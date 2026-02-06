@@ -20,17 +20,17 @@ export const DEFAULT_ACCENT_COLORS: ChartColorV2[] = [
 export const LIGHT_THEME_ACCENT_COLORS: ChartColorV2[] = [
   ...DEFAULT_ACCENT_COLORS,
   {
-    base: baseColors.orion[10],
-    tint: baseColors.orion[5],
-    shade: baseColors.orion[20],
+    base: "#000000", // accent8 - black
+    tint: "#666666", // lighter gray for tint
+    shade: "#000000", // black (already darkest)
   },
 ];
 
 export const DARK_THEME_ACCENT_COLORS: ChartColorV2[] = [
   ...DEFAULT_ACCENT_COLORS,
   {
-    base: baseColors.orion[80],
-    tint: baseColors.orion[80],
-    shade: baseColors.orion[110],
+    base: "#000000", // accent8 - black
+    tint: "#808080", // medium gray for tint (visible on dark backgrounds)
+    shade: "#000000", // black (already darkest)
   },
 ];
