@@ -15,7 +15,6 @@ import {
 import { InsightsTabOrLink } from "metabase/common/components/Sidesheet/components/InsightsTabOrLink";
 import { SidesheetEditableDescription } from "metabase/common/components/Sidesheet/components/SidesheetEditableDescription";
 import SidesheetStyles from "metabase/common/components/Sidesheet/sidesheet.module.css";
-import { InsightsUpsellTab } from "metabase/dashboard/components/DashboardInfoSidebar/components/InsightsUpsellTab";
 import { useDispatch } from "metabase/lib/redux";
 import * as Urls from "metabase/lib/urls";
 import { PLUGIN_MODERATION } from "metabase/plugins";
@@ -90,7 +89,6 @@ export const QuestionInfoSidebar = ({
               </Flex>
             </Link>
           )}
-          <InsightsTabOrLink question={question} />
         </Tabs.List>
 
         <SidesheetTabPanelContainer>
@@ -126,9 +124,6 @@ export const QuestionInfoSidebar = ({
             <SidesheetCard>
               <QuestionActivityTimeline question={question} />
             </SidesheetCard>
-          </Tabs.Panel>
-          <Tabs.Panel value="insights">
-            <InsightsUpsellTab model={question.type()} />
           </Tabs.Panel>
         </SidesheetTabPanelContainer>
       </Tabs>

@@ -5,15 +5,12 @@ import {
   type AdminNavItemProps,
   AdminNavWrapper,
 } from "metabase/admin/components/AdminNav";
-import { shouldNudgeToPro } from "metabase/admin/people/selectors";
-import { UpsellSSO } from "metabase/admin/upsells";
 import { useSetting } from "metabase/common/hooks";
 import { useSelector } from "metabase/lib/redux";
 import { getLocation } from "metabase/selectors/routing";
 import { Divider, Stack } from "metabase/ui";
 
 export function PeopleNav() {
-  const shouldNudge = useSelector(shouldNudgeToPro) as boolean;
   const isUsingTenants = useSetting("use-tenants");
 
   return (
@@ -55,7 +52,6 @@ export function PeopleNav() {
           </>
         )}
       </Stack>
-      {shouldNudge && <UpsellSSO location="people-groups-settings" />}
     </AdminNavWrapper>
   );
 }

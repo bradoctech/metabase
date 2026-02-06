@@ -7,7 +7,6 @@ import {
 } from "metabase/admin/components/RelatedSettingsSection";
 import { SettingsPageWrapper } from "metabase/admin/components/SettingsSection";
 import { NewEmbedButton } from "metabase/admin/settings/components/EmbeddingSettings/NewEmbedButton/NewEmbedButton";
-import { UpsellDevInstances } from "metabase/admin/upsells";
 import ExternalLink from "metabase/common/components/ExternalLink";
 import {
   useDocsUrl,
@@ -43,7 +42,6 @@ function EmbeddingSettingsPageWrapper({ children }: PropsWithChildren) {
         })}
       />
 
-      {isEE && <UpsellDevInstances location="embedding-page" />}
     </SettingsPageWrapper>
   );
 }

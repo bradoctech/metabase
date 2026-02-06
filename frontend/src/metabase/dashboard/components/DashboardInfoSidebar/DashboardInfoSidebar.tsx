@@ -12,7 +12,6 @@ import {
   SidesheetCard,
   SidesheetTabPanelContainer,
 } from "metabase/common/components/Sidesheet";
-import { InsightsTabOrLink } from "metabase/common/components/Sidesheet/components/InsightsTabOrLink";
 import { SidesheetEditableDescription } from "metabase/common/components/Sidesheet/components/SidesheetEditableDescription";
 import SidesheetS from "metabase/common/components/Sidesheet/sidesheet.module.css";
 import { Timeline } from "metabase/common/components/Timeline";
@@ -36,12 +35,10 @@ import type {
 
 import { DashboardDetails } from "./DashboardDetails";
 import { DashboardEntityIdCard } from "./DashboardEntityIdCard";
-import { InsightsUpsellTab } from "./components/InsightsUpsellTab";
 
 enum Tab {
   Overview = "overview",
   History = "history",
-  Insights = "insights",
 }
 
 export function DashboardInfoSidebar() {
@@ -147,7 +144,6 @@ export function DashboardInfoSidebarInner({
               {!isIADashboard && (
                 <Tabs.Tab value={Tab.History}>{t`History`}</Tabs.Tab>
               )}
-              <InsightsTabOrLink dashboard={dashboard} />
             </Tabs.List>
             <SidesheetTabPanelContainer>
               <Tabs.Panel value={Tab.Overview}>
@@ -168,9 +164,6 @@ export function DashboardInfoSidebarInner({
                   currentUser={currentUser}
                   moderationReviews={dashboard.moderation_reviews}
                 />
-              </Tabs.Panel>
-              <Tabs.Panel value={Tab.Insights}>
-                <InsightsUpsellTab model="dashboard" />
               </Tabs.Panel>
             </SidesheetTabPanelContainer>
           </Tabs>

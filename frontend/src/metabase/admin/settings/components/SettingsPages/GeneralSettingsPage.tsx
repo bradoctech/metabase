@@ -4,7 +4,6 @@ import {
   SettingsPageWrapper,
   SettingsSection,
 } from "metabase/admin/components/SettingsSection";
-import { UpsellDevInstances } from "metabase/admin/upsells";
 import ExternalLink from "metabase/common/components/ExternalLink";
 import { useDocsUrl, useHasTokenFeature } from "metabase/common/hooks";
 import { PLUGIN_LANDING_PAGE, PLUGIN_SEMANTIC_SEARCH } from "metabase/plugins";
@@ -88,7 +87,6 @@ export function GeneralSettingsPage() {
           inputType="textarea"
         />
       </SettingsSection>
-      <UpsellDevInstances location="settings-general" />
     </SettingsPageWrapper>
   );
 }
