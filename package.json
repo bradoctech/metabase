@@ -353,7 +353,7 @@
     "typedoc-plugin-redirect": "^1.2.0",
     "typescript-plugin-css-modules": "^5.1.0",
     "web-streams-polyfill": "^4.1.0",
-    "webpack": "5.94.0",
+    "webpack": "5.104.1",
     "webpack-bundle-analyzer": "^4.10.1",
     "webpack-cli": "^5.1.1",
     "webpack-dev-server": "^5.2.1",
