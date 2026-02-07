@@ -29,9 +29,16 @@ fi
 
 cd "$PROJECT_ROOT"
 
+# Activate mise so clojure is on PATH (installed by ./bin/dev-install)
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise activate bash)"
+elif [[ -x "$HOME/.local/bin/mise" ]]; then
+  export PATH="$HOME/.local/bin:$PATH"
+  eval "$(mise activate bash)"
+fi
+
 echo "==> 1/5 Building JAR (./bin/build.sh)..."
-# Use login shell so Clojure (e.g. from asdf/mise/sdkman) is on PATH
-bash -l -c 'cd "$0" && ./bin/build.sh' "$PROJECT_ROOT"
+./bin/build.sh
 
 echo "==> 2/5 Copying JAR and driver plugins to bin/docker..."
 cp -v target/uberjar/metabase.jar bin/docker/
