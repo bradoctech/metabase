@@ -30,7 +30,8 @@ fi
 cd "$PROJECT_ROOT"
 
 echo "==> 1/5 Building JAR (./bin/build.sh)..."
-./bin/build.sh
+# Use login shell so Clojure (e.g. from asdf/mise/sdkman) is on PATH
+bash -l -c 'cd "$0" && ./bin/build.sh' "$PROJECT_ROOT"
 
 echo "==> 2/5 Copying JAR and driver plugins to bin/docker..."
 cp -v target/uberjar/metabase.jar bin/docker/
