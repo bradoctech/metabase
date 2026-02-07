@@ -7,6 +7,7 @@ import { getAdminPaths } from "metabase/admin/app/selectors";
 import { logout } from "metabase/auth/actions";
 import { ErrorDiagnosticModalWrapper } from "metabase/common/components/ErrorPages/ErrorDiagnosticModal";
 import { trackErrorDiagnosticModalOpened } from "metabase/common/components/ErrorPages/analytics";
+import ExternalLink from "metabase/common/components/ExternalLink";
 import { ForwardRefLink } from "metabase/common/components/Link";
 import LogoIcon from "metabase/common/components/LogoIcon";
 import Modal from "metabase/common/components/Modal";
@@ -75,7 +76,8 @@ function ProfileLinkInner({
   const [modalOpen, setModalOpen] = useState<string | null>(null);
   const version = useSetting("version") as MetabaseInfo["version"];
   const applicationName = useSelector(getApplicationName);
-  const { tag, date, ...versionExtra } = version;
+  const sourceCodeUrl = version?.["source-code-url"];
+  const { tag, date, "source-code-url": _skip, ...versionExtra } = version ?? {};
   const helpLink = useHelpLink();
   const dispatch = useDispatch();
 
@@ -268,6 +270,12 @@ function ProfileLinkInner({
               <p className={cx(CS.textMedium, CS.textBold)}>
                 {t`Built on`} {date}
               </p>
+              {sourceCodeUrl && (
+                <p className={cx(CS.textMedium, CS.textBold, CS.pt1)}>
+                  {t`Source code`}:{" "}
+                  <ExternalLink href={sourceCodeUrl}>{sourceCodeUrl}</ExternalLink>
+                </p>
+              )}
               {tag && !/^v\d+\.\d+\.\d+$/.test(tag) && (
                 <div>
                   {_.map(versionExtra, (value, key) => (

@@ -61,6 +61,8 @@
              "Usage of Metabase Enterprise Edition features are subject to the Metabase Commercial License."
              "See https://www.metabase.com/license/commercial/ for details.")
         "Metabase Enterprise Edition extensions are NOT PRESENT.")))
+(when-not (str/blank? (config/config-str :mb-source-code-url))
+  (log/info (str "\nSource code for this build (AGPL): " (config/config-str :mb-source-code-url))))
 
 ;;; --------------------------------------------------- Info Metric---------------------------------------------------
 
