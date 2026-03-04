@@ -143,7 +143,7 @@
     "ts-pattern": "^5.9.0",
     "ttag": "1.7.21",
     "typescript": "^5.9.2",
-    "underscore": "~1.13.3",
+    "underscore": "~1.13.8",
     "yamljs": "^0.3.0",
     "yup": "^0.32.11"
   },
