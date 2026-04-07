@@ -10,6 +10,7 @@ import {
 } from "metabase/api";
 import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
 import Select from "metabase/common/components/Select";
+import { IS_SAOPAULO_CLIENT } from "metabase/lib/client-config";
 import { useSelector } from "metabase/lib/redux";
 import { isSyncCompleted } from "metabase/lib/syncing";
 import { isNotNull } from "metabase/lib/types";
@@ -97,7 +98,7 @@ const HomeXrayView = ({ database, candidates = [] }: HomeXrayViewProps) => {
           <DatabaseInfo database={database} />
         </HomeCaption>
       ) : null}
-      <SectionBody>
+      <SectionBody $compact={IS_SAOPAULO_CLIENT}>
         {candidate?.tables.map((table, index) => (
           <HomeXrayCard
             key={table.url}

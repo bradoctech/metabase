@@ -6,8 +6,10 @@ import { forwardRef } from "react";
 import _ from "underscore";
 
 import ButtonsS from "metabase/css/components/buttons.module.css";
+import SaoPauloButtonsS from "metabase/css/components/buttons.saopaulo.module.css";
 import CS from "metabase/css/core/index.css";
 import SpacingS from "metabase/css/core/spacing.module.css";
+import { IS_SAOPAULO_CLIENT } from "metabase/lib/client-config";
 import type { ColorName } from "metabase/lib/colors/types";
 import { isNotNull } from "metabase/lib/types";
 import type { IconName } from "metabase/ui";
@@ -124,6 +126,7 @@ const BaseButton = forwardRef(function BaseButton(
         variantClasses,
         {
           [SpacingS.p1]: !children,
+          [SaoPauloButtonsS.ButtonPrimary]: IS_SAOPAULO_CLIENT && props.primary,
         },
         className,
       )}

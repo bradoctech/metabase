@@ -13,6 +13,7 @@ import {
   FormSubmitButton,
   FormTextInput,
 } from "metabase/forms";
+import { IS_SAOPAULO_CLIENT } from "metabase/lib/client-config";
 import * as Errors from "metabase/lib/errors";
 import { Box, Text } from "metabase/ui";
 import type { LocaleData, User } from "metabase-types/api";
@@ -68,7 +69,7 @@ const UserProfileForm = ({
 
   return (
     <Box>
-      <ColorSchemeSwitcher />
+      {!IS_SAOPAULO_CLIENT && <ColorSchemeSwitcher />}
       <FormProvider
         initialValues={initialValues}
         validationSchema={schema}

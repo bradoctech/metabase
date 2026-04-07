@@ -19,6 +19,7 @@ import {
 import { isEmbeddingSdk } from "metabase/embedding-sdk/config";
 import { PUT } from "metabase/lib/api";
 import { parseHashOptions } from "metabase/lib/browser";
+import { IS_SAOPAULO_CLIENT } from "metabase/lib/client-config";
 import type {
   ColorScheme,
   ResolvedColorScheme,
@@ -159,7 +160,9 @@ export const ThemeProvider = (props: ThemeProviderProps) => {
     : schemeFromHash;
 
   const [colorSchemeFromSettings, setColorSchemeFromSettings] =
-    useState<ColorScheme>(() => getUserColorScheme() ?? "auto");
+    useState<ColorScheme>(
+      () => getUserColorScheme() ?? (IS_SAOPAULO_CLIENT ? "light" : "auto"),
+    );
 
   // FIXME: Not only does this use a deprecated API, it also adds a complementary
   // method to the already deprecated method to remove the listener. This is just

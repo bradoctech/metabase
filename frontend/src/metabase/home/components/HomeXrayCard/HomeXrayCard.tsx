@@ -1,3 +1,5 @@
+import { IS_SAOPAULO_CLIENT } from "metabase/lib/client-config";
+
 import { HomeCard } from "../HomeCard";
 
 import {
@@ -5,6 +7,11 @@ import {
   CardTitle,
   CardTitlePrimary,
   CardTitleSecondary,
+  SpCardIcon,
+  SpCardIconWrapper,
+  SpCardTitle,
+  SpCategoryBadge,
+  SpXrayCardRoot,
 } from "./HomeXrayCard.styled";
 import { trackHomeXRayClicked } from "./analytics";
 
@@ -19,6 +26,18 @@ export const HomeXrayCard = ({
   url,
   message,
 }: HomeXrayCardProps): JSX.Element => {
+  if (IS_SAOPAULO_CLIENT) {
+    return (
+      <SpXrayCardRoot to={url} onClick={trackHomeXRayClicked}>
+        <SpCategoryBadge>{title}</SpCategoryBadge>
+        <SpCardIconWrapper>
+          <SpCardIcon name="bolt_filled" />
+        </SpCardIconWrapper>
+        <SpCardTitle>{message}</SpCardTitle>
+      </SpXrayCardRoot>
+    );
+  }
+
   return (
     <HomeCard url={url} onClick={trackHomeXRayClicked}>
       <CardIcon name="bolt_filled" />

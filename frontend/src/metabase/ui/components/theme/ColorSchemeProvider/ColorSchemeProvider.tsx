@@ -11,6 +11,7 @@ import { useMedia } from "react-use";
 import { noop } from "underscore";
 
 import { isEmbeddingSdk } from "metabase/embedding-sdk/config";
+import { IS_SAOPAULO_CLIENT } from "metabase/lib/client-config";
 import type {
   ColorScheme,
   ResolvedColorScheme,
@@ -79,7 +80,12 @@ export function ColorSchemeProvider({
     if (getIsEmbeddingIframe()) {
       return "light";
     }
-    return colorScheme === "auto" ? systemColorScheme : colorScheme;
+    // return colorScheme === "auto" ? systemColorScheme : colorScheme;
+    return colorScheme === "auto"
+      ? IS_SAOPAULO_CLIENT
+        ? "light"
+        : systemColorScheme
+      : colorScheme;
   }, [colorScheme, forceColorScheme, systemColorScheme]);
 
   const handleColorSchemeUpdate = useCallback(

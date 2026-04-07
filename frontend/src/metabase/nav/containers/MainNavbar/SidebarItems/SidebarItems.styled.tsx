@@ -7,6 +7,7 @@ import { forwardRef } from "react";
 
 import Link from "metabase/common/components/Link";
 import { TreeNode } from "metabase/common/components/tree/TreeNode";
+import { IS_SAOPAULO_CLIENT } from "metabase/lib/client-config";
 import { alpha } from "metabase/lib/colors";
 import type { ColorName } from "metabase/lib/colors/types";
 import { NAV_SIDEBAR_WIDTH } from "metabase/nav/constants";
@@ -41,7 +42,11 @@ const activeColorCSS = css`
 `;
 
 function getTextColor(isSelected: boolean) {
-  return isSelected ? color("brand") : color("text-primary");
+  return isSelected
+    ? IS_SAOPAULO_CLIENT
+      ? color("text-primary")
+      : color("brand")
+    : color("text-primary");
 }
 
 type NodeRootProps = ComponentProps<typeof TreeNode.Root> & {
@@ -51,7 +56,11 @@ type NodeRootProps = ComponentProps<typeof TreeNode.Root> & {
 export const NodeRoot = styled(TreeNode.Root)<NodeRootProps>`
   color: ${(props) => getTextColor(props.isSelected)};
   background-color: ${(props) =>
-    props.isSelected ? alpha("brand", 0.2) : "unset"};
+    props.isSelected
+      ? IS_SAOPAULO_CLIENT
+        ? "var(--mb-color-background-menu-selected)"
+        : alpha("brand", 0.2)
+      : "unset"};
   padding-left: ${(props) => props.depth}rem;
   border-radius: 4px;
 
@@ -65,8 +74,14 @@ export const NodeRoot = styled(TreeNode.Root)<NodeRootProps>`
   }
 
   &:hover {
-    background-color: ${() => alpha("brand", 0.35)};
-    color: var(--mb-color-brand);
+    background-color: ${() =>
+      IS_SAOPAULO_CLIENT
+        ? "var(--mb-color-background-menu-hover)"
+        : alpha("brand", 0.35)};
+    color: ${() =>
+      IS_SAOPAULO_CLIENT
+        ? "var(--mb-color-text-primary)"
+        : "var(--mb-color-brand)"};
 
     ${ExpandToggleButton} {
       color: var(--mb-color-brand);
@@ -105,11 +120,15 @@ export const FullWidthButton = styled.button<{ isSelected: boolean }>`
   ${itemContentStyle}
   ${TreeNode.NameContainer} {
     font-weight: 700;
-    color: ${(props) => (props.isSelected ? color("brand") : "inherit")};
+    color: ${(props) =>
+      props.isSelected
+        ? color(IS_SAOPAULO_CLIENT ? "text-primary" : "brand")
+        : "inherit"};
     text-align: start;
 
     &:hover {
-      color: var(--mb-color-brand);
+      color: ${() =>
+        IS_SAOPAULO_CLIENT ? "inherit" : "var(--mb-color-brand)"};
     }
   }
 

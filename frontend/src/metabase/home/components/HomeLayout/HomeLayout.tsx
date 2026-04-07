@@ -5,6 +5,7 @@ import { t } from "ttag";
 import { LighthouseIllustration } from "metabase/common/components/LighthouseIllustration";
 import { useHasTokenFeature, useSetting } from "metabase/common/hooks";
 import { EmbeddingHubHomePage } from "metabase/embedding/embedding-hub";
+import { IS_SAOPAULO_CLIENT } from "metabase/lib/client-config";
 import { useSelector } from "metabase/lib/redux";
 import { getUser, getUserIsAdmin } from "metabase/selectors/user";
 import { getLandingPageIllustration } from "metabase/selectors/whitelabel";
@@ -45,11 +46,13 @@ export const HomeLayout = ({ children }: HomeLayoutProps): ReactNode => {
         xl: "10rem 15rem 4rem",
       }}
       mih="100%"
-      bg="background-secondary"
+      bg={IS_SAOPAULO_CLIENT ? "background-home" : "background-secondary"}
     >
       {landingPageIllustration &&
         (landingPageIllustration.isDefault ? (
-          <LighthouseIllustration />
+          IS_SAOPAULO_CLIENT ? null : (
+            <LighthouseIllustration />
+          )
         ) : (
           <Box
             data-testid="landing-page-illustration"
