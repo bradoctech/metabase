@@ -4,11 +4,13 @@ import { useMemo } from "react";
 
 import { useSetting } from "metabase/common/hooks";
 import { baseStyle, rootStyle } from "metabase/css/core/base.styled";
+import { saoPauloFontFiles } from "metabase/css/core/fonts.saopaulo.styled";
 import { defaultFontFiles } from "metabase/css/core/fonts.styled";
 import {
   isPublicEmbedding,
   isStaticEmbedding,
 } from "metabase/embedding/config";
+import { IS_SAOPAULO_CLIENT } from "metabase/lib/client-config";
 import { getSitePath } from "metabase/lib/dom";
 import { useSelector } from "metabase/lib/redux";
 import { getMetabaseCssVariables } from "metabase/styled-components/theme/css-variables";
@@ -35,10 +37,12 @@ export const GlobalStyles = (): JSX.Element => {
     return css`
       ${cssVariables}
       :root {
-        --mb-default-font-family: "${font}";
+        --mb-default-font-family: "${IS_SAOPAULO_CLIENT ? "Rawline" : font}";
       }
 
-      ${defaultFontFiles({ baseUrl: sitePath })}
+      ${IS_SAOPAULO_CLIENT
+        ? saoPauloFontFiles({ baseUrl: sitePath })
+        : defaultFontFiles({ baseUrl: sitePath })}
       ${fontFiles?.map(
         (file) => css`
           @font-face {
