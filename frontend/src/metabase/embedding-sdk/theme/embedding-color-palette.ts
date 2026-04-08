@@ -3,7 +3,6 @@ import type {
   MetabaseColors,
   MetabaseComponentTheme,
 } from "metabase/embedding-sdk/theme";
-import { IS_SAOPAULO_CLIENT } from "metabase/lib/client-config";
 import { colors } from "metabase/lib/colors";
 import { mapChartColorsToAccents } from "metabase/lib/colors/accents";
 import type { ColorName, ColorPalette } from "metabase/lib/colors/types";
@@ -38,7 +37,7 @@ export const SDK_TO_MAIN_APP_COLORS_MAPPING: Record<
   "text-tertiary": ["text-tertiary"],
   background: ["background-primary"],
   "background-secondary": ["background-secondary", "background-tertiary"],
-  "background-hover": IS_SAOPAULO_CLIENT ? ["text-primary"] : [],
+  "background-hover": ["text-primary"],
   "background-disabled": ["background-disabled"],
   "background-light": ["background-secondary"],
   shadow: ["shadow"],

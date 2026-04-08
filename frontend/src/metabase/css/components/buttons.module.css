@@ -59,19 +59,19 @@
 
 .ButtonPrimary {
   color: var(--mb-color-text-primary-inverse);
-  background: var(--mb-color-brand);
-  border-color: var(--mb-color-brand);
+  background: var(--mb-color-button-primary);
+  border-color: var(--mb-color-button-primary);
 }
 
 .ButtonPrimary:hover {
   color: var(--mb-color-text-primary-inverse);
-  border-color: var(--mb-color-brand);
-  background-color: var(--mb-color-brand-hover);
+  border-color: var(--mb-color-button-primary-hover);
+  background-color: var(--mb-color-button-primary-hover);
 }
 
 .ButtonPrimary:focus-visible {
   border-color: var(--mb-color-background-primary);
-  outline-color: var(--mb-color-brand);
+  outline-color: var(--mb-color-button-primary);
 }
 
 .ButtonWarning {

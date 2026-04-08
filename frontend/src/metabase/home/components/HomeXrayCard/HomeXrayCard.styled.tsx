@@ -1,16 +1,16 @@
 // eslint-disable-next-line no-restricted-imports
 import styled from "@emotion/styled";
 
-import { Ellipsified } from "metabase/common/components/Ellipsified";
 import { alpha } from "metabase/lib/colors";
+import {
+  breakpointMinLarge,
+  breakpointMinSmall,
+} from "metabase/styled-components/theme";
 import { Icon } from "metabase/ui";
-import { color } from "metabase/ui/utils/colors";
 
 import { CardRoot } from "../HomeCard/HomeCard.styled";
 
-// ─── São Paulo client: new vertical card layout ───────────────────────────────
-
-export const SpXrayCardRoot = styled(CardRoot)`
+export const XrayCardRoot = styled(CardRoot)`
   flex-direction: column;
   align-items: flex-start;
   height: 315px;
@@ -22,12 +22,21 @@ export const SpXrayCardRoot = styled(CardRoot)`
   box-shadow: 0 0 0 0 transparent;
   transition: box-shadow 0.2s ease;
 
+  /* Override inherited responsive max-width from CardRoot */
+  ${breakpointMinSmall} {
+    max-width: 215px;
+  }
+
+  ${breakpointMinLarge} {
+    padding: 1rem;
+  }
+
   &:hover {
     box-shadow: -1px 6px 18.9px 0 var(--mb-color-shadow-card-hover);
   }
 `;
 
-export const SpCategoryBadge = styled.span`
+export const CategoryBadge = styled.span`
   display: inline-block;
   font-size: 0.7rem;
   font-weight: 600;
@@ -41,47 +50,22 @@ export const SpCategoryBadge = styled.span`
   white-space: nowrap;
 `;
 
-export const SpCardIconWrapper = styled.div`
+export const CardIconWrapper = styled.div`
   flex: 1;
   display: flex;
   align-items: flex-end;
 `;
 
-export const SpCardIcon = styled(Icon)`
+export const CardIcon = styled(Icon)`
   display: block;
   color: var(--mb-color-brand);
   width: 2rem;
   height: 2rem;
 `;
 
-export const SpCardTitle = styled.div`
+export const CardTitle = styled.div`
   font-size: 1.25rem;
   font-weight: bold;
   color: var(--mb-color-text-primary);
   width: 100%;
-`;
-
-// ─── Default: original card layout ────────────────────────────────────────────
-
-export const CardIcon = styled(Icon)`
-  display: block;
-  flex: 0 0 auto;
-  color: ${() => color("accent4")};
-  width: 1.25rem;
-  height: 1.25rem;
-`;
-
-export const CardTitle = styled(Ellipsified)`
-  font-size: 1rem;
-  font-weight: bold;
-  margin-left: 0.5rem;
-  padding-right: 0.2rem;
-`;
-
-export const CardTitlePrimary = styled.span`
-  color: var(--mb-color-text-primary);
-`;
-
-export const CardTitleSecondary = styled.span`
-  color: var(--mb-color-text-secondary);
 `;

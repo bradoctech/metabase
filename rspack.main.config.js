@@ -334,7 +334,6 @@ const config = {
       WEBPACK_BUNDLE: "development",
       MB_LOG_ANALYTICS: "false",
       ENABLE_CLJS_HOT_RELOAD: process.env.ENABLE_CLJS_HOT_RELOAD ?? "false",
-      MB_CURRENT_CLIENT: process.env.MB_CURRENT_CLIENT ?? "default",
     }),
   ],
 };
