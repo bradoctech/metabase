@@ -34,6 +34,9 @@
 [settings]
 # Automatically install tools when entering the project directory
 auto_install = true
+# Auto-load environment variables from .env (gitignored)
+# https://mise.jdx.dev/environments.html
+env_file = ".env"
 
 [env]
 # Add bin/ to PATH so mage and other project scripts are available

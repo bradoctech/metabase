@@ -159,7 +159,7 @@ export const ThemeProvider = (props: ThemeProviderProps) => {
     : schemeFromHash;
 
   const [colorSchemeFromSettings, setColorSchemeFromSettings] =
-    useState<ColorScheme>(() => getUserColorScheme() ?? "auto");
+    useState<ColorScheme>(() => getUserColorScheme() ?? "light");
 
   // FIXME: Not only does this use a deprecated API, it also adds a complementary
   // method to the already deprecated method to remove the listener. This is just

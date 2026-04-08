@@ -54,7 +54,7 @@ export const TabButtonRoot = styled.div<TabButtonProps>`
   padding: calc(0.6875rem - 0.25rem - 1px) calc(0.5rem - 0.25rem - 2px); /* tab .list padding - input padding - borders/margins */
   color: ${(props) =>
     props.isSelected && !props.disabled
-      ? "var(--mb-color-brand)"
+      ? "var(--mb-color-text-primary)"
       : "var(--mb-color-text-primary)"};
   opacity: ${(props) => (props.disabled ? 0.3 : 1)};
   font-size: var(--mantine-font-size-md);
@@ -66,7 +66,8 @@ export const TabButtonRoot = styled.div<TabButtonProps>`
     ${(props) =>
       !props.disabled &&
       css`
-        color: var(--mb-color-brand);
+        color: var(--mb-color-text-primary);
+        border-bottom: 0.125rem solid var(--mb-color-brand);
       `}
   }
 

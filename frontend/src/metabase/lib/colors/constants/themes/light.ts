@@ -21,10 +21,13 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "background-error-secondary": baseColors.lobster[5],
     "background-highlight":
       "color-mix(in srgb, var(--mb-color-brand) 7%, transparent)",
+    "background-home": "#F2F2F2",
     "background-hover":
       "color-mix(in srgb, var(--mb-color-brand) 7%, transparent)",
+    "background-menu-hover": "color-mix(in srgb, #ebebeb, white 20%)",
     "background-selected":
       "color-mix(in srgb, var(--mb-color-brand) 21%, transparent)",
+    "background-menu-selected": "color-mix(in srgb, #ebebeb, white 0%)",
     "background-primary": baseColors.white,
     "background-secondary": baseColors.orion[5],
     "background-tertiary": baseColors.orion[10],
@@ -54,6 +57,7 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "saturated-red": baseColors.lobster[60],
     "saturated-yellow": baseColors.dubloon[30],
     shadow: baseColors.orionAlpha[20],
+    "shadow-card-hover": "rgba(0, 0, 0, 0.15)",
     "success-secondary": baseColors.palm[60],
     success: baseColors.palm[50],
     summarize: baseColors.palm[50],
@@ -81,8 +85,11 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     white: baseColors.white,
     border: baseColors.orion[20],
     "border-brand": baseColors.brand[10],
+    "border-card-home": "#E2E2E2",
     "border-strong": baseColors.orionAlpha[50],
     "border-subtle": baseColors.orionAlpha[10],
+    "button-primary": "#1a1a1a",
+    "button-primary-hover": "#404040",
     copper: "#B87333",
     bronze: "#CD7F32",
     silver: "#C0C0C0",
