@@ -10,6 +10,7 @@ import { Box, Divider } from "metabase/ui";
 
 import { getAuthProviders } from "../../selectors";
 import { AuthLayout } from "../AuthLayout";
+import { LayoutFormSubtitle } from "../AuthLayout/AuthLayout.styled";
 
 interface LoginQueryString {
   redirect?: string;
@@ -48,6 +49,7 @@ export const Login = ({ params, location }: LoginProps): JSX.Element => {
       >
         {t`Sign in to ${applicationName}`}
       </Box>
+      <LayoutFormSubtitle>{t`Faça o login para acessar`}</LayoutFormSubtitle>
       {selection && selection.Panel && (
         <Box mt="2.5rem">
           <selection.Panel redirectUrl={redirectUrl} />

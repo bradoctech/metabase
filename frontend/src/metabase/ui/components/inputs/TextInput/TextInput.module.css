@@ -2,6 +2,15 @@
   color: var(--mb-color-text-primary);
   background: var(--mb-color-background-primary);
   border-color: var(--mb-color-border);
+
+  &:-webkit-autofill,
+  &:-webkit-autofill:hover,
+  &:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #fff inset;
+    box-shadow: 0 0 0 1000px #fff inset;
+    -webkit-text-fill-color: var(--mb-color-text-primary);
+    transition: background-color 5000s ease-in-out 0s;
+  }
 }
 
 .error {

@@ -1,38 +1,44 @@
 import type { ReactNode } from "react";
+import { t } from "ttag";
 
-import { LighthouseIllustration } from "metabase/common/components/LighthouseIllustration";
 import LogoIcon from "metabase/common/components/LogoIcon";
-import { useSelector } from "metabase/lib/redux";
-import { getLoginPageIllustration } from "metabase/selectors/whitelabel";
 
 import {
-  LayoutBody,
   LayoutCard,
-  LayoutIllustration,
+  LayoutFrameBottom,
+  LayoutFrameTop,
+  LayoutLeftImage,
+  LayoutLeftPanel,
+  LayoutLeftSubtitle,
+  LayoutLeftTitle,
+  LayoutRightPanel,
   LayoutRoot,
 } from "./AuthLayout.styled";
+
 interface AuthLayoutProps {
   children?: ReactNode;
 }
 
 export const AuthLayout = ({ children }: AuthLayoutProps): JSX.Element => {
-  const loginPageIllustration = useSelector(getLoginPageIllustration);
-
   return (
     <LayoutRoot data-testid="login-page">
-      {loginPageIllustration &&
-        (loginPageIllustration.isDefault ? (
-          <LighthouseIllustration />
-        ) : (
-          <LayoutIllustration
-            data-testid="login-page-illustration"
-            backgroundImageSrc={loginPageIllustration.src}
-          />
-        ))}
-      <LayoutBody>
+      <LayoutLeftPanel>
+        <LayoutFrameTop src="/app/img/login_frametop.png" alt="" />
+        <LayoutFrameBottom src="/app/img/login_framebottom.png" alt="" />
+        <LayoutLeftImage
+          src="/app/img/login_dashboard.png"
+          alt={t`Dashboard preview`}
+        />
+        <LayoutLeftTitle>{t`Dashboards SP`}</LayoutLeftTitle>
+        <LayoutLeftSubtitle>
+          {t`Make more informed decisions by analyzing the numbers carefully. Understanding the data can lead to better outcomes and strategies.`}
+        </LayoutLeftSubtitle>
+      </LayoutLeftPanel>
+
+      <LayoutRightPanel>
         <LogoIcon height={65} />
         <LayoutCard>{children}</LayoutCard>
-      </LayoutBody>
+      </LayoutRightPanel>
     </LayoutRoot>
   );
 };
