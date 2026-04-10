@@ -66,7 +66,7 @@ export const LoginForm = ({
             isLdapEnabled ? t`Username or email address` : t`Email address`
           }
           type={isLdapEnabled ? "input" : "email"}
-          placeholder="nicetoseeyou@email.com"
+          placeholder="seuemail@sp.gov.br"
           autoFocus
           mb="1.25rem"
         />
@@ -74,7 +74,7 @@ export const LoginForm = ({
           name="password"
           label={t`Password`}
           type="password"
-          placeholder="Shhh..."
+          placeholder="Sua senha"
           mb="1.25rem"
         />
         {!hasSessionCookies && (
