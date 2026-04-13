@@ -17,7 +17,7 @@ export const TabButtonInputWrapper = styled.span<TabButtonProps>`
   padding: 0.25rem;
   border: 1px solid transparent;
   border-radius: 6px;
-  line-height: 1.15; /* Matches .tabLabel */
+  line-height: 1.5;
 `;
 
 export const TabButtonInputResizer = styled.span`
