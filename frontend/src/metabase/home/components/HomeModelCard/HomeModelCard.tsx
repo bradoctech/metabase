@@ -1,13 +1,18 @@
 import type { IconName } from "metabase/ui";
 
-import { HomeCard } from "../HomeCard";
-
-import { CardIcon, CardTitle } from "./HomeModelCard.styled";
+import {
+  CardIcon,
+  CardTitle,
+  ModelCardIconWrapper,
+  ModelCardRoot,
+  ModelCategoryBadge,
+} from "./HomeModelCard.styled";
 
 interface HomeModelCardProps {
   title: string;
   icon: HomeModelIconProps;
   url: string;
+  category?: string;
 }
 
 export interface HomeModelIconProps {
@@ -18,11 +23,15 @@ export const HomeModelCard = ({
   title,
   icon,
   url,
+  category,
 }: HomeModelCardProps): JSX.Element => {
   return (
-    <HomeCard url={url}>
-      <CardIcon {...icon} />
+    <ModelCardRoot to={url}>
+      {category && <ModelCategoryBadge>{category}</ModelCategoryBadge>}
+      <ModelCardIconWrapper>
+        <CardIcon {...icon} />
+      </ModelCardIconWrapper>
       <CardTitle>{title}</CardTitle>
-    </HomeCard>
+    </ModelCardRoot>
   );
 };

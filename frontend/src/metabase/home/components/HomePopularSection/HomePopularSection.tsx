@@ -8,6 +8,23 @@ import { getName } from "metabase/lib/name";
 import * as Urls from "metabase/lib/urls";
 import type { PopularItem } from "metabase-types/api";
 
+const getModelCategory = (model: PopularItem["model"]): string => {
+  switch (model) {
+    case "table":
+      return t`Table`;
+    case "card":
+      return t`Question`;
+    case "dataset":
+      return t`Model`;
+    case "metric":
+      return t`Metric`;
+    case "dashboard":
+      return t`Dashboard`;
+    default:
+      return model;
+  }
+};
+
 import { HomeCaption } from "../HomeCaption";
 import { HomeHelpCard } from "../HomeHelpCard";
 import { HomeModelCard } from "../HomeModelCard";
@@ -35,6 +52,7 @@ export const HomePopularSection = (): JSX.Element => {
             title={getName(item)}
             icon={getIcon(item)}
             url={Urls.modelToUrl(item) ?? ""}
+            category={getModelCategory(item.model)}
           />
         ))}
         <HomeHelpCard />
