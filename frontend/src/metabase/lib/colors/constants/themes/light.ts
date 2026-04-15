@@ -42,7 +42,7 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "brand-hover": "color-mix(in srgb, #FF161F, white 12%)", // SP Paleta Primária: sp-red
     danger: spColors.redDark.base, // SP Paleta Secundária: sp-red-dark
     error: spColors.redDark.base, // SP Paleta Secundária: sp-red-dark
-    filter: spColors.blueMedium.base, // SP Paleta Secundária: sp-blue-medium
+    filter: baseColors.octopus[50], // original — sem roxo na paleta SP
     focus: baseColors.black,
     "icon-brand": spColors.red[30], // SP Paleta Primária: sp-red
     "icon-primary": spColors.black.alpha80, // SP Paleta Primária: sp-black
@@ -54,7 +54,7 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "metabase-brand-hover": "color-mix(in srgb, #FF161F, white 12%)", // SP Paleta Primária: sp-red
     "saturated-blue": spColors.blue.base, // SP Paleta Secundária: sp-blue
     "saturated-green": spColors.green[60], // SP Paleta Secundária: sp-green
-    "saturated-purple": spColors.navy.base, // SP Paleta Secundária: sp-navy
+    "saturated-purple": baseColors.octopus[60], // original — sem roxo na paleta SP
     "saturated-red": spColors.redDark.base, // SP Paleta Secundária: sp-red-dark
     "saturated-yellow": spColors.yellow.base, // SP Paleta Secundária: sp-yellow
     shadow: baseColors.orionAlpha[20],
