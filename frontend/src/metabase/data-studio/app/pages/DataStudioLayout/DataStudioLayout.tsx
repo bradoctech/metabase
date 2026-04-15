@@ -4,7 +4,6 @@ import { t } from "ttag";
 
 import DataStudioLogo from "assets/img/data-studio-logo.svg";
 import { ForwardRefLink } from "metabase/common/components/Link";
-import { UpsellGem } from "metabase/common/components/upsells/components/UpsellGem";
 import { useHasTokenFeature } from "metabase/common/hooks";
 import { useUserKeyValue } from "metabase/common/hooks/use-user-key-value";
 import { isMac } from "metabase/lib/browser";
@@ -251,8 +250,7 @@ function DataStudioTab({
   rightSection,
   isGated,
 }: DataStudioTabProps) {
-  const upsellGem = isGated ? <UpsellGem.New size={14} /> : null;
-  const effectiveRightSection = rightSection ?? upsellGem;
+  const effectiveRightSection = rightSection ?? null;
 
   return (
     <Tooltip

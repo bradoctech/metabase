@@ -3,13 +3,10 @@ import { t } from "ttag";
 import { useMetabotEnabledEmbeddingAware } from "metabase/metabot/hooks";
 import { Card, Flex, Radio, Stack, Text } from "metabase/ui";
 
-import { UPSELL_CAMPAIGN_EXPERIENCE } from "../analytics";
 import { getEmbedExperiences } from "../constants";
 import { useSdkIframeEmbedSetupContext } from "../context";
 import { useHandleExperienceChange } from "../hooks/use-handle-experience-change";
 import type { SdkIframeEmbedSetupExperience } from "../types";
-
-import { EmbeddingUpsell } from "./Common/EmbeddingUpsell";
 
 export const SelectEmbedExperienceStep = () => {
   const { isSimpleEmbedFeatureAvailable, experience, settings } =
@@ -61,8 +58,6 @@ export const SelectEmbedExperienceStep = () => {
           </Stack>
         </Radio.Group>
       </Card>
-
-      <EmbeddingUpsell campaign={UPSELL_CAMPAIGN_EXPERIENCE} />
     </>
   );
 };

@@ -8,7 +8,6 @@ import {
   SettingsPageWrapper,
   SettingsSection,
 } from "metabase/admin/components/SettingsSection";
-import { UpsellBetterSupport } from "metabase/admin/upsells";
 import { CopyButton } from "metabase/common/components/CopyButton";
 import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { useSetting } from "metabase/common/hooks";
@@ -122,8 +121,6 @@ export const Help = ({ children }: PropsWithChildren) => {
           link={githubIssueLink(detailString)}
         />
       </Group>
-
-      <UpsellBetterSupport location="settings-troubleshooting" />
 
       {PLUGIN_SUPPORT.isEnabled && <PLUGIN_SUPPORT.SupportSettings />}
 

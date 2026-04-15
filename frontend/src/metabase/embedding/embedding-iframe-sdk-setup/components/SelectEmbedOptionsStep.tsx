@@ -20,13 +20,11 @@ import {
   Text,
 } from "metabase/ui";
 
-import { UPSELL_CAMPAIGN_BEHAVIOR } from "../analytics";
 import { useSdkIframeEmbedSetupContext } from "../context";
 import { getBehaviorDocsUrlParams } from "../utils/get-behavior-docs-url-params";
 
 import { ColorCustomizationSection } from "./Appearance/ColorCustomizationSection";
 import { SimpleThemeSwitcherSection } from "./Appearance/SimpleThemeSwitcherSection";
-import { EmbeddingUpsell } from "./Common/EmbeddingUpsell";
 import { WithNotAvailableForOssOrGuestEmbedsGuard } from "./Common/WithNotAvailableForOssOrGuestEmbedsGuard";
 import { LegacyStaticEmbeddingAlert } from "./LegacyStaticEmbeddingAlert";
 import { MetabotLayoutSetting } from "./MetabotLayoutSetting";
@@ -38,7 +36,6 @@ export const SelectEmbedOptionsStep = () => (
     <ParametersSection />
     <AppearanceSection />
     <LegacyStaticEmbeddingAlert />
-    <EmbeddingUpsell campaign={UPSELL_CAMPAIGN_BEHAVIOR} />
   </Stack>
 );
 

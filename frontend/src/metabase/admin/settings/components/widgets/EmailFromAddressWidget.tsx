@@ -1,6 +1,5 @@
 import { t } from "ttag";
 
-import { UpsellEmailWhitelabelPill } from "metabase/admin/upsells";
 import { useAdminSetting } from "metabase/api/utils";
 import { useHasTokenFeature, useSetting } from "metabase/common/hooks";
 import { Box, Icon, TextInput } from "metabase/ui";
@@ -42,10 +41,6 @@ export function EmailFromAddressWidget() {
         title={t`From Address`}
         description={t`Please set up a custom SMTP server to change this${hasCloudCustomSMTPFeature ? "" : t` (Pro only)`}`}
       />
-      <Box pos="absolute" top={0} right={0}>
-        <UpsellEmailWhitelabelPill source="settings-email" />
-      </Box>
-
       <TextInput
         id={"email-from-address"}
         value={fromAddressValue ? fromAddressValue : ""}

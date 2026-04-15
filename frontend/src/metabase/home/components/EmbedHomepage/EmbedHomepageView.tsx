@@ -1,7 +1,6 @@
 import { match } from "ts-pattern";
 import { t } from "ttag";
 
-import { UpsellEmbedHomepage } from "metabase/common/components/upsells/UpsellEmbedHomepage";
 import { Box, Card, Flex, Stack, Text, Title } from "metabase/ui";
 import type { EmbeddingHomepageDismissReason } from "metabase-types/api";
 
@@ -116,11 +115,6 @@ export const EmbedHomepageView = (props: EmbedHomepageViewProps) => {
         />
       </Stack>
 
-      {variant === "oss" && (
-        <Box mt="2.5rem">
-          <UpsellEmbedHomepage location="embedding-homepage" />
-        </Box>
-      )}
     </Flex>
   );
 };

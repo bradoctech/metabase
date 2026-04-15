@@ -66,7 +66,6 @@ import { StrategyEditorForDatabases } from "./performance/components/StrategyEdi
 import { PerformanceTabId } from "./performance/types";
 import { getSettingsRoutes } from "./settingsRoutes";
 import { ToolsApp } from "./tools/components/ToolsApp";
-import { ToolsUpsell } from "./tools/components/ToolsUpsell";
 import { getTasksRoutes } from "./tools/routes";
 import {
   RedirectToAllowedSettings,
@@ -268,9 +267,7 @@ export const getRoutes = (
             <Route
               key="error-overview"
               path="errors"
-              // If the audit_app feature flag is present, our enterprise plugin system kicks in and we render the
-              // appropriate enterprise component. The upsell component is shown in all other cases.
-              component={PLUGIN_ADMIN_TOOLS.COMPONENT || ToolsUpsell}
+              component={PLUGIN_ADMIN_TOOLS.COMPONENT || ToolsApp}
             />
             <Route path="model-caching" component={ModelCachePage}>
               <ModalRoute path=":jobId" modal={ModelCacheRefreshJobModal} />

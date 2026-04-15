@@ -4,12 +4,10 @@ import { t } from "ttag";
 
 import { useListDatabasesQuery } from "metabase/api";
 import { QuestionPickerModal } from "metabase/common/components/Pickers";
-import { UpsellGem } from "metabase/common/components/upsells/components/UpsellGem";
 import { useHasTokenFeature } from "metabase/common/hooks";
 import { useDispatch, useSelector } from "metabase/lib/redux";
 import * as Urls from "metabase/lib/urls";
 import { PLUGIN_REMOTE_SYNC } from "metabase/plugins";
-import { getShouldShowPythonTransformsUpsell } from "metabase/transforms/selectors";
 import { Button, Center, Icon, Loader, Menu, Tooltip } from "metabase/ui";
 
 import { trackTransformCreate } from "../../../analytics";
@@ -27,15 +25,11 @@ export const CreateTransformMenu = () => {
   ] = useDisclosure();
 
   const hasPythonTransformsFeature = useHasTokenFeature("transforms-python");
-  const shouldShowPythonTransformsUpsell = useSelector(
-    getShouldShowPythonTransformsUpsell,
-  );
 
   const { data: databases, isLoading } = useListDatabasesQuery({
     include_analytics: true,
   });
-  const shouldShowPythonScriptOption =
-    hasPythonTransformsFeature || shouldShowPythonTransformsUpsell;
+  const shouldShowPythonScriptOption = hasPythonTransformsFeature;
   const isRemoteSyncReadOnly = useSelector(
     PLUGIN_REMOTE_SYNC.getIsRemoteSyncReadOnly,
   );
@@ -107,9 +101,6 @@ export const CreateTransformMenu = () => {
               {shouldShowPythonScriptOption && (
                 <Menu.Item
                   leftSection={<Icon name="code_block" />}
-                  rightSection={
-                    !hasPythonTransformsFeature ? <UpsellGem size={14} /> : null
-                  }
                   onClick={handlePythonClick}
                 >
                   {t`Python script`}
