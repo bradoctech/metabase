@@ -84,7 +84,24 @@ export type MetabaseColorKey =
   | "tooltip-text"
   | "tooltip-text-secondary"
   | "warning"
-  | "white";
+  | "white"
+  // SP Design System — Paleta Primária
+  | "sp-black"
+  | "sp-red"
+  | "sp-white"
+  | "sp-gray"
+  | "sp-gray-light"
+  // SP Design System — Paleta Secundária
+  | "sp-yellow"
+  | "sp-blue"
+  | "sp-green"
+  | "sp-sky-light"
+  | "sp-sky"
+  | "sp-blue-medium"
+  | "sp-blue-dark"
+  | "sp-navy"
+  | "sp-olive"
+  | "sp-red-dark";
 
 /**
  * @inline

@@ -2,6 +2,7 @@
 import type { MetabaseThemeV2 } from "../../types";
 import { LIGHT_THEME_ACCENT_COLORS } from "../accent-colors";
 import { getBaseColorsForThemeDefinitionOnly } from "../base-colors";
+import { spColors } from "../sp-colors";
 
 const baseColors = getBaseColorsForThemeDefinitionOnly();
 
@@ -15,10 +16,10 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "admin-navbar": "#1a1a1a",
     "admin-navbar-secondary": "#404040",
     "admin-navbar-inverse": "#FFFFFF",
-    "background-brand": baseColors.brand[10],
+    "background-brand": spColors.red[10], // SP Paleta Primária: sp-red
     "background-disabled": baseColors.orionAlpha[10],
     "background-disabled-inverse": baseColors.orionAlphaInverse[10],
-    "background-error-secondary": baseColors.lobster[5],
+    "background-error-secondary": spColors.redDark[5], // SP Paleta Secundária: sp-red-dark
     "background-highlight":
       "color-mix(in srgb, var(--mb-color-brand) 7%, transparent)",
     "background-home": "#F2F2F2",
@@ -35,67 +36,84 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "background-secondary-inverse": baseColors.orion[70],
     "background-tertiary-inverse": baseColors.orion[40],
     overlay: baseColors.orionAlpha[60],
-    "background-error": baseColors.lobster[10],
-    "background-success": baseColors.palm[5],
-    brand: "#C40008",
-    "brand-hover": "color-mix(in srgb, #C40008, white 12%)",
-    danger: baseColors.lobster[50],
-    error: baseColors.lobster[50],
-    filter: baseColors.octopus[50],
+    "background-error": spColors.redDark[10], // SP Paleta Secundária: sp-red-dark
+    "background-success": spColors.green.bg, // SP Paleta Secundária: sp-green
+    brand: spColors.red[40], // SP Paleta Primária: sp-red
+    "brand-hover": "color-mix(in srgb, #FF161F, white 12%)", // SP Paleta Primária: sp-red
+    danger: spColors.redDark.base, // SP Paleta Secundária: sp-red-dark
+    error: spColors.redDark.base, // SP Paleta Secundária: sp-red-dark
+    filter: spColors.blueMedium.base, // SP Paleta Secundária: sp-blue-medium
     focus: baseColors.black,
-    "icon-brand": baseColors.brand[40],
-    "icon-primary": baseColors.orionAlpha[80],
-    "icon-disabled": baseColors.orionAlpha[30],
-    "icon-secondary": baseColors.orionAlpha[50],
-    "illustration-brand-secondary": baseColors.brand[10],
-    "illustration-brand-tertiary": baseColors.brand[5],
-    "metabase-brand": "#C40008",
-    "metabase-brand-hover": "color-mix(in srgb, #C40008, white 12%)",
-    "saturated-blue": baseColors.ocean[60],
-    "saturated-green": baseColors.palm[60],
-    "saturated-purple": baseColors.octopus[60],
-    "saturated-red": baseColors.lobster[60],
-    "saturated-yellow": baseColors.dubloon[30],
+    "icon-brand": spColors.red[30], // SP Paleta Primária: sp-red
+    "icon-primary": spColors.black.alpha80, // SP Paleta Primária: sp-black
+    "icon-disabled": spColors.grayLight.base, // SP Paleta Primária: sp-gray-light
+    "icon-secondary": spColors.gray.base, // SP Paleta Primária: sp-gray
+    "illustration-brand-secondary": spColors.red[10], // SP Paleta Primária: sp-red
+    "illustration-brand-tertiary": spColors.red[5], // SP Paleta Primária: sp-red
+    "metabase-brand": spColors.red[40], // SP Paleta Primária: sp-red
+    "metabase-brand-hover": "color-mix(in srgb, #FF161F, white 12%)", // SP Paleta Primária: sp-red
+    "saturated-blue": spColors.blue.base, // SP Paleta Secundária: sp-blue
+    "saturated-green": spColors.green[60], // SP Paleta Secundária: sp-green
+    "saturated-purple": spColors.navy.base, // SP Paleta Secundária: sp-navy
+    "saturated-red": spColors.redDark.base, // SP Paleta Secundária: sp-red-dark
+    "saturated-yellow": spColors.yellow.base, // SP Paleta Secundária: sp-yellow
     shadow: baseColors.orionAlpha[20],
     "shadow-card-hover": "rgba(0, 0, 0, 0.15)",
-    "success-secondary": baseColors.palm[60],
-    success: baseColors.palm[50],
-    summarize: baseColors.palm[50],
-    "switch-off": baseColors.orionAlpha[20],
-    "syntax-parameters-active": baseColors.mango[10],
-    "syntax-parameters": baseColors.mango[60],
-    "text-brand": baseColors.brand[50],
-    "text-tertiary": baseColors.orionAlpha[40],
+    "success-secondary": spColors.green.dark, // SP Paleta Secundária: sp-green
+    success: spColors.green.base, // SP Paleta Secundária: sp-green
+    summarize: spColors.green.base, // SP Paleta Secundária: sp-green
+    "switch-off": spColors.grayLight.base, // SP Paleta Primária: sp-gray-light
+    "syntax-parameters-active": spColors.yellow[10], // SP Paleta Secundária: sp-yellow
+    "syntax-parameters": spColors.yellow.base, // SP Paleta Secundária: sp-yellow
+    "text-brand": spColors.red[40], // SP Paleta Primária: sp-red
+    "text-tertiary": spColors.grayLight.base, // SP Paleta Primária: sp-gray-light
     "text-tertiary-inverse": baseColors.orionAlphaInverse[40],
-    "text-hover": baseColors.brand[60],
-    "text-secondary-opaque": baseColors.orion[60],
-    "text-primary": baseColors.orionAlpha[80],
+    "text-hover": spColors.red[60], // SP Paleta Primária: sp-red
+    "text-secondary-opaque": spColors.gray.base, // SP Paleta Primária: sp-gray
+    "text-primary": spColors.black.base, // SP Paleta Primária: sp-black
     "text-primary-inverse": baseColors.orionAlphaInverse[80],
-    "text-secondary": baseColors.orionAlpha[60],
+    "text-secondary": spColors.gray.base, // SP Paleta Primária: sp-gray
     "text-secondary-inverse": baseColors.orionAlphaInverse[60],
-    "text-selected": baseColors.orionAlpha[80],
+    "text-selected": spColors.black.base, // SP Paleta Primária: sp-black
     "tooltip-background-focused": `color-mix(in srgb, ${baseColors.orion[80]} 50%, #000)`,
     "tooltip-background": baseColors.orion[80],
     "tooltip-text-secondary": baseColors.orionAlphaInverse[60],
     "tooltip-text": baseColors.white,
-    warning: baseColors.dubloon[30],
-    "background-warning": baseColors.dubloon[5],
-    info: baseColors.orion[40],
-    "background-info": baseColors.orion[10],
+    warning: spColors.yellow.base, // SP Paleta Secundária: sp-yellow
+    "background-warning": spColors.yellow.bg, // SP Paleta Secundária: sp-yellow
+    info: spColors.gray.base, // SP Paleta Primária: sp-gray
+    "background-info": spColors.gray.bg, // SP Paleta Primária: sp-gray
     white: baseColors.white,
-    border: baseColors.orion[20],
-    "border-brand": baseColors.brand[10],
+    border: spColors.black[15], // SP Paleta Primária: sp-black
+    "border-brand": spColors.red[10], // SP Paleta Primária: sp-red
     "border-card-home": "#E2E2E2",
-    "border-strong": baseColors.orionAlpha[50],
-    "border-subtle": baseColors.orionAlpha[10],
-    "button-primary": "#1a1a1a",
-    "button-primary-hover": "#404040",
+    "border-strong": spColors.gray.base, // SP Paleta Primária: sp-gray
+    "border-subtle": spColors.black.alpha10, // SP Paleta Primária: sp-black
+    "button-primary": spColors.black.base, // SP Paleta Primária: sp-black
+    "button-primary-hover": spColors.black.hover, // SP Paleta Primária: sp-black
     copper: "#B87333",
     bronze: "#CD7F32",
     silver: "#C0C0C0",
     gold: "#FFD700",
-    "upsell-primary": baseColors.ocean[70],
-    "upsell-secondary": baseColors.ocean[20],
+    "upsell-primary": spColors.blue.base, // SP Paleta Secundária: sp-blue
+    "upsell-secondary": spColors.skyLight.base, // SP Paleta Secundária: sp-sky-light
     "upsell-gem": "#00d4ff",
+    // SP Design System — Paleta Primária
+    "sp-black": "#000000",
+    "sp-red": "#FF161F",
+    "sp-white": "#FFFFFF",
+    "sp-gray": "#808080",
+    "sp-gray-light": "#BFBFBF",
+    // SP Design System — Paleta Secundária
+    "sp-yellow": "#FBB900",
+    "sp-blue": "#034EA2",
+    "sp-green": "#0B9247",
+    "sp-sky-light": "#A1DDF7",
+    "sp-sky": "#62C9E0",
+    "sp-blue-medium": "#4297D3",
+    "sp-blue-dark": "#005992",
+    "sp-navy": "#233254",
+    "sp-olive": "#94AA54",
+    "sp-red-dark": "#842519",
   },
 };
