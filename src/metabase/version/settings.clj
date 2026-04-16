@@ -1,5 +1,6 @@
 (ns metabase.version.settings
   (:require
+   [clojure.string :as str]
    [metabase.config.core :as config]
    [metabase.settings.core :as setting :refer [defsetting]]
    [metabase.system.core :as system]
@@ -7,10 +8,13 @@
    [metabase.util.log :as log]))
 
 (defsetting version
-  "Metabase's version info"
+  "Metabase's version info. When MB_SOURCE_CODE_URL is set (e.g. for AGPL compliance of a fork), it is included as :source-code-url."
   :visibility :public
   :setter     :none
-  :getter     (constantly config/mb-version-info)
+  :getter     (fn []
+                (cond-> config/mb-version-info
+                  (not (str/blank? (config/config-str :mb-source-code-url)))
+                  (assoc :source-code-url (config/config-str :mb-source-code-url))))
   :doc        false)
 
 (defsetting check-for-updates
