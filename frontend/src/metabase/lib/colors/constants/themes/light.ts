@@ -43,7 +43,7 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     danger: spColors.redDark.base, // SP Paleta Secundária: sp-red-dark
     error: spColors.redDark.base, // SP Paleta Secundária: sp-red-dark
     filter: baseColors.octopus[50], // original — sem roxo na paleta SP
-    focus: baseColors.black,
+    focus: spColors.grayLight.base, // SP Paleta Primária: sp-gray-light
     "icon-brand": spColors.red[30], // SP Paleta Primária: sp-red
     "icon-primary": spColors.black.alpha80, // SP Paleta Primária: sp-black
     "icon-disabled": spColors.grayLight.base, // SP Paleta Primária: sp-gray-light
