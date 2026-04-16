@@ -4,9 +4,9 @@ import styled from "@emotion/styled";
 import { Link } from "metabase/common/components/Link";
 import { Icon } from "metabase/ui";
 
-export const SectionBody = styled.div`
+export const SectionBody = styled.div<{ $compact?: boolean }>`
   display: flex;
-  gap: 1.5rem;
+  gap: ${({ $compact }) => ($compact ? "0.75rem" : "1.5rem")};
   flex-wrap: wrap;
 `;
 

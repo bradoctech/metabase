@@ -202,6 +202,10 @@ export type FontFormat = "woff" | "woff2" | "truetype";
 
 export interface Version {
   tag?: string;
+  date?: string;
+  hash?: string;
+  /** When set (e.g. MB_SOURCE_CODE_URL), used for AGPL source offer in the UI */
+  "source-code-url"?: string;
 }
 
 export interface VersionInfoRecord {

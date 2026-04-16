@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { t } from "ttag";
 
-import { LighthouseIllustration } from "metabase/common/components/LighthouseIllustration";
 import { useHasTokenFeature, useSetting } from "metabase/common/hooks";
 import { EmbeddingHubHomePage } from "metabase/embedding/embedding-hub";
 import { useSelector } from "metabase/lib/redux";
@@ -45,12 +44,10 @@ export const HomeLayout = ({ children }: HomeLayoutProps): ReactNode => {
         xl: "10rem 15rem 4rem",
       }}
       mih="100%"
-      bg="background-secondary"
+      bg="background-home"
     >
       {landingPageIllustration &&
-        (landingPageIllustration.isDefault ? (
-          <LighthouseIllustration />
-        ) : (
+        (landingPageIllustration.isDefault ? null : (
           <Box
             data-testid="landing-page-illustration"
             pos="absolute"

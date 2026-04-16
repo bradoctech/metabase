@@ -1,10 +1,9 @@
-import { HomeCard } from "../HomeCard";
-
 import {
   CardIcon,
+  CardIconWrapper,
   CardTitle,
-  CardTitlePrimary,
-  CardTitleSecondary,
+  CategoryBadge,
+  XrayCardRoot,
 } from "./HomeXrayCard.styled";
 import { trackHomeXRayClicked } from "./analytics";
 
@@ -20,12 +19,12 @@ export const HomeXrayCard = ({
   message,
 }: HomeXrayCardProps): JSX.Element => {
   return (
-    <HomeCard url={url} onClick={trackHomeXRayClicked}>
-      <CardIcon name="bolt_filled" />
-      <CardTitle>
-        <CardTitleSecondary>{message}</CardTitleSecondary>{" "}
-        <CardTitlePrimary>{title}</CardTitlePrimary>
-      </CardTitle>
-    </HomeCard>
+    <XrayCardRoot to={url} onClick={trackHomeXRayClicked}>
+      <CategoryBadge>{title}</CategoryBadge>
+      <CardIconWrapper>
+        <CardIcon name="bolt_filled" />
+      </CardIconWrapper>
+      <CardTitle>{message}</CardTitle>
+    </XrayCardRoot>
   );
 };

@@ -3218,7 +3218,7 @@ msgstr "Login"
 #: frontend/src/metabase/auth/components/Login/Login.tsx:49
 #, javascript-format
 msgid "Sign in to {0}"
-msgstr "Faça login em {0}"
+msgstr "Dashboards SP"
 
 #: frontend/src/metabase/auth/components/PasswordButton/PasswordButton.tsx:19
 msgid "Sign in with username or email"

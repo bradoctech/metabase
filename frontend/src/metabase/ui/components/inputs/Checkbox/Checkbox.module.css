@@ -77,8 +77,8 @@
   }
 
   &:checked {
-    border-color: var(--mb-color-brand);
-    background-color: var(--mb-color-brand);
+    border-color: #1a1a1a;
+    background-color: var(--mb-color-background-primary);
   }
 
   &:disabled {
@@ -111,6 +111,10 @@
 
 .icon {
   color: var(--mb-color-text-primary-inverse);
+}
+
+.root:has(.input:checked) .icon {
+  color: #1a1a1a;
 }
 
 .labelWrapper {

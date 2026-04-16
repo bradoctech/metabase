@@ -26,6 +26,8 @@ type CollectionBadgeProps = {
   className?: string;
   collection: WrappedEntity<CollectionType>;
   isSingleLine?: boolean;
+  activeColor?: string;
+  inactiveColor?: string;
   onClick?: () => void;
 };
 
@@ -33,6 +35,8 @@ const CollectionBadgeInner = ({
   className,
   collection,
   isSingleLine,
+  activeColor,
+  inactiveColor = "text-tertiary",
   onClick,
 }: CollectionBadgeProps) => {
   const tc = useTranslateContent();
@@ -54,8 +58,8 @@ const CollectionBadgeInner = ({
     <Badge
       className={className}
       icon={icon}
-      activeColor={icon.color}
-      inactiveColor="text-tertiary"
+      activeColor={activeColor ?? icon.color}
+      inactiveColor={inactiveColor}
       isSingleLine={isSingleLine}
       {...clickActionProps}
     >

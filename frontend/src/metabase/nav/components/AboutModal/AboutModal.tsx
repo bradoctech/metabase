@@ -1,6 +1,7 @@
 import { t } from "ttag";
 import _ from "underscore";
 
+import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { LogoIcon } from "metabase/common/components/LogoIcon";
 import { useSetting } from "metabase/common/hooks";
 import { capitalize } from "metabase/lib/formatting";
@@ -27,7 +28,11 @@ export const AboutModal = ({
 }: Pick<ModalProps, "onClose" | "opened">) => {
   const version = useSetting("version") as MetabaseInfo["version"];
   const applicationName = useSelector(getApplicationName);
-  const { tag, date, ...versionExtra } = version;
+  const sourceCodeUrl =
+    version?.["source-code-url"] ??
+    version?.["source_code_url"] ??
+    (version as Record<string, unknown>)?.["sourceCodeUrl"];
+  const { tag, date, "source-code-url": _skip, ...versionExtra } = version ?? {};
 
   const isWhiteLabeling = useSelector(getIsWhiteLabeling);
   const showTrademark = !isWhiteLabeling;
@@ -46,6 +51,18 @@ export const AboutModal = ({
           <Text c="text-secondary" fw="bold">
             {t`Built on`} {date}
           </Text>
+          {sourceCodeUrl && (
+            <Text c="text-secondary" fw="bold">
+              {t`Source code`}:{" "}
+              <ExternalLink
+                href={sourceCodeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {sourceCodeUrl}
+              </ExternalLink>
+            </Text>
+          )}
           {tag &&
             !/^v\d+\.\d+\.\d+$/.test(tag) &&
             _.map(versionExtra, (value, key) => (

@@ -2,7 +2,6 @@ import cx from "classnames";
 import { match } from "ts-pattern";
 import { c, t } from "ttag";
 
-import { UpsellSdkLink } from "metabase/admin/upsells/UpsellSdkLink";
 import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { useDocsUrl, useUrlWithUtm } from "metabase/common/hooks";
 import CS from "metabase/css/core/index.css";
@@ -53,10 +52,8 @@ export const EmbeddingSdkSettings = () => {
     .with(
       { needsToUpgrade: true },
       () =>
-        c(
-          "{0} is the link to upsell the SDK. {1} is the link to implement JWT or SAML authentication.",
-        )
-          .jt`You can test Embedded analytics SDK on localhost quickly by using API keys. To use the SDK on other sites, ${(<UpsellSdkLink key="upsell-sdk-link" />)} and ${ImplementJwtLink}.`,
+        c("{0} is the link to implement JWT or SAML authentication.")
+          .jt`You can test Embedded analytics SDK on localhost quickly by using API keys. To use the SDK on other sites, ${ImplementJwtLink}.`,
     )
     .with(
       { needsToImplementJwt: true },

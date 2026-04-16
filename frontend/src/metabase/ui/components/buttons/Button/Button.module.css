@@ -64,6 +64,29 @@
     }
   }
 
+  &[data-variant="primary"] {
+    color: #fff;
+    background-color: var(--mb-color-button-primary);
+    border-color: var(--mb-color-button-primary);
+
+    &:hover {
+      background-color: var(--mb-color-button-primary-hover);
+      border-color: var(--mb-color-button-primary-hover);
+    }
+
+    &:active {
+      background-color: var(--mb-color-button-primary-hover);
+      border-color: var(--mb-color-button-primary-hover);
+    }
+
+    &:disabled,
+    &[data-disabled="true"] {
+      color: var(--mb-color-text-tertiary);
+      border-color: var(--mb-color-border);
+      background-color: var(--mb-color-background-disabled);
+    }
+  }
+
   &[data-variant="subtle"] {
     &:hover {
       color: alpha(var(--button-color), 0.88);
@@ -169,6 +192,7 @@
   height: auto;
   display: inline-block;
   text-overflow: ellipsis;
+  padding-bottom: 2px;
 }
 
 .leftSection {
