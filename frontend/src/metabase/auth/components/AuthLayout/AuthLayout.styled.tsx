@@ -3,7 +3,7 @@ import styled from "@emotion/styled";
 
 import { breakpointMaxSmall } from "metabase/styled-components/theme";
 
-// eslint-disable-next-line no-color-literals
+// eslint-disable-next-line metabase/no-color-literals
 const LEFT_SUBTITLE_COLOR = "#5e5e5e";
 
 export const LayoutRoot = styled.div`
@@ -11,7 +11,7 @@ export const LayoutRoot = styled.div`
   min-height: 100vh;
 `;
 
-export const LayoutLeftPanel = styled.div`
+export const LayoutLeftPanel = styled.div<{ bgImage?: string }>`
   position: relative;
   display: flex;
   flex-direction: column;
@@ -20,7 +20,8 @@ export const LayoutLeftPanel = styled.div`
   flex: 1;
   padding: 1.5rem 2.5rem;
   background-color: var(--mb-color-button-primary);
-  background-image: url("/app/img/login_leftbg_only.png");
+  background-image: ${({ bgImage }) =>
+    bgImage ? `url("${bgImage}")` : `url("/app/img/login_leftbg_only.png")`};
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
