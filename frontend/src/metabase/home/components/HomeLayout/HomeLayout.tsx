@@ -75,14 +75,7 @@ export const HomeLayout = ({ children }: HomeLayoutProps): ReactNode => {
           </Button>
         </Tooltip>
       )}
-      <Box
-        pos="relative"
-        mt={{
-          base: "2.5rem",
-          md: "4rem",
-          lg: "6rem",
-        }}
-      >
+      <Box pos="relative" mt="0.5rem">
         {children}
       </Box>
       <CustomHomePageModal
