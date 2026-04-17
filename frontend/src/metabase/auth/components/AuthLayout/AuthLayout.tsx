@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { t } from "ttag";
 
 import { LogoIcon } from "metabase/common/components/LogoIcon";
+import { getSubpathSafeUrl } from "metabase/lib/urls";
 
 import {
   LayoutCard,
@@ -22,11 +23,19 @@ interface AuthLayoutProps {
 export const AuthLayout = ({ children }: AuthLayoutProps): JSX.Element => {
   return (
     <LayoutRoot data-testid="login-page">
-      <LayoutLeftPanel>
-        <LayoutFrameTop src="/app/img/login_frametop.png" alt="" />
-        <LayoutFrameBottom src="/app/img/login_framebottom.png" alt="" />
+      <LayoutLeftPanel
+        bgImage={getSubpathSafeUrl("app/img/login_leftbg_only.png")}
+      >
+        <LayoutFrameTop
+          src={getSubpathSafeUrl("app/img/login_frametop.png")}
+          alt=""
+        />
+        <LayoutFrameBottom
+          src={getSubpathSafeUrl("app/img/login_framebottom.png")}
+          alt=""
+        />
         <LayoutLeftImage
-          src="/app/img/login_dashboard.png"
+          src={getSubpathSafeUrl("app/img/login_dashboard.png")}
           alt={t`Dashboard preview`}
         />
         <LayoutLeftTitle>{t`Dashboards SP`}</LayoutLeftTitle>
