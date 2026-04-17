@@ -31,7 +31,7 @@ export const AuthLayout = ({ children }: AuthLayoutProps): JSX.Element => {
         />
         <LayoutLeftTitle>{t`Dashboards SP`}</LayoutLeftTitle>
         <LayoutLeftSubtitle>
-          {t`Make more informed decisions by analyzing the numbers carefully. Understanding the data can lead to better outcomes and strategies.`}
+          {t`Ambiente de análise com indicadores e dados consolidados para apoio à gestão pública.`}
         </LayoutLeftSubtitle>
       </LayoutLeftPanel>
 

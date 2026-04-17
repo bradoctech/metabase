@@ -47,8 +47,8 @@ export const findSize = ({
   return `${size}${unit}`;
 };
 
-const MAX_SIZE_SMALL = 2.2;
-const MAX_SIZE_LARGE = 7;
+const MAX_SIZE_SMALL = 1.8;
+const MAX_SIZE_LARGE = 4;
 
 const NARROW_CARD_WIDTH = 240;
 const NARROW_CARD_MAX_SIZE = 2.5;
