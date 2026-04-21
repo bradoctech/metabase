@@ -60,7 +60,7 @@
 .label {
   color: var(--mb-color-text-primary);
   font-size: var(--mantine-font-size-md);
-  font-weight: bold;
+  font-weight: 600;
   line-height: var(--mantine-line-height-md);
   margin-bottom: var(--mantine-spacing-xs);
 }
