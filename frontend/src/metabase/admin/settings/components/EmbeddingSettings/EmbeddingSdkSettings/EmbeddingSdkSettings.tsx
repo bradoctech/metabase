@@ -52,7 +52,9 @@ export const EmbeddingSdkSettings = () => {
     .with(
       { needsToUpgrade: true },
       () =>
-        c("{0} is the link to implement JWT or SAML authentication.")
+        c(
+          "{0} is the link to upsell the SDK. {1} is the link to implement JWT or SAML authentication.",
+        )
           .jt`You can test Embedded analytics SDK on localhost quickly by using API keys. To use the SDK on other sites, ${ImplementJwtLink}.`,
     )
     .with(
