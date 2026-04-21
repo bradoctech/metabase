@@ -13,7 +13,7 @@
   background-color: var(--mb-color-background-primary);
 
   &::placeholder {
-    color: var(--mb-color-text-tertiary);
+    color: var(--mb-color-sp-primary-40);
   }
 
   &:disabled {
@@ -32,14 +32,15 @@
   }
 
   &[data-variant="default"] {
-    border-color: var(--mb-color-border);
+    border-color: var(--mb-color-sp-color-border);
 
     &:focus {
-      border-color: var(--mb-color-brand);
+      border: 2px solid var(--mb-color-text-primary);
     }
 
     &[data-error] {
-      border-color: var(--mb-color-error);
+      border: 2px solid var(--mb-color-error);
+      color: var(--mb-color-text-primary);
     }
   }
 
@@ -48,7 +49,7 @@
     border-color: var(--mb-color-error);
 
     &::placeholder {
-      color: var(--mb-color-error);
+      color: var(--mb-color-sp-primary-40);
     }
   }
 }
@@ -74,6 +75,7 @@
 
 .error {
   color: var(--mb-color-error);
+  font-weight: 600;
   font-size: var(--mantine-font-size-sm);
   line-height: var(--mantine-line-height-sm);
   margin-top: var(--mantine-spacing-sm);
