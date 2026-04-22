@@ -19,6 +19,9 @@ RUN apt-get update && apt-get upgrade -y && apt-get install wget apt-transport-h
     && ./linux-install-1.12.0.1488.sh \
     && curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local/bin sh
 
+
+ENV PATH="/root/.local/bin:$PATH"
+
 COPY . .
 
 # version is pulled from git, but git doesn't trust the directory due to different owners
