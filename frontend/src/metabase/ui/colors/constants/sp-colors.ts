@@ -1,4 +1,4 @@
-/* eslint-disable no-color-literals */
+/* eslint-disable metabase/no-color-literals */
 /**
  * SP Design System color scales — valores 100% estáticos (hex / rgba).
  *
@@ -39,6 +39,12 @@ export const spColors = {
     5: "#FFF3F4",
   },
 
+  /** Cor primary40 solicitada pelo time */
+  primary40: "#5E5E5E",
+
+  /** Cor específica para bordas customizadas */
+  colorBorder: "#919191",
+
   /** #000000 — preto SP */
   black: {
     /** preto puro */
@@ -46,7 +52,7 @@ export const spColors = {
     /** rgba com 80% de opacidade */
     alpha80: "rgba(0, 0, 0, 0.80)",
     /** ~25% white (~#404040) */
-    hover: "#404040",
+    hover: "#303030",
     /** +85% white (~#D9D9D9) */
     15: "#D9D9D9",
     /** +90% white (~#E6E6E6) */
@@ -125,5 +131,39 @@ export const spColors = {
   navy: {
     /** azul marinho puro */
     base: "#233254",
+  },
+
+  // ─── Paleta de Status (error / success / warning / info) ────────────────
+  /** Paleta usada para estados de UI (erros, sucessos, avisos, informações) */
+  status: {
+    /** Erro — cor base solicitada */
+    error: {
+      base: "#E52207",
+      10: "#FFEDEB",
+      5: "#FFF6F5",
+    },
+
+    /** Sucesso */
+    success: {
+      base: "#0B9247",
+      bg: "#EBF6F0",
+    },
+
+    /** Aviso padrão */
+    warning: {
+      base: "#FBB900",
+      bg: "#FFF9EB",
+    },
+
+    /** Aviso laranja alternativo */
+    warningOrange: {
+      base: "#C68B00",
+    },
+
+    /** Informação/Info */
+    info: {
+      base: "#034EA2",
+      bg: "#EAF4FF",
+    },
   },
 };

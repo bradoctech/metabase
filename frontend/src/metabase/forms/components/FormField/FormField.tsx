@@ -44,7 +44,7 @@ export const FormField = forwardRef(function FormField(
                 component="label"
                 c={hasError ? "error" : "text-primary"}
                 htmlFor={htmlFor}
-                fw="bold"
+                fw="600"
                 fz="md"
               >
                 {title}

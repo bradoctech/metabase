@@ -3,9 +3,6 @@ import styled from "@emotion/styled";
 
 import { breakpointMaxSmall } from "metabase/styled-components/theme";
 
-// eslint-disable-next-line metabase/no-color-literals
-const LEFT_SUBTITLE_COLOR = "#5e5e5e";
-
 export const LayoutRoot = styled.div`
   display: flex;
   min-height: 100vh;
@@ -72,7 +69,7 @@ export const LayoutLeftTitle = styled.h1`
 `;
 
 export const LayoutLeftSubtitle = styled.p`
-  color: ${LEFT_SUBTITLE_COLOR};
+  color: var(--mb-color-sp-primary-40);
   font-size: 0.9rem;
   line-height: 1.6;
   max-width: 320px;

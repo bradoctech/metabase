@@ -173,7 +173,9 @@
 
 .Button:disabled {
   opacity: 0.5;
+  background-color: var(--mb-color-sp-color-border);
   cursor: not-allowed;
+  color: var(--mb-color-sp-white);
 }
 
 .ButtonDanger {
@@ -212,4 +214,16 @@
 
 .ButtonFullWidth {
   width: 100%;
+}
+
+/* Utility class to remove button border when needed (use via className)
+   Keeps background and text intact but removes border and focus outline. */
+.ButtonNoBorder {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.ButtonNoBorder:focus-visible {
+  border: none !important;
+  outline: none !important;
 }

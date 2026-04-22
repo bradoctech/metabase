@@ -98,6 +98,8 @@ export type MetabaseColorKey =
   | "sp-white"
   | "sp-gray"
   | "sp-gray-light"
+  | "sp-primary-40"
+  | "sp-color-border"
   // SP Design System — Paleta Secundária
   | "sp-yellow"
   | "sp-blue"

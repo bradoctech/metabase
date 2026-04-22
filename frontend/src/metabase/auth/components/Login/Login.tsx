@@ -42,7 +42,7 @@ export const Login = ({ params, location }: LoginProps): JSX.Element => {
       <Box
         role="heading"
         c="text-primary"
-        fz="1.25rem"
+        fz="1.5rem"
         fw="bold"
         lh="1.5rem"
         ta="center"
