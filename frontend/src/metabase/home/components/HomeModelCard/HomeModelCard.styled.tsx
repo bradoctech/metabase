@@ -60,10 +60,10 @@ export const CardIcon = styled(Icon)`
   color: var(--mb-color-brand);
   width: auto;
   height: auto;
-  max-width: 32px;
-  max-height: 32px;
-  min-width: 26.6px;
-  min-height: 26.6px;
+  max-width: 2rem;
+  max-height: 2rem;
+  min-width: 1.66rem;
+  min-height: 1.66rem;
 
   svg,
   img {
