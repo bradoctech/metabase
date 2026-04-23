@@ -40,7 +40,7 @@ const activeColorCSS = css`
 `;
 
 function getTextColor(isSelected: boolean) {
-  return isSelected ? color("text-primary") : color("text-primary");
+  return isSelected ? color("text-primary") : color("sp-black-hover");
 }
 
 type NodeRootProps = ComponentProps<typeof TreeNode.Root> & {
@@ -98,13 +98,14 @@ const itemContentStyle = css`
 `;
 
 export const FullWidthButton = styled.button<{ isSelected: boolean }>`
-  color: inherit;
+  color: ${(props) =>
+    props.isSelected ? color("text-primary") : color("sp-black-hover")};
   cursor: pointer;
 
   ${itemContentStyle}
   ${TreeNode.NameContainer} {
-    font-weight: 700;
-    color: ${(props) => (props.isSelected ? color("text-primary") : "inherit")};
+    color: ${(props) =>
+      props.isSelected ? color("text-primary") : color("sp-black-hover")};
     text-align: start;
 
     &:hover {
@@ -120,7 +121,6 @@ export const FullWidthButton = styled.button<{ isSelected: boolean }>`
 
 export const FullWidthLink = styled(Link)`
   ${itemContentStyle}
-
   &:focus,
   &:focus-visible {
     outline: none !important;

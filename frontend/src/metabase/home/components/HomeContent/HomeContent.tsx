@@ -27,10 +27,10 @@ const DEBUG_CARDS = false;
 const DebugCardsView = () => (
   <div
     style={{
-      padding: "2rem",
+      padding: "0",
       display: "flex",
       flexDirection: "column",
-      gap: "2rem",
+      gap: "0.75rem",
     }}
   >
     <div>

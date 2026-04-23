@@ -94,6 +94,7 @@ export type MetabaseColorKey =
   | "white"
   // SP Design System — Paleta Primária
   | "sp-black"
+  | "sp-black-hover"
   | "sp-red"
   | "sp-white"
   | "sp-gray"

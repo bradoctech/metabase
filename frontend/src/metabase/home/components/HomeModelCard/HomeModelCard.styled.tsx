@@ -16,7 +16,7 @@ export const ModelCardRoot = styled(CardRoot)`
   height: 315px;
   width: 215px;
   max-width: 215px;
-  gap: 1.25rem;
+  gap: 1.5rem;
   border-radius: 0.75rem;
   border-color: var(--mb-color-border-card-home);
   box-shadow: 0 0 0 0 transparent;
@@ -58,15 +58,25 @@ export const CardIconWrapper = styled.div`
 export const CardIcon = styled(Icon)`
   display: block;
   color: var(--mb-color-brand);
-  width: 1.5rem;
-  height: 1.5rem;
-  max-width: 24px;
-  max-height: 24px;
+  width: auto;
+  height: auto;
+  max-width: 2rem;
+  max-height: 2rem;
+  min-width: 1.66rem;
+  min-height: 1.66rem;
+
+  svg,
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
 `;
 
 export const CardTitle = styled.div`
-  font-size: 1.25rem;
-  font-weight: bold;
-  color: var(--mb-color-text-primary);
+  font-size: 1.25rem; /* 20px */
+  line-height: 1.875rem; /* 30px */
+  font-weight: 600;
+  color: var(--mb-color-sp-black-hover);
   width: 100%;
 `;

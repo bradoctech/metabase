@@ -11,10 +11,10 @@ interface CaptionProps {
 export const CaptionRoot = styled.div<CaptionProps>`
   display: flex;
   align-items: center;
-  color: ${(props) =>
-    props.primary ? color("text-primary") : color("text-secondary")};
-  font-weight: bold;
-  margin-bottom: 1.5rem;
+  color: ${color("sp-primary-40")};
+  font-weight: 500;
+  margin-bottom: 1.1563rem;
+  line-height: 1.875rem;
 
   ${breakpointMinExtraLarge} {
     margin-bottom: 2rem;
