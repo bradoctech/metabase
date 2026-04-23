@@ -6,7 +6,7 @@ import { Icon } from "metabase/ui";
 
 export const SectionBody = styled.div<{ $compact?: boolean }>`
   display: flex;
-  gap: ${({ $compact }) => ($compact ? "0.75rem" : "1.5rem")};
+  gap: 0.75rem;
   flex-wrap: wrap;
 `;
 

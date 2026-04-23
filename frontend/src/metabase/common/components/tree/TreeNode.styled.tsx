@@ -22,7 +22,7 @@ export const TreeNodeRoot = styled.li<TreeNodeRootProps>`
   padding-left: ${(props) => props.depth + 0.5}rem;
   padding-right: 0.5rem;
   cursor: pointer;
-  font-weight: 700;
+  font-weight: ${(props) => (props.isSelected ? 700 : 600)};
 
   &:hover {
     background-color: ${(props) =>

@@ -25,9 +25,9 @@
 }
 
 .greetingMessage {
-  color: var(--mb-color-text-primary);
-  font-weight: bold;
-  line-height: 1.5rem;
+  color: var(--mb-color-sp-black-hover);
+  font-weight: 600;
+  line-height: 1.875rem;
 
   &.withLogo {
     font-size: 1.125rem;
@@ -45,4 +45,8 @@
       font-size: 1.5rem;
     }
   }
+}
+
+.greetingName {
+  font-weight: 800;
 }

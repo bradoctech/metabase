@@ -14,6 +14,11 @@ export const NewButton = styled((props: ButtonProps) => (
   align-items: center;
   height: 2.25rem;
   padding: 0.5rem;
+  color: var(--mb-color-sp-white);
+
+  svg {
+    color: var(--mb-color-sp-white);
+  }
 
   ${Button.TextContainer} {
     margin-left: 0;
@@ -28,4 +33,6 @@ export const NewButtonText = styled.h4`
   display: inline;
   margin-left: 0.5rem;
   white-space: nowrap;
+  color: var(--mb-color-sp-white);
+  font-weight: 600;
 `;
