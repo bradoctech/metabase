@@ -91,6 +91,11 @@
   background-color: var(--mb-color-background-hover);
 }
 
+/* Use for menu-like hover backgrounds (e.g. search, small cards) */
+.bgMenuHover:hover {
+  background-color: var(--mb-color-background-menu-hover);
+}
+
 .bgLight,
 .bgLightHover:hover {
   background-color: var(--mb-color-background-secondary);

@@ -24,7 +24,8 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "background-highlight":
       "color-mix(in srgb, var(--mb-color-brand) 7%, transparent)",
     "background-home": "#F2F2F2",
-    "background-hover": "#ebebeb",
+    "background-hover":
+      "color-mix(in srgb, var(--mb-color-brand) 7%, transparent)",
     "background-menu-hover": "color-mix(in srgb, #ebebeb, white 20%)",
     "background-selected":
       "color-mix(in srgb, var(--mb-color-brand) 21%, transparent)",
