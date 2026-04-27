@@ -37,11 +37,32 @@
 }
 
 /* TODO: remove this and apply AdminHoverItem to content rows */
-.ContentTable tbody tr:hover {
+.ContentTable tbody tr:hover,
+/* Hover for div-based grid "rows" inside quadrant containers */
+[data-testid="center-pinned-quadrant"] [role="row"]:hover,
+[data-testid="center-center-quadrant"] [role="row"]:hover,
+[data-testid="pinned-center-quadrant"] [role="row"]:hover,
+[data-testid="pinned-pinned-quadrant"] [role="row"]:hover,
+/* Also apply when hovering a gridcell: highlight its parent row (uses :has)
+   Modern browsers support :has; falls back to coloring the cell itself where unsupported. */
+[data-testid="center-pinned-quadrant"] [role="row"]:has([role="gridcell"]:hover),
+[data-testid="center-center-quadrant"] [role="row"]:has([role="gridcell"]:hover),
+[data-testid="pinned-center-quadrant"] [role="row"]:has([role="gridcell"]:hover),
+[data-testid="pinned-pinned-quadrant"] [role="row"]:has([role="gridcell"]:hover) {
   background-color: var(--mb-color-background-hover);
 }
 
-.ContentTable tr:hover .TableActions {
+/* Show row actions on hover for both table rows and div-based rows */
+.ContentTable tr:hover .TableActions,
+[data-testid="center-pinned-quadrant"] [role="row"]:hover .TableActions,
+[data-testid="center-center-quadrant"] [role="row"]:hover .TableActions,
+[data-testid="pinned-center-quadrant"] [role="row"]:hover .TableActions,
+[data-testid="pinned-pinned-quadrant"] [role="row"]:hover .TableActions,
+/* Show actions when a gridcell inside the row is hovered (via :has) */
+[data-testid="center-pinned-quadrant"] [role="row"]:has([role="gridcell"]:hover) .TableActions,
+[data-testid="center-center-quadrant"] [role="row"]:has([role="gridcell"]:hover) .TableActions,
+[data-testid="pinned-center-quadrant"] [role="row"]:has([role="gridcell"]:hover) .TableActions,
+[data-testid="pinned-pinned-quadrant"] [role="row"]:has([role="gridcell"]:hover) .TableActions {
   opacity: 1;
   transition: opacity 0.2s linear;
 }
