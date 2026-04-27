@@ -27,6 +27,12 @@
     /* Not semantically correct color, but we need something with contrast on background-hover */
     background-color: var(--mb-color-background-selected);
   }
+
+  /* increase specificity to override global Button.module.css rules */
+  &[data-variant="default"]:hover,
+  &.searchTextButton[data-variant="default"]:hover {
+    background-color: var(--mb-color-background-menu-hover);
+  }
 }
 
 .shortcutText {
