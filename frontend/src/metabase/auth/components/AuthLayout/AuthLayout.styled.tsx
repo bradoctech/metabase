@@ -56,7 +56,7 @@ export const LayoutLeftImage = styled.img`
   max-width: 95%;
   border-radius: 0.75rem;
   object-fit: cover;
-  margin-top: 0;
+  margin-top: -3rem;
   z-index: 1;
 `;
 
@@ -64,7 +64,7 @@ export const LayoutLeftTitle = styled.h1`
   color: var(--mb-color-text-primary-inverse);
   font-size: 1.75rem;
   font-weight: 700;
-  margin: 1rem 0 0.35rem;
+  margin: -4rem 0 0.35rem;
   z-index: 1;
 `;
 
