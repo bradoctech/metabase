@@ -1,7 +1,9 @@
 import Color from "color";
 import _ from "underscore";
 
-import { ACCENT_COUNT, color } from "./palette";
+import { LIGHT_THEME_ACCENT_COLORS } from "./constants/accent-colors";
+import { ACCENT_COLOR_NAMES_MAP } from "./constants/accents";
+import { color } from "./palette";
 import type { AccentColorOptions, ColorName, ColorPalette } from "./types";
 
 export const getAccentColors = (
@@ -29,15 +31,14 @@ export const getAccentColors = (
 };
 
 const getBaseAccentsNames = (withGray = false) => {
-  const accents: ColorName[] = _.times(
-    ACCENT_COUNT,
-    (i) => `accent${i}` as ColorName,
+  const names: ColorName[] = ACCENT_COLOR_NAMES_MAP.map(
+    (entry) => entry.base as ColorName,
   );
-  if (withGray) {
-    accents.push("accent-gray");
+  if (!withGray) {
+    return names.filter((n) => n !== ("accent-gray" as ColorName));
   }
 
-  return accents;
+  return names;
 };
 
 export const getMainAccentColors = (
@@ -45,27 +46,104 @@ export const getMainAccentColors = (
   withGray = false,
 ): string[] => {
   // Ensure that colors are defined in hex, not HSLA
-  return getBaseAccentsNames(withGray).map((accent) =>
-    Color(color(accent, palette)).hex(),
-  );
+  return getBaseAccentsNames(withGray).map((accent, i) => {
+    const def = LIGHT_THEME_ACCENT_COLORS[i];
+    if (def && typeof def !== "string") {
+      return Color(def.base).hex();
+    }
+
+    try {
+      const c = color(accent, palette);
+      // If palette returned an unresolved token, fall back to default string value
+      if (typeof c === "string" && c.startsWith("accent")) {
+        if (typeof def === "string") {
+          return Color(def).hex();
+        }
+        // fallback generic
+        return Color(accent).hex();
+      }
+
+      return Color(c).hex();
+    } catch (e) {
+      if (typeof def === "string") {
+        return Color(def).hex();
+      }
+      // eslint-disable-next-line metabase/no-color-literals
+      return "#000000";
+    }
+  });
 };
 
 export const getLightAccentColors = (
   palette?: ColorPalette,
   withGray = false,
 ): string[] => {
-  return getBaseAccentsNames(withGray).map((accent) =>
-    Color(color(`${accent}-light` as ColorName, palette)).hex(),
-  );
+  return getBaseAccentsNames(withGray).map((accent, i) => {
+    const def = LIGHT_THEME_ACCENT_COLORS[i];
+    if (def && typeof def !== "string") {
+      return Color(def.tint ?? def.base).hex();
+    }
+
+    try {
+      const c = color(`${accent}-light` as ColorName, palette);
+      if (typeof c === "string" && c.startsWith("accent")) {
+        if (typeof def === "string") {
+          return Color(def)
+            .lightness(Color(def).lightness() + 12.5)
+            .hex();
+        }
+        return Color(accent)
+          .lightness(Color(accent).lightness() + 12.5)
+          .hex();
+      }
+
+      return Color(c).hex();
+    } catch (e) {
+      if (typeof def === "string") {
+        return Color(def)
+          .lightness(Color(def).lightness() + 12.5)
+          .hex();
+      }
+      // eslint-disable-next-line metabase/no-color-literals
+      return "#000000";
+    }
+  });
 };
 
 export const getDarkAccentColors = (
   palette?: ColorPalette,
   withGray = false,
 ) => {
-  return getBaseAccentsNames(withGray).map((accent) =>
-    Color(color(`${accent}-dark` as ColorName, palette)).hex(),
-  );
+  return getBaseAccentsNames(withGray).map((accent, i) => {
+    const def = LIGHT_THEME_ACCENT_COLORS[i];
+    if (def && typeof def !== "string") {
+      return Color(def.shade ?? def.base).hex();
+    }
+
+    try {
+      const c = color(`${accent}-dark` as ColorName, palette);
+      if (typeof c === "string" && c.startsWith("accent")) {
+        if (typeof def === "string") {
+          return Color(def)
+            .lightness(Color(def).lightness() - 12.5)
+            .hex();
+        }
+        return Color(accent)
+          .lightness(Color(accent).lightness() - 12.5)
+          .hex();
+      }
+
+      return Color(c).hex();
+    } catch (e) {
+      if (typeof def === "string") {
+        return Color(def)
+          .lightness(Color(def).lightness() - 12.5)
+          .hex();
+      }
+      // eslint-disable-next-line metabase/no-color-literals
+      return "#000000";
+    }
+  });
 };
 
 export const getStatusColorRanges = (): string[][] => {

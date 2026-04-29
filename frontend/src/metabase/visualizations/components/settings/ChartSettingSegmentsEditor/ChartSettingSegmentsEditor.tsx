@@ -138,10 +138,12 @@ export const ChartSettingSegmentsEditor = ({
 function getColorPalette() {
   return [
     ...getAccentColors(),
+    Color(color("blue")).hex(),
+    Color(color("success")).hex(),
+    // eslint-disable-next-line metabase/no-color-literals
+    "#BFBFBF",
     Color(color("error")).hex(),
     Color(color("warning")).hex(),
-    Color(color("success")).hex(),
-    Color(color("background-tertiary")).hex(),
   ];
 }
 
