@@ -20,9 +20,9 @@ export const DEFAULT_ACCENT_COLORS: ChartColorV2[] = [
 export const LIGHT_THEME_ACCENT_COLORS: ChartColorV2[] = [
   ...DEFAULT_ACCENT_COLORS,
   {
-    base: baseColors.orion[10],
-    tint: baseColors.orion[5],
-    shade: baseColors.orion[20],
+    base: "#000000",
+    tint: "#666666",
+    shade: "#000000",
   },
 ];
 
