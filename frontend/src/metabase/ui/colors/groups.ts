@@ -3,6 +3,7 @@ import _ from "underscore";
 
 import { LIGHT_THEME_ACCENT_COLORS } from "./constants/accent-colors";
 import { ACCENT_COLOR_NAMES_MAP } from "./constants/accents";
+// import { ACCENT_COUNT } from "./palette"; // Controla a quantidade de accents (accent0..accentN). Aumente junto com DEFAULT_ACCENT_COLORS e ACCENT_COLOR_NAMES_MAP ao adicionar novas cores.
 import { color } from "./palette";
 import type { AccentColorOptions, ColorName, ColorPalette } from "./types";
 
