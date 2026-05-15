@@ -1,6 +1,7 @@
 import type React from "react";
 import { t } from "ttag";
 
+import CS from "metabase/css/core/index.css";
 import { MODAL_TYPES, type QueryModalType } from "metabase/querying/constants";
 import { Box, Flex } from "metabase/ui";
 import * as Lib from "metabase-lib";
@@ -45,6 +46,11 @@ export function AdHocQuestionLeftSide(
   return (
     <Box className={AdHocQuestionLeftSideS.AdHocLeftSideRoot}>
       <Flex align="center" wrap="nowrap">
+        <img
+          src="app/assets/img/logo-sp-gov.svg"
+          alt="São Paulo"
+          className={CS.SpLogo}
+        />
         <ViewHeading
           className={ViewTitleHeaderS.AdHocViewHeading}
           c="text-secondary"

@@ -31,7 +31,7 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
       "color-mix(in srgb, var(--mb-color-brand) 21%, transparent)",
     "background-menu-selected": "color-mix(in srgb, #ebebeb, white 0%)",
     "background-primary": baseColors.white,
-    "background-secondary": baseColors.orion[5],
+    "background-secondary": spColors.bgSecondary,
     "background-tertiary": baseColors.orion[10],
     "background-primary-inverse": baseColors.orion[80],
     "background-secondary-inverse": baseColors.orion[70],
@@ -108,7 +108,8 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "sp-red": "#FF161F",
     "sp-white": "#FFFFFF",
     "sp-gray": "#808080",
-    "sp-gray-light": "#BFBFBF",
+    "sp-gray-light": spColors.grayLight.base,
+    "sp-gray-medium": spColors.grayMedium.base,
     "sp-primary-40": spColors.primary40,
     "sp-color-border": spColors.colorBorder,
     // SP Design System Paleta Secundaria

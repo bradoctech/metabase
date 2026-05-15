@@ -9,6 +9,8 @@
  * Todos os tons foram pré-calculados a partir das cores base da paleta SP.
  *
  * Só use este arquivo para definir os temas `light.ts` e `dark.ts`.
+ *
+ * Case queira adicionar var use color-keys-ts para add o type e então adicione ao light.ts ou dark.ts.
  */
 export const spColors = {
   // ─── Paleta Primária ────────────────────────────────────────────────────────
@@ -73,6 +75,12 @@ export const spColors = {
   grayLight: {
     /** cinza claro puro */
     base: "#BFBFBF",
+  },
+
+  /** #949AAB — cinza médio SP */
+  grayMedium: {
+    /** cinza médio puro */
+    base: "#949AAB",
   },
 
   // ─── Paleta Secundária ───────────────────────────────────────────────────────
@@ -166,4 +174,8 @@ export const spColors = {
       bg: "#EAF4FF",
     },
   },
+
+  // ─── Paletas adicionais conforme figma com novos ajustes ───────────────────
+
+  bgSecondary: "#F1F1F1",
 };

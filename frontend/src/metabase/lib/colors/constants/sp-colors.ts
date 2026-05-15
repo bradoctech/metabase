@@ -1,4 +1,4 @@
-/* eslint-disable no-color-literals */
+/* eslint-disable metabase/no-color-literals */
 /**
  * SP Design System color scales — valores 100% estáticos (hex / rgba).
  *
@@ -67,6 +67,12 @@ export const spColors = {
   grayLight: {
     /** cinza claro puro */
     base: "#BFBFBF",
+  },
+
+  /** #949AAB — cinza médio SP */
+  grayMedium: {
+    /** cinza médio puro */
+    base: "#949AAB",
   },
 
   // ─── Paleta Secundária ───────────────────────────────────────────────────────

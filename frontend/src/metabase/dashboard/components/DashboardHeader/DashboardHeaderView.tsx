@@ -139,6 +139,11 @@ export function DashboardHeaderView({
                   })}
                 >
                   <Flex className={S.HeaderCaptionContainer} gap={2}>
+                    <img
+                      src="app/assets/img/logo-sp-gov.svg"
+                      alt="São Paulo"
+                      className={CS.SpLogo}
+                    />
                     <Dashboard.Title className={S.HeaderCaption} />
 
                     <Flex
