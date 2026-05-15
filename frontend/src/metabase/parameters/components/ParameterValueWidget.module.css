@@ -1,15 +1,20 @@
 .parameter {
   align-items: center;
   display: flex;
-  font-weight: 700;
+  font-weight: 600;
+  font-style: normal;
+  font-size: 0.75rem;
+  line-height: var(--mantine-line-height-sm, 1rem);
+  letter-spacing: 0;
+  text-align: center;
+  vertical-align: middle;
   height: 32px;
   min-width: 120px;
   background: var(--mb-color-background-primary);
   color: var(--mb-color-text-primary);
-  border: 1px solid var(--mb-color-border);
-  padding-left: var(--mantine-spacing-sm);
-  padding-right: var(--mantine-spacing-sm);
-  border-radius: var(--mantine-radius-sm);
+  border: 1px solid var(--mb-color-sp-color-border);
+  padding: 0.375rem 1rem;
+  border-radius: 100px;
   transition: all 0.2s ease-in-out;
 
   &.selected {
@@ -100,15 +105,41 @@
 
 .widgetStatus {
   flex: 0 0 auto;
+  /* ensure icons inherit the desired color */
+  color: var(--mb-color-sp-black-hover);
+}
+
+/* Specific styling for the chevron-down icon inside the widget status */
+.widgetStatus .Icon-chevrondown,
+.widgetStatus .Icon-chevrondown path {
+  color: var(--mb-color-sp-black-hover);
+  fill: var(--mb-color-sp-black-hover);
+  /* width: 1rem;
+  height: 1rem; */
+  width: 10px;
+  height: 5px;
 }
 
 .TriggerContainer {
   padding: 0.6875rem;
-  border: 1px solid var(--mb-color-border);
-  border-radius: 0.25rem;
+  border: 1px solid var(--mb-color-sp-color-border);
+  border-radius: 100px;
+  font-weight: 600;
+  font-style: normal;
+  font-size: 0.75rem;
+  line-height: var(--mantine-line-height-sm, 1rem);
+  letter-spacing: 0;
+  text-align: center;
+  vertical-align: middle;
   cursor: pointer;
 
   &.hasValue {
     border-color: var(--mb-color-brand);
   }
+}
+
+/* Ensure the small action areas inside the widget also have the requested border-radius */
+.widgetStatus,
+.widgetStatus *[role="button"] {
+  border-radius: 100px;
 }

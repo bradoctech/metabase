@@ -214,11 +214,18 @@ export const EmbedFrame = ({
                   isFixedWidth={dashboard?.width === "fixed"}
                 >
                   {finalName && (
-                    <TitleAndDescription
-                      title={finalName}
-                      description={description}
-                      className={CS.my2}
-                    />
+                    <>
+                      <img
+                        src="app/assets/img/logo-sp-gov.svg"
+                        alt="São Paulo"
+                        className={CS.SpLogo}
+                      />
+                      <TitleAndDescription
+                        title={finalName}
+                        description={description}
+                        className={CS.my2}
+                      />
+                    </>
                   )}
                   <Box style={{ flex: 1 }} />
                   {dashboard && pdfDownloadsEnabled && (

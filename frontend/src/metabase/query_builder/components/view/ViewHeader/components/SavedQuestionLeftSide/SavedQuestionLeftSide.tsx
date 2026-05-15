@@ -3,6 +3,7 @@ import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 
 import { LastEditInfoLabel } from "metabase/common/components/LastEditInfoLabel";
+import CS from "metabase/css/core/index.css";
 import { SavedQuestionHeaderButton } from "metabase/query_builder/components/SavedQuestionHeaderButton/SavedQuestionHeaderButton";
 import { Box, Flex } from "metabase/ui";
 import type Question from "metabase-lib/v1/Question";
@@ -74,6 +75,11 @@ export function SavedQuestionLeftSide({
           })}
         >
           <Flex align="center" gap="sm">
+            <img
+              src="app/assets/img/logo-sp-gov.svg"
+              alt="São Paulo"
+              className={CS.SpLogo}
+            />
             <HeadBreadcrumbs
               divider={
                 <span className={ViewTitleHeaderS.HeaderDivider}>/</span>

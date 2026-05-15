@@ -28,3 +28,12 @@
   display: flex;
   flex-direction: column;
 }
+
+.SpLogo {
+  height: 2.125rem; /* 34px */
+  width: auto;
+  margin-right: 0.5rem;
+  display: inline-block;
+  object-fit: contain;
+  border-right: 1px solid var(--mb-color-sp-color-border, #d1d5dc);
+}

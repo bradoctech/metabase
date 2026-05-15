@@ -121,6 +121,11 @@ const AutomaticDashboardAppInner = () => {
                     className={cx(CS.flex, CS.alignCenter)}
                     isFixedWidth={dashboard?.width === "fixed"}
                   >
+                    <img
+                      src="app/assets/img/logo-sp-gov.svg"
+                      alt="São Paulo"
+                      className={cx(S.SpLogo)}
+                    />
                     <XrayIcon />
                     <Dashboard.Title className={cx(CS.textWrap, CS.h2)} />
                   </FixedWidthContainer>
