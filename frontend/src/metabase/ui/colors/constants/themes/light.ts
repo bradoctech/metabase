@@ -16,11 +16,11 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "admin-navbar": "#1a1a1a",
     "admin-navbar-secondary": "#404040",
     "admin-navbar-inverse": "#FFFFFF",
-    "background-brand": spColors.red[10], // SP Paleta Primária: sp-red
+    "background-brand": spColors.red[10], // SP Paleta Primaria: sp-red
     "background-filter": baseColors.filter[5],
     "background-disabled": baseColors.orionAlpha[10],
     "background-disabled-inverse": baseColors.orionAlphaInverse[10],
-    "background-error-secondary": spColors.redDark[5], // SP Paleta Secundária: sp-red-dark
+    "background-error-secondary": spColors.redDark[5], // SP Paleta Secundaria: sp-red-dark
     "background-highlight":
       "color-mix(in srgb, var(--mb-color-brand) 7%, transparent)",
     "background-home": "#F2F2F2",
@@ -117,11 +117,22 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "sp-blue": "#034EA2",
     "sp-green": "#0B9247",
     "sp-sky-light": "#A1DDF7",
-    "sp-sky": "#62C9E0",
+    "sp-sky": spColors.sky.base, // SP Paleta Secundaria: sp-sky #62C9E0
     "sp-blue-medium": "#4297D3",
     "sp-blue-dark": "#005992",
     "sp-navy": "#233254",
-    "sp-olive": "#94AA54",
-    "sp-red-dark": "#842519",
+    "sp-olive": spColors.olive.base, // SP Paleta Secundaria: sp-olive #94AA54
+    "sp-red-dark": spColors.redDark.base, // SP Paleta Secundaria: sp-red-dark #842519
+    // SP Design System — Paleta ampliada (tons e variacoes)
+    "sp-green-light": spColors.green.light, // #E3F5E1
+    "sp-green-medium": spColors.green.medium, // #B4D0BB
+    "sp-green-darker": spColors.green.darker, // #086732
+    "sp-yellow-light": spColors.yellow.light, // #FFF5C2
+    "sp-yellow-medium": spColors.yellow.medium, // #FFC572
+    "sp-red-light": spColors.red.light, // #FFE5E5
+    "sp-red-medium": spColors.red.medium, // #EB7B7B
+    "sp-red-dark2": spColors.red.dark, // #B22929
+    "sp-blue-light": spColors.blue.light, // #E6F0FC
+    "sp-blue-soft": spColors.blue.medium, // #ADD7FB
   },
 };

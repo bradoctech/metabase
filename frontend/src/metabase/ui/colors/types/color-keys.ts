@@ -101,7 +101,7 @@ export type MetabaseColorKey =
   | "sp-gray-light"
   | "sp-primary-40"
   | "sp-color-border"
-  // SP Design System — Paleta Secundária
+  // SP Design System — Paleta Secundaria
   | "sp-yellow"
   | "sp-blue"
   | "sp-green"
@@ -111,7 +111,18 @@ export type MetabaseColorKey =
   | "sp-blue-dark"
   | "sp-navy"
   | "sp-olive"
-  | "sp-red-dark";
+  | "sp-red-dark"
+  // SP Design System — Paleta ampliada (tons e variacoes)
+  | "sp-green-light"
+  | "sp-green-medium"
+  | "sp-green-darker"
+  | "sp-yellow-light"
+  | "sp-yellow-medium"
+  | "sp-red-light"
+  | "sp-red-medium"
+  | "sp-red-dark2"
+  | "sp-blue-light"
+  | "sp-blue-soft";
 
 /**
  * @inline

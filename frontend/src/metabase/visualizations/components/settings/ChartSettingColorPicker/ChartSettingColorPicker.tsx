@@ -5,7 +5,7 @@ import { ColorSelector } from "metabase/common/components/ColorSelector";
 import CS from "metabase/css/core/index.css";
 import { isEmbeddingSdk } from "metabase/embedding-sdk/config";
 import { Box, type BoxProps } from "metabase/ui";
-import { getAccentColors } from "metabase/ui/colors/groups";
+import { SP_PALETTE_COLORS } from "metabase/ui/colors/constants/accent-colors";
 import type { AccentColorOptions } from "metabase/ui/colors/types";
 
 interface ChartSettingColorPickerProps extends BoxProps {
@@ -23,13 +23,7 @@ export const ChartSettingColorPicker = ({
   title,
   pillSize,
   onChange,
-  accentColorOptions = {
-    main: true,
-    light: true,
-    dark: true,
-    harmony: false,
-    gray: true,
-  },
+  accentColorOptions: _accentColorOptions, // kept for API compatibility
   ...boxProps
 }: ChartSettingColorPickerProps) => {
   // For the SDK the ColorSelector is rendered inside a parent Mantine popover,
@@ -40,7 +34,7 @@ export const ChartSettingColorPicker = ({
     <Box className={cx(CS.flex, CS.alignCenter, className)} {...boxProps}>
       <ColorSelector
         value={value}
-        colors={getAccentColors(accentColorOptions)}
+        colors={SP_PALETTE_COLORS}
         withinPortal={withinPortal}
         onChange={onChange}
         pillSize={pillSize}

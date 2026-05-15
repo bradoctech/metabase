@@ -13,7 +13,7 @@
  * Case queira adicionar var use color-keys-ts para add o type e então adicione ao light.ts ou dark.ts.
  */
 export const spColors = {
-  // ─── Paleta Primária ────────────────────────────────────────────────────────
+  // ─── Paleta Primaria ────────────────────────────────────────────────────────
 
   /** #FF161F — vermelho principal SP */
   red: {
@@ -39,6 +39,12 @@ export const spColors = {
     10: "#FFE8E9",
     /** +95% white (~#FFF3F4) */
     5: "#FFF3F4",
+    /** muito claro (#FFE5E5) — fundo suave vermelho */
+    light: "#FFE5E5",
+    /** medio (#EB7B7B) — vermelho rosado */
+    medium: "#EB7B7B",
+    /** escuro (#B22929) — vermelho sangue */
+    dark: "#B22929",
   },
 
   /** Cor primary40 solicitada pelo time */
@@ -77,13 +83,13 @@ export const spColors = {
     base: "#BFBFBF",
   },
 
-  /** #949AAB — cinza médio SP */
+  /** #949AAB — cinza medio SP */
   grayMedium: {
-    /** cinza médio puro */
+    /** cinza medio puro */
     base: "#949AAB",
   },
 
-  // ─── Paleta Secundária ───────────────────────────────────────────────────────
+  // ─── Paleta Secundaria ───────────────────────────────────────────────────────
 
   /** #842519 — vermelho escuro SP */
   redDark: {
@@ -105,6 +111,12 @@ export const spColors = {
     base: "#0B9247",
     /** +92% white (~#EBF6F0) */
     bg: "#EBF6F0",
+    /** muito claro (#E3F5E1) — fundo suave verde */
+    light: "#E3F5E1",
+    /** medio (#B4D0BB) — verde acinzentado */
+    medium: "#B4D0BB",
+    /** mais escuro (#086732) — verde floresta */
+    darker: "#086732",
   },
 
   /** #FBB900 — amarelo SP */
@@ -115,17 +127,25 @@ export const spColors = {
     10: "#FEF5D9",
     /** +92% white (~#FFF9EB) */
     bg: "#FFF9EB",
+    /** muito claro (#FFF5C2) — fundo suave amarelo */
+    light: "#FFF5C2",
+    /** medio (#FFC572) — amarelo ambar */
+    medium: "#FFC572",
   },
 
   /** #034EA2 — azul SP */
   blue: {
     /** azul puro */
     base: "#034EA2",
+    /** muito claro (#E6F0FC) — fundo suave azul */
+    light: "#E6F0FC",
+    /** medio-claro (#ADD7FB) — azul suave */
+    medium: "#ADD7FB",
   },
 
-  /** #4297D3 — azul médio SP */
+  /** #4297D3 — azul medio SP */
   blueMedium: {
-    /** azul médio puro */
+    /** azul medio puro */
     base: "#4297D3",
   },
 
@@ -135,6 +155,18 @@ export const spColors = {
     base: "#A1DDF7",
   },
 
+  /** #62C9E0 — azul turquesa SP */
+  sky: {
+    /** turquesa puro */
+    base: "#62C9E0",
+  },
+
+  /** #94AA54 — verde-oliva SP */
+  olive: {
+    /** oliva puro */
+    base: "#94AA54",
+  },
+
   /** #233254 — azul marinho SP */
   navy: {
     /** azul marinho puro */
@@ -142,7 +174,7 @@ export const spColors = {
   },
 
   // ─── Paleta de Status (error / success / warning / info) ────────────────
-  /** Paleta usada para estados de UI (erros, sucessos, avisos, informações) */
+  /** Paleta usada para estados de UI (erros, sucessos, avisos, informacoes) */
   status: {
     /** Erro — cor base solicitada */
     error: {
@@ -168,7 +200,7 @@ export const spColors = {
       base: "#C68B00",
     },
 
-    /** Informação/Info */
+    /** Informacao/Info */
     info: {
       base: "#034EA2",
       bg: "#EAF4FF",
