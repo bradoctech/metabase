@@ -1,26 +1,9 @@
-import { Icon, type IconProps } from "metabase/ui";
+import type { IconProps } from "metabase/ui";
 
-import S from "./UpsellGem.module.css";
+/** SP fork: upsell gems are not shown. */
+const _UpsellGem = (_props: Omit<IconProps, "name" | "color">) => null;
 
-const _UpsellGem = (props: Omit<IconProps, "name" | "color">) => (
-  <Icon
-    data-testid="upsell-gem"
-    size={16}
-    name="gem"
-    className={S.UpsellGem}
-    {...props}
-  />
-);
-
-const UpsellGemNew = (props: Omit<IconProps, "name" | "color">) => (
-  <Icon
-    data-testid="upsell-gem"
-    size={16}
-    name="gem"
-    className={S.UpsellGemNew}
-    {...props}
-  />
-);
+const UpsellGemNew = (_props: Omit<IconProps, "name" | "color">) => null;
 
 export const UpsellGem = Object.assign(_UpsellGem, {
   New: UpsellGemNew,

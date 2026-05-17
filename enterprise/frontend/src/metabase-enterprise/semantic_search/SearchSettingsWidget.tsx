@@ -4,7 +4,6 @@ import _ from "underscore";
 
 import { SettingHeader } from "metabase/admin/settings/components/SettingHeader";
 import { BasicAdminSettingInput } from "metabase/admin/settings/components/widgets/AdminSettingInput";
-import { UpsellSemanticSearchPill } from "metabase/admin/upsells/UpsellSemanticSearch";
 import { getErrorMessage, useAdminSetting } from "metabase/api/utils";
 import { getPlan, isProPlan } from "metabase/common/utils/plan";
 import type { SearchSettingsWidgetProps } from "metabase/plugins";
@@ -68,11 +67,6 @@ export function SearchSettingsWidget({
           description={t`Provides more relevant search results.`}
         />
 
-        {shouldUpsell && (
-          <div>
-            <UpsellSemanticSearchPill source="settings-general" />
-          </div>
-        )}
       </Stack>
 
       {!shouldUpsell && (

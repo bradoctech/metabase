@@ -4,7 +4,6 @@ import { match } from "ts-pattern";
 import { t } from "ttag";
 
 import { skipToken } from "metabase/api";
-import { UpsellStorage } from "metabase/common/components/upsells/UpsellStorage";
 import { useHasTokenFeature, useStoreUrl } from "metabase/common/hooks";
 import { useSelector } from "metabase/lib/redux";
 import { getSubpathSafeUrl } from "metabase/lib/urls";
@@ -162,11 +161,7 @@ export const GdriveAddDataPanel = ({
   }
 
   if (!hasStorage) {
-    return (
-      <PanelWrapper subtitle={NO_STORAGE_SUBTITLE}>
-        <UpsellStorage location="add-data-modal-sheets" />
-      </PanelWrapper>
-    );
+    return <PanelWrapper subtitle={NO_STORAGE_SUBTITLE} />;
   }
 
   // If a user is an admin of a hosted instance with storage but for some reason

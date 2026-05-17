@@ -2,7 +2,6 @@ import { push } from "react-router-redux";
 import { t } from "ttag";
 
 import { useDeleteThemeFlow } from "metabase/admin/embedding/hooks";
-import { UpsellEmbeddingTheme } from "metabase/admin/upsells";
 import {
   useCopyEmbeddingThemeMutation,
   useListEmbeddingThemesQuery,
@@ -18,7 +17,7 @@ export function EmbeddingThemeListingApp() {
   const hasSimpleEmbedding = useHasTokenFeature("embedding_simple");
 
   if (!hasSimpleEmbedding) {
-    return <UpsellEmbeddingTheme source="embedding-themes" />;
+    return null;
   }
 
   return <EmbeddingThemeListingAppInner />;
