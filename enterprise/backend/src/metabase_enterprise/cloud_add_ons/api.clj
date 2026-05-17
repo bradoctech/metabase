@@ -55,7 +55,9 @@
    "python-execution"
    "transforms"
    "transforms-basic"
-   "transforms-advanced"])
+   "transforms-advanced"
+   "transforms-basic-metered"
+   "transforms-advanced-metered"])
 
 (defn- handle-store-api-error
   "Handle exceptions from Store API calls and return appropriate error response."
@@ -139,19 +141,11 @@
          (not quantity))
     response-no-quantity
 
-    (and (= product-type "python-execution")
-         (premium-features/enable-python-transforms?))
-    response-not-eligible
-
-    (and (= product-type "transforms")
+    (and (#{"transforms" "transforms-basic" "transforms-basic-metered"} product-type)
          (premium-features/enable-basic-transforms?))
     response-not-eligible
 
-    (and (= product-type "transforms-basic")
-         (premium-features/enable-basic-transforms?))
-    response-not-eligible
-
-    (and (= product-type "transforms-advanced")
+    (and (#{"python-execution" "transforms-advanced" "transforms-advanced-metered"} product-type)
          (premium-features/enable-python-transforms?))
     response-not-eligible
 

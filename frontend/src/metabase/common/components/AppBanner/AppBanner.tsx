@@ -1,8 +1,6 @@
 import dayjs from "dayjs";
 
 import { useSetting, useUserSetting } from "metabase/common/hooks";
-import { isWithinIframe } from "metabase/lib/dom";
-import { useSelector } from "metabase/lib/redux";
 import { DevModeBanner } from "metabase/nav/components/DevModeBanner";
 import {
   LicenseTokenMissingBanner,
@@ -12,8 +10,10 @@ import { PaymentBanner } from "metabase/nav/components/PaymentBanner/PaymentBann
 import { ReadOnlyBanner } from "metabase/nav/components/ReadOnlyBanner";
 import { TrialBanner } from "metabase/nav/components/TrialBanner";
 import { PLUGIN_SECURITY_CENTER } from "metabase/plugins";
+import { useSelector } from "metabase/redux";
 import { getUserIsAdmin } from "metabase/selectors/user";
 import { getIsHosted } from "metabase/setup/selectors";
+import { isWithinIframe } from "metabase/utils/iframe";
 
 import { getCurrentUTCTimestamp, shouldShowTrialBanner } from "./utils";
 

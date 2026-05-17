@@ -1,5 +1,6 @@
 /* eslint-disable complexity */
 import cx from "classnames";
+import type { LocationDescriptorObject } from "history";
 import React, {
   type CSSProperties,
   type ComponentType,
@@ -17,20 +18,16 @@ import { SmallGenericError } from "metabase/common/components/ErrorPages";
 import { ExplicitSize } from "metabase/common/components/ExplicitSize";
 import CS from "metabase/css/core/index.css";
 import DashboardS from "metabase/css/dashboard.module.css";
-import type { CardSlownessStatus } from "metabase/dashboard/components/DashCard/types";
 import { isEmbeddingSdk } from "metabase/embedding-sdk/config";
 import type { ContentTranslationFunction } from "metabase/i18n/types";
-import { formatNumber } from "metabase/lib/formatting";
-import { connect } from "metabase/lib/redux";
-import { equals } from "metabase/lib/utils";
-import {
-  getIsShowingRawTable,
-  getUiControls,
-} from "metabase/query_builder/selectors";
+import { connect } from "metabase/redux";
 import { getIsDownloadingToImage } from "metabase/redux/downloads";
+import type { Dispatch, State } from "metabase/redux/store";
 import { getTokenFeature } from "metabase/setup/selectors";
 import { getFont } from "metabase/styled-components/selectors";
 import type { IconName, IconProps } from "metabase/ui";
+import { formatNumber } from "metabase/utils/formatting";
+import { memoizeClass } from "metabase/utils/memoize";
 import {
   extractRemappings,
   getVisualizationTransformed,
@@ -48,6 +45,7 @@ import {
 import { getComputedSettingsForSeries } from "metabase/visualizations/lib/settings/visualization";
 import { getCardKey, isSameSeries } from "metabase/visualizations/lib/utils";
 import {
+  type CardSlownessStatus,
   type ClickActionModeGetter,
   type ClickActionsMode,
   type ClickObject,
@@ -67,7 +65,6 @@ import {
 import Question from "metabase-lib/v1/Question";
 import type Metadata from "metabase-lib/v1/metadata/Metadata";
 import { datasetContainsNoResults } from "metabase-lib/v1/queries/utils/dataset";
-import { memoizeClass } from "metabase-lib/v1/utils";
 import type {
   Card,
   CardId,
@@ -79,7 +76,6 @@ import type {
   TimelineEvent,
   VisualizationSettings,
 } from "metabase-types/api";
-import type { Dispatch, State } from "metabase-types/store";
 
 import { EmptyVizState } from "../EmptyVizState";
 
@@ -103,9 +99,7 @@ type StateDispatchProps = {
 type StateProps = {
   hasDevWatermark: boolean;
   fontFamily: string;
-  isRawTable: boolean;
   isEmbeddingSdk: boolean;
-  scrollToLastColumn: boolean;
   isDownloadingToImage: boolean;
 };
 
@@ -143,15 +137,17 @@ type VisualizationOwnProps = {
   isDocument?: boolean;
   isMetricsViewer?: boolean;
   isMobile?: boolean;
+  isRawTable?: boolean;
   isRunning?: boolean;
   isShowingSummarySidebar?: boolean;
   isSlow?: CardSlownessStatus;
   isVisible?: boolean;
   isVisualizer?: boolean;
+  scrollToLastColumn?: boolean;
   renderLoadingView?: (props: LoadingViewProps) => JSX.Element | null;
   metadata?: Metadata;
   mode?: ClickActionModeGetter | ClickActionsMode | QueryClickActionsMode;
-  onEditSummary?: () => void;
+  editSummary?: () => void;
   rawSeries?: (
     | SingleSeries
     | {
@@ -185,6 +181,7 @@ type VisualizationOwnProps = {
   ) => void;
   onUpdateWarnings?: (warnings: string[]) => void;
   onVisualizationRendered?: (series: Series) => void;
+  onSameOriginNavigation?: (location: LocationDescriptorObject) => void;
   /** When true, internal click behaviors (dashboard/question links) are preserved */
   enableEntityNavigation?: boolean;
 } & VisualizationPassThroughProps;
@@ -211,9 +208,7 @@ type VisualizationState = {
 const mapStateToProps = (state: State): StateProps => ({
   hasDevWatermark: getTokenFeature(state, "development_mode"),
   fontFamily: getFont(state),
-  isRawTable: getIsShowingRawTable(state),
   isEmbeddingSdk: isEmbeddingSdk(),
-  scrollToLastColumn: getUiControls(state)?.scrollToLastColumn,
   isDownloadingToImage: getIsDownloadingToImage(state),
 });
 
@@ -310,9 +305,9 @@ class Visualization extends PureComponent<
     // getDerivedStateFromProps does not have access to the last props, so
     if (
       !isSameSeries(props.rawSeries, state._lastProps?.rawSeries) ||
-      !equals(props.settings, state._lastProps?.settings) ||
-      !equals(props.timelineEvents, state._lastProps?.timelineEvents) ||
-      !equals(
+      !_.isEqual(props.settings, state._lastProps?.settings) ||
+      !_.isEqual(props.timelineEvents, state._lastProps?.timelineEvents) ||
+      !_.isEqual(
         props.selectedTimelineEventIds,
         state._lastProps?.selectedTimelineEventIds,
       ) ||
@@ -346,7 +341,9 @@ class Visualization extends PureComponent<
     prevProps: VisualizationProps,
     prevState: VisualizationState,
   ) {
-    if (!equals(this.getWarnings(prevProps, prevState), this.getWarnings())) {
+    if (
+      !_.isEqual(this.getWarnings(prevProps, prevState), this.getWarnings())
+    ) {
       this.updateWarnings();
     }
   }
@@ -583,6 +580,7 @@ class Visualization extends PureComponent<
       {
         dispatch: this.props.dispatch,
         onChangeCardAndRun: this.handleOnChangeCardAndRun,
+        onSameOriginNavigation: this.props.onSameOriginNavigation,
       },
     );
 
@@ -685,7 +683,7 @@ class Visualization extends PureComponent<
       isDownloadingToImage,
       metadata,
       mode,
-      onEditSummary,
+      editSummary,
       queryBuilderMode,
       rawSeries = [],
       isSelectable,
@@ -879,7 +877,7 @@ class Visualization extends PureComponent<
           )}
           {replacementContent ? (
             replacementContent
-          ) : isDashboard && noResults ? (
+          ) : (isDashboard || isMetricsViewer) && noResults ? (
             <NoResultsView isSmall={small} />
           ) : error && !isRunning ? (
             <ErrorView
@@ -899,7 +897,7 @@ class Visualization extends PureComponent<
             <EmptyVizState
               chartType={visualization?.identifier}
               isSummarizeSidebarOpen={isShowingSummarySidebar}
-              onEditSummary={isDashboard ? undefined : onEditSummary}
+              editSummary={isDashboard ? undefined : editSummary}
               isNativeView={isNativeView}
             />
           ) : (
@@ -1012,6 +1010,7 @@ class Visualization extends PureComponent<
               clickActions={regularClickActions}
               onChangeCardAndRun={this.handleOnChangeCardAndRun}
               onUpdateQuestion={this.props.onUpdateQuestion}
+              onSameOriginNavigation={this.props.onSameOriginNavigation}
               onClose={this.hideActions}
               series={series}
               onUpdateVisualizationSettings={onUpdateVisualizationSettings}

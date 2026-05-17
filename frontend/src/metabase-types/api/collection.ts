@@ -1,5 +1,3 @@
-import type { IconName } from "metabase/ui";
-import type { ColorName } from "metabase/ui/colors/types";
 import type {
   BaseEntityId,
   CollectionEssentials,
@@ -56,22 +54,6 @@ export type LastEditInfo = Pick<
   timestamp: string;
 };
 
-export type CollectionAuthorityLevelConfig = {
-  type: CollectionAuthorityLevel;
-  name: string;
-  icon: IconName;
-  color?: ColorName;
-  tooltips?: Record<string, string>;
-};
-
-export type CollectionInstanceAnaltyicsConfig = {
-  type: CollectionType;
-  name?: string;
-  icon: IconName;
-  color?: ColorName;
-  tooltips?: Record<string, string>;
-};
-
 export interface Collection {
   id: CollectionId;
   name: string;
@@ -119,6 +101,7 @@ export const COLLECTION_ITEM_MODELS = [
   "document",
   "table",
   "transform",
+  "measure",
 ] as const;
 export type CollectionItemModel = (typeof COLLECTION_ITEM_MODELS)[number];
 

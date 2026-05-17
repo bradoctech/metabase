@@ -2,13 +2,12 @@ import dayjs from "dayjs";
 import { type FormEvent, useState } from "react";
 import { c, t } from "ttag";
 
-import { reloadSettings } from "metabase/admin/settings/settings";
 import { skipToken, useGetUserQuery } from "metabase/api";
 import { CopyButton } from "metabase/common/components/CopyButton";
 import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { Markdown } from "metabase/common/components/Markdown";
-import { useDispatch } from "metabase/lib/redux";
-import { getUserName } from "metabase/lib/user";
+import { useDispatch } from "metabase/redux";
+import { reloadSettings } from "metabase/redux/settings";
 import {
   Box,
   Button,
@@ -20,6 +19,7 @@ import {
   Text,
   TextInput,
 } from "metabase/ui";
+import { getUserName } from "metabase/utils/user";
 import {
   useGetGsheetsFolderQuery,
   useGetServiceAccountQuery,

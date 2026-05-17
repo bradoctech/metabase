@@ -920,7 +920,7 @@
                       {:model "Field" :id "Some Field"}]}
                    (set (serdes/dependencies ser))))))))))
 
-(defn- pmbql-measure-definition
+(defn- mbql5-measure-definition
   "Create an MBQL5 measure definition with a sum aggregation."
   [db-id table-id field-id]
   (let [metadata-provider (lib-be/application-database-metadata-provider db-id)
@@ -937,7 +937,7 @@
                        :model/Database   {db-id :id}        {:name "My Database"}
                        :model/Table      {no-schema-id :id} {:name "Schemaless Table" :db_id db-id}
                        :model/Field      {field-id :id}     {:name "Some Field" :table_id no-schema-id}]
-      (let [definition (pmbql-measure-definition db-id no-schema-id field-id)]
+      (let [definition (mbql5-measure-definition db-id no-schema-id field-id)]
         (ts/with-temp-dpc [:model/Measure
                            {m1-id  :id
                             m1-eid :entity_id}
@@ -975,7 +975,7 @@
                        :model/Database   {db-id :id}        {:name "My Database"}
                        :model/Table      {table-id :id}     {:name "My Table" :db_id db-id}
                        :model/Field      {field-id :id}     {:name "Amount" :table_id table-id}]
-      (let [base-definition (pmbql-measure-definition db-id table-id field-id)]
+      (let [base-definition (mbql5-measure-definition db-id table-id field-id)]
         (ts/with-temp-dpc [:model/Measure
                            {m1-id  :id
                             m1-eid :entity_id}
@@ -2776,3 +2776,35 @@
         (let [ser (ts/extract-one "Channel" http-id)]
           (is (= [{:label "channels"} {:label "HTTP Channel" :key "HTTP Channel"}]
                  (serdes/storage-path ser {}))))))))
+
+(deftest embedding-theme-test
+  (mt/with-empty-h2-app-db!
+    (ts/with-temp-dpc [:model/EmbeddingTheme
+                       {light-id  :id
+                        light-eid :entity_id}
+                       {:name "Light"
+                        :settings {}}
+
+                       :model/EmbeddingTheme
+                       {_dark-id  :id
+                        dark-eid :entity_id}
+                       {:name "Dark"
+                        :settings {}}]
+      (testing "embedding theme extracts correctly"
+        (let [ser (serdes/extract-one "EmbeddingTheme" {} (t2/select-one :model/EmbeddingTheme :id light-id))]
+          (is (=? {:serdes/meta [{:model "EmbeddingTheme"
+                                  :id    light-eid
+                                  :label "light"}]
+                   :entity_id  light-eid
+                   :name       "Light"
+                   :settings   {}
+                   :created_at string?
+                   :updated_at string?}
+                  ser))
+          (is (not (contains? ser :id)))
+          (testing "embedding themes have no dependencies"
+            (is (empty? (serdes/dependencies ser))))))
+
+      (testing "all embedding themes are extracted"
+        (is (= #{light-eid dark-eid}
+               (ids-by-model "EmbeddingTheme" (extract/extract {}))))))))

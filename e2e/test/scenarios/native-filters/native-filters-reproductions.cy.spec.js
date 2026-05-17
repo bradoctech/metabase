@@ -40,6 +40,7 @@ describe("issue 9357", () => {
       H.filterWidget().findAllByRole("listitem").first().as("dragElement");
       H.moveDnDKitElementByAlias("@dragElement", {
         vertical: 50,
+        useMouseEvents: true,
       });
 
       // Ensure they're in the right order
@@ -1303,5 +1304,41 @@ describe("issue 63537", () => {
     });
     H.runNativeQuery();
     H.assertQueryBuilderRowCount(2);
+  });
+});
+
+describe("issue 70311", () => {
+  beforeEach(() => {
+    H.restore();
+    cy.signInAsAdmin();
+    cy.intercept("POST", "/api/card/*/query").as("cardQuery");
+  });
+
+  it("should not show the run overlay for a saved question with an empty between field filter (metabase#70311)", () => {
+    H.createNativeQuestion(
+      {
+        name: "70311",
+        native: {
+          query: "SELECT * FROM PRODUCTS WHERE {{filter}} LIMIT 5",
+          "template-tags": {
+            filter: {
+              id: "a3b95feb-b6d2-33b6-660b-bb656f59b1d7",
+              name: "filter",
+              "display-name": "Filter",
+              type: "dimension",
+              dimension: ["field", PRODUCTS.RATING, null],
+              "widget-type": "number/between",
+              default: null,
+            },
+          },
+        },
+      },
+      { visitQuestion: true },
+    );
+
+    cy.wait("@cardQuery");
+
+    cy.findByTestId("query-visualization-root").should("be.visible");
+    cy.icon("play").should("not.exist");
   });
 });

@@ -7,7 +7,6 @@
    [metabase.driver.util :as driver.u]
    [metabase.lib.core :as lib]
    [metabase.lib.metadata :as lib.metadata]
-   [metabase.models.transforms.transform :as transform.model]
    [metabase.permissions.core :as perms]
    [metabase.permissions.models.permissions-group :as perms-group]
    [metabase.query-processor.test :as qp]
@@ -15,6 +14,7 @@
    [metabase.test :as mt]
    [metabase.transforms-base.util :as transforms-base.u]
    [metabase.transforms-rest.api.transform]
+   [metabase.transforms.models.transform :as transform.model]
    [metabase.transforms.query-test-util :as query-test-util]
    [metabase.transforms.test-dataset :as transforms-dataset]
    [metabase.transforms.test-util :refer [get-test-schema

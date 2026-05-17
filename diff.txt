@@ -1,0 +1,2620 @@
+diff --git a/bin/build-and-push-docker.sh b/bin/build-and-push-docker.sh
+new file mode 100755
+index 0000000000..0f72b04733
+--- /dev/null
++++ b/bin/build-and-push-docker.sh
+@@ -0,0 +1,64 @@
++#!/usr/bin/env bash
++#
++# Build Metabase JAR, build Docker image, and push to Docker Hub.
++#
++# Prerequisites:
++#   - Log in to Docker Hub:  docker login
++#   - Or set: DOCKERHUB_RELEASE_USERNAME, DOCKERHUB_RELEASE_TOKEN
++#
++# Usage:
++#   DOCKER_IMAGE=your-dockerhub-username/metabase-sp:latest ./bin/build-and-push-docker.sh
++#
++# One-liner example:
++#   DOCKER_IMAGE=myuser/metabase-saopaulo:latest ./bin/build-and-push-docker.sh
++#
++set -euo pipefail
++
++SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
++
++# Full Docker image tag (e.g. myuser/metabase-sp:latest)
++DOCKER_IMAGE="${DOCKER_IMAGE:-}"
++
++if [[ -z "$DOCKER_IMAGE" ]]; then
++  echo "Error: Set DOCKER_IMAGE to your Docker Hub image tag (e.g. myuser/metabase-sp:latest)"
++  echo "  export DOCKER_IMAGE=your-username/your-repo:latest"
++  echo "  ./bin/build-and-push-docker.sh"
++  exit 1
++fi
++
++cd "$PROJECT_ROOT"
++
++# Activate mise so clojure is on PATH (installed by ./bin/dev-install)
++if command -v mise >/dev/null 2>&1; then
++  eval "$(mise activate bash)"
++elif [[ -x "$HOME/.local/bin/mise" ]]; then
++  export PATH="$HOME/.local/bin:$PATH"
++  eval "$(mise activate bash)"
++fi
++
++echo "==> 1/5 Building JAR (./bin/build.sh)..."
++./bin/build.sh
++
++echo "==> 2/5 Copying JAR and driver plugins to bin/docker..."
++cp -v target/uberjar/metabase.jar bin/docker/
++mkdir -p bin/docker/plugins
++if ls resources/modules/*.jar 1>/dev/null 2>&1; then
++  cp -v resources/modules/*.jar bin/docker/plugins/
++else
++  echo "No driver JARs in resources/modules (run full ./bin/build.sh to include drivers)"
++  touch bin/docker/plugins/.keep
++fi
++
++echo "==> 3/5 Building Docker image: $DOCKER_IMAGE"
++docker build --tag "$DOCKER_IMAGE" bin/docker/.
++
++echo "==> 4/5 Pushing to Docker Hub..."
++if [[ -n "${DOCKERHUB_RELEASE_USERNAME:-}" && -n "${DOCKERHUB_RELEASE_TOKEN:-}" ]]; then
++  echo "$DOCKERHUB_RELEASE_TOKEN" | docker login --username "$DOCKERHUB_RELEASE_USERNAME" --password-stdin
++fi
++docker push "$DOCKER_IMAGE"
++
++echo ""
++echo "Done. Image pushed: $DOCKER_IMAGE"
++echo "Run with: docker run -d -p 3000:3000 $DOCKER_IMAGE"
+diff --git a/bin/docker/Dockerfile b/bin/docker/Dockerfile
+index 1575aa02d1..f2757ed5d0 100644
+--- a/bin/docker/Dockerfile
++++ b/bin/docker/Dockerfile
+@@ -16,8 +16,9 @@ RUN apk add -U bash fontconfig curl font-noto font-noto-arabic font-noto-hebrew
+     /opt/java/openjdk/bin/keytool -noprompt -import -trustcacerts -alias azure-cert -file /app/certs/DigiCertGlobalRootG2.crt.pem -keystore /etc/ssl/certs/java/cacerts -keypass changeit -storepass changeit && \
+     mkdir -p /plugins && chmod a+rwx /plugins
+ 
+-# add Metabase jar & add our run script to the image
++# add Metabase jar, run script, and driver plugins to the image
+ COPY ./metabase.jar ./run_metabase.sh /app/
++COPY ./plugins/ /plugins/
+ 
+ # expose our default runtime port
+ EXPOSE 3000
+diff --git a/frontend/src/metabase-types/api/settings.ts b/frontend/src/metabase-types/api/settings.ts
+index f406e4f94a..75433345ed 100644
+--- a/frontend/src/metabase-types/api/settings.ts
++++ b/frontend/src/metabase-types/api/settings.ts
+@@ -175,6 +175,10 @@ export type FontFormat = "woff" | "woff2" | "truetype";
+ 
+ export interface Version {
+   tag?: string;
++  date?: string;
++  hash?: string;
++  /** When set (e.g. MB_SOURCE_CODE_URL), used for AGPL source offer in the UI */
++  "source-code-url"?: string;
+ }
+ 
+ export interface VersionInfoRecord {
+diff --git a/frontend/src/metabase/account/profile/components/UserProfileForm/UserProfileForm.tsx b/frontend/src/metabase/account/profile/components/UserProfileForm/UserProfileForm.tsx
+index 131b19bf78..22cb0079aa 100644
+--- a/frontend/src/metabase/account/profile/components/UserProfileForm/UserProfileForm.tsx
++++ b/frontend/src/metabase/account/profile/components/UserProfileForm/UserProfileForm.tsx
+@@ -3,7 +3,6 @@ import { t } from "ttag";
+ import _ from "underscore";
+ import * as Yup from "yup";
+ 
+-import { ColorSchemeSelect } from "metabase/common/components/ColorScheme";
+ import { CommunityLocalizationNotice } from "metabase/common/components/CommunityLocalizationNotice";
+ import {
+   Form,
+@@ -14,7 +13,7 @@ import {
+   FormTextInput,
+ } from "metabase/forms";
+ import * as Errors from "metabase/lib/errors";
+-import { Box, Text } from "metabase/ui";
++import { Box } from "metabase/ui";
+ import type { LocaleData, User } from "metabase-types/api";
+ 
+ import type { UserProfileData } from "../../types";
+@@ -68,7 +67,6 @@ const UserProfileForm = ({
+ 
+   return (
+     <Box>
+-      <ColorSchemeSwitcher />
+       <FormProvider
+         initialValues={initialValues}
+         validationSchema={schema}
+@@ -135,17 +133,5 @@ const getLocaleOptions = (locales: LocaleData[] | null) => {
+   return [{ label: t`Use site default`, value: "" }, ...options];
+ };
+ 
+-const ColorSchemeSwitcher = () => {
+-  return (
+-    <Box mb="md">
+-      <Text mt="xs" fw="bold">
+-        {t`Theme`}
+-      </Text>
+-
+-      <ColorSchemeSelect />
+-    </Box>
+-  );
+-};
+-
+ // eslint-disable-next-line import/no-default-export -- deprecated usage
+ export default UserProfileForm;
+diff --git a/frontend/src/metabase/admin/people/components/PeopleNav.tsx b/frontend/src/metabase/admin/people/components/PeopleNav.tsx
+index a416762c64..8e8dc64a18 100644
+--- a/frontend/src/metabase/admin/people/components/PeopleNav.tsx
++++ b/frontend/src/metabase/admin/people/components/PeopleNav.tsx
+@@ -5,15 +5,12 @@ import {
+   type AdminNavItemProps,
+   AdminNavWrapper,
+ } from "metabase/admin/components/AdminNav";
+-import { shouldNudgeToPro } from "metabase/admin/people/selectors";
+-import { UpsellSSO } from "metabase/admin/upsells";
+ import { useSetting } from "metabase/common/hooks";
+ import { useSelector } from "metabase/lib/redux";
+ import { getLocation } from "metabase/selectors/routing";
+ import { Divider, Stack } from "metabase/ui";
+ 
+ export function PeopleNav() {
+-  const shouldNudge = useSelector(shouldNudgeToPro) as boolean;
+   const isUsingTenants = useSetting("use-tenants");
+ 
+   return (
+@@ -55,7 +52,6 @@ export function PeopleNav() {
+           </>
+         )}
+       </Stack>
+-      {shouldNudge && <UpsellSSO location="people-groups-settings" />}
+     </AdminNavWrapper>
+   );
+ }
+diff --git a/frontend/src/metabase/admin/performance/components/StrategyEditorForDatabases.tsx b/frontend/src/metabase/admin/performance/components/StrategyEditorForDatabases.tsx
+index fb434603eb..699e396780 100644
+--- a/frontend/src/metabase/admin/performance/components/StrategyEditorForDatabases.tsx
++++ b/frontend/src/metabase/admin/performance/components/StrategyEditorForDatabases.tsx
+@@ -3,7 +3,6 @@ import { t } from "ttag";
+ import { findWhere } from "underscore";
+ 
+ import { SettingsPageWrapper } from "metabase/admin/components/SettingsSection";
+-import { UpsellCacheConfig } from "metabase/admin/upsells";
+ import { useListDatabasesQuery } from "metabase/api";
+ import { DelayedLoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper/DelayedLoadingAndErrorWrapper";
+ import { PLUGIN_CACHING } from "metabase/plugins";
+@@ -155,7 +154,6 @@ export const StrategyEditorForDatabases: React.FC = () => {
+             )}
+           </Panel>
+         </RoundedBox>
+-        <UpsellCacheConfig location="performance-data_cache" />
+       </Flex>
+     </SettingsPageWrapper>
+   );
+diff --git a/frontend/src/metabase/admin/permissions/components/PermissionsEditor/PermissionsEditor.jsx b/frontend/src/metabase/admin/permissions/components/PermissionsEditor/PermissionsEditor.jsx
+index e8b020d516..a70ed42944 100644
+--- a/frontend/src/metabase/admin/permissions/components/PermissionsEditor/PermissionsEditor.jsx
++++ b/frontend/src/metabase/admin/permissions/components/PermissionsEditor/PermissionsEditor.jsx
+@@ -1,8 +1,6 @@
+ import PropTypes from "prop-types";
+ 
+-import { UpsellPermissions } from "metabase/admin/upsells";
+ import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
+-import { Box } from "metabase/ui";
+ 
+ import { PermissionsEditorRoot } from "./PermissionsEditor.styled";
+ import {
+@@ -20,12 +18,7 @@ export const PermissionsEditor = ({ isLoading, error, ...contentProps }) => {
+   return (
+     <PermissionsEditorRoot>
+       <LoadingAndErrorWrapper loading={isLoading} error={error} noWrapper>
+-        <>
+-          <Box mx="xl" mb="md">
+-            <UpsellPermissions location="settings-permissions" />
+-          </Box>
+-          <PermissionsEditorContent {...contentProps} />
+-        </>
++        <PermissionsEditorContent {...contentProps} />
+       </LoadingAndErrorWrapper>
+     </PermissionsEditorRoot>
+   );
+diff --git a/frontend/src/metabase/admin/settings/components/CloudPanel/MigrationStart.tsx b/frontend/src/metabase/admin/settings/components/CloudPanel/MigrationStart.tsx
+index 50a3b26357..b39be7f1ce 100644
+--- a/frontend/src/metabase/admin/settings/components/CloudPanel/MigrationStart.tsx
++++ b/frontend/src/metabase/admin/settings/components/CloudPanel/MigrationStart.tsx
+@@ -1,7 +1,6 @@
+ import { useDisclosure } from "@mantine/hooks";
+ import { t } from "ttag";
+ 
+-import { UpsellCloud } from "metabase/admin/upsells/UpsellCloud";
+ import ExternalLink from "metabase/common/components/ExternalLink";
+ import { Box, Button, Icon, Modal, Text } from "metabase/ui";
+ 
+@@ -19,10 +18,6 @@ export const MigrationStart = ({
+ 
+   return (
+     <>
+-      <Box mb="xl">
+-        <UpsellCloud onOpenModal={openModal} source="settings-cloud" />
+-      </Box>
+-
+       <Modal
+         opened={isModalOpen}
+         onClose={closeModal}
+diff --git a/frontend/src/metabase/admin/settings/components/EmbeddingSettings/EmbeddingSdkSettings/EmbeddingSdkSettings.tsx b/frontend/src/metabase/admin/settings/components/EmbeddingSettings/EmbeddingSdkSettings/EmbeddingSdkSettings.tsx
+index 00ab02635e..286926188c 100644
+--- a/frontend/src/metabase/admin/settings/components/EmbeddingSettings/EmbeddingSdkSettings/EmbeddingSdkSettings.tsx
++++ b/frontend/src/metabase/admin/settings/components/EmbeddingSettings/EmbeddingSdkSettings/EmbeddingSdkSettings.tsx
+@@ -2,7 +2,6 @@ import cx from "classnames";
+ import { match } from "ts-pattern";
+ import { c, t } from "ttag";
+ 
+-import { UpsellSdkLink } from "metabase/admin/upsells/UpsellSdkLink";
+ import ExternalLink from "metabase/common/components/ExternalLink";
+ import { useDocsUrl, useUrlWithUtm } from "metabase/common/hooks";
+ import CS from "metabase/css/core/index.css";
+@@ -53,10 +52,8 @@ export const EmbeddingSdkSettings = () => {
+     .with(
+       { needsToUpgrade: true },
+       () =>
+-        c(
+-          "{0} is the link to upsell the SDK. {1} is the link to implement JWT or SAML authentication.",
+-        )
+-          .jt`You can test Embedded analytics SDK on localhost quickly by using API keys. To use the SDK on other sites, ${(<UpsellSdkLink key="upsell-sdk-link" />)} and ${ImplementJwtLink}.`,
++        c("{0} is the link to implement JWT or SAML authentication.")
++          .jt`You can test Embedded analytics SDK on localhost quickly by using API keys. To use the SDK on other sites, ${ImplementJwtLink}.`,
+     )
+     .with(
+       { needsToImplementJwt: true },
+diff --git a/frontend/src/metabase/admin/settings/components/EmbeddingSettings/EmbeddingSettings/EmbeddingSettings.tsx b/frontend/src/metabase/admin/settings/components/EmbeddingSettings/EmbeddingSettings/EmbeddingSettings.tsx
+index b4fa7a7ec3..62ad77f04d 100644
+--- a/frontend/src/metabase/admin/settings/components/EmbeddingSettings/EmbeddingSettings/EmbeddingSettings.tsx
++++ b/frontend/src/metabase/admin/settings/components/EmbeddingSettings/EmbeddingSettings/EmbeddingSettings.tsx
+@@ -7,7 +7,6 @@ import {
+ } from "metabase/admin/components/RelatedSettingsSection";
+ import { SettingsPageWrapper } from "metabase/admin/components/SettingsSection";
+ import { NewEmbedButton } from "metabase/admin/settings/components/EmbeddingSettings/NewEmbedButton/NewEmbedButton";
+-import { UpsellDevInstances } from "metabase/admin/upsells";
+ import ExternalLink from "metabase/common/components/ExternalLink";
+ import {
+   useDocsUrl,
+@@ -43,7 +42,6 @@ function EmbeddingSettingsPageWrapper({ children }: PropsWithChildren) {
+         })}
+       />
+ 
+-      {isEE && <UpsellDevInstances location="embedding-page" />}
+     </SettingsPageWrapper>
+   );
+ }
+diff --git a/frontend/src/metabase/admin/settings/components/EmbeddingSettings/SharedCombinedEmbeddingSettings/SharedCombinedEmbeddingSettings.tsx b/frontend/src/metabase/admin/settings/components/EmbeddingSettings/SharedCombinedEmbeddingSettings/SharedCombinedEmbeddingSettings.tsx
+index 45336cc679..6445a6aa26 100644
+--- a/frontend/src/metabase/admin/settings/components/EmbeddingSettings/SharedCombinedEmbeddingSettings/SharedCombinedEmbeddingSettings.tsx
++++ b/frontend/src/metabase/admin/settings/components/EmbeddingSettings/SharedCombinedEmbeddingSettings/SharedCombinedEmbeddingSettings.tsx
+@@ -3,15 +3,9 @@ import { t } from "ttag";
+ import { SettingsSection } from "metabase/admin/components/SettingsSection";
+ import { EmbeddingSettingsCard } from "metabase/admin/settings/components/EmbeddingSettings";
+ import { NewEmbedButton } from "metabase/admin/settings/components/EmbeddingSettings/NewEmbedButton/NewEmbedButton";
+-import { UpsellBanner } from "metabase/admin/upsells/components";
+ import { useSetting } from "metabase/common/hooks";
+-import { useSelector } from "metabase/lib/redux";
+-import {
+-  PLUGIN_CONTENT_TRANSLATION,
+-  PLUGIN_EMBEDDING_IFRAME_SDK_SETUP,
+-} from "metabase/plugins";
+-import { getUpgradeUrl } from "metabase/selectors/settings";
+-import { Box, Text } from "metabase/ui";
++import { PLUGIN_CONTENT_TRANSLATION } from "metabase/plugins";
++import { Box } from "metabase/ui";
+ 
+ import { SettingTitle } from "../../SettingHeader";
+ import { EmbeddedResources } from "../../widgets/PublicLinksListing/EmbeddedResources";
+@@ -28,14 +22,8 @@ export function SharedCombinedEmbeddingSettings({
+   showCorsSettings,
+   showContentTranslationSettings,
+ }: Props) {
+-  const isSimpleEmbedFeatureAvailable =
+-    PLUGIN_EMBEDDING_IFRAME_SDK_SETUP.isEnabled();
+   const isGuestEmbedsEnabled = useSetting("enable-embedding-static");
+ 
+-  const upgradeUrl = useSelector((state) =>
+-    getUpgradeUrl(state, { utm_content: "embedding-settings" }),
+-  );
+-
+   return (
+     <>
+       <EmbeddingSettingsCard
+@@ -47,21 +35,6 @@ export function SharedCombinedEmbeddingSettings({
+         testId="guest-embeds-setting-card"
+       />
+ 
+-      {!isSimpleEmbedFeatureAvailable && (
+-        <UpsellBanner
+-          title={t`Upgrade to Metabase Pro for more powerful embedding methods`}
+-          campaign="embedded-analytics-js"
+-          location="embedding-page"
+-          buttonText={t`Upgrade`}
+-          buttonLink={upgradeUrl}
+-          dismissible
+-        >
+-          <Text c="text-secondary" lh="md">
+-            {t`Embed charts, dashboards with drill-throughs, or even the query builder into your own application using customizable components. Secure your embeds with single sign-on.`}
+-          </Text>
+-        </UpsellBanner>
+-      )}
+-
+       <SettingsSection>
+         <EmbeddingSecretKeyWidget />
+       </SettingsSection>
+diff --git a/frontend/src/metabase/admin/settings/components/SettingsNav/SettingsNav.tsx b/frontend/src/metabase/admin/settings/components/SettingsNav/SettingsNav.tsx
+index 30159d9abd..0d8bab2149 100644
+--- a/frontend/src/metabase/admin/settings/components/SettingsNav/SettingsNav.tsx
++++ b/frontend/src/metabase/admin/settings/components/SettingsNav/SettingsNav.tsx
+@@ -7,20 +7,15 @@ import {
+   type AdminNavItemProps,
+   AdminNavWrapper,
+ } from "metabase/admin/components/AdminNav";
+-import { UpsellGem } from "metabase/admin/upsells/components/UpsellGem";
+ import { useHasTokenFeature, useSetting } from "metabase/common/hooks";
+ import { useSelector } from "metabase/lib/redux";
+ import { PLUGIN_REMOTE_SYNC } from "metabase/plugins";
+ import { getLocation } from "metabase/selectors/routing";
+-import { Divider, Flex } from "metabase/ui";
+-
+-import { UpdatesNavItem } from "./UpdatesNavItem";
++import { Divider } from "metabase/ui";
+ 
+ const NavDivider = () => <Divider my="sm" />;
+ 
+ export function SettingsNav() {
+-  const hasHosting = useHasTokenFeature("hosting");
+-  const hasWhitelabel = useHasTokenFeature("whitelabel");
+   const hasSaml = useHasTokenFeature("sso_saml");
+   const hasJwt = useHasTokenFeature("sso_jwt");
+   const hasScim = useHasTokenFeature("scim");
+@@ -56,7 +51,6 @@ export function SettingsNav() {
+         label={t`Notification channels`}
+         icon="bell"
+       />
+-      {!hasHosting && <UpdatesNavItem />}
+       <NavDivider />
+       <SettingsNavItem
+         path="localization"
+@@ -64,31 +58,6 @@ export function SettingsNav() {
+         icon="globe"
+       />
+       <SettingsNavItem path="maps" label={t`Maps`} icon="pinmap" />
+-      <SettingsNavItem
+-        path={!hasWhitelabel ? "whitelabel" : undefined}
+-        folderPattern="whitelabel"
+-        label={
+-          <Flex gap="sm" align="center">
+-            <span>{t`Appearance`}</span>
+-            {!hasWhitelabel && <UpsellGem />}
+-          </Flex>
+-        }
+-        icon="palette"
+-      >
+-        {hasWhitelabel && [
+-          // using an array so that child path detection can access them as direct children
+-          <SettingsNavItem
+-            key="branding"
+-            path="whitelabel/branding"
+-            label={t`Branding`}
+-          />,
+-          <SettingsNavItem
+-            key="conceal"
+-            path="whitelabel/conceal-metabase"
+-            label={t`Conceal Metabase`}
+-          />,
+-        ]}
+-      </SettingsNavItem>
+       <NavDivider />
+       <SettingsNavItem path="uploads" label={t`Uploads`} icon="upload" />
+       {/* Python Runner settings are managed by Metabase Cloud for hosted instances */}
+@@ -106,16 +75,6 @@ export function SettingsNav() {
+       />
+       <NavDivider />
+       <SettingsNavItem path="license" label={t`License`} icon="store" />
+-      <SettingsNavItem
+-        path="cloud"
+-        label={
+-          <Flex gap="sm" align="center">
+-            <span>{t`Cloud`}</span>
+-            {!hasHosting && <UpsellGem />}
+-          </Flex>
+-        }
+-        icon="cloud"
+-      />
+     </AdminNavWrapper>
+   );
+ }
+diff --git a/frontend/src/metabase/admin/settings/components/SettingsPages/AppearanceSettingsPage.tsx b/frontend/src/metabase/admin/settings/components/SettingsPages/AppearanceSettingsPage.tsx
+index ea2d601698..00f699b112 100644
+--- a/frontend/src/metabase/admin/settings/components/SettingsPages/AppearanceSettingsPage.tsx
++++ b/frontend/src/metabase/admin/settings/components/SettingsPages/AppearanceSettingsPage.tsx
+@@ -1,4 +1,3 @@
+-import { UpsellWhitelabel } from "metabase/admin/upsells";
+ import { useHasTokenFeature } from "metabase/common/hooks";
+ import { PLUGIN_WHITELABEL } from "metabase/plugins";
+ 
+@@ -17,5 +16,5 @@ export function AppearanceSettingsPage({
+     );
+   }
+ 
+-  return <UpsellWhitelabel source="settings-appearance" />;
++  return null;
+ }
+diff --git a/frontend/src/metabase/admin/settings/components/SettingsPages/AuthenticationSettingsPage.tsx b/frontend/src/metabase/admin/settings/components/SettingsPages/AuthenticationSettingsPage.tsx
+index 2367b8a46c..fc0576dc89 100644
+--- a/frontend/src/metabase/admin/settings/components/SettingsPages/AuthenticationSettingsPage.tsx
++++ b/frontend/src/metabase/admin/settings/components/SettingsPages/AuthenticationSettingsPage.tsx
+@@ -1,11 +1,10 @@
+ import { t } from "ttag";
+ 
+ import { SettingsPageWrapper } from "metabase/admin/components/SettingsSection";
+-import { UpsellSSO } from "metabase/admin/upsells";
+ import { useGetSettingsQuery } from "metabase/api";
+ import { hasAnySsoFeature } from "metabase/common/utils/plan";
+ import { PLUGIN_AUTH_PROVIDERS } from "metabase/plugins";
+-import { Box, Flex, Stack } from "metabase/ui";
++import { Stack } from "metabase/ui";
+ 
+ import { ApiKeysAuthCard } from "../../auth/components/ApiKeysAuthCard";
+ import { GoogleAuthCard } from "../../auth/containers/GoogleAuthCard/GoogleAuthCard";
+@@ -25,16 +24,11 @@ export function AuthenticationSettingsPage({ tab }: { tab: string }) {
+ 
+   return (
+     <SettingsPageWrapper title={t`Authentication`}>
+-      <Flex justify={"space-between"} gap="lg">
+-        <Stack gap="lg">
+-          <GoogleAuthCard />
+-          <LdapAuthCard />
+-          <ApiKeysAuthCard />
+-        </Stack>
+-        <Box style={{ flexShrink: 0 }}>
+-          <UpsellSSO location="authentication-sidebar" />
+-        </Box>
+-      </Flex>
++      <Stack gap="lg">
++        <GoogleAuthCard />
++        <LdapAuthCard />
++        <ApiKeysAuthCard />
++      </Stack>
+     </SettingsPageWrapper>
+   );
+ }
+diff --git a/frontend/src/metabase/admin/settings/components/SettingsPages/EmailSettingsPage.tsx b/frontend/src/metabase/admin/settings/components/SettingsPages/EmailSettingsPage.tsx
+index 45be628976..8307ac550f 100644
+--- a/frontend/src/metabase/admin/settings/components/SettingsPages/EmailSettingsPage.tsx
++++ b/frontend/src/metabase/admin/settings/components/SettingsPages/EmailSettingsPage.tsx
+@@ -4,11 +4,9 @@ import {
+   SettingsPageWrapper,
+   SettingsSection,
+ } from "metabase/admin/components/SettingsSection";
+-import { UpsellHostingBanner } from "metabase/admin/upsells";
+ import { useGetSettingsQuery } from "metabase/api";
+ import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
+ import { useHasTokenFeature } from "metabase/common/hooks";
+-import { Center } from "metabase/ui";
+ 
+ import { SMTPConnectionCard } from "../Email/SMTPConnectionCard";
+ import { AdminSettingInput } from "../widgets/AdminSettingInput";
+@@ -77,9 +75,6 @@ export function EmailSettingsPage() {
+             <SendTestEmailWidget />
+           </SettingsSection>
+         )}
+-        <Center>
+-          <UpsellHostingBanner location="settings-email-migrate_to_cloud" />
+-        </Center>
+       </SettingsPageWrapper>
+     </>
+   );
+diff --git a/frontend/src/metabase/admin/settings/components/SettingsPages/GeneralSettingsPage.tsx b/frontend/src/metabase/admin/settings/components/SettingsPages/GeneralSettingsPage.tsx
+index b721e11d93..ec89a74c30 100644
+--- a/frontend/src/metabase/admin/settings/components/SettingsPages/GeneralSettingsPage.tsx
++++ b/frontend/src/metabase/admin/settings/components/SettingsPages/GeneralSettingsPage.tsx
+@@ -4,7 +4,6 @@ import {
+   SettingsPageWrapper,
+   SettingsSection,
+ } from "metabase/admin/components/SettingsSection";
+-import { UpsellDevInstances } from "metabase/admin/upsells";
+ import ExternalLink from "metabase/common/components/ExternalLink";
+ import { useDocsUrl, useHasTokenFeature } from "metabase/common/hooks";
+ import { PLUGIN_LANDING_PAGE, PLUGIN_SEMANTIC_SEARCH } from "metabase/plugins";
+@@ -88,7 +87,6 @@ export function GeneralSettingsPage() {
+           inputType="textarea"
+         />
+       </SettingsSection>
+-      <UpsellDevInstances location="settings-general" />
+     </SettingsPageWrapper>
+   );
+ }
+diff --git a/frontend/src/metabase/admin/settings/components/SettingsPages/UpdatesSettingsPage.tsx b/frontend/src/metabase/admin/settings/components/SettingsPages/UpdatesSettingsPage.tsx
+index fb5a1bb818..803be588f0 100644
+--- a/frontend/src/metabase/admin/settings/components/SettingsPages/UpdatesSettingsPage.tsx
++++ b/frontend/src/metabase/admin/settings/components/SettingsPages/UpdatesSettingsPage.tsx
+@@ -5,7 +5,6 @@ import {
+   SettingsPageWrapper,
+   SettingsSection,
+ } from "metabase/admin/components/SettingsSection";
+-import { UpsellHostingBanner } from "metabase/admin/upsells";
+ import { NotFound } from "metabase/common/components/ErrorPages";
+ import { useSetting } from "metabase/common/hooks";
+ import CS from "metabase/css/core/index.css";
+@@ -41,7 +40,6 @@ export function UpdatesSettingsPage() {
+         )}
+         <NewVersionInfo />
+       </SettingsSection>
+-      <UpsellHostingBanner location="settings-updates-migrate_to_cloud" />
+     </SettingsPageWrapper>
+   );
+ }
+diff --git a/frontend/src/metabase/admin/settings/components/SettingsPages/UploadSettingsPage.tsx b/frontend/src/metabase/admin/settings/components/SettingsPages/UploadSettingsPage.tsx
+index c15763acdf..fbd9295b76 100644
+--- a/frontend/src/metabase/admin/settings/components/SettingsPages/UploadSettingsPage.tsx
++++ b/frontend/src/metabase/admin/settings/components/SettingsPages/UploadSettingsPage.tsx
+@@ -4,24 +4,18 @@ import {
+   SettingsPageWrapper,
+   SettingsSection,
+ } from "metabase/admin/components/SettingsSection";
+-import { UpsellUploads } from "metabase/admin/upsells";
+ import { PLUGIN_UPLOAD_MANAGEMENT } from "metabase/plugins";
+-import { Box, Flex } from "metabase/ui";
++import { Flex } from "metabase/ui";
+ 
+ import { UploadSettingsForm } from "../UploadSettings/UploadSettingsForm";
+ 
+ export function UploadSettingsPage() {
+   return (
+     <SettingsPageWrapper title={t`Uploads`}>
+-      <Flex justify="space-between" gap="lg">
+-        <SettingsSection>
+-          <UploadSettingsForm />
+-          <PLUGIN_UPLOAD_MANAGEMENT.UploadManagementTable />
+-        </SettingsSection>
+-        <Box>
+-          <UpsellUploads location="settings-uploads" />
+-        </Box>
+-      </Flex>
++      <SettingsSection>
++        <UploadSettingsForm />
++        <PLUGIN_UPLOAD_MANAGEMENT.UploadManagementTable />
++      </SettingsSection>
+     </SettingsPageWrapper>
+   );
+ }
+diff --git a/frontend/src/metabase/admin/settings/components/widgets/EmailFromAddressWidget.tsx b/frontend/src/metabase/admin/settings/components/widgets/EmailFromAddressWidget.tsx
+index 31b70e9a60..909d45b3fe 100644
+--- a/frontend/src/metabase/admin/settings/components/widgets/EmailFromAddressWidget.tsx
++++ b/frontend/src/metabase/admin/settings/components/widgets/EmailFromAddressWidget.tsx
+@@ -1,6 +1,5 @@
+ import { t } from "ttag";
+ 
+-import { UpsellEmailWhitelabelPill } from "metabase/admin/upsells";
+ import { useAdminSetting } from "metabase/api/utils";
+ import { useHasTokenFeature, useSetting } from "metabase/common/hooks";
+ import { Box, Icon, TextInput } from "metabase/ui";
+@@ -42,9 +41,6 @@ export function EmailFromAddressWidget() {
+         title={t`From Address`}
+         description={t`Please set up a custom SMTP server to change this${hasCloudCustomSMTPFeature ? "" : t` (Pro only)`}`}
+       />
+-      <Box pos="absolute" top={0} right={0}>
+-        <UpsellEmailWhitelabelPill source="settings-email" />
+-      </Box>
+ 
+       <TextInput
+         id={"email-from-address"}
+diff --git a/frontend/src/metabase/admin/tools/components/Help/Help.tsx b/frontend/src/metabase/admin/tools/components/Help/Help.tsx
+index e17beceefb..82c2e80508 100644
+--- a/frontend/src/metabase/admin/tools/components/Help/Help.tsx
++++ b/frontend/src/metabase/admin/tools/components/Help/Help.tsx
+@@ -8,7 +8,6 @@ import {
+   SettingsPageWrapper,
+   SettingsSection,
+ } from "metabase/admin/components/SettingsSection";
+-import { UpsellBetterSupport } from "metabase/admin/upsells";
+ import Code from "metabase/common/components/Code";
+ import { CopyButton } from "metabase/common/components/CopyButton";
+ import ExternalLink from "metabase/common/components/ExternalLink";
+@@ -122,8 +121,6 @@ export const Help = ({ children }: PropsWithChildren) => {
+         />
+       </Group>
+ 
+-      <UpsellBetterSupport location="settings-troubleshooting" />
+-
+       {PLUGIN_SUPPORT.isEnabled && <PLUGIN_SUPPORT.SupportSettings />}
+ 
+       <SettingsSection
+diff --git a/frontend/src/metabase/admin/tools/components/ToolsUpsell/ToolsUpsell.tsx b/frontend/src/metabase/admin/tools/components/ToolsUpsell/ToolsUpsell.tsx
+index 68f28288ca..075ab23ebb 100644
+--- a/frontend/src/metabase/admin/tools/components/ToolsUpsell/ToolsUpsell.tsx
++++ b/frontend/src/metabase/admin/tools/components/ToolsUpsell/ToolsUpsell.tsx
+@@ -1,12 +1,7 @@
+ import { t } from "ttag";
+ 
+ import { SettingsPageWrapper } from "metabase/admin/components/SettingsSection";
+-import { UpsellPerformanceTools } from "metabase/admin/upsells";
+ 
+ export const ToolsUpsell = () => {
+-  return (
+-    <SettingsPageWrapper title={t`Erroring questions`}>
+-      <UpsellPerformanceTools source="settings-tools" />
+-    </SettingsPageWrapper>
+-  );
++  return <SettingsPageWrapper title={t`Erroring questions`} />;
+ };
+diff --git a/frontend/src/metabase/auth/components/AuthButton/AuthButton.styled.tsx b/frontend/src/metabase/auth/components/AuthButton/AuthButton.styled.tsx
+index 32c7fc6dce..03ea3da288 100644
+--- a/frontend/src/metabase/auth/components/AuthButton/AuthButton.styled.tsx
++++ b/frontend/src/metabase/auth/components/AuthButton/AuthButton.styled.tsx
+@@ -6,6 +6,7 @@ import Link from "metabase/common/components/Link";
+ export const TextLink = styled(Link)`
+   cursor: pointer;
+   color: var(--mb-color-text-primary);
++  font-weight: 700;
+ 
+   &:hover {
+     color: var(--mb-color-brand);
+diff --git a/frontend/src/metabase/auth/components/AuthLayout/AuthLayout.styled.tsx b/frontend/src/metabase/auth/components/AuthLayout/AuthLayout.styled.tsx
+index 015f0a9da4..f6885981b8 100644
+--- a/frontend/src/metabase/auth/components/AuthLayout/AuthLayout.styled.tsx
++++ b/frontend/src/metabase/auth/components/AuthLayout/AuthLayout.styled.tsx
+@@ -1,49 +1,109 @@
+ // eslint-disable-next-line no-restricted-imports
+ import styled from "@emotion/styled";
+ 
+-import { breakpointMinSmall } from "metabase/styled-components/theme";
++import { breakpointMaxSmall } from "metabase/styled-components/theme";
++
++// eslint-disable-next-line no-color-literals
++const LEFT_SUBTITLE_COLOR = "#5e5e5e";
+ 
+ export const LayoutRoot = styled.div`
+-  position: relative;
++  display: flex;
+   min-height: 100vh;
+-  background-color: var(--mb-color-background-secondary);
+ `;
+ 
+-export const LayoutBody = styled.div`
++export const LayoutLeftPanel = styled.div`
++  position: relative;
+   display: flex;
+   flex-direction: column;
+   justify-content: center;
+   align-items: center;
+-  position: relative;
+-  padding: 1.5rem 1rem 3rem;
+-  min-height: 100vh;
+-`;
++  flex: 1;
++  padding: 1.5rem 2.5rem;
++  background-color: var(--mb-color-button-primary);
++  background-image: url("/app/img/login_leftbg_only.png");
++  background-size: cover;
++  background-position: center;
++  background-repeat: no-repeat;
++  gap: 0;
++  text-align: center;
++  overflow: hidden;
+ 
+-export const LayoutCard = styled.div`
+-  width: 100%;
+-  margin-top: 1.5rem;
+-  padding: 2.5rem 1.5rem;
+-  background-color: var(--mb-color-background-primary);
+-  box-shadow: 0 1px 15px var(--mb-color-shadow);
+-  border-radius: 6px;
+-
+-  ${breakpointMinSmall} {
+-    width: 30.875rem;
+-    padding: 2.5rem 3.5rem;
++  ${breakpointMaxSmall} {
++    display: none;
+   }
+ `;
+ 
+-export const LayoutIllustration = styled.div<{
+-  backgroundImageSrc: string;
+-}>`
++export const LayoutFrameTop = styled.img`
+   position: absolute;
+   top: 0;
++  right: 1.5rem;
++  width: auto;
++  max-width: 44%;
++  pointer-events: none;
++  user-select: none;
++`;
++
++export const LayoutFrameBottom = styled.img`
++  position: absolute;
++  bottom: 0;
+   left: 0;
++  width: auto;
++  max-width: 36%;
++  pointer-events: none;
++  user-select: none;
++`;
++
++export const LayoutLeftImage = styled.img`
++  width: 95%;
++  max-width: 95%;
++  border-radius: 0.75rem;
++  object-fit: cover;
++  margin-top: 0;
++  z-index: 1;
++`;
++
++export const LayoutLeftTitle = styled.h1`
++  color: var(--mb-color-text-primary-inverse);
++  font-size: 1.75rem;
++  font-weight: 700;
++  margin: 1rem 0 0.35rem;
++  z-index: 1;
++`;
++
++export const LayoutLeftSubtitle = styled.p`
++  color: ${LEFT_SUBTITLE_COLOR};
++  font-size: 0.9rem;
++  line-height: 1.6;
++  max-width: 320px;
++  margin: 0;
++  z-index: 1;
++`;
++
++export const LayoutRightPanel = styled.div`
++  display: flex;
++  flex-direction: column;
++  justify-content: center;
++  align-items: center;
++  flex: 1;
++  padding: 3rem 2rem;
++  background-color: var(--mb-color-background);
++
++  ${breakpointMaxSmall} {
++    padding: 2rem 1.5rem;
++  }
++`;
++
++export const LayoutCard = styled.div`
+   width: 100%;
+-  height: 100%;
+-  background-image: ${({ backgroundImageSrc }) =>
+-    `url("${backgroundImageSrc}")`};
+-  background-size: 100% auto;
+-  background-repeat: no-repeat;
+-  background-position: right bottom;
++  max-width: 420px;
++  margin-top: 1rem;
++`;
++
++export const LayoutFormSubtitle = styled.p`
++  font-size: 1rem;
++  font-weight: 500;
++  color: var(--mb-color-text-primary);
++  margin: 0.75rem 0 0;
++  padding: 0 0.625rem;
++  text-align: center;
+ `;
+diff --git a/frontend/src/metabase/auth/components/AuthLayout/AuthLayout.tsx b/frontend/src/metabase/auth/components/AuthLayout/AuthLayout.tsx
+index 3113e6c587..b5f44729c7 100644
+--- a/frontend/src/metabase/auth/components/AuthLayout/AuthLayout.tsx
++++ b/frontend/src/metabase/auth/components/AuthLayout/AuthLayout.tsx
+@@ -1,38 +1,44 @@
+ import type { ReactNode } from "react";
++import { t } from "ttag";
+ 
+-import { LighthouseIllustration } from "metabase/common/components/LighthouseIllustration";
+ import LogoIcon from "metabase/common/components/LogoIcon";
+-import { useSelector } from "metabase/lib/redux";
+-import { getLoginPageIllustration } from "metabase/selectors/whitelabel";
+ 
+ import {
+-  LayoutBody,
+   LayoutCard,
+-  LayoutIllustration,
++  LayoutFrameBottom,
++  LayoutFrameTop,
++  LayoutLeftImage,
++  LayoutLeftPanel,
++  LayoutLeftSubtitle,
++  LayoutLeftTitle,
++  LayoutRightPanel,
+   LayoutRoot,
+ } from "./AuthLayout.styled";
++
+ interface AuthLayoutProps {
+   children?: ReactNode;
+ }
+ 
+ export const AuthLayout = ({ children }: AuthLayoutProps): JSX.Element => {
+-  const loginPageIllustration = useSelector(getLoginPageIllustration);
+-
+   return (
+     <LayoutRoot data-testid="login-page">
+-      {loginPageIllustration &&
+-        (loginPageIllustration.isDefault ? (
+-          <LighthouseIllustration />
+-        ) : (
+-          <LayoutIllustration
+-            data-testid="login-page-illustration"
+-            backgroundImageSrc={loginPageIllustration.src}
+-          />
+-        ))}
+-      <LayoutBody>
++      <LayoutLeftPanel>
++        <LayoutFrameTop src="/app/img/login_frametop.png" alt="" />
++        <LayoutFrameBottom src="/app/img/login_framebottom.png" alt="" />
++        <LayoutLeftImage
++          src="/app/img/login_dashboard.png"
++          alt={t`Dashboard preview`}
++        />
++        <LayoutLeftTitle>{t`Dashboards SP`}</LayoutLeftTitle>
++        <LayoutLeftSubtitle>
++          {t`Make more informed decisions by analyzing the numbers carefully. Understanding the data can lead to better outcomes and strategies.`}
++        </LayoutLeftSubtitle>
++      </LayoutLeftPanel>
++
++      <LayoutRightPanel>
+         <LogoIcon height={65} />
+         <LayoutCard>{children}</LayoutCard>
+-      </LayoutBody>
++      </LayoutRightPanel>
+     </LayoutRoot>
+   );
+ };
+diff --git a/frontend/src/metabase/auth/components/Login/Login.tsx b/frontend/src/metabase/auth/components/Login/Login.tsx
+index c95823ebbb..50923f5271 100644
+--- a/frontend/src/metabase/auth/components/Login/Login.tsx
++++ b/frontend/src/metabase/auth/components/Login/Login.tsx
+@@ -10,6 +10,7 @@ import { Box, Divider } from "metabase/ui";
+ 
+ import { getAuthProviders } from "../../selectors";
+ import { AuthLayout } from "../AuthLayout";
++import { LayoutFormSubtitle } from "../AuthLayout/AuthLayout.styled";
+ 
+ interface LoginQueryString {
+   redirect?: string;
+@@ -48,6 +49,7 @@ export const Login = ({ params, location }: LoginProps): JSX.Element => {
+       >
+         {t`Sign in to ${applicationName}`}
+       </Box>
++      <LayoutFormSubtitle>{t`Faça o login para acessar`}</LayoutFormSubtitle>
+       {selection && selection.Panel && (
+         <Box mt="2.5rem">
+           <selection.Panel redirectUrl={redirectUrl} />
+diff --git a/frontend/src/metabase/auth/components/LoginForm/LoginForm.tsx b/frontend/src/metabase/auth/components/LoginForm/LoginForm.tsx
+index f413395613..81b6b892fa 100644
+--- a/frontend/src/metabase/auth/components/LoginForm/LoginForm.tsx
++++ b/frontend/src/metabase/auth/components/LoginForm/LoginForm.tsx
+@@ -66,7 +66,7 @@ export const LoginForm = ({
+             isLdapEnabled ? t`Username or email address` : t`Email address`
+           }
+           type={isLdapEnabled ? "input" : "email"}
+-          placeholder="nicetoseeyou@email.com"
++          placeholder="seuemail@sp.gov.br"
+           autoFocus
+           mb="1.25rem"
+         />
+@@ -74,13 +74,18 @@ export const LoginForm = ({
+           name="password"
+           label={t`Password`}
+           type="password"
+-          placeholder="Shhh..."
++          placeholder="Sua senha"
+           mb="1.25rem"
+         />
+         {!hasSessionCookies && (
+           <FormCheckbox name="remember" label={t`Remember me`} mb="1.25rem" />
+         )}
+-        <FormSubmitButton label={t`Sign in`} variant="filled" w="100%" />
++        <FormSubmitButton
++          label={t`Sign in`}
++          variant="primary"
++          w="100%"
++          radius="100px"
++        />
+         <FormErrorMessage mt="1rem" />
+       </Form>
+     </FormProvider>
+diff --git a/frontend/src/metabase/common/components/TabButton/TabButton.styled.tsx b/frontend/src/metabase/common/components/TabButton/TabButton.styled.tsx
+index 48922e5826..813abe8059 100644
+--- a/frontend/src/metabase/common/components/TabButton/TabButton.styled.tsx
++++ b/frontend/src/metabase/common/components/TabButton/TabButton.styled.tsx
+@@ -17,7 +17,7 @@ export const TabButtonInputWrapper = styled.span<TabButtonProps>`
+   padding: 0.25rem;
+   border: 1px solid transparent;
+   border-radius: 6px;
+-  line-height: 1.15; /* Matches .tabLabel */
++  line-height: 1.5;
+ `;
+ 
+ export const TabButtonInputResizer = styled.span`
+@@ -54,7 +54,7 @@ export const TabButtonRoot = styled.div<TabButtonProps>`
+   padding: calc(0.6875rem - 0.25rem - 1px) calc(0.5rem - 0.25rem - 2px); /* tab .list padding - input padding - borders/margins */
+   color: ${(props) =>
+     props.isSelected && !props.disabled
+-      ? "var(--mb-color-brand)"
++      ? "var(--mb-color-text-primary)"
+       : "var(--mb-color-text-primary)"};
+   opacity: ${(props) => (props.disabled ? 0.3 : 1)};
+   font-size: var(--mantine-font-size-md);
+@@ -66,7 +66,8 @@ export const TabButtonRoot = styled.div<TabButtonProps>`
+     ${(props) =>
+       !props.disabled &&
+       css`
+-        color: var(--mb-color-brand);
++        color: var(--mb-color-text-primary);
++        border-bottom: 0.125rem solid var(--mb-color-brand);
+       `}
+   }
+ 
+diff --git a/frontend/src/metabase/css/components/buttons.module.css b/frontend/src/metabase/css/components/buttons.module.css
+index 5410dcde86..ad305952e6 100644
+--- a/frontend/src/metabase/css/components/buttons.module.css
++++ b/frontend/src/metabase/css/components/buttons.module.css
+@@ -59,19 +59,19 @@
+ 
+ .ButtonPrimary {
+   color: var(--mb-color-text-primary-inverse);
+-  background: var(--mb-color-brand);
+-  border-color: var(--mb-color-brand);
++  background: var(--mb-color-button-primary);
++  border-color: var(--mb-color-button-primary);
+ }
+ 
+ .ButtonPrimary:hover {
+   color: var(--mb-color-text-primary-inverse);
+-  border-color: var(--mb-color-brand);
+-  background-color: var(--mb-color-brand-hover);
++  border-color: var(--mb-color-button-primary-hover);
++  background-color: var(--mb-color-button-primary-hover);
+ }
+ 
+ .ButtonPrimary:focus-visible {
+   border-color: var(--mb-color-background-primary);
+-  outline-color: var(--mb-color-brand);
++  outline-color: var(--mb-color-button-primary);
+ }
+ 
+ .ButtonWarning {
+diff --git a/frontend/src/metabase/css/core/fonts.saopaulo.styled.ts b/frontend/src/metabase/css/core/fonts.saopaulo.styled.ts
+new file mode 100644
+index 0000000000..0102e465e9
+--- /dev/null
++++ b/frontend/src/metabase/css/core/fonts.saopaulo.styled.ts
+@@ -0,0 +1,172 @@
++// eslint-disable-next-line no-restricted-imports
++import { css } from "@emotion/react";
++
++export const saoPauloFontFiles = ({ baseUrl = "./" } = {}) => {
++  const localInstanceUrl = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
++  const basePath = `${localInstanceUrl}app/fonts/Rawline`;
++
++  return css`
++    @font-face {
++      font-family: "Rawline";
++      font-style: normal;
++      font-weight: 100;
++      src:
++        url("${basePath}/rawline-100.woff") format("woff"),
++        url("${basePath}/rawline-100.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: italic;
++      font-weight: 100;
++      src:
++        url("${basePath}/rawline-100i.woff") format("woff"),
++        url("${basePath}/rawline-100i.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: normal;
++      font-weight: 200;
++      src:
++        url("${basePath}/rawline-200.woff") format("woff"),
++        url("${basePath}/rawline-200.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: italic;
++      font-weight: 200;
++      src:
++        url("${basePath}/rawline-200i.woff") format("woff"),
++        url("${basePath}/rawline-200i.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: normal;
++      font-weight: 300;
++      src:
++        url("${basePath}/rawline-300.woff") format("woff"),
++        url("${basePath}/rawline-300.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: italic;
++      font-weight: 300;
++      src:
++        url("${basePath}/rawline-300i.woff") format("woff"),
++        url("${basePath}/rawline-300i.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: normal;
++      font-weight: 400;
++      src:
++        url("${basePath}/rawline-400.woff") format("woff"),
++        url("${basePath}/rawline-400.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: italic;
++      font-weight: 400;
++      src:
++        url("${basePath}/rawline-400i.woff") format("woff"),
++        url("${basePath}/rawline-400i.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: normal;
++      font-weight: 500;
++      src:
++        url("${basePath}/rawline-500.woff") format("woff"),
++        url("${basePath}/rawline-500.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: italic;
++      font-weight: 500;
++      src:
++        url("${basePath}/rawline-500i.woff") format("woff"),
++        url("${basePath}/rawline-500i.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: normal;
++      font-weight: 600;
++      src:
++        url("${basePath}/rawline-600.woff") format("woff"),
++        url("${basePath}/rawline-600.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: italic;
++      font-weight: 600;
++      src:
++        url("${basePath}/rawline-600i.woff") format("woff"),
++        url("${basePath}/rawline-600i.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: normal;
++      font-weight: 700;
++      src:
++        url("${basePath}/rawline-700.woff") format("woff"),
++        url("${basePath}/rawline-700.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: italic;
++      font-weight: 700;
++      src:
++        url("${basePath}/rawline-700i.woff") format("woff"),
++        url("${basePath}/rawline-700i.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: normal;
++      font-weight: 800;
++      src:
++        url("${basePath}/rawline-800.woff") format("woff"),
++        url("${basePath}/rawline-800.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: italic;
++      font-weight: 800;
++      src:
++        url("${basePath}/rawline-800i.woff") format("woff"),
++        url("${basePath}/rawline-800i.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: normal;
++      font-weight: 900;
++      src:
++        url("${basePath}/rawline-900.woff") format("woff"),
++        url("${basePath}/rawline-900.ttf") format("truetype");
++      font-display: swap;
++    }
++    @font-face {
++      font-family: "Rawline";
++      font-style: italic;
++      font-weight: 900;
++      src:
++        url("${basePath}/rawline-900i.woff") format("woff"),
++        url("${basePath}/rawline-900i.ttf") format("truetype");
++      font-display: swap;
++    }
++  `;
++};
+diff --git a/frontend/src/metabase/dashboard/components/DashboardInfoSidebar/DashboardInfoSidebar.tsx b/frontend/src/metabase/dashboard/components/DashboardInfoSidebar/DashboardInfoSidebar.tsx
+index 557363d467..d2c9c2d340 100644
+--- a/frontend/src/metabase/dashboard/components/DashboardInfoSidebar/DashboardInfoSidebar.tsx
++++ b/frontend/src/metabase/dashboard/components/DashboardInfoSidebar/DashboardInfoSidebar.tsx
+@@ -12,7 +12,6 @@ import {
+   SidesheetCard,
+   SidesheetTabPanelContainer,
+ } from "metabase/common/components/Sidesheet";
+-import { InsightsTabOrLink } from "metabase/common/components/Sidesheet/components/InsightsTabOrLink";
+ import { SidesheetEditableDescription } from "metabase/common/components/Sidesheet/components/SidesheetEditableDescription";
+ import SidesheetS from "metabase/common/components/Sidesheet/sidesheet.module.css";
+ import { Timeline } from "metabase/common/components/Timeline";
+@@ -36,12 +35,10 @@ import type {
+ 
+ import { DashboardDetails } from "./DashboardDetails";
+ import { DashboardEntityIdCard } from "./DashboardEntityIdCard";
+-import { InsightsUpsellTab } from "./components/InsightsUpsellTab";
+ 
+ enum Tab {
+   Overview = "overview",
+   History = "history",
+-  Insights = "insights",
+ }
+ 
+ export function DashboardInfoSidebar() {
+@@ -147,7 +144,6 @@ export function DashboardInfoSidebarInner({
+               {!isIADashboard && (
+                 <Tabs.Tab value={Tab.History}>{t`History`}</Tabs.Tab>
+               )}
+-              <InsightsTabOrLink dashboard={dashboard} />
+             </Tabs.List>
+             <SidesheetTabPanelContainer>
+               <Tabs.Panel value={Tab.Overview}>
+@@ -169,9 +165,6 @@ export function DashboardInfoSidebarInner({
+                   moderationReviews={dashboard.moderation_reviews}
+                 />
+               </Tabs.Panel>
+-              <Tabs.Panel value={Tab.Insights}>
+-                <InsightsUpsellTab model="dashboard" />
+-              </Tabs.Panel>
+             </SidesheetTabPanelContainer>
+           </Tabs>
+         </Sidesheet>
+diff --git a/frontend/src/metabase/embedding-sdk/theme/embedding-color-palette.ts b/frontend/src/metabase/embedding-sdk/theme/embedding-color-palette.ts
+index 2cf69a4597..0b412aa74b 100644
+--- a/frontend/src/metabase/embedding-sdk/theme/embedding-color-palette.ts
++++ b/frontend/src/metabase/embedding-sdk/theme/embedding-color-palette.ts
+@@ -37,7 +37,7 @@ export const SDK_TO_MAIN_APP_COLORS_MAPPING: Record<
+   "text-tertiary": ["text-tertiary"],
+   background: ["background-primary"],
+   "background-secondary": ["background-secondary", "background-tertiary"],
+-  "background-hover": [],
++  "background-hover": ["text-primary"],
+   "background-disabled": ["background-disabled"],
+   "background-light": ["background-secondary"],
+   shadow: ["shadow"],
+diff --git a/frontend/src/metabase/embedding/embedding-iframe-sdk-setup/components/SelectEmbedExperienceStep.tsx b/frontend/src/metabase/embedding/embedding-iframe-sdk-setup/components/SelectEmbedExperienceStep.tsx
+index 7e377a5c6e..29009afbdb 100644
+--- a/frontend/src/metabase/embedding/embedding-iframe-sdk-setup/components/SelectEmbedExperienceStep.tsx
++++ b/frontend/src/metabase/embedding/embedding-iframe-sdk-setup/components/SelectEmbedExperienceStep.tsx
+@@ -3,14 +3,11 @@ import { t } from "ttag";
+ import { PLUGIN_METABOT } from "metabase/plugins";
+ import { Card, Flex, Radio, Stack, Text } from "metabase/ui";
+ 
+-import { UPSELL_CAMPAIGN_EXPERIENCE } from "../analytics";
+ import { getEmbedExperiences } from "../constants";
+ import { useSdkIframeEmbedSetupContext } from "../context";
+ import { useHandleExperienceChange } from "../hooks/use-handle-experience-change";
+ import type { SdkIframeEmbedSetupExperience } from "../types";
+ 
+-import { EmbeddingUpsell } from "./Common/EmbeddingUpsell";
+-
+ export const SelectEmbedExperienceStep = () => {
+   const { isSimpleEmbedFeatureAvailable, experience, settings } =
+     useSdkIframeEmbedSetupContext();
+@@ -59,8 +56,6 @@ export const SelectEmbedExperienceStep = () => {
+           </Stack>
+         </Radio.Group>
+       </Card>
+-
+-      <EmbeddingUpsell campaign={UPSELL_CAMPAIGN_EXPERIENCE} />
+     </>
+   );
+ };
+diff --git a/frontend/src/metabase/embedding/embedding-iframe-sdk-setup/components/SelectEmbedOptionsStep.tsx b/frontend/src/metabase/embedding/embedding-iframe-sdk-setup/components/SelectEmbedOptionsStep.tsx
+index 3d7a470c85..282a7a4493 100644
+--- a/frontend/src/metabase/embedding/embedding-iframe-sdk-setup/components/SelectEmbedOptionsStep.tsx
++++ b/frontend/src/metabase/embedding/embedding-iframe-sdk-setup/components/SelectEmbedOptionsStep.tsx
+@@ -19,12 +19,10 @@ import {
+   Text,
+ } from "metabase/ui";
+ 
+-import { UPSELL_CAMPAIGN_BEHAVIOR } from "../analytics";
+ import { useSdkIframeEmbedSetupContext } from "../context";
+ 
+ import { ColorCustomizationSection } from "./Appearance/ColorCustomizationSection";
+ import { SimpleThemeSwitcherSection } from "./Appearance/SimpleThemeSwitcherSection";
+-import { EmbeddingUpsell } from "./Common/EmbeddingUpsell";
+ import { WithNotAvailableForOssOrGuestEmbedsGuard } from "./Common/WithNotAvailableForOssOrGuestEmbedsGuard";
+ import { LegacyStaticEmbeddingAlert } from "./LegacyStaticEmbeddingAlert";
+ import { MetabotLayoutSetting } from "./MetabotLayoutSetting";
+@@ -36,7 +34,6 @@ export const SelectEmbedOptionsStep = () => (
+     <ParametersSection />
+     <AppearanceSection />
+     <LegacyStaticEmbeddingAlert />
+-    <EmbeddingUpsell campaign={UPSELL_CAMPAIGN_BEHAVIOR} />
+   </Stack>
+ );
+ 
+diff --git a/frontend/src/metabase/home/components/EmbedHomepage/EmbedHomepageView.tsx b/frontend/src/metabase/home/components/EmbedHomepage/EmbedHomepageView.tsx
+index ea5aa25edc..066a85dad9 100644
+--- a/frontend/src/metabase/home/components/EmbedHomepage/EmbedHomepageView.tsx
++++ b/frontend/src/metabase/home/components/EmbedHomepage/EmbedHomepageView.tsx
+@@ -1,7 +1,6 @@
+ import { match } from "ts-pattern";
+ import { t } from "ttag";
+ 
+-import { UpsellEmbedHomepage } from "metabase/admin/upsells";
+ import { Box, Card, Flex, Stack, Text, Title } from "metabase/ui";
+ import type { EmbeddingHomepageDismissReason } from "metabase-types/api";
+ 
+@@ -116,11 +115,6 @@ export const EmbedHomepageView = (props: EmbedHomepageViewProps) => {
+         />
+       </Stack>
+ 
+-      {variant === "oss/starter" && (
+-        <Box mt="2.5rem">
+-          <UpsellEmbedHomepage location="embedding-homepage" />
+-        </Box>
+-      )}
+     </Flex>
+   );
+ };
+diff --git a/frontend/src/metabase/home/components/HomeLayout/HomeLayout.tsx b/frontend/src/metabase/home/components/HomeLayout/HomeLayout.tsx
+index 71ccb3cbd8..05cc83e17c 100644
+--- a/frontend/src/metabase/home/components/HomeLayout/HomeLayout.tsx
++++ b/frontend/src/metabase/home/components/HomeLayout/HomeLayout.tsx
+@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
+ import { useState } from "react";
+ import { t } from "ttag";
+ 
+-import { LighthouseIllustration } from "metabase/common/components/LighthouseIllustration";
+ import { useHasTokenFeature, useSetting } from "metabase/common/hooks";
+ import { EmbeddingHubHomePage } from "metabase/embedding/embedding-hub";
+ import { useSelector } from "metabase/lib/redux";
+@@ -45,12 +44,10 @@ export const HomeLayout = ({ children }: HomeLayoutProps): ReactNode => {
+         xl: "10rem 15rem 4rem",
+       }}
+       mih="100%"
+-      bg="background-secondary"
++      bg="background-home"
+     >
+       {landingPageIllustration &&
+-        (landingPageIllustration.isDefault ? (
+-          <LighthouseIllustration />
+-        ) : (
++        (landingPageIllustration.isDefault ? null : (
+           <Box
+             data-testid="landing-page-illustration"
+             pos="absolute"
+diff --git a/frontend/src/metabase/home/components/HomeXrayCard/HomeXrayCard.styled.tsx b/frontend/src/metabase/home/components/HomeXrayCard/HomeXrayCard.styled.tsx
+index 49964ad509..6c5f91811f 100644
+--- a/frontend/src/metabase/home/components/HomeXrayCard/HomeXrayCard.styled.tsx
++++ b/frontend/src/metabase/home/components/HomeXrayCard/HomeXrayCard.styled.tsx
+@@ -1,29 +1,71 @@
+ // eslint-disable-next-line no-restricted-imports
+ import styled from "@emotion/styled";
+ 
+-import { Ellipsified } from "metabase/common/components/Ellipsified";
++import { alpha } from "metabase/lib/colors";
++import {
++  breakpointMinLarge,
++  breakpointMinSmall,
++} from "metabase/styled-components/theme";
+ import { Icon } from "metabase/ui";
+-import { color } from "metabase/ui/utils/colors";
+ 
+-export const CardIcon = styled(Icon)`
+-  display: block;
+-  flex: 0 0 auto;
+-  color: ${() => color("accent4")};
+-  width: 1.25rem;
+-  height: 1.25rem;
++import { CardRoot } from "../HomeCard/HomeCard.styled";
++
++export const XrayCardRoot = styled(CardRoot)`
++  flex-direction: column;
++  align-items: flex-start;
++  height: 315px;
++  width: 215px;
++  max-width: 215px;
++  gap: 1.25rem;
++  border-radius: 0.75rem;
++  border-color: var(--mb-color-border-card-home);
++  box-shadow: 0 0 0 0 transparent;
++  transition: box-shadow 0.2s ease;
++
++  /* Override inherited responsive max-width from CardRoot */
++  ${breakpointMinSmall} {
++    max-width: 215px;
++  }
++
++  ${breakpointMinLarge} {
++    padding: 1rem;
++  }
++
++  &:hover {
++    box-shadow: -1px 6px 18.9px 0 var(--mb-color-shadow-card-hover);
++  }
+ `;
+ 
+-export const CardTitle = styled(Ellipsified)`
+-  font-size: 1rem;
+-  font-weight: bold;
+-  margin-left: 0.5rem;
+-  padding-right: 0.2rem;
++export const CategoryBadge = styled.span`
++  display: inline-block;
++  font-size: 0.7rem;
++  font-weight: 600;
++  color: var(--mb-color-brand);
++  background-color: ${() => alpha("brand", 0.1)};
++  padding: 0.2rem 0.5rem;
++  border-radius: 0.25rem;
++  max-width: 100%;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
+ `;
+ 
+-export const CardTitlePrimary = styled.span`
+-  color: var(--mb-color-text-primary);
++export const CardIconWrapper = styled.div`
++  flex: 1;
++  display: flex;
++  align-items: flex-end;
+ `;
+ 
+-export const CardTitleSecondary = styled.span`
+-  color: var(--mb-color-text-secondary);
++export const CardIcon = styled(Icon)`
++  display: block;
++  color: var(--mb-color-brand);
++  width: 2rem;
++  height: 2rem;
++`;
++
++export const CardTitle = styled.div`
++  font-size: 1.25rem;
++  font-weight: bold;
++  color: var(--mb-color-text-primary);
++  width: 100%;
+ `;
+diff --git a/frontend/src/metabase/home/components/HomeXrayCard/HomeXrayCard.tsx b/frontend/src/metabase/home/components/HomeXrayCard/HomeXrayCard.tsx
+index 994fce4515..9776c42faa 100644
+--- a/frontend/src/metabase/home/components/HomeXrayCard/HomeXrayCard.tsx
++++ b/frontend/src/metabase/home/components/HomeXrayCard/HomeXrayCard.tsx
+@@ -1,10 +1,9 @@
+-import { HomeCard } from "../HomeCard";
+-
+ import {
+   CardIcon,
++  CardIconWrapper,
+   CardTitle,
+-  CardTitlePrimary,
+-  CardTitleSecondary,
++  CategoryBadge,
++  XrayCardRoot,
+ } from "./HomeXrayCard.styled";
+ import { trackHomeXRayClicked } from "./analytics";
+ 
+@@ -20,12 +19,12 @@ export const HomeXrayCard = ({
+   message,
+ }: HomeXrayCardProps): JSX.Element => {
+   return (
+-    <HomeCard url={url} onClick={trackHomeXRayClicked}>
+-      <CardIcon name="bolt_filled" />
+-      <CardTitle>
+-        <CardTitleSecondary>{message}</CardTitleSecondary>{" "}
+-        <CardTitlePrimary>{title}</CardTitlePrimary>
+-      </CardTitle>
+-    </HomeCard>
++    <XrayCardRoot to={url} onClick={trackHomeXRayClicked}>
++      <CategoryBadge>{title}</CategoryBadge>
++      <CardIconWrapper>
++        <CardIcon name="bolt_filled" />
++      </CardIconWrapper>
++      <CardTitle>{message}</CardTitle>
++    </XrayCardRoot>
+   );
+ };
+diff --git a/frontend/src/metabase/home/components/HomeXraySection/HomeXraySection.styled.tsx b/frontend/src/metabase/home/components/HomeXraySection/HomeXraySection.styled.tsx
+index ee8b76ace7..e287ebd412 100644
+--- a/frontend/src/metabase/home/components/HomeXraySection/HomeXraySection.styled.tsx
++++ b/frontend/src/metabase/home/components/HomeXraySection/HomeXraySection.styled.tsx
+@@ -4,9 +4,9 @@ import styled from "@emotion/styled";
+ import Link from "metabase/common/components/Link";
+ import { Icon } from "metabase/ui";
+ 
+-export const SectionBody = styled.div`
++export const SectionBody = styled.div<{ $compact?: boolean }>`
+   display: flex;
+-  gap: 1.5rem;
++  gap: ${({ $compact }) => ($compact ? "0.75rem" : "1.5rem")};
+   flex-wrap: wrap;
+ `;
+ 
+diff --git a/frontend/src/metabase/home/components/HomeXraySection/HomeXraySection.tsx b/frontend/src/metabase/home/components/HomeXraySection/HomeXraySection.tsx
+index 913c6a4e5f..725855d19c 100644
+--- a/frontend/src/metabase/home/components/HomeXraySection/HomeXraySection.tsx
++++ b/frontend/src/metabase/home/components/HomeXraySection/HomeXraySection.tsx
+@@ -97,7 +97,7 @@ const HomeXrayView = ({ database, candidates = [] }: HomeXrayViewProps) => {
+           <DatabaseInfo database={database} />
+         </HomeCaption>
+       ) : null}
+-      <SectionBody>
++      <SectionBody $compact={true}>
+         {candidate?.tables.map((table, index) => (
+           <HomeXrayCard
+             key={table.url}
+diff --git a/frontend/src/metabase/lib/colors/constants/sp-colors.ts b/frontend/src/metabase/lib/colors/constants/sp-colors.ts
+new file mode 100644
+index 0000000000..a2503013e3
+--- /dev/null
++++ b/frontend/src/metabase/lib/colors/constants/sp-colors.ts
+@@ -0,0 +1,129 @@
++/* eslint-disable no-color-literals */
++/**
++ * SP Design System color scales — valores 100% estáticos (hex / rgba).
++ *
++ * IMPORTANTE: Nenhum valor aqui usa `var(--mb-color-sp-*)` porque o parser JS
++ * do Metabase só aceita `var(--mb-color-brand)` como variável CSS. Qualquer
++ * outro `var()` causa "Unable to parse color".
++ *
++ * Todos os tons foram pré-calculados a partir das cores base da paleta SP.
++ *
++ * Só use este arquivo para definir os temas `light.ts` e `dark.ts`.
++ */
++export const spColors = {
++  // ─── Paleta Primária ────────────────────────────────────────────────────────
++
++  /** #FF161F — vermelho principal SP */
++  red: {
++    /** ~14% de #FF161F (muito escuro) */
++    100: "#240304",
++    /** ~25% de #FF161F */
++    90: "#400608",
++    /** ~40% de #FF161F */
++    80: "#66090C",
++    /** ~55% de #FF161F */
++    70: "#8C0C11",
++    /** +28% black (~#B81017) */
++    60: "#B81017",
++    /** +12% black (~#E11319) */
++    50: "#E11319",
++    /** sp-red puro */
++    40: "#FF161F",
++    /** +35% white (~#FF686D) */
++    30: "#FF686D",
++    /** +70% white (~#FFB9BC) */
++    20: "#FFB9BC",
++    /** +90% white (~#FFE8E9) */
++    10: "#FFE8E9",
++    /** +95% white (~#FFF3F4) */
++    5: "#FFF3F4",
++  },
++
++  /** #000000 — preto SP */
++  black: {
++    /** preto puro */
++    base: "#000000",
++    /** rgba com 80% de opacidade */
++    alpha80: "rgba(0, 0, 0, 0.80)",
++    /** ~25% white (~#404040) */
++    hover: "#404040",
++    /** +85% white (~#D9D9D9) */
++    15: "#D9D9D9",
++    /** +90% white (~#E6E6E6) */
++    10: "#E6E6E6",
++    /** rgba com 10% de opacidade */
++    alpha10: "rgba(0, 0, 0, 0.10)",
++  },
++
++  /** #808080 — cinza SP */
++  gray: {
++    /** cinza puro */
++    base: "#808080",
++    /** +88% white (~#F0F0F0) */
++    bg: "#F0F0F0",
++  },
++
++  /** #BFBFBF — cinza claro SP */
++  grayLight: {
++    /** cinza claro puro */
++    base: "#BFBFBF",
++  },
++
++  // ─── Paleta Secundária ───────────────────────────────────────────────────────
++
++  /** #842519 — vermelho escuro SP */
++  redDark: {
++    /** vermelho escuro puro */
++    base: "#842519",
++    /** +88% white (~#F0E5E3) */
++    10: "#F0E5E3",
++    /** +94% white (~#F8F2F1) */
++    5: "#F8F2F1",
++  },
++
++  /** #0B9247 — verde SP */
++  green: {
++    /** +15% black (~#097C3C) */
++    dark: "#097C3C",
++    /** +10% black (~#0A8340) */
++    60: "#0A8340",
++    /** verde puro */
++    base: "#0B9247",
++    /** +92% white (~#EBF6F0) */
++    bg: "#EBF6F0",
++  },
++
++  /** #FBB900 — amarelo SP */
++  yellow: {
++    /** amarelo puro */
++    base: "#FBB900",
++    /** +85% white (~#FEF5D9) */
++    10: "#FEF5D9",
++    /** +92% white (~#FFF9EB) */
++    bg: "#FFF9EB",
++  },
++
++  /** #034EA2 — azul SP */
++  blue: {
++    /** azul puro */
++    base: "#034EA2",
++  },
++
++  /** #4297D3 — azul médio SP */
++  blueMedium: {
++    /** azul médio puro */
++    base: "#4297D3",
++  },
++
++  /** #A1DDF7 — azul claro SP */
++  skyLight: {
++    /** azul claro puro */
++    base: "#A1DDF7",
++  },
++
++  /** #233254 — azul marinho SP */
++  navy: {
++    /** azul marinho puro */
++    base: "#233254",
++  },
++};
+diff --git a/frontend/src/metabase/lib/colors/constants/themes/dark.ts b/frontend/src/metabase/lib/colors/constants/themes/dark.ts
+index 9a2477b4e6..13735c2e3d 100644
+--- a/frontend/src/metabase/lib/colors/constants/themes/dark.ts
++++ b/frontend/src/metabase/lib/colors/constants/themes/dark.ts
+@@ -21,10 +21,15 @@ export const METABASE_DARK_THEME: MetabaseThemeV2 = {
+     "background-error-secondary": baseColors.lobster[90],
+     "background-highlight":
+       "color-mix(in srgb, var(--mb-color-brand) 7%, transparent)",
++    "background-home": baseColors.orion[90],
+     "background-hover":
+       "color-mix(in srgb, var(--mb-color-brand) 7%, transparent)",
++    "background-menu-hover":
++      "color-mix(in srgb, var(--mb-color-brand) 14%, transparent)",
+     "background-selected":
+       "color-mix(in srgb, var(--mb-color-brand) 21%, transparent)",
++    "background-menu-selected":
++      "color-mix(in srgb, var(--mb-color-brand) 21%, transparent)",
+     "background-primary": baseColors.orion[100],
+     "background-secondary": baseColors.orion[110],
+     "background-tertiary": baseColors.orion[80],
+@@ -34,8 +39,8 @@ export const METABASE_DARK_THEME: MetabaseThemeV2 = {
+     overlay: baseColors.orionAlpha[70],
+     "background-error": baseColors.lobster[90],
+     "background-success": baseColors.palm[90],
+-    brand: "#C40008",
+-    "brand-hover": "color-mix(in srgb, #C40008, white 25%)",
++    brand: "#FF161F",
++    "brand-hover": "color-mix(in srgb, #FF161F, white 25%)",
+     danger: baseColors.lobster[50],
+     error: baseColors.lobster[50],
+     filter: baseColors.octopus[40],
+@@ -46,14 +51,15 @@ export const METABASE_DARK_THEME: MetabaseThemeV2 = {
+     "icon-secondary": baseColors.orionAlphaInverse[50],
+     "illustration-brand-secondary": baseColors.brand[80],
+     "illustration-brand-tertiary": baseColors.brand[90],
+-    "metabase-brand": "#C40008",
+-    "metabase-brand-hover": "color-mix(in srgb, #C40008, white 25%)",
++    "metabase-brand": "#FF161F",
++    "metabase-brand-hover": "color-mix(in srgb, #FF161F, white 25%)",
+     "saturated-blue": baseColors.ocean[40],
+     "saturated-green": baseColors.palm[40],
+     "saturated-purple": baseColors.octopus[40],
+     "saturated-red": baseColors.lobster[40],
+     "saturated-yellow": baseColors.dubloon[30],
+     shadow: `color-mix(in srgb, ${baseColors.orion[110]} 20%, transparent)`,
++    "shadow-card-hover": "rgba(0, 0, 0, 0.15)",
+     "success-secondary": baseColors.palm[40],
+     success: baseColors.palm[50],
+     summarize: baseColors.palm[40],
+@@ -81,8 +87,11 @@ export const METABASE_DARK_THEME: MetabaseThemeV2 = {
+     white: baseColors.orion[110],
+     border: baseColors.orionAlphaInverse[20],
+     "border-brand": baseColors.brand[80],
++    "border-card-home": "#E2E2E2",
+     "border-strong": baseColors.orionAlphaInverse[50],
+     "border-subtle": baseColors.orionAlphaInverse[10],
++    "button-primary": "#000000",
++    "button-primary-hover": "color-mix(in srgb, #000000, white 25%)",
+     copper: "#B87333",
+     bronze: "#CD7F32",
+     silver: "#C0C0C0",
+@@ -90,5 +99,22 @@ export const METABASE_DARK_THEME: MetabaseThemeV2 = {
+     "upsell-primary": baseColors.ocean[30],
+     "upsell-secondary": baseColors.ocean[80],
+     "upsell-gem": "#00d4ff",
++    // SP Design System — Paleta Primária
++    "sp-black": "#000000",
++    "sp-red": "#FF161F",
++    "sp-white": "#FFFFFF",
++    "sp-gray": "#808080",
++    "sp-gray-light": "#BFBFBF",
++    // SP Design System — Paleta Secundária
++    "sp-yellow": "#FBB900",
++    "sp-blue": "#034EA2",
++    "sp-green": "#0B9247",
++    "sp-sky-light": "#A1DDF7",
++    "sp-sky": "#62C9E0",
++    "sp-blue-medium": "#4297D3",
++    "sp-blue-dark": "#005992",
++    "sp-navy": "#233254",
++    "sp-olive": "#94AA54",
++    "sp-red-dark": "#842519",
+   },
+ };
+diff --git a/frontend/src/metabase/lib/colors/constants/themes/light.ts b/frontend/src/metabase/lib/colors/constants/themes/light.ts
+index 0d2b16830a..9f2c807112 100644
+--- a/frontend/src/metabase/lib/colors/constants/themes/light.ts
++++ b/frontend/src/metabase/lib/colors/constants/themes/light.ts
+@@ -2,6 +2,7 @@
+ import type { MetabaseThemeV2 } from "../../types";
+ import { LIGHT_THEME_ACCENT_COLORS } from "../accent-colors";
+ import { getBaseColorsForThemeDefinitionOnly } from "../base-colors";
++import { spColors } from "../sp-colors";
+ 
+ const baseColors = getBaseColorsForThemeDefinitionOnly();
+ 
+@@ -15,16 +16,19 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
+     "admin-navbar": "#1a1a1a",
+     "admin-navbar-secondary": "#404040",
+     "admin-navbar-inverse": "#FFFFFF",
+-    "background-brand": baseColors.brand[10],
++    "background-brand": spColors.red[10], // SP Paleta Primária: sp-red
+     "background-disabled": baseColors.orionAlpha[10],
+     "background-disabled-inverse": baseColors.orionAlphaInverse[10],
+-    "background-error-secondary": baseColors.lobster[5],
++    "background-error-secondary": spColors.redDark[5], // SP Paleta Secundária: sp-red-dark
+     "background-highlight":
+       "color-mix(in srgb, var(--mb-color-brand) 7%, transparent)",
++    "background-home": "#F2F2F2",
+     "background-hover":
+       "color-mix(in srgb, var(--mb-color-brand) 7%, transparent)",
++    "background-menu-hover": "color-mix(in srgb, #ebebeb, white 20%)",
+     "background-selected":
+       "color-mix(in srgb, var(--mb-color-brand) 21%, transparent)",
++    "background-menu-selected": "color-mix(in srgb, #ebebeb, white 0%)",
+     "background-primary": baseColors.white,
+     "background-secondary": baseColors.orion[5],
+     "background-tertiary": baseColors.orion[10],
+@@ -32,63 +36,84 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
+     "background-secondary-inverse": baseColors.orion[70],
+     "background-tertiary-inverse": baseColors.orion[40],
+     overlay: baseColors.orionAlpha[60],
+-    "background-error": baseColors.lobster[10],
+-    "background-success": baseColors.palm[5],
+-    brand: "#C40008",
+-    "brand-hover": "color-mix(in srgb, #C40008, white 12%)",
+-    danger: baseColors.lobster[50],
+-    error: baseColors.lobster[50],
+-    filter: baseColors.octopus[50],
++    "background-error": spColors.redDark[10], // SP Paleta Secundária: sp-red-dark
++    "background-success": spColors.green.bg, // SP Paleta Secundária: sp-green
++    brand: spColors.red[40], // SP Paleta Primária: sp-red
++    "brand-hover": "color-mix(in srgb, #FF161F, white 12%)", // SP Paleta Primária: sp-red
++    danger: spColors.redDark.base, // SP Paleta Secundária: sp-red-dark
++    error: spColors.redDark.base, // SP Paleta Secundária: sp-red-dark
++    filter: baseColors.octopus[50], // original — sem roxo na paleta SP
+     focus: baseColors.black,
+-    "icon-brand": baseColors.brand[40],
+-    "icon-primary": baseColors.orionAlpha[80],
+-    "icon-disabled": baseColors.orionAlpha[30],
+-    "icon-secondary": baseColors.orionAlpha[50],
+-    "illustration-brand-secondary": baseColors.brand[10],
+-    "illustration-brand-tertiary": baseColors.brand[5],
+-    "metabase-brand": "#C40008",
+-    "metabase-brand-hover": "color-mix(in srgb, #C40008, white 12%)",
+-    "saturated-blue": baseColors.ocean[60],
+-    "saturated-green": baseColors.palm[60],
+-    "saturated-purple": baseColors.octopus[60],
+-    "saturated-red": baseColors.lobster[60],
+-    "saturated-yellow": baseColors.dubloon[30],
++    "icon-brand": spColors.red[30], // SP Paleta Primária: sp-red
++    "icon-primary": spColors.black.alpha80, // SP Paleta Primária: sp-black
++    "icon-disabled": spColors.grayLight.base, // SP Paleta Primária: sp-gray-light
++    "icon-secondary": spColors.gray.base, // SP Paleta Primária: sp-gray
++    "illustration-brand-secondary": spColors.red[10], // SP Paleta Primária: sp-red
++    "illustration-brand-tertiary": spColors.red[5], // SP Paleta Primária: sp-red
++    "metabase-brand": spColors.red[40], // SP Paleta Primária: sp-red
++    "metabase-brand-hover": "color-mix(in srgb, #FF161F, white 12%)", // SP Paleta Primária: sp-red
++    "saturated-blue": spColors.blue.base, // SP Paleta Secundária: sp-blue
++    "saturated-green": spColors.green[60], // SP Paleta Secundária: sp-green
++    "saturated-purple": baseColors.octopus[60], // original — sem roxo na paleta SP
++    "saturated-red": spColors.redDark.base, // SP Paleta Secundária: sp-red-dark
++    "saturated-yellow": spColors.yellow.base, // SP Paleta Secundária: sp-yellow
+     shadow: baseColors.orionAlpha[20],
+-    "success-secondary": baseColors.palm[60],
+-    success: baseColors.palm[50],
+-    summarize: baseColors.palm[50],
+-    "switch-off": baseColors.orionAlpha[20],
+-    "syntax-parameters-active": baseColors.mango[10],
+-    "syntax-parameters": baseColors.mango[60],
+-    "text-brand": baseColors.brand[50],
+-    "text-tertiary": baseColors.orionAlpha[40],
++    "shadow-card-hover": "rgba(0, 0, 0, 0.15)",
++    "success-secondary": spColors.green.dark, // SP Paleta Secundária: sp-green
++    success: spColors.green.base, // SP Paleta Secundária: sp-green
++    summarize: spColors.green.base, // SP Paleta Secundária: sp-green
++    "switch-off": spColors.grayLight.base, // SP Paleta Primária: sp-gray-light
++    "syntax-parameters-active": spColors.yellow[10], // SP Paleta Secundária: sp-yellow
++    "syntax-parameters": spColors.yellow.base, // SP Paleta Secundária: sp-yellow
++    "text-brand": spColors.red[40], // SP Paleta Primária: sp-red
++    "text-tertiary": spColors.grayLight.base, // SP Paleta Primária: sp-gray-light
+     "text-tertiary-inverse": baseColors.orionAlphaInverse[40],
+-    "text-hover": baseColors.brand[60],
+-    "text-secondary-opaque": baseColors.orion[60],
+-    "text-primary": baseColors.orionAlpha[80],
++    "text-hover": spColors.red[60], // SP Paleta Primária: sp-red
++    "text-secondary-opaque": spColors.gray.base, // SP Paleta Primária: sp-gray
++    "text-primary": spColors.black.base, // SP Paleta Primária: sp-black
+     "text-primary-inverse": baseColors.orionAlphaInverse[80],
+-    "text-secondary": baseColors.orionAlpha[60],
++    "text-secondary": spColors.gray.base, // SP Paleta Primária: sp-gray
+     "text-secondary-inverse": baseColors.orionAlphaInverse[60],
+-    "text-selected": baseColors.orionAlpha[80],
++    "text-selected": spColors.black.base, // SP Paleta Primária: sp-black
+     "tooltip-background-focused": `color-mix(in srgb, ${baseColors.orion[80]} 50%, #000)`,
+     "tooltip-background": baseColors.orion[80],
+     "tooltip-text-secondary": baseColors.orionAlphaInverse[60],
+     "tooltip-text": baseColors.white,
+-    warning: baseColors.dubloon[30],
+-    "background-warning": baseColors.dubloon[5],
+-    info: baseColors.orion[40],
+-    "background-info": baseColors.orion[10],
++    warning: spColors.yellow.base, // SP Paleta Secundária: sp-yellow
++    "background-warning": spColors.yellow.bg, // SP Paleta Secundária: sp-yellow
++    info: spColors.gray.base, // SP Paleta Primária: sp-gray
++    "background-info": spColors.gray.bg, // SP Paleta Primária: sp-gray
+     white: baseColors.white,
+-    border: baseColors.orion[20],
+-    "border-brand": baseColors.brand[10],
+-    "border-strong": baseColors.orionAlpha[50],
+-    "border-subtle": baseColors.orionAlpha[10],
++    border: spColors.black[15], // SP Paleta Primária: sp-black
++    "border-brand": spColors.red[10], // SP Paleta Primária: sp-red
++    "border-card-home": "#E2E2E2",
++    "border-strong": spColors.gray.base, // SP Paleta Primária: sp-gray
++    "border-subtle": spColors.black.alpha10, // SP Paleta Primária: sp-black
++    "button-primary": spColors.black.base, // SP Paleta Primária: sp-black
++    "button-primary-hover": spColors.black.hover, // SP Paleta Primária: sp-black
+     copper: "#B87333",
+     bronze: "#CD7F32",
+     silver: "#C0C0C0",
+     gold: "#FFD700",
+-    "upsell-primary": baseColors.ocean[70],
+-    "upsell-secondary": baseColors.ocean[20],
++    "upsell-primary": spColors.blue.base, // SP Paleta Secundária: sp-blue
++    "upsell-secondary": spColors.skyLight.base, // SP Paleta Secundária: sp-sky-light
+     "upsell-gem": "#00d4ff",
++    // SP Design System — Paleta Primária
++    "sp-black": "#000000",
++    "sp-red": "#FF161F",
++    "sp-white": "#FFFFFF",
++    "sp-gray": "#808080",
++    "sp-gray-light": "#BFBFBF",
++    // SP Design System — Paleta Secundária
++    "sp-yellow": "#FBB900",
++    "sp-blue": "#034EA2",
++    "sp-green": "#0B9247",
++    "sp-sky-light": "#A1DDF7",
++    "sp-sky": "#62C9E0",
++    "sp-blue-medium": "#4297D3",
++    "sp-blue-dark": "#005992",
++    "sp-navy": "#233254",
++    "sp-olive": "#94AA54",
++    "sp-red-dark": "#842519",
+   },
+ };
+diff --git a/frontend/src/metabase/lib/colors/theme-from-color-scheme.ts b/frontend/src/metabase/lib/colors/theme-from-color-scheme.ts
+index 22bdfb69a2..05beed9396 100644
+--- a/frontend/src/metabase/lib/colors/theme-from-color-scheme.ts
++++ b/frontend/src/metabase/lib/colors/theme-from-color-scheme.ts
+@@ -7,5 +7,9 @@ import type { MetabaseThemeV2 } from "./types";
+ /** Returns the theme definition for a color scheme. */
+ export const getThemeFromColorScheme = (
+   colorScheme: ResolvedColorScheme,
+-): MetabaseThemeV2 =>
+-  colorScheme === "dark" ? METABASE_DARK_THEME : METABASE_LIGHT_THEME;
++): MetabaseThemeV2 => {
++  if (colorScheme === "dark") {
++    return METABASE_DARK_THEME;
++  }
++  return METABASE_LIGHT_THEME;
++};
+diff --git a/frontend/src/metabase/lib/colors/types/color-keys.ts b/frontend/src/metabase/lib/colors/types/color-keys.ts
+index 7092e4e629..9bd678f370 100644
+--- a/frontend/src/metabase/lib/colors/types/color-keys.ts
++++ b/frontend/src/metabase/lib/colors/types/color-keys.ts
+@@ -17,7 +17,10 @@ export type MetabaseColorKey =
+   | "background-error"
+   | "background-error-secondary"
+   | "background-highlight"
++  | "background-home"
+   | "background-hover"
++  | "background-menu-hover"
++  | "background-menu-selected"
+   | "background-info"
+   | "background-primary"
+   | "background-primary-inverse"
+@@ -30,9 +33,12 @@ export type MetabaseColorKey =
+   | "background-warning"
+   | "border"
+   | "border-brand"
++  | "border-card-home"
+   | "border-strong"
+   | "border-subtle"
+   | "brand"
++  | "button-primary"
++  | "button-primary-hover"
+   | "brand-hover"
+   | "bronze"
+   | "copper"
+@@ -55,6 +61,7 @@ export type MetabaseColorKey =
+   | "saturated-red"
+   | "saturated-yellow"
+   | "shadow"
++  | "shadow-card-hover"
+   | "silver"
+   | "success"
+   | "success-secondary"
+@@ -77,7 +84,24 @@ export type MetabaseColorKey =
+   | "tooltip-text"
+   | "tooltip-text-secondary"
+   | "warning"
+-  | "white";
++  | "white"
++  // SP Design System — Paleta Primária
++  | "sp-black"
++  | "sp-red"
++  | "sp-white"
++  | "sp-gray"
++  | "sp-gray-light"
++  // SP Design System — Paleta Secundária
++  | "sp-yellow"
++  | "sp-blue"
++  | "sp-green"
++  | "sp-sky-light"
++  | "sp-sky"
++  | "sp-blue-medium"
++  | "sp-blue-dark"
++  | "sp-navy"
++  | "sp-olive"
++  | "sp-red-dark";
+ 
+ /**
+  * @inline
+diff --git a/frontend/src/metabase/nav/components/ProfileLink/ProfileLink.tsx b/frontend/src/metabase/nav/components/ProfileLink/ProfileLink.tsx
+index fea1b96425..7fa0621d9b 100644
+--- a/frontend/src/metabase/nav/components/ProfileLink/ProfileLink.tsx
++++ b/frontend/src/metabase/nav/components/ProfileLink/ProfileLink.tsx
+@@ -7,6 +7,7 @@ import { getAdminPaths } from "metabase/admin/app/selectors";
+ import { logout } from "metabase/auth/actions";
+ import { ErrorDiagnosticModalWrapper } from "metabase/common/components/ErrorPages/ErrorDiagnosticModal";
+ import { trackErrorDiagnosticModalOpened } from "metabase/common/components/ErrorPages/analytics";
++import ExternalLink from "metabase/common/components/ExternalLink";
+ import { ForwardRefLink } from "metabase/common/components/Link";
+ import LogoIcon from "metabase/common/components/LogoIcon";
+ import Modal from "metabase/common/components/Modal";
+@@ -75,7 +76,11 @@ function ProfileLinkInner({
+   const [modalOpen, setModalOpen] = useState<string | null>(null);
+   const version = useSetting("version") as MetabaseInfo["version"];
+   const applicationName = useSelector(getApplicationName);
+-  const { tag, date, ...versionExtra } = version;
++  const sourceCodeUrl =
++    version?.["source-code-url"] ??
++    version?.["source_code_url"] ??
++    (version as Record<string, unknown>)?.["sourceCodeUrl"];
++  const { tag, date, "source-code-url": _skip, ...versionExtra } = version ?? {};
+   const helpLink = useHelpLink();
+   const dispatch = useDispatch();
+ 
+@@ -268,6 +273,18 @@ function ProfileLinkInner({
+               <p className={cx(CS.textMedium, CS.textBold)}>
+                 {t`Built on`} {date}
+               </p>
++              {sourceCodeUrl && (
++                <p className={cx(CS.textMedium, CS.textBold, CS.pt1)}>
++                  {t`Source code`}:{" "}
++                  <ExternalLink
++                    href={sourceCodeUrl}
++                    target="_blank"
++                    rel="noopener noreferrer"
++                  >
++                    {sourceCodeUrl}
++                  </ExternalLink>
++                </p>
++              )}
+               {tag && !/^v\d+\.\d+\.\d+$/.test(tag) && (
+                 <div>
+                   {_.map(versionExtra, (value, key) => (
+diff --git a/frontend/src/metabase/nav/containers/MainNavbar/MainNavbarContainer/AddDataModal/Panels/CSVPanel.tsx b/frontend/src/metabase/nav/containers/MainNavbar/MainNavbarContainer/AddDataModal/Panels/CSVPanel.tsx
+index 7ceee2defe..ca3cedf4b3 100644
+--- a/frontend/src/metabase/nav/containers/MainNavbar/MainNavbarContainer/AddDataModal/Panels/CSVPanel.tsx
++++ b/frontend/src/metabase/nav/containers/MainNavbar/MainNavbarContainer/AddDataModal/Panels/CSVPanel.tsx
+@@ -1,6 +1,5 @@
+ import { t } from "ttag";
+ 
+-import { UpsellStorage } from "metabase/admin/upsells";
+ import * as Urls from "metabase/lib/urls";
+ 
+ import { CSVPanelEmptyState } from "./AddDataModalEmptyStates";
+@@ -41,7 +40,6 @@ export const CSVPanel = ({
+           text: t`Enable uploads`,
+           to: Urls.uploadsSettings(),
+         }}
+-        upsell={<UpsellStorage location="add-data-modal-csv" />}
+       />
+     );
+   }
+diff --git a/frontend/src/metabase/nav/containers/MainNavbar/SidebarItems/SidebarItems.styled.tsx b/frontend/src/metabase/nav/containers/MainNavbar/SidebarItems/SidebarItems.styled.tsx
+index 38dec0b8e2..633f3107a1 100644
+--- a/frontend/src/metabase/nav/containers/MainNavbar/SidebarItems/SidebarItems.styled.tsx
++++ b/frontend/src/metabase/nav/containers/MainNavbar/SidebarItems/SidebarItems.styled.tsx
+@@ -7,7 +7,6 @@ import { forwardRef } from "react";
+ 
+ import Link from "metabase/common/components/Link";
+ import { TreeNode } from "metabase/common/components/tree/TreeNode";
+-import { alpha } from "metabase/lib/colors";
+ import type { ColorName } from "metabase/lib/colors/types";
+ import { NAV_SIDEBAR_WIDTH } from "metabase/nav/constants";
+ import type { IconProps } from "metabase/ui";
+@@ -41,7 +40,7 @@ const activeColorCSS = css`
+ `;
+ 
+ function getTextColor(isSelected: boolean) {
+-  return isSelected ? color("brand") : color("text-primary");
++  return isSelected ? color("text-primary") : color("text-primary");
+ }
+ 
+ type NodeRootProps = ComponentProps<typeof TreeNode.Root> & {
+@@ -51,7 +50,7 @@ type NodeRootProps = ComponentProps<typeof TreeNode.Root> & {
+ export const NodeRoot = styled(TreeNode.Root)<NodeRootProps>`
+   color: ${(props) => getTextColor(props.isSelected)};
+   background-color: ${(props) =>
+-    props.isSelected ? alpha("brand", 0.2) : "unset"};
++    props.isSelected ? "var(--mb-color-background-menu-selected)" : "unset"};
+   padding-left: ${(props) => props.depth}rem;
+   border-radius: 4px;
+ 
+@@ -65,8 +64,8 @@ export const NodeRoot = styled(TreeNode.Root)<NodeRootProps>`
+   }
+ 
+   &:hover {
+-    background-color: ${() => alpha("brand", 0.35)};
+-    color: var(--mb-color-brand);
++    background-color: var(--mb-color-background-menu-hover);
++    color: var(--mb-color-text-primary);
+ 
+     ${ExpandToggleButton} {
+       color: var(--mb-color-brand);
+@@ -105,11 +104,11 @@ export const FullWidthButton = styled.button<{ isSelected: boolean }>`
+   ${itemContentStyle}
+   ${TreeNode.NameContainer} {
+     font-weight: 700;
+-    color: ${(props) => (props.isSelected ? color("brand") : "inherit")};
++    color: ${(props) => (props.isSelected ? color("text-primary") : "inherit")};
+     text-align: start;
+ 
+     &:hover {
+-      color: var(--mb-color-brand);
++      color: inherit;
+     }
+   }
+ 
+diff --git a/frontend/src/metabase/public/components/EmbedModal/StaticEmbedSetupPane/LookAndFeelSettings.tsx b/frontend/src/metabase/public/components/EmbedModal/StaticEmbedSetupPane/LookAndFeelSettings.tsx
+index 8cd9711d2f..40029e0fce 100644
+--- a/frontend/src/metabase/public/components/EmbedModal/StaticEmbedSetupPane/LookAndFeelSettings.tsx
++++ b/frontend/src/metabase/public/components/EmbedModal/StaticEmbedSetupPane/LookAndFeelSettings.tsx
+@@ -1,7 +1,6 @@
+ import { match } from "ts-pattern";
+ import { jt, t } from "ttag";
+ 
+-import { UpsellMetabaseBanner } from "metabase/admin/upsells";
+ import ExternalLink from "metabase/common/components/ExternalLink";
+ import { useDocsUrl } from "metabase/common/hooks";
+ import { useSelector } from "metabase/lib/redux";
+@@ -202,14 +201,6 @@ export const LookAndFeelSettings = ({
+         </Stack>
+       </StaticEmbedSetupPaneSettingsContentSection>
+ 
+-      {!canWhitelabel && (
+-        <>
+-          <Divider my="2rem" />
+-          <div aria-label={t`Removing the banner`}>
+-            <UpsellMetabaseBanner />
+-          </div>
+-        </>
+-      )}
+     </>
+   );
+ };
+diff --git a/frontend/src/metabase/query_builder/components/view/sidebars/QuestionInfoSidebar/QuestionInfoSidebar.tsx b/frontend/src/metabase/query_builder/components/view/sidebars/QuestionInfoSidebar/QuestionInfoSidebar.tsx
+index 7c461d2d48..30ade6c4ac 100644
+--- a/frontend/src/metabase/query_builder/components/view/sidebars/QuestionInfoSidebar/QuestionInfoSidebar.tsx
++++ b/frontend/src/metabase/query_builder/components/view/sidebars/QuestionInfoSidebar/QuestionInfoSidebar.tsx
+@@ -15,7 +15,6 @@ import {
+ import { InsightsTabOrLink } from "metabase/common/components/Sidesheet/components/InsightsTabOrLink";
+ import { SidesheetEditableDescription } from "metabase/common/components/Sidesheet/components/SidesheetEditableDescription";
+ import SidesheetStyles from "metabase/common/components/Sidesheet/sidesheet.module.css";
+-import { InsightsUpsellTab } from "metabase/dashboard/components/DashboardInfoSidebar/components/InsightsUpsellTab";
+ import { useDispatch } from "metabase/lib/redux";
+ import * as Urls from "metabase/lib/urls";
+ import { PLUGIN_MODERATION } from "metabase/plugins";
+@@ -90,7 +89,6 @@ export const QuestionInfoSidebar = ({
+               </Flex>
+             </Link>
+           )}
+-          <InsightsTabOrLink question={question} />
+         </Tabs.List>
+ 
+         <SidesheetTabPanelContainer>
+@@ -127,9 +125,6 @@ export const QuestionInfoSidebar = ({
+               <QuestionActivityTimeline question={question} />
+             </SidesheetCard>
+           </Tabs.Panel>
+-          <Tabs.Panel value="insights">
+-            <InsightsUpsellTab model={question.type()} />
+-          </Tabs.Panel>
+         </SidesheetTabPanelContainer>
+       </Tabs>
+     </Sidesheet>
+diff --git a/frontend/src/metabase/questions/components/CollectionBadge.tsx b/frontend/src/metabase/questions/components/CollectionBadge.tsx
+index 2056234de1..f5592233fb 100644
+--- a/frontend/src/metabase/questions/components/CollectionBadge.tsx
++++ b/frontend/src/metabase/questions/components/CollectionBadge.tsx
+@@ -25,6 +25,8 @@ type CollectionBadgeProps = {
+   className?: string;
+   collection: WrappedEntity<CollectionType>;
+   isSingleLine?: boolean;
++  activeColor?: string;
++  inactiveColor?: string;
+   onClick?: () => void;
+ };
+ 
+@@ -32,6 +34,8 @@ const CollectionBadgeInner = ({
+   className,
+   collection,
+   isSingleLine,
++  activeColor,
++  inactiveColor = "text-tertiary",
+   onClick,
+ }: CollectionBadgeProps) => {
+   if (!collection) {
+@@ -51,8 +55,8 @@ const CollectionBadgeInner = ({
+     <Badge
+       className={className}
+       icon={icon}
+-      activeColor={icon.color}
+-      inactiveColor="text-tertiary"
++      activeColor={activeColor ?? icon.color}
++      inactiveColor={inactiveColor}
+       isSingleLine={isSingleLine}
+       {...clickActionProps}
+     >
+diff --git a/frontend/src/metabase/styled-components/containers/GlobalStyles/GlobalStyles.tsx b/frontend/src/metabase/styled-components/containers/GlobalStyles/GlobalStyles.tsx
+index ccaceaf4cf..a5ce0e4ec4 100644
+--- a/frontend/src/metabase/styled-components/containers/GlobalStyles/GlobalStyles.tsx
++++ b/frontend/src/metabase/styled-components/containers/GlobalStyles/GlobalStyles.tsx
+@@ -4,7 +4,7 @@ import { useMemo } from "react";
+ 
+ import { useSetting } from "metabase/common/hooks";
+ import { baseStyle, rootStyle } from "metabase/css/core/base.styled";
+-import { defaultFontFiles } from "metabase/css/core/fonts.styled";
++import { saoPauloFontFiles } from "metabase/css/core/fonts.saopaulo.styled";
+ import {
+   isPublicEmbedding,
+   isStaticEmbedding,
+@@ -15,10 +15,9 @@ import { getMetabaseCssVariables } from "metabase/styled-components/theme/css-va
+ import { useMantineTheme } from "metabase/ui";
+ import { saveDomImageStyles } from "metabase/visualizations/lib/image-exports";
+ 
+-import { getFont, getFontFiles } from "../../selectors";
++import { getFontFiles } from "../../selectors";
+ 
+ export const GlobalStyles = (): JSX.Element => {
+-  const font = useSelector(getFont);
+   const fontFiles = useSelector(getFontFiles);
+   const whitelabelColors = useSetting("application-colors");
+ 
+@@ -35,10 +34,10 @@ export const GlobalStyles = (): JSX.Element => {
+     return css`
+       ${cssVariables}
+       :root {
+-        --mb-default-font-family: "${font}";
++        --mb-default-font-family: "Rawline";
+       }
+ 
+-      ${defaultFontFiles({ baseUrl: sitePath })}
++      ${saoPauloFontFiles({ baseUrl: sitePath })}
+       ${fontFiles?.map(
+         (file) => css`
+           @font-face {
+@@ -61,7 +60,7 @@ export const GlobalStyles = (): JSX.Element => {
+ 
+       ${baseStyle}
+     `;
+-  }, [cssVariables, font, sitePath, fontFiles, colorScheme]);
++  }, [cssVariables, sitePath, fontFiles, colorScheme]);
+ 
+   return <Global styles={styles} />;
+ };
+diff --git a/frontend/src/metabase/ui/components/buttons/Button/Button.module.css b/frontend/src/metabase/ui/components/buttons/Button/Button.module.css
+index c7a46235c3..32b234924e 100644
+--- a/frontend/src/metabase/ui/components/buttons/Button/Button.module.css
++++ b/frontend/src/metabase/ui/components/buttons/Button/Button.module.css
+@@ -64,6 +64,29 @@
+     }
+   }
+ 
++  &[data-variant="primary"] {
++    color: #fff;
++    background-color: var(--mb-color-button-primary);
++    border-color: var(--mb-color-button-primary);
++
++    &:hover {
++      background-color: var(--mb-color-button-primary-hover);
++      border-color: var(--mb-color-button-primary-hover);
++    }
++
++    &:active {
++      background-color: var(--mb-color-button-primary-hover);
++      border-color: var(--mb-color-button-primary-hover);
++    }
++
++    &:disabled,
++    &[data-disabled="true"] {
++      color: var(--mb-color-text-tertiary);
++      border-color: var(--mb-color-border);
++      background-color: var(--mb-color-background-disabled);
++    }
++  }
++
+   &[data-variant="subtle"] {
+     &:hover {
+       color: alpha(var(--button-color), 0.88);
+@@ -169,6 +192,7 @@
+   height: auto;
+   display: inline-block;
+   text-overflow: ellipsis;
++  padding-bottom: 2px;
+ }
+ 
+ .leftSection {
+diff --git a/frontend/src/metabase/ui/components/inputs/Checkbox/Checkbox.module.css b/frontend/src/metabase/ui/components/inputs/Checkbox/Checkbox.module.css
+index 56ba621ca4..4432a509de 100644
+--- a/frontend/src/metabase/ui/components/inputs/Checkbox/Checkbox.module.css
++++ b/frontend/src/metabase/ui/components/inputs/Checkbox/Checkbox.module.css
+@@ -77,8 +77,8 @@
+   }
+ 
+   &:checked {
+-    border-color: var(--mb-color-brand);
+-    background-color: var(--mb-color-brand);
++    border-color: #1a1a1a;
++    background-color: var(--mb-color-background-primary);
+   }
+ 
+   &:disabled {
+@@ -105,3 +105,7 @@
+ .icon {
+   color: var(--mb-color-text-primary-inverse);
+ }
++
++.root:has(.input:checked) .icon {
++  color: #1a1a1a;
++}
+diff --git a/frontend/src/metabase/ui/components/inputs/TextInput/TextInput.module.css b/frontend/src/metabase/ui/components/inputs/TextInput/TextInput.module.css
+index b622475742..4d0ccd8429 100644
+--- a/frontend/src/metabase/ui/components/inputs/TextInput/TextInput.module.css
++++ b/frontend/src/metabase/ui/components/inputs/TextInput/TextInput.module.css
+@@ -2,6 +2,15 @@
+   color: var(--mb-color-text-primary);
+   background: var(--mb-color-background-primary);
+   border-color: var(--mb-color-border);
++
++  &:-webkit-autofill,
++  &:-webkit-autofill:hover,
++  &:-webkit-autofill:focus {
++    -webkit-box-shadow: 0 0 0 1000px #fff inset;
++    box-shadow: 0 0 0 1000px #fff inset;
++    -webkit-text-fill-color: var(--mb-color-text-primary);
++    transition: background-color 5000s ease-in-out 0s;
++  }
+ }
+ 
+ .error {
+diff --git a/frontend/src/metabase/ui/components/theme/ColorSchemeProvider/ColorSchemeProvider.tsx b/frontend/src/metabase/ui/components/theme/ColorSchemeProvider/ColorSchemeProvider.tsx
+index c0fd3f9e4c..99935ca60a 100644
+--- a/frontend/src/metabase/ui/components/theme/ColorSchemeProvider/ColorSchemeProvider.tsx
++++ b/frontend/src/metabase/ui/components/theme/ColorSchemeProvider/ColorSchemeProvider.tsx
+@@ -79,8 +79,8 @@ export function ColorSchemeProvider({
+     if (getIsEmbeddingIframe()) {
+       return "light";
+     }
+-    return colorScheme === "auto" ? systemColorScheme : colorScheme;
+-  }, [colorScheme, forceColorScheme, systemColorScheme]);
++    return colorScheme === "auto" ? "light" : colorScheme;
++  }, [colorScheme, forceColorScheme]);
+ 
+   const handleColorSchemeUpdate = useCallback(
+     (value: ColorScheme) => {
+diff --git a/frontend/src/metabase/ui/components/theme/ThemeProvider/ThemeProvider.tsx b/frontend/src/metabase/ui/components/theme/ThemeProvider/ThemeProvider.tsx
+index 840b5cfc3c..f47055eb82 100644
+--- a/frontend/src/metabase/ui/components/theme/ThemeProvider/ThemeProvider.tsx
++++ b/frontend/src/metabase/ui/components/theme/ThemeProvider/ThemeProvider.tsx
+@@ -159,7 +159,7 @@ export const ThemeProvider = (props: ThemeProviderProps) => {
+     : schemeFromHash;
+ 
+   const [colorSchemeFromSettings, setColorSchemeFromSettings] =
+-    useState<ColorScheme>(() => getUserColorScheme() ?? "auto");
++    useState<ColorScheme>(() => getUserColorScheme() ?? "light");
+ 
+   // FIXME: Not only does this use a deprecated API, it also adds a complementary
+   // method to the already deprecated method to remove the listener. This is just
+diff --git a/locales/pt-BR.po b/locales/pt-BR.po
+index b42db0248e..1315c8d7fa 100644
+--- a/locales/pt-BR.po
++++ b/locales/pt-BR.po
+@@ -3060,7 +3060,7 @@ msgstr "Login"
+ #: frontend/src/metabase/auth/components/Login/Login.tsx:49
+ #, javascript-format
+ msgid "Sign in to {0}"
+-msgstr "Faça login em {0}"
++msgstr "Dashboards SP"
+ 
+ #: frontend/src/metabase/auth/components/PasswordButton/PasswordButton.tsx:19
+ msgid "Sign in with username or email"
+diff --git a/mise.toml b/mise.toml
+index b23d7bc7a3..fc18c30393 100644
+--- a/mise.toml
++++ b/mise.toml
+@@ -34,6 +34,9 @@
+ [settings]
+ # Automatically install tools when entering the project directory
+ auto_install = true
++# Auto-load environment variables from .env (gitignored)
++# https://mise.jdx.dev/environments.html
++env_file = ".env"
+ 
+ [env]
+ # Add bin/ to PATH so mage and other project scripts are available
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-100.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-100.ttf
+new file mode 100644
+index 0000000000..476c7b989d
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-100.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-100.woff b/resources/frontend_client/app/fonts/Rawline/rawline-100.woff
+new file mode 100644
+index 0000000000..2291c1edc8
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-100.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-100i.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-100i.ttf
+new file mode 100644
+index 0000000000..c3614ffdc9
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-100i.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-100i.woff b/resources/frontend_client/app/fonts/Rawline/rawline-100i.woff
+new file mode 100644
+index 0000000000..ab326fb290
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-100i.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-200.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-200.ttf
+new file mode 100644
+index 0000000000..d7242869de
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-200.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-200.woff b/resources/frontend_client/app/fonts/Rawline/rawline-200.woff
+new file mode 100644
+index 0000000000..9a132b5796
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-200.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-200i.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-200i.ttf
+new file mode 100644
+index 0000000000..826a400e1e
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-200i.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-200i.woff b/resources/frontend_client/app/fonts/Rawline/rawline-200i.woff
+new file mode 100644
+index 0000000000..bbfd7b2ba7
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-200i.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-300.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-300.ttf
+new file mode 100644
+index 0000000000..ef1938562d
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-300.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-300.woff b/resources/frontend_client/app/fonts/Rawline/rawline-300.woff
+new file mode 100644
+index 0000000000..8a10a8c23a
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-300.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-300i.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-300i.ttf
+new file mode 100644
+index 0000000000..a7afb652db
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-300i.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-300i.woff b/resources/frontend_client/app/fonts/Rawline/rawline-300i.woff
+new file mode 100644
+index 0000000000..371b4d5866
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-300i.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-400.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-400.ttf
+new file mode 100644
+index 0000000000..3216803e92
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-400.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-400.woff b/resources/frontend_client/app/fonts/Rawline/rawline-400.woff
+new file mode 100644
+index 0000000000..946ac7c046
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-400.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-400i.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-400i.ttf
+new file mode 100644
+index 0000000000..d6c5f547a4
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-400i.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-400i.woff b/resources/frontend_client/app/fonts/Rawline/rawline-400i.woff
+new file mode 100644
+index 0000000000..384e2ceddf
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-400i.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-500.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-500.ttf
+new file mode 100644
+index 0000000000..a0e18c7364
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-500.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-500.woff b/resources/frontend_client/app/fonts/Rawline/rawline-500.woff
+new file mode 100644
+index 0000000000..941206d577
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-500.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-500i.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-500i.ttf
+new file mode 100644
+index 0000000000..6fdcf2079b
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-500i.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-500i.woff b/resources/frontend_client/app/fonts/Rawline/rawline-500i.woff
+new file mode 100644
+index 0000000000..c7830b700f
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-500i.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-600.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-600.ttf
+new file mode 100644
+index 0000000000..45a71cd584
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-600.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-600.woff b/resources/frontend_client/app/fonts/Rawline/rawline-600.woff
+new file mode 100644
+index 0000000000..608f34e9de
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-600.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-600i.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-600i.ttf
+new file mode 100644
+index 0000000000..f39ad0f956
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-600i.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-600i.woff b/resources/frontend_client/app/fonts/Rawline/rawline-600i.woff
+new file mode 100644
+index 0000000000..46c19ca10c
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-600i.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-700.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-700.ttf
+new file mode 100644
+index 0000000000..100ea890f1
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-700.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-700.woff b/resources/frontend_client/app/fonts/Rawline/rawline-700.woff
+new file mode 100644
+index 0000000000..4f566956d7
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-700.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-700i.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-700i.ttf
+new file mode 100644
+index 0000000000..2d5800d024
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-700i.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-700i.woff b/resources/frontend_client/app/fonts/Rawline/rawline-700i.woff
+new file mode 100644
+index 0000000000..aae3e72997
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-700i.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-800.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-800.ttf
+new file mode 100644
+index 0000000000..623a327cd8
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-800.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-800.woff b/resources/frontend_client/app/fonts/Rawline/rawline-800.woff
+new file mode 100644
+index 0000000000..65e3c0c19a
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-800.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-800i.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-800i.ttf
+new file mode 100644
+index 0000000000..ea4f8729e1
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-800i.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-800i.woff b/resources/frontend_client/app/fonts/Rawline/rawline-800i.woff
+new file mode 100644
+index 0000000000..38a04eeb6b
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-800i.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-900.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-900.ttf
+new file mode 100644
+index 0000000000..4027cb4c72
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-900.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-900.woff b/resources/frontend_client/app/fonts/Rawline/rawline-900.woff
+new file mode 100644
+index 0000000000..9e23dcfd29
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-900.woff differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-900i.ttf b/resources/frontend_client/app/fonts/Rawline/rawline-900i.ttf
+new file mode 100644
+index 0000000000..1011f5ac45
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-900i.ttf differ
+diff --git a/resources/frontend_client/app/fonts/Rawline/rawline-900i.woff b/resources/frontend_client/app/fonts/Rawline/rawline-900i.woff
+new file mode 100644
+index 0000000000..05ed28271f
+Binary files /dev/null and b/resources/frontend_client/app/fonts/Rawline/rawline-900i.woff differ
+diff --git a/resources/frontend_client/app/img/dashboard_illustration.png b/resources/frontend_client/app/img/dashboard_illustration.png
+index a578f9c998..9ba12e57d9 100644
+Binary files a/resources/frontend_client/app/img/dashboard_illustration.png and b/resources/frontend_client/app/img/dashboard_illustration.png differ
+diff --git a/resources/frontend_client/app/img/dashboard_illustration@2x.png b/resources/frontend_client/app/img/dashboard_illustration@2x.png
+index a578f9c998..9ba12e57d9 100644
+Binary files a/resources/frontend_client/app/img/dashboard_illustration@2x.png and b/resources/frontend_client/app/img/dashboard_illustration@2x.png differ
+diff --git a/resources/frontend_client/app/img/empty.png b/resources/frontend_client/app/img/empty.png
+index bf66147252..f93a0aac5f 100644
+Binary files a/resources/frontend_client/app/img/empty.png and b/resources/frontend_client/app/img/empty.png differ
+diff --git a/resources/frontend_client/app/img/empty@2x.png b/resources/frontend_client/app/img/empty@2x.png
+index 98d2a85018..ccbe1c9c35 100644
+Binary files a/resources/frontend_client/app/img/empty@2x.png and b/resources/frontend_client/app/img/empty@2x.png differ
+diff --git a/resources/frontend_client/app/img/empty_dashboard.png b/resources/frontend_client/app/img/empty_dashboard.png
+index 9ff8fab12b..7b3aef0777 100644
+Binary files a/resources/frontend_client/app/img/empty_dashboard.png and b/resources/frontend_client/app/img/empty_dashboard.png differ
+diff --git a/resources/frontend_client/app/img/empty_dashboard@2x.png b/resources/frontend_client/app/img/empty_dashboard@2x.png
+index 9ff8fab12b..7b3aef0777 100644
+Binary files a/resources/frontend_client/app/img/empty_dashboard@2x.png and b/resources/frontend_client/app/img/empty_dashboard@2x.png differ
+diff --git a/resources/frontend_client/app/img/empty_question.png b/resources/frontend_client/app/img/empty_question.png
+index c3d6436d4b..5cc6606c41 100644
+Binary files a/resources/frontend_client/app/img/empty_question.png and b/resources/frontend_client/app/img/empty_question.png differ
+diff --git a/resources/frontend_client/app/img/empty_question@2x.png b/resources/frontend_client/app/img/empty_question@2x.png
+index e28ce2f919..21417dbea0 100644
+Binary files a/resources/frontend_client/app/img/empty_question@2x.png and b/resources/frontend_client/app/img/empty_question@2x.png differ
+diff --git a/resources/frontend_client/app/img/list_illustration.png b/resources/frontend_client/app/img/list_illustration.png
+index 8bd79e9ab4..fe40871538 100644
+Binary files a/resources/frontend_client/app/img/list_illustration.png and b/resources/frontend_client/app/img/list_illustration.png differ
+diff --git a/resources/frontend_client/app/img/list_illustration@2x.png b/resources/frontend_client/app/img/list_illustration@2x.png
+index 7595429953..c97c816ca1 100644
+Binary files a/resources/frontend_client/app/img/list_illustration@2x.png and b/resources/frontend_client/app/img/list_illustration@2x.png differ
+diff --git a/resources/frontend_client/app/img/login_dashboard.png b/resources/frontend_client/app/img/login_dashboard.png
+new file mode 100644
+index 0000000000..173102c703
+Binary files /dev/null and b/resources/frontend_client/app/img/login_dashboard.png differ
+diff --git a/resources/frontend_client/app/img/login_framebottom.png b/resources/frontend_client/app/img/login_framebottom.png
+new file mode 100644
+index 0000000000..c451362da4
+Binary files /dev/null and b/resources/frontend_client/app/img/login_framebottom.png differ
+diff --git a/resources/frontend_client/app/img/login_frametop.png b/resources/frontend_client/app/img/login_frametop.png
+new file mode 100644
+index 0000000000..e0a8157757
+Binary files /dev/null and b/resources/frontend_client/app/img/login_frametop.png differ
+diff --git a/resources/frontend_client/app/img/login_leftbg_only.png b/resources/frontend_client/app/img/login_leftbg_only.png
+new file mode 100644
+index 0000000000..b6c286c869
+Binary files /dev/null and b/resources/frontend_client/app/img/login_leftbg_only.png differ
+diff --git a/resources/frontend_client/app/img/metrics_illustration.png b/resources/frontend_client/app/img/metrics_illustration.png
+index 3e7af395cb..de98d4beec 100644
+Binary files a/resources/frontend_client/app/img/metrics_illustration.png and b/resources/frontend_client/app/img/metrics_illustration.png differ
+diff --git a/resources/frontend_client/app/img/metrics_illustration@2x.png b/resources/frontend_client/app/img/metrics_illustration@2x.png
+index a5dce8e82b..de98d4beec 100644
+Binary files a/resources/frontend_client/app/img/metrics_illustration@2x.png and b/resources/frontend_client/app/img/metrics_illustration@2x.png differ
+diff --git a/resources/frontend_client/app/img/new_metric.png b/resources/frontend_client/app/img/new_metric.png
+index 2c88f95aa4..53ed824270 100644
+Binary files a/resources/frontend_client/app/img/new_metric.png and b/resources/frontend_client/app/img/new_metric.png differ
+diff --git a/resources/frontend_client/app/img/new_metric@2x.png b/resources/frontend_client/app/img/new_metric@2x.png
+index af0f4a3d55..53ed824270 100644
+Binary files a/resources/frontend_client/app/img/new_metric@2x.png and b/resources/frontend_client/app/img/new_metric@2x.png differ
+diff --git a/resources/frontend_client/app/img/notebook_mode_illustration.png b/resources/frontend_client/app/img/notebook_mode_illustration.png
+index 0f00e2b25a..c96c4113a6 100644
+Binary files a/resources/frontend_client/app/img/notebook_mode_illustration.png and b/resources/frontend_client/app/img/notebook_mode_illustration.png differ
+diff --git a/resources/frontend_client/app/img/notebook_mode_illustration@2x.png b/resources/frontend_client/app/img/notebook_mode_illustration@2x.png
+index b45260edb8..db616bb3f3 100644
+Binary files a/resources/frontend_client/app/img/notebook_mode_illustration@2x.png and b/resources/frontend_client/app/img/notebook_mode_illustration@2x.png differ
+diff --git a/resources/frontend_client/app/img/questions_illustration.png b/resources/frontend_client/app/img/questions_illustration.png
+index 8e98788cfc..22609cd565 100644
+Binary files a/resources/frontend_client/app/img/questions_illustration.png and b/resources/frontend_client/app/img/questions_illustration.png differ
+diff --git a/resources/frontend_client/app/img/questions_illustration@2x.png b/resources/frontend_client/app/img/questions_illustration@2x.png
+index 8e98788cfc..22609cd565 100644
+Binary files a/resources/frontend_client/app/img/questions_illustration@2x.png and b/resources/frontend_client/app/img/questions_illustration@2x.png differ
+diff --git a/resources/frontend_client/app/img/segments_illustration.png b/resources/frontend_client/app/img/segments_illustration.png
+index 2900769dcf..d15e23e2ba 100644
+Binary files a/resources/frontend_client/app/img/segments_illustration.png and b/resources/frontend_client/app/img/segments_illustration.png differ
+diff --git a/resources/frontend_client/app/img/segments_illustration@2x.png b/resources/frontend_client/app/img/segments_illustration@2x.png
+index f73c32a330..b2df4ffb27 100644
+Binary files a/resources/frontend_client/app/img/segments_illustration@2x.png and b/resources/frontend_client/app/img/segments_illustration@2x.png differ
+diff --git a/resources/frontend_client/app/img/simple_mode_illustration.png b/resources/frontend_client/app/img/simple_mode_illustration.png
+index e276f0390a..2cc4a2b502 100644
+Binary files a/resources/frontend_client/app/img/simple_mode_illustration.png and b/resources/frontend_client/app/img/simple_mode_illustration.png differ
+diff --git a/resources/frontend_client/app/img/simple_mode_illustration@2x.png b/resources/frontend_client/app/img/simple_mode_illustration@2x.png
+index 9aaf1ec703..7f83103e47 100644
+Binary files a/resources/frontend_client/app/img/simple_mode_illustration@2x.png and b/resources/frontend_client/app/img/simple_mode_illustration@2x.png differ
+diff --git a/resources/frontend_client/app/img/sql_illustration.png b/resources/frontend_client/app/img/sql_illustration.png
+index 6bf289c3d1..713256f251 100644
+Binary files a/resources/frontend_client/app/img/sql_illustration.png and b/resources/frontend_client/app/img/sql_illustration.png differ
+diff --git a/resources/frontend_client/app/img/sql_illustration@2x.png b/resources/frontend_client/app/img/sql_illustration@2x.png
+index f7cfa0e522..9e7bcf2df7 100644
+Binary files a/resources/frontend_client/app/img/sql_illustration@2x.png and b/resources/frontend_client/app/img/sql_illustration@2x.png differ
+diff --git a/src/metabase/config/core.clj b/src/metabase/config/core.clj
+index 5408f5fb42..81399b28e8 100644
+--- a/src/metabase/config/core.clj
++++ b/src/metabase/config/core.clj
+@@ -57,6 +57,8 @@
+    :mb-password-complexity          "normal"
+    :mb-version-info-url             "https://static.metabase.com/version-info.json"
+    :mb-version-info-ee-url          "https://static.metabase.com/version-info-ee.json"
++   ;; Optional: set MB_SOURCE_CODE_URL when distributing a modified build (AGPL requires offering source)
++   :mb-source-code-url              ""
+    :mb-ns-trace                     ""                      ; comma-separated namespaces to trace
+    :max-session-age                 "20160"                 ; session length in minutes (14 days)
+    :mb-colorize-logs                (str (not is-windows?)) ; since PowerShell and cmd.exe don't support ANSI color escape codes or emoji,
+diff --git a/src/metabase/core/core.clj b/src/metabase/core/core.clj
+index e336b08eff..6b14dc86b8 100644
+--- a/src/metabase/core/core.clj
++++ b/src/metabase/core/core.clj
+@@ -61,6 +61,8 @@
+              "Usage of Metabase Enterprise Edition features are subject to the Metabase Commercial License."
+              "See https://www.metabase.com/license/commercial/ for details.")
+         "Metabase Enterprise Edition extensions are NOT PRESENT.")))
++(when-not (str/blank? (config/config-str :mb-source-code-url))
++  (log/info (str "\nSource code for this build (AGPL): " (config/config-str :mb-source-code-url))))
+ 
+ ;;; --------------------------------------------------- Info Metric---------------------------------------------------
+ 
+diff --git a/src/metabase/version/settings.clj b/src/metabase/version/settings.clj
+index 5325eba69c..78f44b1734 100644
+--- a/src/metabase/version/settings.clj
++++ b/src/metabase/version/settings.clj
+@@ -1,5 +1,6 @@
+ (ns metabase.version.settings
+   (:require
++   [clojure.string :as str]
+    [metabase.config.core :as config]
+    [metabase.settings.core :as setting :refer [defsetting]]
+    [metabase.system.core :as system]
+@@ -7,10 +8,13 @@
+    [metabase.util.log :as log]))
+ 
+ (defsetting version
+-  "Metabase's version info"
++  "Metabase's version info. When MB_SOURCE_CODE_URL is set (e.g. for AGPL compliance of a fork), it is included as :source-code-url."
+   :visibility :public
+   :setter     :none
+-  :getter     (constantly config/mb-version-info)
++  :getter     (fn []
++                (cond-> config/mb-version-info
++                  (not (str/blank? (config/config-str :mb-source-code-url)))
++                  (assoc :source-code-url (config/config-str :mb-source-code-url))))
+   :doc        false)
+ 
+ (defsetting check-for-updates

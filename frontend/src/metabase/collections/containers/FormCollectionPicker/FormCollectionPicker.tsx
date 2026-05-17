@@ -20,8 +20,8 @@ import { SnippetCollectionName } from "metabase/common/components/SnippetCollect
 import { TransformCollectionName } from "metabase/common/components/TransformCollectionName";
 import { useUniqueId } from "metabase/common/hooks/use-unique-id";
 import { Collections } from "metabase/entities/collections";
-import { useSelector } from "metabase/lib/redux";
 import { PLUGIN_TENANTS } from "metabase/plugins";
+import { useSelector } from "metabase/redux";
 import { Button, Icon, Input, type InputWrapperProps } from "metabase/ui";
 import type { CollectionId, CollectionNamespace } from "metabase-types/api";
 

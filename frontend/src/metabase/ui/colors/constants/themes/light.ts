@@ -83,6 +83,7 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "tooltip-text": baseColors.white,
     warning: spColors.yellow.base, // SP Paleta Secundaria: sp-yellow
     "background-warning": spColors.yellow.bg, // SP Paleta Secundaria: sp-yellow
+    "background-warning-secondary": spColors.yellow[10], // SP Paleta Secundaria: sp-yellow
     info: spColors.gray.base, // SP Paleta Primaria: sp-gray
     "background-info": spColors.gray.bg, // SP Paleta Primaria: sp-gray
     white: baseColors.white,

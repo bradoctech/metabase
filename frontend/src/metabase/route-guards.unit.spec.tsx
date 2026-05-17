@@ -3,9 +3,9 @@ import { routerActions } from "react-router-redux";
 import { connectedReduxRedirect } from "redux-auth-wrapper/history3/redirect";
 
 import { renderWithProviders, screen } from "__support__/ui";
-import { createMockState } from "metabase-types/store/mocks";
+import { metabaseReduxContext } from "metabase/redux/context";
+import { createMockState } from "metabase/redux/store/mocks";
 
-import { MetabaseReduxContext } from "./lib/redux";
 import { isBackendOnlyPath } from "./route-guards";
 
 describe("route-guards", () => {
@@ -20,7 +20,7 @@ describe("route-guards", () => {
       let selectorState: any;
       const RouteGuard = setupRouteGuard({
         // leverage the same context used by the main application
-        context: MetabaseReduxContext,
+        context: metabaseReduxContext,
         authenticatedSelector: (state) => {
           selectorState = state;
           return !!state.auth.VAL_ONLY_IN_THIS_CTX;
@@ -70,6 +70,12 @@ describe("route-guards", () => {
       expect(isBackendOnlyPath("/oauth/authorize")).toBe(true);
       expect(isBackendOnlyPath("/oauth/authorize/decision")).toBe(true);
       expect(isBackendOnlyPath("/oauth/token")).toBe(true);
+    });
+
+    it("should return true for /auth/sso/ paths", () => {
+      expect(isBackendOnlyPath("/auth/sso/slack-connect")).toBe(true);
+      expect(isBackendOnlyPath("/auth/sso/slack-connect/callback")).toBe(true);
+      expect(isBackendOnlyPath("/auth/sso/my-provider")).toBe(true);
     });
 
     it("should return false for frontend paths", () => {

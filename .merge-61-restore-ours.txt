@@ -1,0 +1,4 @@
+frontend/src/metabase/lib/colors/constants/sp-colors.ts
+frontend/src/metabase/ui/colors/constants/sp-colors.ts
+src/metabase/config/core.clj
+src/metabase/version/settings.clj

@@ -2,14 +2,16 @@ import fetchMock from "fetch-mock";
 import type { LocationDescriptorObject } from "history";
 
 import { createMockEntitiesState } from "__support__/store";
+import * as CardLib from "metabase/common/utils/card";
 import { Databases } from "metabase/entities/databases";
 import { Snippets } from "metabase/entities/snippets";
-import * as CardLib from "metabase/lib/card";
-import { checkNotNull } from "metabase/lib/types";
-import * as Urls from "metabase/lib/urls";
 import * as questionActions from "metabase/questions/actions";
 import { setErrorPage } from "metabase/redux/app";
+import * as sharedQB from "metabase/redux/query-builder";
+import { createMockState } from "metabase/redux/store/mocks";
 import { getMetadata } from "metabase/selectors/metadata";
+import * as Urls from "metabase/urls";
+import { checkNotNull } from "metabase/utils/types";
 import * as Lib from "metabase-lib";
 import Question from "metabase-lib/v1/Question";
 import type NativeQuery from "metabase-lib/v1/queries/NativeQuery";
@@ -38,12 +40,10 @@ import {
   createSavedStructuredCard,
   createStructuredModelCard,
 } from "metabase-types/api/mocks/presets";
-import { createMockState } from "metabase-types/store/mocks";
 
 import * as querying from "../querying";
 
 import * as cardActions from "./card";
-import * as core from "./core";
 import { initializeQB } from "./initializeQB";
 
 type DisplayLock = { displayIsLocked?: boolean };
@@ -102,7 +102,7 @@ function getLocationForCard(
 ): LocationDescriptorObject {
   const isSaved = "id" in card;
   return {
-    pathname: isSaved ? Urls.question(card) : Urls.serializedQuestion(card),
+    pathname: isSaved ? Urls.card(card) : Urls.serializedQuestion(card),
     hash: !isSaved ? CardLib.serializeCardForUrl(card) : "",
     query: {},
     ...extra,
@@ -240,7 +240,7 @@ describe("QB Actions > initializeQB", () => {
 
       describe(questionType, () => {
         it("resets QB state before doing anything", async () => {
-          const resetQBSpy = jest.spyOn(core, "resetQB");
+          const resetQBSpy = jest.spyOn(sharedQB, "resetQB");
           await setup({ card });
           expect(resetQBSpy).toHaveBeenCalledTimes(1);
         });
@@ -276,7 +276,7 @@ describe("QB Actions > initializeQB", () => {
 
         it("does not run question query in notebook mode", async () => {
           const runQuestionQuerySpy = jest.spyOn(querying, "runQuestionQuery");
-          const baseUrl = Urls.question(card as Card);
+          const baseUrl = Urls.card(card as Card);
           const location = getLocationForCard(card, {
             pathname: `${baseUrl}/notebook`,
           });
@@ -311,7 +311,7 @@ describe("QB Actions > initializeQB", () => {
         });
 
         it("sets QB mode to notebook if opening /notebook route", async () => {
-          const baseUrl = Urls.question(card as Card);
+          const baseUrl = Urls.card(card as Card);
           const location = getLocationForCard(card, {
             pathname: `${baseUrl}/notebook`,
           });
@@ -490,11 +490,9 @@ describe("QB Actions > initializeQB", () => {
 
         it("handles error if couldn't deserialize card hash", async () => {
           const error = new Error("failed to deserialize card");
-          jest
-            .spyOn(CardLib, "deserializeCardFromUrl")
-            .mockImplementation(() => {
-              throw error;
-            });
+          jest.spyOn(CardLib, "deserializeCard").mockImplementation(() => {
+            throw error;
+          });
 
           const { dispatch } = await setup({ card: card });
 
@@ -536,7 +534,7 @@ describe("QB Actions > initializeQB", () => {
 
         it("runs question query on /query route", async () => {
           const runQuestionQuerySpy = jest.spyOn(querying, "runQuestionQuery");
-          const baseUrl = Urls.question(card);
+          const baseUrl = Urls.card(card);
           const location = getLocationForCard(card, {
             pathname: `${baseUrl}/query`,
           });
@@ -548,7 +546,7 @@ describe("QB Actions > initializeQB", () => {
 
         it("runs question query on /metadata route", async () => {
           const runQuestionQuerySpy = jest.spyOn(querying, "runQuestionQuery");
-          const baseUrl = Urls.question(card);
+          const baseUrl = Urls.card(card);
           const location = getLocationForCard(card, {
             pathname: `${baseUrl}/metadata`,
           });
@@ -559,7 +557,7 @@ describe("QB Actions > initializeQB", () => {
         });
 
         it("sets UI state correctly for /query route", async () => {
-          const baseUrl = Urls.question(card);
+          const baseUrl = Urls.card(card);
           const location = getLocationForCard(card, {
             pathname: `${baseUrl}/query`,
           });
@@ -571,7 +569,7 @@ describe("QB Actions > initializeQB", () => {
         });
 
         it("sets UI state correctly for /columns route", async () => {
-          const baseUrl = Urls.question(card);
+          const baseUrl = Urls.card(card);
           const location = getLocationForCard(card, {
             pathname: `${baseUrl}/columns`,
           });
@@ -583,7 +581,7 @@ describe("QB Actions > initializeQB", () => {
         });
 
         it("sets UI state correctly for /metadata route", async () => {
-          const baseUrl = Urls.question(card);
+          const baseUrl = Urls.card(card);
           const location = getLocationForCard(card, {
             pathname: `${baseUrl}/metadata`,
           });
@@ -658,6 +656,119 @@ describe("QB Actions > initializeQB", () => {
           );
         });
       });
+    });
+  });
+
+  describe("staleness / overlapping initializeQB calls", () => {
+    function startInit(
+      card: Card,
+      dispatch: jest.Mock,
+      getState: () => ReturnType<typeof createMockState>,
+    ) {
+      return initializeQB(
+        getLocationForCard(card),
+        getQueryParamsForCard(card),
+      )(dispatch, getState);
+    }
+
+    function makeState() {
+      const state = createMockState({
+        entities: createMockEntitiesState({
+          databases: [createSampleDatabase()],
+        }),
+        currentUser: createMockUser({
+          permissions: createMockUserPermissions({ can_create_queries: true }),
+        }),
+      });
+      return { state, getState: () => state };
+    }
+
+    it("aborts a stale initializeQB once a newer one is in flight", async () => {
+      const firstCard = createSavedStructuredCard({ id: 1, name: "first" });
+      const secondCard = createSavedStructuredCard({ id: 2, name: "second" });
+
+      const { getState } = makeState();
+      const dispatch = jest.fn((action) => action);
+
+      let resolveFirstLoad!: (card: Card) => void;
+      const firstLoadPromise = new Promise<Card>((resolve) => {
+        resolveFirstLoad = resolve;
+      });
+
+      jest
+        .spyOn(cardActions, "loadCard")
+        .mockReturnValueOnce(firstLoadPromise)
+        .mockReturnValueOnce(Promise.resolve(secondCard as Card));
+
+      fetchMock.get(`path:/api/card/${firstCard.id}`, firstCard);
+      fetchMock.get(`path:/api/card/${secondCard.id}`, secondCard);
+
+      // First init: hangs on loadCard
+      const firstInit = startInit(firstCard as Card, dispatch, getState);
+      await Promise.resolve();
+
+      // Second init runs to completion, superseding the first
+      await startInit(secondCard as Card, dispatch, getState);
+      jest.runAllTimers();
+
+      // Unblock the first init; it should bail out once it sees the version
+      // has been superseded.
+      resolveFirstLoad(firstCard as Card);
+      await firstInit;
+      jest.runAllTimers();
+
+      const initActions = dispatch.mock.calls.filter(
+        (call) => call[0]?.type === "metabase/qb/INITIALIZE_QB",
+      );
+      expect(initActions).toHaveLength(1);
+      expect(initActions[0][0].payload.card.id).toBe(secondCard.id);
+    });
+
+    it("does not dispatch setErrorPage from a stale init even when its card would have errored", async () => {
+      const firstCard = createSavedStructuredCard({
+        id: 1,
+        name: "archived first",
+        archived: true,
+      });
+      const secondCard = createSavedStructuredCard({ id: 2, name: "second" });
+
+      // user=null + archived first card → archived setErrorPage on the stale path
+      const state = createMockState({
+        entities: createMockEntitiesState({
+          databases: [createSampleDatabase()],
+        }),
+        currentUser: null,
+      });
+      const getState = () => state;
+      const dispatch = jest.fn((action) => action);
+
+      let resolveFirstLoad!: (card: Card) => void;
+      const firstLoadPromise = new Promise<Card>((resolve) => {
+        resolveFirstLoad = resolve;
+      });
+
+      jest
+        .spyOn(cardActions, "loadCard")
+        .mockReturnValueOnce(firstLoadPromise)
+        .mockReturnValueOnce(Promise.resolve(secondCard as Card));
+
+      fetchMock.get(`path:/api/card/${firstCard.id}`, firstCard);
+      fetchMock.get(`path:/api/card/${secondCard.id}`, secondCard);
+
+      const firstInit = startInit(firstCard as Card, dispatch, getState);
+      await Promise.resolve();
+
+      await startInit(secondCard as Card, dispatch, getState);
+      jest.runAllTimers();
+
+      resolveFirstLoad(firstCard as Card);
+      await firstInit;
+      jest.runAllTimers();
+
+      const archiveError = setErrorPage(
+        expect.objectContaining({ data: { error_code: "archived" } }),
+      );
+      expect(dispatch).not.toHaveBeenCalledWith(archiveError);
     });
   });
 

@@ -4,7 +4,7 @@ import { t } from "ttag";
 
 import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { useStoreUrl } from "metabase/common/hooks";
-import { useDispatch } from "metabase/lib/redux";
+import { useDispatch } from "metabase/redux";
 import { dismissUndo } from "metabase/redux/undo";
 import {
   Button,
@@ -41,7 +41,7 @@ export const MetabotManagedProviderLimitActions = ({
 
   const configureModal = (
     <Modal
-      title="Connect to an AI provider"
+      title={t`Connect to an AI provider`}
       onClose={close}
       opened={isOpen}
       size="lg"

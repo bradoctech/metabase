@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { jt, t } from "ttag";
 import * as Yup from "yup";
 
-import { hasFeature } from "metabase/admin/databases/utils";
 import {
   skipToken,
   useDeleteTransformTargetMutation,
@@ -11,6 +10,7 @@ import {
   useUpdateTransformMutation,
 } from "metabase/api";
 import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
+import { hasFeature } from "metabase/common/utils/database";
 import {
   Form,
   FormErrorMessage,
@@ -18,7 +18,6 @@ import {
   FormSubmitButton,
   FormTextInput,
 } from "metabase/forms";
-import * as Errors from "metabase/lib/errors";
 import { SchemaFormSelect } from "metabase/transforms/components/SchemaFormSelect";
 import { sourceDatabaseId } from "metabase/transforms/utils";
 import {
@@ -30,6 +29,7 @@ import {
   Radio,
   Stack,
 } from "metabase/ui";
+import * as Errors from "metabase/utils/errors";
 import type { Transform, UpdateTransformRequest } from "metabase-types/api";
 
 type UpdateTargetModalProps = {

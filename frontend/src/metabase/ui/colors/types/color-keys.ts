@@ -35,6 +35,7 @@ export type MetabaseColorKey =
   | "background-tertiary"
   | "background-tertiary-inverse"
   | "background-warning"
+  | "background-warning-secondary"
   | "border"
   | "border-brand"
   | "border-card-home"

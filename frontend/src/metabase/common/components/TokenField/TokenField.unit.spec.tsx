@@ -2,7 +2,7 @@ import userEvent from "@testing-library/user-event";
 import { Component } from "react";
 
 import { act, fireEvent, render, screen, within } from "__support__/ui";
-import { KEYCODE_ENTER } from "metabase/lib/keyboard";
+import { KEYCODE_ENTER } from "metabase/utils/keyboard";
 
 import type { LayoutRendererArgs, TokenFieldProps } from "./TokenField";
 import { TokenField } from "./TokenField";

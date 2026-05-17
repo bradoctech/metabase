@@ -12,22 +12,21 @@ import {
 } from "metabase/api";
 import CS from "metabase/css/core/index.css";
 import { isEmbeddingSdk } from "metabase/embedding-sdk/config";
-import { getResponseErrorMessage } from "metabase/lib/errors";
 import {
   alertIsValid,
   getAlertTriggerOptions,
-} from "metabase/lib/notifications";
+  getDefaultQuestionAlertRequest,
+} from "metabase/notifications/utils";
 import {
   getHasConfiguredAnyChannel,
   getHasConfiguredEmailOrSlackChannel,
-} from "metabase/lib/pulse";
-import { useDispatch, useSelector } from "metabase/lib/redux";
-import { getDefaultQuestionAlertRequest } from "metabase/notifications/utils";
+} from "metabase/pulse";
 import { updateUrl } from "metabase/query_builder/actions/url";
 import {
   getQuestion,
   getVisualizationSettings,
 } from "metabase/query_builder/selectors";
+import { useDispatch, useSelector } from "metabase/redux";
 import { addUndo } from "metabase/redux/undo";
 import { canAccessSettings, getUser } from "metabase/selectors/user";
 import {
@@ -41,6 +40,7 @@ import {
   Text,
   rem,
 } from "metabase/ui";
+import { getResponseErrorMessage } from "metabase/utils/errors";
 import type Question from "metabase-lib/v1/Question";
 import type {
   CreateAlertNotificationRequest,

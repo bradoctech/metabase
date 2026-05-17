@@ -4,10 +4,10 @@
    [java-time.api :as t]
    [metabase.lib.core :as lib]
    [metabase.lib.metadata :as lib.metadata]
-   [metabase.models.transforms.transform-run :as transform-run]
    [metabase.premium-features.core :as premium-features]
    [metabase.test :as mt]
    [metabase.test.fixtures :as fixtures]
+   [metabase.transforms.models.transform-run :as transform-run]
    [toucan2.core :as t2]))
 
 (set! *warn-on-reflection* true)

@@ -88,7 +88,10 @@ describe("issue 45255", () => {
     // Can reorder (empty)
     H.getDraggableElements().eq(2).should("have.text", "(empty)");
     H.getDraggableElements().first().as("dragElement");
-    H.moveDnDKitElementByAlias("@dragElement", { vertical: 100 });
+    H.moveDnDKitElementByAlias("@dragElement", {
+      vertical: 100,
+      useMouseEvents: true,
+    });
     H.getDraggableElements().eq(1).should("have.text", "(empty)");
 
     // Has (empty) in the chart
@@ -782,9 +785,10 @@ describe("UXW-2696", () => {
 
     H.getDocumentSidebar().within(() => {
       cy.findByRole("radio", { name: /axes/i }).click({ force: true });
-      cy.findByRole("switch", { name: /auto y-axis range/i }).should(
-        "not.have.attr",
+      cy.findByLabelText("Auto y-axis range").should(
+        "have.attr",
         "data-checked",
+        "false",
       );
 
       cy.findByLabelText("Min").clear().type("70");
@@ -825,9 +829,10 @@ describe("UXW-2696", () => {
 
       H.modal().within(() => {
         cy.findByRole("radio", { name: /axes/i }).click({ force: true });
-        cy.findByRole("switch", { name: /auto y-axis range/i }).should(
-          "not.have.attr",
+        cy.findByLabelText("Auto y-axis range").should(
+          "have.attr",
           "data-checked",
+          "false",
         );
 
         assertNoPoints(false);

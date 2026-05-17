@@ -104,9 +104,9 @@
     :query    {:source-table (u/the-id table-or-id)
                :aggregation  [[:count]]}}))
 
-(defn pmbql-count-query
+(defn mbql5-count-query
   ([]
-   (pmbql-count-query (mt/id) (mt/id :venues)))
+   (mbql5-count-query (mt/id) (mt/id :venues)))
 
   ([db-or-id table-or-id]
    (let [metadata-provider (lib-be/application-database-metadata-provider (u/the-id db-or-id))
@@ -310,8 +310,8 @@
           (mt/user-http-request :crowberto :post 202 (str "card/" (u/the-id card-1) "/query")
                                 {:request-options {:headers {"x-metabase-client" client-string
                                                              "x-metabase-client-version" version-string}}}))
-        (is (= {:embedding_client client-string, :embedding_version version-string}
-               (t2/select-one [:model/ViewLog :embedding_client :embedding_version] :model "card" :model_id (u/the-id card-1))))))))
+        (is (= {:embedding_client client-string, :embedding_sdk_version version-string}
+               (t2/select-one [:model/ViewLog :embedding_client :embedding_sdk_version] :model "card" :model_id (u/the-id card-1))))))))
 
 (deftest embedding-sdk-info-saves-query-execution
   (testing "GET /api/card with embedding headers set"
@@ -324,10 +324,10 @@
       (mt/user-http-request :crowberto :post 202 (format "card/%d/query" (u/the-id card-1))
                             {:request-options {:headers {"x-metabase-client" "client-B"
                                                          "x-metabase-client-version" "2"}}})
-      (is (=? {:embedding_client "client-B", :embedding_version "2"}
+      (is (=? {:embedding_client "client-B", :embedding_sdk_version "2"}
               ;; The query metadata is handled asynchronously, so we need to poll until it's available:
               (tu/poll-until 2000
-                             (t2/select-one [:model/QueryExecution :embedding_client :embedding_version]
+                             (t2/select-one [:model/QueryExecution :embedding_client :embedding_sdk_version]
                                             :card_id (u/the-id card-1))))))))
 
 (deftest filter-by-bookmarked-test
@@ -732,7 +732,7 @@
             (perms/grant-collection-readwrite-permissions! (perms-group/all-users) collection)
             (mt/with-model-cleanup [:model/Card]
               (doseq [[mbql-version query] {"MBQL" (mbql-count-query)
-                                            "pMBQL" (pmbql-count-query)}]
+                                            "MBQL 5" (mbql5-count-query)}]
                 (testing mbql-version
                   (let [card (assoc (card-with-name-and-query (mt/random-name) query)
                                     :collection_id (u/the-id collection)
@@ -780,6 +780,27 @@
                                                           (-> edit-info
                                                               (update :id boolean)
                                                               (update :timestamp boolean)))))))))))))))))
+
+(deftest create-a-card-with-result-metadata-updates-recents-test
+  (testing "POST /api/card adds user-created questions to recents (UXW-3171)"
+    (mt/with-full-data-perms-for-all-users!
+      (mt/with-model-cleanup [:model/Card]
+        (t2/delete! :model/RecentViews :user_id (mt/user->id :rasta))
+        (let [card    (assoc (card-with-name-and-query) :result_metadata [])
+              card-id (:id (mt/user-http-request :rasta :post 200 "card" card))]
+          (is (= {:user_id  (mt/user->id :rasta)
+                  :model    "card"
+                  :model_id card-id}
+                 (t2/select-one [:model/RecentViews :user_id :model :model_id]
+                                :user_id  (mt/user->id :rasta)
+                                :model_id card-id
+                                :model    "card"))))
+        (testing "Cards saved without result metadata are not treated as viewed"
+          (let [card-id (:id (mt/user-http-request :rasta :post 200 "card" (card-with-name-and-query)))]
+            (is (nil? (t2/select-one :model/RecentViews
+                                     :user_id  (mt/user->id :rasta)
+                                     :model_id card-id
+                                     :model    "card")))))))))
 
 (deftest ^:parallel create-card-validation-test
   (testing "POST /api/card"
@@ -846,7 +867,7 @@
 
 (deftest create-and-update-metric-card-validation-test
   (testing "POST /api/card"
-    (let [query (pmbql-count-query)
+    (let [query (mbql5-count-query)
           card-name (mt/random-name)
           card (-> (card-with-name-and-query card-name query)
                    (assoc :type :metric))
@@ -3730,15 +3751,15 @@
    (fn [card]
      (mt/user-http-request :crowberto :get 200 (str "card/" (:id card))))))
 
-(deftest save-mlv2-card-test
+(deftest save-mbql5-card-test
   (testing "POST /api/card"
-    (testing "Should be able to save a Card with an MLv2 query (#39024)"
+    (testing "Should be able to save a Card with an MBQL 5 query (#39024)"
       (mt/with-model-cleanup [:model/Card]
         (let [metadata-provider (mt/metadata-provider)
               venues            (lib.metadata/table metadata-provider (mt/id :venues))
               query             (lib/query metadata-provider venues)
               response          (mt/user-http-request :crowberto :post 200 "card"
-                                                      {:name                   "pMBQL Card"
+                                                      {:name                   "MBQL 5 Card"
                                                        :dataset_query          (dissoc query :lib/metadata)
                                                        :display                :table
                                                        :visualization_settings {}})]
@@ -3749,9 +3770,9 @@
                                                    :source-table (mt/id :venues)}]}}
                   response)))))))
 
-(deftest ^:parallel run-mlv2-card-query-test
+(deftest ^:parallel run-mbql5-card-query-test
   (testing "POST /api/card/:id/query"
-    (testing "Should be able to run a query for a Card with an MLv2 query (#39024)"
+    (testing "Should be able to run a query for a Card with an MBQL 5 query (#39024)"
       (let [metadata-provider (mt/metadata-provider)
             venues            (lib.metadata/table metadata-provider (mt/id :venues))
             query             (-> (lib/query metadata-provider venues)
