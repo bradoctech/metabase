@@ -20,7 +20,6 @@
    [metabase.lib.core :as lib]
    [metabase.lib.metadata :as lib.metadata]
    [metabase.lib.schema.id :as lib.schema.id]
-   [metabase.lib.util.match :as lib.util.match]
    [metabase.models.interface :as mi]
    [metabase.permissions.core :as perms]
    [metabase.premium-features.core :as premium-features :refer [defenterprise]]
@@ -28,7 +27,6 @@
    [metabase.request.core :as request]
    [metabase.sample-data.core :as sample-data]
    [metabase.secrets.core :as secret]
-   [metabase.server.streaming-response :as server.streaming-response :refer [streaming-response]]
    [metabase.settings.core :as setting]
    [metabase.sync.core :as sync]
    [metabase.sync.schedules :as sync.schedules]
@@ -38,11 +36,11 @@
    [metabase.util.cron :as u.cron]
    [metabase.util.honey-sql-2 :as h2x]
    [metabase.util.i18n :as i18n :refer [deferred-tru trs tru]]
-   [metabase.util.json :as json]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
    [metabase.util.malli.registry :as mr]
    [metabase.util.malli.schema :as ms]
+   [metabase.util.match :as match]
    [metabase.util.quick-task :as quick-task]
    [metabase.warehouse-schema.models.field :refer [readable-fields-only]]
    [metabase.warehouse-schema.table :as schema.table]
@@ -156,7 +154,7 @@
   we can filter it out in Clojure-land."
   [{query :dataset_query, :as _card} :- [:map
                                          [:dataset_query ::queries.schema/query]]]
-  (lib.util.match/match-lite (lib/aggregations query) [#{:cum-count :cum-sum} & _] true))
+  (match/match-one (lib/aggregations query) [#{:cum-count :cum-sum} & _] true))
 
 (defn card-can-be-used-as-source-query?
   "Does `card`'s query meet the conditions required for it to be used as a source query for another query?"
@@ -545,142 +543,6 @@
                          :let [query (database-usage-query model id)]
                          :when query]
                      [query model])})))
-
-;;; ----------------------------------------- GET /api/database/metadata ------------------------------------------
-
-(defn- format-database-metadata
-  "Formats a Database record for the /metadata endpoint response."
-  [{:keys [id name engine]}]
-  {:id id :name name :engine engine})
-
-(defn- format-table-metadata
-  "Formats a Table record for the /metadata endpoint response, omitting nil optional fields."
-  [{:keys [id db_id name schema description]}]
-  (m/assoc-some {:id id :db_id db_id :name name}
-                :schema schema
-                :description description))
-
-(defn- format-field-metadata
-  "Formats a Field record for the /metadata endpoint response. Includes effective_type only when it differs from base_type."
-  [{:keys [id table_id parent_id fk_target_field_id name description base_type database_type effective_type semantic_type coercion_strategy]}]
-  (m/assoc-some {:id id :table_id table_id :name name}
-                :parent_id parent_id
-                :fk_target_field_id fk_target_field_id
-                :description description
-                :base_type base_type
-                :database_type database_type
-                :effective_type (when (and effective_type (not= base_type effective_type)) effective_type)
-                :semantic_type semantic_type
-                :coercion_strategy coercion_strategy))
-
-(defn- perm-user-info
-  "User information used to check permissions."
-  []
-  {:user-id       api/*current-user-id*
-   :is-superuser? api/*is-superuser?*})
-
-(defn- perm-mapping
-  "Permission mapping used to filter databases and tables to those visible to the current user.
-  Requires `View data` → `Can view` and `Create queries` → `Query builder only` (or `Query builder and native`)."
-  []
-  {:perms/view-data      :unrestricted
-   :perms/create-queries :query-builder})
-
-(defn- write-json-array!
-  "Streams a reducible collection as a JSON array to a Writer, applying `format-fn` to each row.
-
-  `run!` is required here because it dispatches through `reduce`, which consumes the
-  `IReduceInit` returned by `t2/reducible-select` row-by-row without materializing.
-  `doseq` cannot be used: it walks a seq, and producing a seq from the reducible
-  would realize every row into memory — defeating the point of streaming."
-  [^java.io.Writer writer reducible format-fn]
-  (.write writer "[")
-  (let [first? (volatile! true)]
-    (run! (fn [row]
-            (if @first?
-              (vreset! first? false)
-              (.write writer ","))
-            (json/encode-to (format-fn row) writer {}))
-          reducible))
-  (.write writer "]"))
-
-(defn- write-databases-metadata!
-  "Streams the databases/tables/fields metadata as JSON to the given OutputStream.
-
-  Warehouses with large schemas can produce gigabytes of metadata, so streaming is
-  required — materializing the full response in memory would OOM the server. Each
-  section is written directly to the underlying writer as rows are pulled from a
-  reducible query, keeping memory usage bounded regardless of schema size."
-  [^java.io.OutputStream os]
-  (let [db-filter [:and [:= :is_audit false] [:= :router_database_id nil]
-                   [:in :id (perms/visible-database-filter-select (perm-user-info) (perm-mapping))]]
-        t-filter  [:and [:= :active true] [:= :visibility_type nil]
-                   [:in :id (perms/visible-table-filter-select :id (perm-user-info) (perm-mapping))]]
-        f-filter  [:and [:= :active true] [:<> :visibility_type "sensitive"]
-                   [:in :table_id (perms/visible-table-filter-select :id (perm-user-info) (perm-mapping))]]
-        writer   (java.io.BufferedWriter. (java.io.OutputStreamWriter. os java.nio.charset.StandardCharsets/UTF_8))]
-    (.write writer "{\"databases\":")
-    (write-json-array! writer
-                       (t2/reducible-select [:model/Database :id :name :engine] {:where db-filter})
-                       format-database-metadata)
-    (.write writer ",\"tables\":")
-    (write-json-array! writer
-                       (t2/reducible-select [:model/Table :id :db_id :name :schema :description] {:where t-filter})
-                       format-table-metadata)
-    (.write writer ",\"fields\":")
-    (write-json-array! writer
-                       (t2/reducible-select [:model/Field :id :table_id :parent_id :fk_target_field_id :name :description
-                                             :base_type :database_type :effective_type :semantic_type :coercion_strategy]
-                                            {:where f-filter})
-                       format-field-metadata)
-    (.write writer "}")
-    (.flush writer)))
-
-(mr/def ::database-info
-  [:map
-   [:id ::lib.schema.id/database]
-   [:name :string]
-   [:engine :string]])
-
-(mr/def ::table-info
-  [:map
-   [:id ::lib.schema.id/table]
-   [:db_id ::lib.schema.id/database]
-   [:name :string]
-   [:schema {:optional true} :string]
-   [:description {:optional true} :string]])
-
-(mr/def ::field-info
-  [:map
-   [:id ::lib.schema.id/field]
-   [:table_id ::lib.schema.id/table]
-   [:name :string]
-   [:parent_id {:optional true} ::lib.schema.id/field]
-   [:fk_target_field_id {:optional true} ::lib.schema.id/field]
-   [:description {:optional true} :string]
-   [:base_type :string]
-   [:database_type {:optional true} :string]
-   [:effective_type {:optional true} :string]
-   [:semantic_type {:optional true} :string]
-   [:coercion_strategy {:optional true} :string]])
-
-(mr/def ::databases-metadata-response
-  [:map
-   [:databases [:sequential ::database-info]]
-   [:tables    [:sequential ::table-info]]
-   [:fields    [:sequential ::field-info]]])
-
-(api.macros/defendpoint :get "/metadata"
-  :- (server.streaming-response/streaming-response-schema ::databases-metadata-response)
-  "Get metadata (databases, tables, and fields) for all databases visible to the current user.
-  Returns a flat structure with three arrays: databases, tables, and fields.
-  Response is streamed for efficiency with large schemas.
-
-  Requires `View data` → `Can view` and `Create queries` → `Query builder only` (or
-  `Query builder and native`) permissions on each database and table."
-  []
-  (streaming-response {:content-type "application/json; charset=utf-8"} [os _]
-                      (write-databases-metadata! os)))
 
 ;;; ----------------------------------------- GET /api/database/:id/metadata -----------------------------------------
 
@@ -1380,24 +1242,6 @@
     (delete-all-field-values-for-database! db))
   {:status :ok})
 
-(api.macros/defendpoint :post "/:id/permission/workspace/check"
-  :- [:map
-      [:status :string]
-      [:checked_at :string]
-      [:error {:optional true} :string]]
-  "Check if database's connection has the required permissions to manage workspaces.
-  By default it'll return the cached permission check."
-  [{:keys [id cached]} :- [:map [:id ms/PositiveInt]
-                           [:cached {:optional true
-                                     :default true} :boolean]]]
-  (api/check-superuser)
-  (let [db (api/check-404 (t2/select-one :model/Database id))
-        _  (api/check-400 (driver.u/supports? (:engine db) :workspace db)
-                          "Database does not support workspaces")]
-    (or (when cached
-          (t2/select-one-fn :workspace_permissions_status :model/Database id))
-        (database/check-and-cache-workspace-permissions! db))))
-
 ;;; ------------------------------------------ GET /api/database/:id/schemas -----------------------------------------
 
 (defenterprise current-user-can-manage-schema-metadata?
@@ -1442,7 +1286,7 @@
 
 (defn database-schemas
   "Returns a list of all the schemas with tables found for the database `id`. Excludes schemas with no tables."
-  [id {:keys [include-editable-data-model? include-hidden? can-query? can-write-metadata? include-workspace?]}]
+  [id {:keys [include-editable-data-model? include-hidden? can-query? can-write-metadata?]}]
   (let [filter-schemas (fn [schemas]
                          (if include-editable-data-model?
                            (if-let [f (u/ignore-exceptions
@@ -1454,19 +1298,7 @@
         clauses         (cond-> []
                           ;; a non-nil value means Table is hidden --
                           ;; see [[metabase.warehouse-schema.models.table/visibility-types]]
-                          (not include-hidden?) (conj [:= :visibility_type nil])
-                          (not include-workspace?) (conj [:or
-                                                          [:= :schema nil]
-                                                          [:not
-                                                          ;; TODO (Chris 2025-12-09) -- dislike coupling to a constant, at least until we have an e2e test
-                                                           [:like :schema "mb__isolation_%"]
-                                                          ;; TODO (Chris 2025-12-09) -- this might behave terribly without an index when there are lots of workspaces
-                                                           #_[:exists {:select [1]
-                                                                       :from   [[(t2/table-name :model/Workspace) :w]]
-                                                                       :where  [:and
-                                                                                [:= :w.database_id id]
-                                                                                [:= :w.schema :metabase_table.schema]
-                                                                                [:= :w.archived_at nil]]}]]]))
+                          (not include-hidden?) (conj [:= :visibility_type nil]))
         ;; For can-query? and can-write-metadata?, we need to filter based on tables in each schema
         filter-schemas-by-tables (fn [schemas]
                                    (if (or can-query? can-write-metadata?)
@@ -1506,22 +1338,15 @@
    {:keys [include_editable_data_model
            include_hidden
            can-query
-           can-write-metadata
-           include_workspace]} :- [:map
-                                   [:include_editable_data_model {:default false} [:maybe ms/BooleanValue]]
-                                   [:include_hidden              {:default false} [:maybe ms/BooleanValue]]
-                                   [:can-query                   {:optional true} [:maybe :boolean]]
-                                   [:can-write-metadata          {:optional true} [:maybe :boolean]]
-                                   [:include_workspace           {:default false} [:maybe ms/BooleanValue]]]]
+           can-write-metadata]} :- [:map
+                                    [:include_editable_data_model {:default false} [:maybe ms/BooleanValue]]
+                                    [:include_hidden              {:default false} [:maybe ms/BooleanValue]]
+                                    [:can-query                   {:optional true} [:maybe :boolean]]
+                                    [:can-write-metadata          {:optional true} [:maybe :boolean]]]]
   (database-schemas id {:include-editable-data-model? include_editable_data_model
-                        :include-hidden? include_hidden
+                        :include-hidden?              include_hidden
                         :can-query?                   can-query
-                        :can-write-metadata?          can-write-metadata
-                        ;; TODO (Chris 2025-12-09) -- filtering out workspace schemas has a weird FE consequence - if you type one of those
-                        ;;       schemas out manually in the targets, it will offer to create it for you.
-                        ;;       this ends up being a no-op, so i guess it's harmless for now?
-                        ;;       it will look very weird when we add validation to refuse saving that target.
-                        :include-workspace? include_workspace}))
+                        :can-write-metadata?          can-write-metadata}))
 
 ;; TODO (Cam 2025-11-25) please add a response schema to this API endpoint, it makes it easier for our customers to
 ;; use our API + we will need it when we make auto-TypeScript-signature generation happen
@@ -1556,7 +1381,7 @@
 (defn- schema-tables-list
   ([db-id schema]
    (schema-tables-list db-id schema {}))
-  ([db-id schema {:keys [include-hidden? include-editable-data-model? can-query? can-write-metadata?]}]
+  ([db-id schema {:keys [include-hidden? include-editable-data-model? can-query? can-write-metadata? include-measures?]}]
    (when-not include-editable-data-model?
      (api/read-check :model/Database db-id)
      (api/check-403 (can-read-schema? db-id schema)))
@@ -1582,7 +1407,8 @@
                             can-query?          (filter mi/can-query?)
                             can-write-metadata? (filter mi/can-write?))
          hydration-keys   (cond-> []
-                            (premium-features/has-feature? :transforms-basic)   (conj :transform))]
+                            (premium-features/has-feature? :transforms-basic)   (conj :transform)
+                            include-measures? (conj :measures))]
      (if (seq hydration-keys)
        (apply t2/hydrate filtered-tables hydration-keys)
        filtered-tables))))
@@ -1604,18 +1430,20 @@
   [{:keys [id schema]} :- [:map
                            [:id ms/PositiveInt]
                            [:schema ms/NonBlankString]]
-   {:keys [include_hidden include_editable_data_model can-query can-write-metadata]} :- [:map
-                                                                                         [:include_hidden              {:default false} [:maybe ms/BooleanValue]]
-                                                                                         [:include_editable_data_model {:default false} [:maybe ms/BooleanValue]]
-                                                                                         [:can-query                   {:optional true} [:maybe :boolean]]
-                                                                                         [:can-write-metadata          {:optional true} [:maybe :boolean]]]]
+   {:keys [include_hidden include_editable_data_model can-query can-write-metadata include_measures]} :- [:map
+                                                                                                          [:include_hidden              {:default false} [:maybe ms/BooleanValue]]
+                                                                                                          [:include_editable_data_model {:default false} [:maybe ms/BooleanValue]]
+                                                                                                          [:can-query                   {:optional true} [:maybe :boolean]]
+                                                                                                          [:can-write-metadata          {:optional true} [:maybe :boolean]]
+                                                                                                          [:include_measures            {:optional true} [:maybe :boolean]]]]
   (api/check-404 (seq (schema-tables-list
                        id
                        schema
                        {:include-hidden?              include_hidden
                         :include-editable-data-model? include_editable_data_model
                         :can-query?                   can-query
-                        :can-write-metadata?          can-write-metadata}))))
+                        :can-write-metadata?          can-write-metadata
+                        :include-measures?            include_measures}))))
 
 ;; TODO (Cam 10/28/25) -- fix this endpoint so it uses kebab-case for query parameters for consistency with the rest
 ;; of the REST API
@@ -1633,15 +1461,17 @@
   - `can-write-metadata=true` - filter to only tables the user can edit metadata for"
   [{:keys [id]} :- [:map
                     [:id ms/PositiveInt]]
-   {:keys [include_hidden include_editable_data_model can-query can-write-metadata]} :- [:map
-                                                                                         [:include_hidden              {:default false} [:maybe ms/BooleanValue]]
-                                                                                         [:include_editable_data_model {:default false} [:maybe ms/BooleanValue]]
-                                                                                         [:can-query                   {:optional true} [:maybe :boolean]]
-                                                                                         [:can-write-metadata          {:optional true} [:maybe :boolean]]]]
+   {:keys [include_hidden include_editable_data_model can-query can-write-metadata include_measures]} :- [:map
+                                                                                                          [:include_hidden              {:default false} [:maybe ms/BooleanValue]]
+                                                                                                          [:include_editable_data_model {:default false} [:maybe ms/BooleanValue]]
+                                                                                                          [:can-query                   {:optional true} [:maybe :boolean]]
+                                                                                                          [:can-write-metadata          {:optional true} [:maybe :boolean]]
+                                                                                                          [:include_measures            {:optional true} [:maybe :boolean]]]]
   (let [opts {:include-hidden?              include_hidden
               :include-editable-data-model? include_editable_data_model
               :can-query?                   can-query
-              :can-write-metadata?          can-write-metadata}]
+              :can-write-metadata?          can-write-metadata
+              :include-measures?            include_measures}]
     (api/check-404 (seq (concat (schema-tables-list id nil opts)
                                 (schema-tables-list id "" opts))))))
 

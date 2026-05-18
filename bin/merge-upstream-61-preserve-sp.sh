@@ -112,6 +112,12 @@ cmd_merge() {
 should_restore_path() {
   local path="$1"
   is_dual_changed "$path" && return 1
+  # Upstream 61.x moved match off clojure.core.match; never restore old lib.util.match from fork.
+  case "$path" in
+    src/metabase/lib/util/match*|test/metabase/lib/util/match*)
+      return 1
+      ;;
+  esac
   # restore-ours list
   grep -qxF "$path" "$RESTORE_OURS_FILE" 2>/dev/null && return 0
   # binaries and assets

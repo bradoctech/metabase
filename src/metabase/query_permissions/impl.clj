@@ -15,7 +15,6 @@
    [metabase.lib.metadata :as lib.metadata]
    [metabase.lib.metadata.protocols :as lib.metadata.protocols]
    [metabase.lib.schema.id :as lib.schema.id]
-   [metabase.lib.util.match :as lib.util.match]
    [metabase.models.interface :as mi]
    [metabase.permissions.core :as perms]
    [metabase.query-processor.error-type :as qp.error-type]
@@ -26,6 +25,7 @@
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
    [metabase.util.malli.schema :as ms]
+   [metabase.util.match :as match]
    [toucan2.core :as t2]))
 
 (set! *warn-on-reflection* true)
@@ -126,29 +126,29 @@
      (recur (lib/->legacy-MBQL query) parent-source-card-id in-sandbox?)
      ;; already legacy MBQL
      (apply merge-with merge-source-ids
-            (lib.util.match/match-many query
-              (m :guard (and (map? m) (:qp/stage-is-from-source-card m)))
+            (match/match-many query
+              (:and m {:qp/stage-is-from-source-card (id :guard identity)})
               (merge-with merge-source-ids
                           (when-not parent-source-card-id
-                            {:card-ids #{(:qp/stage-is-from-source-card m)}})
-                          (query->source-ids (dissoc m :qp/stage-is-from-source-card) (:qp/stage-is-from-source-card m) in-sandbox?))
+                            {:card-ids #{id}})
+                          (query->source-ids (dissoc m :qp/stage-is-from-source-card) id in-sandbox?))
 
-              (m :guard (and (map? m) (:query-permissions/sandboxed-table m)))
+              (:and m {:query-permissions/sandboxed-table (id :guard identity)})
               (merge-with merge-source-ids
-                          {:table-ids #{(:query-permissions/sandboxed-table m)}}
+                          {:table-ids #{id}}
                           (when-not (or parent-source-card-id in-sandbox?)
-                            {:table-query-ids #{(:query-permissions/sandboxed-table m)}})
+                            {:table-query-ids #{id}})
                           (query->source-ids (dissoc m :query-permissions/sandboxed-table :native) parent-source-card-id true))
 
-              {:native (_ :guard identity)}
+              {:native &truthy}
               (when-not parent-source-card-id
                 {:native? true})
 
-              (m :guard (and (map? m) (pos-int? (:source-table m))))
+              (:and m {:source-table (id :guard pos-int?)})
               (merge-with merge-source-ids
-                          {:table-ids #{(:source-table m)}}
+                          {:table-ids #{id}}
                           (when-not (or parent-source-card-id in-sandbox?)
-                            {:table-query-ids #{(:source-table m)}})
+                            {:table-query-ids #{id}})
                           (query->source-ids (dissoc m :source-table) parent-source-card-id in-sandbox?)))))))
 
 (mu/defn query->source-table-ids
@@ -283,25 +283,21 @@
                         {:query query}))))))
 
 (defn- has-perm-for-db?
-  "Checks that the current user has at least `required-perm` for the entire DB specified by `db-id`."
   [perm-type required-perm db-id]
   (perms/at-least-as-permissive? perm-type
                                  (perms/full-db-permission-for-user api/*current-user-id* perm-type db-id)
                                  required-perm))
 
 (defn- has-perm-for-table?
-  "Checks that the current user has the permissions for tables specified in `table-id->perm`."
   [perm-type table-id->required-perm db-id]
-  (let [table-id->has-perm?
-        (into {} (for [[table-id required-perm] table-id->required-perm]
-                   [table-id (boolean
-                              (perms/user-has-permission-for-table?
-                               api/*current-user-id*
-                               perm-type
-                               required-perm
-                               db-id
-                               table-id))]))]
-    (every? true? (vals table-id->has-perm?))))
+  (every? (fn [[table-id required-perm]]
+            (perms/user-has-permission-for-table?
+             api/*current-user-id*
+             perm-type
+             required-perm
+             db-id
+             table-id))
+          table-id->required-perm))
 
 (defn- card
   [database-id card-id]
@@ -374,7 +370,6 @@
   [query required-perms & {:keys [throw-exceptions?]
                            :or   {throw-exceptions? true}}]
   (try
-    ;; Check any required v1 paths
     (when-let [paths (:paths required-perms)]
       (or (perms/set-has-full-permissions-for-set? @api/*current-user-permissions-set* paths)
           (throw (perms-exception paths))))
@@ -418,17 +413,18 @@
   queries they wouldn't be allowed to run!"
   [query :- :map]
   {:pre [(map? query)]}
-  (when-not (can-run-query? query)
-    (let [required-perms (try
-                           (required-perms-for-query query :throw-exceptions? true)
-                           (catch Throwable e
-                             e))]
-      (throw (ex-info (tru "You cannot save this Question because you do not have permissions to run its query.")
-                      {:status-code    403
-                       :query          query
-                       :required-perms (if (instance? Throwable required-perms)
-                                         :error
-                                         required-perms)
-                       :actual-perms   @api/*current-user-permissions-set*}
-                      (when (instance? Throwable required-perms)
-                        required-perms))))))
+  (let [query (dissoc query :query-permissions/perms)]
+    (when-not (can-run-query? query)
+      (let [required-perms (try
+                             (required-perms-for-query query :throw-exceptions? true)
+                             (catch Throwable e
+                               e))]
+        (throw (ex-info (tru "You cannot save this Question because you do not have permissions to run its query.")
+                        {:status-code    403
+                         :query          query
+                         :required-perms (if (instance? Throwable required-perms)
+                                           :error
+                                           required-perms)
+                         :actual-perms   @api/*current-user-permissions-set*}
+                        (when (instance? Throwable required-perms)
+                          required-perms)))))))
