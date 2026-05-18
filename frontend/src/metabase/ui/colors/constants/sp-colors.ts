@@ -1,16 +1,16 @@
 /* eslint-disable metabase/no-color-literals */
 /**
- * SP Design System color scales — valores 100% estáticos (hex / rgba).
+ * SP Design System color scales — valores 100% estaticos (hex / rgba).
  *
  * IMPORTANTE: Nenhum valor aqui usa `var(--mb-color-sp-*)` porque o parser JS
- * do Metabase só aceita `var(--mb-color-brand)` como variável CSS. Qualquer
+ * do Metabase so aceita `var(--mb-color-brand)` como variável CSS. Qualquer
  * outro `var()` causa "Unable to parse color".
  *
- * Todos os tons foram pré-calculados a partir das cores base da paleta SP.
+ * Todos os tons foram pre-calculados a partir das cores base da paleta SP.
  *
- * Só use este arquivo para definir os temas `light.ts` e `dark.ts`.
+ * So use este arquivo para definir os temas `light.ts` e `dark.ts`.
  *
- * Case queira adicionar var use color-keys-ts para add o type e então adicione ao light.ts ou dark.ts.
+ * Caso queira adicionar var use color-keys-ts para adicionar o type e entao adicione ao light.ts ou dark.ts.
  */
 export const spColors = {
   // ─── Paleta Primaria ────────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ export const spColors = {
   /** Cor primary40 solicitada pelo time */
   primary40: "#5E5E5E",
 
-  /** Cor específica para bordas customizadas */
+  /** Cor especifica para bordas customizadas */
   colorBorder: "#919191",
 
   /** #000000 — preto SP */
@@ -189,7 +189,7 @@ export const spColors = {
       bg: "#EBF6F0",
     },
 
-    /** Aviso padrão */
+    /** Aviso padrao */
     warning: {
       base: "#FBB900",
       bg: "#FFF9EB",
