@@ -32,6 +32,9 @@ RUN npm install -g bun
 # install frontend dependencies
 RUN bun install --frozen-lockfile
 
+# Fail fast if merge restore reintroduced clojure.core.match in cljs sources (removed in 61.x).
+RUN ! grep -rq 'clojure\.core\.match' src/metabase/lib --include='*.cljc' --include='*.cljs'
+
 RUN INTERACTIVE=false CI=true MB_EDITION=$MB_EDITION bin/build.sh :version ${VERSION}
 
 # ###################

@@ -117,6 +117,9 @@ should_restore_path() {
     src/metabase/lib/util/match*|test/metabase/lib/util/match*)
       return 1
       ;;
+    src/metabase/lib/native.cljc|src/metabase/lib/parameters/parse.cljc)
+      return 1
+      ;;
   esac
   # restore-ours list
   grep -qxF "$path" "$RESTORE_OURS_FILE" 2>/dev/null && return 0
