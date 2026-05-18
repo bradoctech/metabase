@@ -120,6 +120,9 @@ should_restore_path() {
     src/metabase/lib/native.cljc|src/metabase/lib/parameters/parse.cljc)
       return 1
       ;;
+    src/metabase/warehouses/models/database.clj|src/metabase/app_db/custom_migrations.clj|src/metabase/driver/sql/query_processor.clj|src/metabase/driver/common/parameters/parse.clj|modules/drivers/druid/src/metabase/driver/druid/query_processor.clj)
+      return 1
+      ;;
   esac
   # restore-ours list
   grep -qxF "$path" "$RESTORE_OURS_FILE" 2>/dev/null && return 0
