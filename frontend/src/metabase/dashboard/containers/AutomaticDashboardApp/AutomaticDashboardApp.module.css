@@ -33,7 +33,8 @@
   height: 2.125rem; /* 34px */
   width: auto;
   margin-right: 0.5rem;
-  display: inline-block;
+  /* display: inline-block; */
+  display: none;
   object-fit: contain;
   border-right: 1px solid var(--mb-color-sp-color-border, #d1d5dc);
 }

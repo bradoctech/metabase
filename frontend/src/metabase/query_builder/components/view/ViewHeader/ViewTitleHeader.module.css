@@ -314,17 +314,17 @@
   column-gap: 1rem;
   row-gap: 0.25rem;
   /* space to account for the SP logo + small gap */
-  padding-left: calc(175px + 0.5rem);
+  /* padding-left: calc(175px + 0.5rem); */
 
   /* reduce spacing on medium screens */
-  @container query-builder (max-width: 70em) {
+  /* @container query-builder (max-width: 70em) {
     padding-left: calc(120px + 0.5rem);
-  }
+  } */
 
   /* collapse to normal padding on small screens */
-  @media screen and (max-width: 40em) {
+  /* @media screen and (max-width: 40em) {
     padding-left: 1.325rem;
-  }
+  } */
 }
 
 .FilterPanel:not([data-css-specificity-hack]) {
