@@ -21,6 +21,7 @@ export interface DataGridRowProps<TData> extends DataGridStylesProps {
   columns: DataGridColumnType<TData>[];
   rowMeasureRef?: ((element: Element | null) => void) | undefined;
   zoomedRowIndex: number | undefined;
+  activeRowIndex?: number | null;
   pinnedRowsCount: number;
   selection: DataGridSelection;
   datasetIndexAttributeName: string;
@@ -38,6 +39,7 @@ export const DataGridRow = <TData,>({
   rowMeasureRef,
   pinnedRowsCount,
   zoomedRowIndex,
+  activeRowIndex,
   selection,
   datasetIndexAttributeName,
   virtualIndexAttributeName,
@@ -72,6 +74,7 @@ export const DataGridRow = <TData,>({
         {
           [S.withSeparator]: row.origin.index === pinnedRowsCount - 1,
           [S.active]: zoomedRowIndex === row.origin.index,
+          [S.activeRow]: activeRowIndex === row.origin.index,
         },
         classNames?.row,
       )}

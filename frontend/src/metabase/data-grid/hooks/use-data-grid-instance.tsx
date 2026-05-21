@@ -241,13 +241,23 @@ export const useDataGridInstance = <TData, TValue>({
       : minGridWidthProp - getScrollBarSize();
   }, [enablePagination, minGridWidthProp]);
 
-  const { columnPinning, toggle: toggleColumnPinningLimiter } =
-    useColumnPinningByCount({
-      gridRef,
-      columnOrder,
-      columnSizingMap,
-      pinnedColumnsCount: pinnedLeftColumnsCount + utilityColumns.length,
-    });
+  const {
+    columnPinning,
+    toggle: toggleColumnPinningLimiter,
+    setDynamicPinnedCount,
+  } = useColumnPinningByCount({
+    gridRef,
+    columnOrder,
+    columnSizingMap,
+    pinnedColumnsCount: pinnedLeftColumnsCount + utilityColumns.length,
+  });
+
+  const setPinnedLeftColumnsCount = useCallback(
+    (count: number) => {
+      setDynamicPinnedCount(count + utilityColumns.length);
+    },
+    [setDynamicPinnedCount, utilityColumns.length],
+  );
 
   const { getRowHeight } = useRowSizing({
     data,
@@ -594,5 +604,6 @@ export const useDataGridInstance = <TData, TValue>({
     enablePagination,
     sorting,
     scrollTo,
+    setPinnedLeftColumnsCount,
   };
 };

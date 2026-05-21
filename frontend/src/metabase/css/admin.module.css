@@ -36,6 +36,10 @@
   padding: 1em;
 }
 
+.ContentTable tbody tr.ActiveRow {
+  background-color: var(--mb-color-background-menu-hover);
+}
+
 /* TODO: remove this and apply AdminHoverItem to content rows */
 .ContentTable tbody tr:hover,
 /* Hover for div-based grid "rows" inside quadrant containers */
@@ -53,6 +57,7 @@
 }
 
 /* Show row actions on hover for both table rows and div-based rows */
+.ContentTable tbody tr.ActiveRow .TableActions,
 .ContentTable tr:hover .TableActions,
 [data-testid="center-pinned-quadrant"] [role="row"]:hover .TableActions,
 [data-testid="center-center-quadrant"] [role="row"]:hover .TableActions,
