@@ -19,6 +19,7 @@ export interface SortableHeaderProps<TData, TValue> {
   style?: React.CSSProperties;
   header: Header<TData, TValue>;
   onClick?: (e: React.MouseEvent<HTMLDivElement>, columnId: string) => void;
+  pinButton?: React.ReactNode;
 }
 
 export const SortableHeader = memo(function SortableHeader<TData, TValue>({
@@ -28,6 +29,7 @@ export const SortableHeader = memo(function SortableHeader<TData, TValue>({
   isColumnReorderingDisabled,
   style: styleProp,
   onClick,
+  pinButton,
 }: SortableHeaderProps<TData, TValue>) {
   const canResize = header.column.columnDef.enableResizing;
   const headerClickTargetSelector =
@@ -121,6 +123,7 @@ export const SortableHeader = memo(function SortableHeader<TData, TValue>({
           onMouseOver={(e) => e.stopPropagation()}
         />
       ) : null}
+      {pinButton}
     </div>
   );
 }) as <TData, TValue>(

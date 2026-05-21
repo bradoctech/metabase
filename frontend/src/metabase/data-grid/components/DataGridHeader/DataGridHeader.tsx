@@ -4,6 +4,7 @@ import type React from "react";
 
 import { HEADER_BASE_HEIGHT } from "metabase/data-grid/constants";
 import { getColumnPositionStyles } from "metabase/data-grid/utils/stylings";
+import { Icon } from "metabase/ui";
 
 import type { DataGridColumnType } from "../../types";
 import S from "../DataGrid/DataGrid.module.css";
@@ -15,6 +16,8 @@ export interface DataGridHeaderProps<TData> extends DataGridStylesProps {
   columns: DataGridColumnType<TData>[];
   backgroundColor?: string;
   isColumnReorderingDisabled?: boolean;
+  // pinnedDataColumnsCount?: number;
+  onPinColumn?: (columnId: string) => void;
   onHeaderCellClick?: (
     event: React.MouseEvent<HTMLDivElement>,
     columnId?: string,
@@ -27,6 +30,8 @@ export const DataGridHeader = <TData,>({
   backgroundColor,
   isColumnReorderingDisabled,
   onHeaderCellClick,
+  // pinnedDataColumnsCount = 0,
+  onPinColumn,
   classNames,
   styles,
 }: DataGridHeaderProps<TData>) => {
@@ -52,6 +57,25 @@ export const DataGridHeader = <TData,>({
         const isUtilityColumn =
           header.column.columnDef.meta?.isUtilityColumn === true;
         const columnPositionStyles = getColumnPositionStyles(column);
+        const isPinned = header.column.getIsPinned() === "left";
+
+        const pinButton =
+          !isUtilityColumn && onPinColumn ? (
+            <button
+              className={cx(S.pinButton, { [S.pinButtonPinned]: isPinned })}
+              title={
+                isPinned ? "Descongelar colunas" : "Congelar até esta coluna"
+              }
+              onMouseDown={(e) => e.stopPropagation()}
+              onMouseUp={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPinColumn(header.column.id);
+              }}
+            >
+              <Icon name={isPinned ? "chevronup" : "chevrondown"} size={9} />
+            </button>
+          ) : null;
 
         const headerContent = isUtilityColumn ? (
           headerCell
@@ -62,6 +86,7 @@ export const DataGridHeader = <TData,>({
             isColumnReorderingDisabled={isColumnReorderingDisabled}
             header={header}
             onClick={onHeaderCellClick}
+            pinButton={pinButton}
           >
             {headerCell}
           </SortableHeader>

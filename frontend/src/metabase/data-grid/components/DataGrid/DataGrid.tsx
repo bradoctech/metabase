@@ -73,6 +73,7 @@ export const DataGrid = function DataGrid<TData>({
   onAddColumnClick,
   onHeaderCellClick,
   isColumnReorderingDisabled,
+  setPinnedLeftColumnsCount,
 }: DataGridProps<TData>) {
   const { columnVirtualizer, virtualIndexAttributeName } = virtualGrid;
 
@@ -114,6 +115,34 @@ export const DataGrid = function DataGrid<TData>({
   const isLastPinnedColumnSpecial =
     lastPinnedColumn?.origin.columnDef.meta?.isUtilityColumn === true;
   const hasSeparator = lastPinnedColumn != null && !isLastPinnedColumnSpecial;
+
+  // const pinnedDataColumnsCount = pinnedColumns.filter(
+  //   (col) => col.origin.columnDef.meta?.isUtilityColumn !== true,
+  // ).length;
+
+  const handlePinColumn = useCallback(
+    (columnId: string) => {
+      if (!setPinnedLeftColumnsCount) {
+        return;
+      }
+      const targetColumn = table.getColumn(columnId);
+      const isPinned = targetColumn?.getIsPinned() === "left";
+      if (isPinned) {
+        setPinnedLeftColumnsCount(0);
+        return;
+      }
+      const dataColumnOrder = table
+        .getState()
+        .columnOrder.filter(
+          (id) => table.getColumn(id)?.columnDef.meta?.isUtilityColumn !== true,
+        );
+      const colDataIndex = dataColumnOrder.indexOf(columnId);
+      if (colDataIndex !== -1) {
+        setPinnedLeftColumnsCount(colDataIndex + 1);
+      }
+    },
+    [table, setPinnedLeftColumnsCount],
+  );
 
   const dndContextProps = useDataGridColumnsReordering(
     columnsReordering,
@@ -178,6 +207,8 @@ export const DataGrid = function DataGrid<TData>({
       backgroundColor={backgroundColor}
       onHeaderCellClick={onHeaderCellClick}
       isColumnReorderingDisabled={isColumnReorderingDisabled}
+      // pinnedDataColumnsCount={pinnedDataColumnsCount}
+      onPinColumn={setPinnedLeftColumnsCount ? handlePinColumn : undefined}
       styles={styles}
     />
   );

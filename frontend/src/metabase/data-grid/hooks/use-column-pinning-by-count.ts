@@ -20,12 +20,17 @@ export const useColumnPinningByCount = ({
   columnSizingMap,
 }: UseColumnPinningByCountProps) => {
   const [isLimitBypassed, setIsLimitBypassed] = useState<boolean>(false);
+  const [dynamicPinnedCount, setDynamicPinnedCount] = useState<number | null>(
+    null,
+  );
+
+  const effectivePinnedCount = dynamicPinnedCount ?? pinnedColumnsCount;
 
   const containerWidth =
     gridRef.current?.getBoundingClientRect().width ?? window.innerWidth;
 
   const columnPinning = useMemo<ColumnPinningState>(() => {
-    const candidateColumns = columnOrder.slice(0, pinnedColumnsCount);
+    const candidateColumns = columnOrder.slice(0, effectivePinnedCount);
     if (isLimitBypassed) {
       return { left: candidateColumns };
     }
@@ -38,10 +43,10 @@ export const useColumnPinningByCount = ({
   }, [
     isLimitBypassed,
     containerWidth,
-    pinnedColumnsCount,
+    effectivePinnedCount,
     columnOrder,
     columnSizingMap,
   ]);
 
-  return { columnPinning, toggle: setIsLimitBypassed };
+  return { columnPinning, toggle: setIsLimitBypassed, setDynamicPinnedCount };
 };

@@ -333,6 +333,7 @@ export interface DataGridInstance<TData> {
   ) => void;
   onAddColumnClick?: React.MouseEventHandler<HTMLButtonElement>;
   onWheel?: React.UIEventHandler<HTMLDivElement>;
+  setPinnedLeftColumnsCount?: (count: number) => void;
 }
 
 export type DataGridRowType<TData> = {

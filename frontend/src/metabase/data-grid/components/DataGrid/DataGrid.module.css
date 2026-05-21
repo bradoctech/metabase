@@ -187,6 +187,43 @@
   visibility: visible;
 }
 
+.pinButton {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--mb-color-text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    background-color 0.15s;
+  z-index: 1;
+
+  &:hover {
+    background-color: var(--mb-color-background-hover);
+    color: var(--mb-color-text-primary);
+  }
+}
+
+.pinButtonPinned {
+  opacity: 1;
+  color: var(--mb-color-brand);
+}
+
+.row:hover .pinButton {
+  opacity: 1;
+}
+
 /** Used for storybook examples for class Styles Api */
 .__storybookStylesApiBodyCellExample {
   background-color: #eef6fd;
