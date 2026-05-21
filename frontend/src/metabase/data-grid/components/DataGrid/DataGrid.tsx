@@ -6,7 +6,7 @@ import {
 import type { HeaderGroup } from "@tanstack/react-table";
 import cx from "classnames";
 import type React from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import _ from "underscore";
 
 import { useForceUpdate } from "metabase/common/hooks/use-force-update";
@@ -76,6 +76,9 @@ export const DataGrid = function DataGrid<TData>({
 }: DataGridProps<TData>) {
   const { columnVirtualizer, virtualIndexAttributeName } = virtualGrid;
 
+  const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
+  const activeRowIndexRef = useRef<number | null>(null);
+
   const [headerHeight, setHeaderHeight] = useState(HEADER_HEIGHT);
   const headerRef = useCallback((node: HTMLDivElement | null) => {
     setHeaderHeight(node?.offsetHeight ?? HEADER_HEIGHT);
@@ -129,6 +132,20 @@ export const DataGrid = function DataGrid<TData>({
       ? getScrollBarSize()
       : 0;
 
+  const handleBodyCellClickWithRowHighlight = useCallback(
+    (
+      event: React.MouseEvent<HTMLDivElement>,
+      rowIndex: number,
+      columnId: string,
+    ) => {
+      const next = activeRowIndexRef.current === rowIndex ? null : rowIndex;
+      activeRowIndexRef.current = next;
+      setActiveRowIndex(next);
+      onBodyCellClick?.(event, rowIndex, columnId);
+    },
+    [onBodyCellClick],
+  );
+
   const renderRow = (
     row: DataGridRowType<TData>,
     columns: DataGridColumnType<TData>[],
@@ -143,8 +160,9 @@ export const DataGrid = function DataGrid<TData>({
       datasetIndexAttributeName={datasetIndexAttributeName}
       virtualIndexAttributeName={virtualIndexAttributeName}
       zoomedRowIndex={zoomedRowIndex}
+      activeRowIndex={activeRowIndex}
       selection={selection}
-      onBodyCellClick={onBodyCellClick}
+      onBodyCellClick={handleBodyCellClickWithRowHighlight}
       classNames={classNames}
       styles={styles}
     />

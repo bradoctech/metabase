@@ -92,6 +92,10 @@
       transparent 90%
     );
   }
+
+  &.activeRow {
+    background-color: var(--mb-color-background-menu-hover);
+  }
 }
 
 .headerCell {
