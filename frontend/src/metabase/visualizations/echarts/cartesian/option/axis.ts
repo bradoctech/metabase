@@ -11,7 +11,11 @@ import type {
   TimeSeriesXAxisModel,
   YAxisModel,
 } from "metabase/visualizations/echarts/cartesian/model/types";
-import { getPaddedAxisLabel } from "metabase/visualizations/echarts/cartesian/option/utils";
+import {
+  getPaddedAxisLabel,
+  toTitleCase,
+  truncateAxisLabel,
+} from "metabase/visualizations/echarts/cartesian/option/utils";
 import type {
   ComputedVisualizationSettings,
   RenderingContext,
@@ -253,11 +257,16 @@ export const buildNumericDimensionAxis = (
     axisLabel: {
       margin: CHART_STYLE.axisTicksMarginX,
       ...getDimensionTicksDefaultOption(settings, renderingContext),
+      triggerEvent: true,
       formatter: (rawValue: number) => {
         if (isPadded && (rawValue < min || rawValue > max)) {
           return "";
         }
-        return getPaddedAxisLabel(formatter(fromEChartsAxisValue(rawValue)));
+        return getPaddedAxisLabel(
+          truncateAxisLabel(
+            toTitleCase(formatter(fromEChartsAxisValue(rawValue))),
+          ),
+        );
       },
     },
     ...(isPadded
@@ -289,11 +298,14 @@ export const buildTimeSeriesDimensionAxis = (
         CHART_STYLE.axisTicksMarginX +
         (hasTimelineEvents ? CHART_STYLE.timelineEvents.height : 0),
       ...getDimensionTicksDefaultOption(settings, renderingContext),
+      triggerEvent: true,
       formatter: (rawValue: number) => {
         const value = xAxisModel.fromEChartsAxisValue(rawValue);
         if (canRender(value)) {
           return getPaddedAxisLabel(
-            formatter(value.format("YYYY-MM-DDTHH:mm:ss[Z]")),
+            truncateAxisLabel(
+              toTitleCase(formatter(value.format("YYYY-MM-DDTHH:mm:ss[Z]"))),
+            ),
           );
         }
         return "";
@@ -337,13 +349,18 @@ export const buildCategoricalDimensionAxis = (
         renderingContext,
       ),
       interval: () => true,
+      triggerEvent: true,
       formatter: (value: string) => {
         const numberValue = parseNumberValue(value);
         if (column && isNumericBaseType(column) && numberValue !== null) {
-          return getPaddedAxisLabel(formatter(numberValue));
+          return getPaddedAxisLabel(
+            truncateAxisLabel(toTitleCase(formatter(numberValue))),
+          );
         }
 
-        return getPaddedAxisLabel(formatter(value));
+        return getPaddedAxisLabel(
+          truncateAxisLabel(toTitleCase(formatter(value))),
+        );
       },
     },
   };
