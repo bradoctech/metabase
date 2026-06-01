@@ -27,16 +27,24 @@ export const truncateAxisLabel = (label: string): string => {
 };
 
 const LOWERCASE_WORDS = new Set([
-  "de",
-  "da",
-  "do",
-  "das",
-  "dos",
-  "e",
+  // Articles
   "a",
   "o",
   "as",
   "os",
+  "um",
+  "uma",
+  "uns",
+  "umas",
+  "à",
+  "às",
+
+  // Prepositions & contractions
+  "de",
+  "do",
+  "da",
+  "dos",
+  "das",
   "em",
   "no",
   "na",
@@ -44,10 +52,40 @@ const LOWERCASE_WORDS = new Set([
   "nas",
   "ao",
   "aos",
+  "num",
+  "numa",
+  "nuns",
+  "numas",
   "por",
   "para",
+  "pelo",
+  "pelos",
+  "pela",
+  "pelas",
   "com",
   "sem",
+  "sob",
+  "sobre",
+  "entre",
+  "até",
+  "após",
+  "ante",
+  "contra",
+  "via",
+  "per",
+
+  // Conjunctions / connectors
+  "e",
+  "ou",
+  "mas",
+  "nem",
+  "como",
+  "que",
+
+  // Short useful tokens
+  "vs",
+  "v.",
+  "x",
 ]);
 
 export const toTitleCase = (text: string): string =>
