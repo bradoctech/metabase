@@ -1,5 +1,12 @@
 import type { EChartsType } from "echarts/core";
-import { type MouseEvent, useCallback, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useSet } from "react-use";
 
 import { isReducedMotionPreferred } from "metabase/lib/dom";
@@ -15,6 +22,10 @@ import {
 } from "metabase/visualizations/echarts/boxplot";
 import { getChartLayout } from "metabase/visualizations/echarts/cartesian/layout";
 import { getLegendItems } from "metabase/visualizations/echarts/cartesian/model/legend";
+import {
+  toTitleCase,
+  truncateAxisLabel,
+} from "metabase/visualizations/echarts/cartesian/option/utils";
 import {
   useClickedStateTooltipSync,
   useCloseTooltipOnScroll,
@@ -59,6 +70,7 @@ function BoxPlotInner({
 }: VisualizationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<EChartsType>();
+  const [chartDom, setChartDom] = useState<HTMLElement | null>(null);
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
   const [hiddenSeries, { toggle: toggleSeriesVisibility }] = useSet<string>();
 
@@ -178,9 +190,74 @@ function BoxPlotInner({
     onChangeCardAndRun,
   });
 
+  const axisLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const rawValue of chartModel.xValues) {
+      if (rawValue == null) {
+        continue;
+      }
+      const fullText = String(chartModel.xAxisModel.formatter(rawValue));
+      const displayText = truncateAxisLabel(toTitleCase(fullText));
+      if (displayText !== fullText && !map.has(displayText)) {
+        map.set(displayText, fullText);
+      }
+    }
+    return map;
+  }, [chartModel.xAxisModel, chartModel.xValues]);
+
+  const [axisLabelTooltip, setAxisLabelTooltip] = useState<{
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
   const handleInit = useCallback((chart: EChartsType) => {
     chartRef.current = chart;
+    setChartDom(chart.getDom());
   }, []);
+
+  useEffect(() => {
+    const el = chartDom;
+    if (!el) {
+      return;
+    }
+
+    const handleMouseMove = (e: globalThis.MouseEvent) => {
+      const target = e.target as Element;
+      const textEl =
+        target.tagName === "text"
+          ? (target as SVGTextElement)
+          : target.closest("text");
+
+      if (!textEl) {
+        setAxisLabelTooltip(null);
+        return;
+      }
+
+      const content = textEl.textContent?.trim() ?? "";
+      const fullText = axisLabelMap.get(content);
+      if (fullText) {
+        const containerRect = el.getBoundingClientRect();
+        setAxisLabelTooltip({
+          text: fullText,
+          x: e.clientX - containerRect.left,
+          y: e.clientY - containerRect.top,
+        });
+      } else {
+        setAxisLabelTooltip(null);
+      }
+    };
+
+    const handleMouseLeave = () => setAxisLabelTooltip(null);
+
+    el.addEventListener("mousemove", handleMouseMove);
+    el.addEventListener("mouseleave", handleMouseLeave);
+
+    return () => {
+      el.removeEventListener("mousemove", handleMouseMove);
+      el.removeEventListener("mouseleave", handleMouseLeave);
+    };
+  }, [axisLabelMap, chartDom]);
 
   const handleResize = useCallback((width: number, height: number) => {
     setChartSize({ width, height });
@@ -231,7 +308,31 @@ function BoxPlotInner({
           eventHandlers={hasValidOption ? eventHandlers : undefined}
           onInit={handleInit}
           onResize={handleResize}
-        />
+        >
+          {axisLabelTooltip && (
+            <div
+              style={{
+                position: "absolute",
+                left: axisLabelTooltip.x,
+                top: axisLabelTooltip.y - 36,
+                transform: "translateX(-50%)",
+                background: "var(--mb-color-tooltip-background)",
+                color: "var(--mb-color-tooltip-text)",
+                padding: "4px 8px",
+                borderRadius: "4px",
+                fontSize: "12px",
+                pointerEvents: "none",
+                whiteSpace: "nowrap",
+                zIndex: 100,
+                maxWidth: "300px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {axisLabelTooltip.text}
+            </div>
+          )}
+        </ResponsiveEChartsRenderer>
       </CartesianChartLegendLayout>
     </CartesianChartRoot>
   );
