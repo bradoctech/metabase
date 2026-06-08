@@ -66,9 +66,62 @@ export function SmartScalar({
   const { getColor } = useBrowserRenderingContext({ fontFamily });
 
   const insights = rawSeries?.[0].data?.insights;
+  const normalizedSeries = useMemo(() => {
+    try {
+      const cols = series?.[0]?.data?.cols ?? [];
+      const metricColIndex = cols.findIndex(
+        (col) => col.name === settings["scalar.field"],
+      );
+      if (metricColIndex < 0) {
+        return series;
+      }
+      let needsReplace = false;
+      for (const s of series) {
+        if (!("data" in s)) {
+          continue;
+        }
+        const rows = s.data.rows ?? [];
+        for (const row of rows) {
+          if (row[metricColIndex] === null) {
+            needsReplace = true;
+            break;
+          }
+        }
+        if (needsReplace) {
+          break;
+        }
+      }
+      if (!needsReplace) {
+        return series;
+      }
+
+      return series.map((s) => {
+        if (!("data" in s)) {
+          return s;
+        }
+        return {
+          ...s,
+          data: {
+            ...s.data,
+            rows: s.data.rows.map((row) => {
+              if (row[metricColIndex] === null) {
+                const copy = row.slice();
+                copy[metricColIndex] = 0;
+                return copy;
+              }
+              return row;
+            }),
+          },
+        } as typeof s;
+      });
+    } catch {
+      return series;
+    }
+  }, [series, settings]);
+
   const { trend, error } = useMemo(
-    () => computeTrend(series, insights, settings, { getColor }),
-    [series, insights, settings, getColor],
+    () => computeTrend(normalizedSeries, insights, settings, { getColor }),
+    [normalizedSeries, insights, settings, getColor],
   );
 
   useEffect(() => {

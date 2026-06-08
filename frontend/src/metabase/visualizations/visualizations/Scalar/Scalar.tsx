@@ -192,7 +192,11 @@ export class Scalar extends Component<
     }
 
     const columnIndex = this._getColumnIndex(cols, settings);
-    const value = rows[0] && rows[0][columnIndex];
+    const hasNoRows = rows.length === 0;
+    const rawValue = hasNoRows ? undefined : rows[0][columnIndex];
+    // Treat null aggregation results (e.g. SUM of empty period) as 0,
+    // distinguishing them from queries that return no rows at all.
+    const value = !hasNoRows && rawValue === null ? 0 : rawValue;
     const column = cols[columnIndex];
 
     const formatOptions = {
@@ -208,11 +212,12 @@ export class Scalar extends Component<
     const color = getColor(value, segments);
     const tooltipContent = getTooltipContent(segments);
 
-    const { displayValue, fullScalarValue } = compactifyValue(
-      value,
-      width,
-      formatOptions,
-    );
+    const { displayValue, fullScalarValue } = hasNoRows
+      ? {
+          displayValue: t`No results`,
+          fullScalarValue: t`No results`,
+        }
+      : compactifyValue(value, width, formatOptions);
 
     const isClickable = onVisualizationClick != null;
 
