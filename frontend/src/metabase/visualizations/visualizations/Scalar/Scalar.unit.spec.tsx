@@ -23,6 +23,14 @@ const series = (value: number | null = 1.23) =>
     },
   ] as Series;
 
+const emptyRowsSeries = () =>
+  [
+    {
+      card: createMockCard({ display: "scalar" }),
+      data: { rows: [], cols: [createMockColumn({ name: "count" })] },
+    },
+  ] as Series;
+
 const mockedProps = {} as ComponentProps<typeof Scalar>;
 
 const settings = {
@@ -60,7 +68,7 @@ describe("Scalar", () => {
     expect(screen.getByText("12.3k")).toBeInTheDocument();
   });
 
-  it("should render null", () => {
+  it("should render 0 when the metric value is null", () => {
     render(
       <Scalar
         {...mockedProps}
@@ -72,7 +80,22 @@ describe("Scalar", () => {
         visualizationIsClickable={() => false}
       />,
     );
-    expect(screen.getByText("null")).toBeInTheDocument();
+    expect(screen.getByText("0")).toBeInTheDocument();
+  });
+
+  it("should render 'No results' when there are no rows", () => {
+    render(
+      <Scalar
+        {...mockedProps}
+        isDashboard
+        showTitle
+        series={emptyRowsSeries()}
+        rawSeries={emptyRowsSeries()}
+        settings={settings}
+        visualizationIsClickable={() => false}
+      />,
+    );
+    expect(screen.getByText("No results")).toBeInTheDocument();
   });
 
   it("should not apply text-overflow ellipsis to the container", () => {

@@ -60,7 +60,7 @@ import type {
 } from "metabase/visualizations/types";
 import type { ClickObject, OrderByDirection } from "metabase-lib";
 import type Question from "metabase-lib/v1/Question";
-import { isFK, isID, isPK } from "metabase-lib/v1/types/utils/isa";
+import { isFK, isID, isNumeric, isPK } from "metabase-lib/v1/types/utils/isa";
 import type {
   ColumnSettings,
   DatasetColumn,
@@ -257,7 +257,11 @@ export const TableInteractiveInner = forwardRef(function TableInteractiveInner(
         (untranslatedValue, rowIndex) => {
           const clicked = getCellClickedObject(columnIndex, rowIndex);
 
-          const value = tc(untranslatedValue);
+          const resolvedRaw =
+            untranslatedValue === null && isNumeric(col)
+              ? 0
+              : untranslatedValue;
+          const value = tc(resolvedRaw);
 
           return formatValue(value, {
             ...columnSettings,
@@ -273,7 +277,11 @@ export const TableInteractiveInner = forwardRef(function TableInteractiveInner(
       const plain: PlainCellFormatter<RowValue> = memoize(
         (untranslatedValue, rowIndex) => {
           const clicked = getCellClickedObject(columnIndex, rowIndex);
-          const value = tc(untranslatedValue);
+          const resolvedRaw =
+            untranslatedValue === null && isNumeric(col)
+              ? 0
+              : untranslatedValue;
+          const value = tc(resolvedRaw);
 
           return String(
             formatValue(value, {
