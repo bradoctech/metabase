@@ -72,7 +72,11 @@ export const getYAxisRange = (
 };
 
 export const getAxisNameDefaultOption = (
-  { getColor, fontFamily, theme }: RenderingContext,
+  {
+    getColor,
+    fontFamily,
+    // theme
+  }: RenderingContext,
   nameGap: number,
   name: string | undefined,
   rotate?: number,
@@ -82,22 +86,24 @@ export const getAxisNameDefaultOption = (
   nameLocation: "middle",
   nameRotate: rotate,
   nameTextStyle: {
-    color: getColor("text-primary"),
-    fontSize: theme.cartesian.label.fontSize,
+    color: getColor("text-secondary"),
+    // fontSize: theme.cartesian.label.fontSize,
+    fontSize: "0.75rem",
     fontWeight: CHART_STYLE.axisName.weight,
     fontFamily,
   },
 });
 
 export const getTicksDefaultOption = ({
-  theme,
+  // theme,
   getColor,
   fontFamily,
 }: RenderingContext) => {
   return {
     hideOverlap: true,
-    color: getColor("text-primary"),
-    fontSize: theme.cartesian.label.fontSize,
+    color: getColor("text-secondary"),
+    // fontSize: theme.cartesian.label.fontSize,
+    fontSize: "0.75rem",
     fontWeight: CHART_STYLE.axisTicks.weight,
     fontFamily,
   };

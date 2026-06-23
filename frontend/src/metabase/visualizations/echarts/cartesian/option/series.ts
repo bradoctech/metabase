@@ -287,7 +287,8 @@ export const buildEChartsLabelOptions = (
   chartDataDensity?: ChartDataDensity,
   position?: LabelOption["position"],
 ): SeriesLabelOption => {
-  const { fontSize } = renderingContext.theme.cartesian.label;
+  // const { fontSize } = renderingContext.theme.cartesian.label;
+  const { fontSize } = "11px";
 
   return {
     show: !!formatter,
@@ -298,6 +299,8 @@ export const buildEChartsLabelOptions = (
     fontWeight: CHART_STYLE.seriesLabels.weight,
     fontSize,
     color: renderingContext.getColor("text-primary"),
+    // Este é dos eixos, precisa ser #000000 e não #808080;
+    // color: renderingContext.getColor("text-secondary"),
     textBorderColor: renderingContext.getColor("background-primary"),
     textBorderWidth: 3,
     formatter:
@@ -386,8 +389,10 @@ export const buildEChartsStackLabelOptions = (
     opacity: 1,
     show: true,
     fontFamily: renderingContext.fontFamily,
-    fontWeight: CHART_STYLE.seriesLabels.weight,
-    fontSize: CHART_STYLE.seriesLabels.size,
+    // fontWeight: CHART_STYLE.seriesLabels.weight,
+    fontWeight: 600,
+    // fontSize: CHART_STYLE.seriesLabels.size,
+    fontSize: "11px",
     color: getTextColorForBackground(
       seriesModel.color,
       renderingContext.getColor,
@@ -436,9 +441,13 @@ function getDataLabelSeriesOption(
       position,
       formatter,
       fontFamily: renderingContext.fontFamily,
-      fontWeight: CHART_STYLE.seriesLabels.weight,
-      fontSize: CHART_STYLE.seriesLabels.size,
+      // fontWeight: CHART_STYLE.seriesLabels.weight,
+      fontWeight: 600,
+      // fontSize: CHART_STYLE.seriesLabels.size,
+      fontSize: "11px",
       color: renderingContext.getColor("text-primary"),
+      // Este é dos eixos, precisa ser #000000 e não #808080;
+      // color: renderingContext.getColor("text-secondary"),
       textBorderColor: renderingContext.getColor("background-primary"),
       textBorderWidth: 3,
     },

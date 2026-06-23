@@ -144,12 +144,12 @@ export function Progress(props: VisualizationProps) {
           CS.flexColumn,
           CS.justifyCenter,
         )}
-        style={{ padding: 10, paddingTop: 0 }}
+        style={{ height: "calc(100% - 35px)", padding: 20, paddingTop: 0 }}
       >
         <div
           ref={containerRef}
           className={cx(CS.relative, CS.textBold, CS.textMedium)}
-          style={{ height: 20 }}
+          style={{ height: 20, top: -10 }}
         >
           <div ref={labelRef} style={{ position: "absolute" }}>
             {hasValidValue ? formatValue(value, columnSettings) : t`No data`}

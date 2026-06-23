@@ -12,8 +12,8 @@ export const LegendCaptionRoot = styled.div`
   min-width: 0;
 `;
 
-export const LEGEND_LABEL_FONT_SIZE = "0.875rem";
-export const LEGEND_LABEL_FONT_WEIGHT = 700;
+export const LEGEND_LABEL_FONT_SIZE = "0.75rem";
+export const LEGEND_LABEL_FONT_WEIGHT = 600;
 
 export const LegendLabel = styled(BaseLegendLabel)`
   overflow: hidden;
@@ -22,8 +22,15 @@ export const LegendLabel = styled(BaseLegendLabel)`
   display: flex;
   flex-direction: row;
   align-items: center;
-  font-size: ${LEGEND_LABEL_FONT_SIZE};
-  font-weight: ${LEGEND_LABEL_FONT_WEIGHT};
+
+  &&& {
+    font-size: ${LEGEND_LABEL_FONT_SIZE};
+    font-weight: ${LEGEND_LABEL_FONT_WEIGHT};
+    line-height: 0.9rem;
+    letter-spacing: -0.5px;
+    vertical-align: middle;
+    color: var(--mb-color-sp-color-border);
+  }
 `;
 
 export const LegendLabelIcon = styled(Icon)`

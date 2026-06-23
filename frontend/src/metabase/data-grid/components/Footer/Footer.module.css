@@ -1,6 +1,6 @@
 .root {
   display: flex;
-  padding: 0 0.5rem;
+  padding: 0 1.25rem;
   flex-shrink: 0;
   font-weight: 600;
   align-items: center;
@@ -9,5 +9,5 @@
 }
 
 .rowsCount {
-  padding-right: 0.5rem;
+  padding-right: 1.25rem;
 }
