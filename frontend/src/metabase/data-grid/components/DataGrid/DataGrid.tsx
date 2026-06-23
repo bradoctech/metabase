@@ -245,7 +245,14 @@ export const DataGrid = function DataGrid<TData>({
         data-testid={`${rowsSection}-center-quadrant`}
         style={{
           minHeight,
-          width: `${columnVirtualizer.getTotalSize()}px`,
+          width: `${Math.max(
+            0,
+            columnVirtualizer.getTotalSize() -
+              (20 * 2 +
+                (hasAddColumnButton && isAddColumnButtonSticky
+                  ? ADD_COLUMN_BUTTON_WIDTH
+                  : 0)),
+          )}px`,
           backgroundColor,
         }}
       >
@@ -291,10 +298,12 @@ export const DataGrid = function DataGrid<TData>({
             style={{
               backgroundColor,
               color: theme?.cell?.textColor,
+              boxSizing: "border-box",
+              paddingLeft: "1.25rem",
               paddingRight:
                 hasAddColumnButton && isAddColumnButtonSticky
-                  ? `${ADD_COLUMN_BUTTON_WIDTH}px`
-                  : 0,
+                  ? `calc(1.25rem + ${ADD_COLUMN_BUTTON_WIDTH}px)`
+                  : "1.25rem",
               ...styles?.tableGrid,
             }}
             onWheel={onWheel}
