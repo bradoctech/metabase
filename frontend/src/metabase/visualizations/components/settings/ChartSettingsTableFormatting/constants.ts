@@ -1,14 +1,12 @@
-import {
-  getAccentColors,
-  getStatusColorRanges,
-} from "metabase/ui/colors/groups";
+import { SP_PALETTE_COLORS } from "metabase/ui/colors/constants/accent-colors";
+import { getStatusColorRanges } from "metabase/ui/colors/groups";
 import type {
   ColumnRangeFormattingSetting,
   ColumnSingleFormattingSetting,
 } from "metabase-types/api";
 
 // TODO
-export const COLORS = getAccentColors({ dark: false });
+export const COLORS = SP_PALETTE_COLORS;
 export const COLOR_RANGES = getStatusColorRanges();
 
 export const DEFAULTS_BY_TYPE: {

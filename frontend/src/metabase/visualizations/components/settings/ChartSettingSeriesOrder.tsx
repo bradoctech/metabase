@@ -11,7 +11,7 @@ import { getEventTarget } from "metabase/lib/dom";
 import { isEmpty } from "metabase/lib/validate";
 import { Box, Button, Flex, Group, Icon, Select, Text } from "metabase/ui";
 import { color } from "metabase/ui/colors";
-import { getAccentColors } from "metabase/ui/colors/groups";
+import { SP_PALETTE_COLORS } from "metabase/ui/colors/constants/accent-colors";
 import type { AccentColorOptions } from "metabase/ui/colors/types";
 import type { Series } from "metabase-types/api";
 
@@ -185,7 +185,7 @@ export const ChartSettingSeriesOrder = ({
             <Group p={4} gap="sm">
               <ColorSelector
                 value={otherColor ?? color("text-tertiary")}
-                colors={getAccentColors()}
+                colors={SP_PALETTE_COLORS}
                 onChange={onOtherColorChange}
                 pillSize="small"
               />
