@@ -15,12 +15,9 @@ import { ChartRenderingErrorBoundary } from "metabase/visualizations/components/
 import { DataPointsVisiblePopover } from "metabase/visualizations/components/DataPointsVisiblePopover/DataPointsVisiblePopover";
 import { ResponsiveEChartsRenderer } from "metabase/visualizations/components/EChartsRenderer";
 import { LegendCaption } from "metabase/visualizations/components/legend/LegendCaption";
-import { X_AXIS_DATA_KEY } from "metabase/visualizations/echarts/cartesian/constants/dataset";
+// import { X_AXIS_DATA_KEY } from "metabase/visualizations/echarts/cartesian/constants/dataset";
 import { getLegendItems } from "metabase/visualizations/echarts/cartesian/model/legend";
-import {
-  toTitleCase,
-  truncateAxisLabel,
-} from "metabase/visualizations/echarts/cartesian/option/utils";
+import { getOriginalAxisLabel } from "metabase/visualizations/echarts/cartesian/option/utils";
 import {
   useCartesianChartSeriesColorsClasses,
   useCloseTooltipOnScroll,
@@ -31,7 +28,7 @@ import {
   CartesianChartRoot,
 } from "metabase/visualizations/visualizations/CartesianChart/CartesianChart.styled";
 import { useChartEvents } from "metabase/visualizations/visualizations/CartesianChart/use-chart-events";
-import type { RowValue } from "metabase-types/api";
+// import type { RowValue } from "metabase-types/api";
 
 import { useChartDebug } from "./use-chart-debug";
 import { useModelsAndOption } from "./use-models-and-option";
@@ -144,26 +141,6 @@ function CartesianChartInner(props: VisualizationProps) {
     props,
   );
 
-  const axisLabelMap = useMemo(() => {
-    const map = new Map<string, string>();
-    const { xAxisModel, dataset } = chartModel;
-    if (!("formatter" in xAxisModel)) {
-      return map;
-    }
-    for (const row of dataset) {
-      const rawValue = row[X_AXIS_DATA_KEY];
-      if (rawValue == null) {
-        continue;
-      }
-      const fullText = String(xAxisModel.formatter(rawValue as RowValue));
-      const displayText = truncateAxisLabel(toTitleCase(fullText));
-      if (displayText !== fullText && !map.has(displayText)) {
-        map.set(displayText, fullText);
-      }
-    }
-    return map;
-  }, [chartModel]);
-
   const [axisLabelTooltip, setAxisLabelTooltip] = useState<{
     text: string;
     x: number;
@@ -187,7 +164,7 @@ function CartesianChartInner(props: VisualizationProps) {
         return;
       }
       const content = textEl.textContent?.trim() ?? "";
-      const fullText = axisLabelMap.get(content);
+      const fullText = getOriginalAxisLabel(content);
       if (fullText) {
         const containerRect = el.getBoundingClientRect();
         setAxisLabelTooltip({
@@ -209,7 +186,7 @@ function CartesianChartInner(props: VisualizationProps) {
       el.removeEventListener("mousemove", handleMouseMove);
       el.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, [axisLabelMap, chartDom]);
+  }, [chartDom]);
 
   const handleResize = useCallback((width: number, height: number) => {
     setChartSize({ width, height });

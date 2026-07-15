@@ -17,13 +17,30 @@ export function getSeriesYAxisIndex(
 export const getPaddedAxisLabel = (label: string | number): string =>
   ` ${label} `; // spaces force padding between ticks
 
-export const AXIS_LABEL_MAX_CHARS = 15;
+export const AXIS_LABEL_MAX_CHARS = 10;
 
 export const truncateAxisLabel = (label: string): string => {
   if (label.length <= AXIS_LABEL_MAX_CHARS) {
     return label;
   }
   return label.slice(0, AXIS_LABEL_MAX_CHARS) + "...";
+};
+
+const originalAxisLabels = new Map<string, string>();
+
+export const registerAxisLabel = (
+  displayText: string,
+  fullText: string,
+): void => {
+  if (displayText && fullText && displayText !== fullText) {
+    originalAxisLabels.set(displayText, fullText);
+  }
+};
+
+export const getOriginalAxisLabel = (
+  displayText: string,
+): string | undefined => {
+  return originalAxisLabels.get(displayText);
 };
 
 const LOWERCASE_WORDS = new Set([

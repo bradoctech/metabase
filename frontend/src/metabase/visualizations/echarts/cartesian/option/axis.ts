@@ -13,6 +13,7 @@ import type {
 } from "metabase/visualizations/echarts/cartesian/model/types";
 import {
   getPaddedAxisLabel,
+  registerAxisLabel,
   toTitleCase,
   truncateAxisLabel,
 } from "metabase/visualizations/echarts/cartesian/option/utils";
@@ -268,11 +269,11 @@ export const buildNumericDimensionAxis = (
         if (isPadded && (rawValue < min || rawValue > max)) {
           return "";
         }
-        return getPaddedAxisLabel(
-          truncateAxisLabel(
-            toTitleCase(formatter(fromEChartsAxisValue(rawValue))),
-          ),
-        );
+        const fullText = formatter(fromEChartsAxisValue(rawValue));
+        const titleCased = toTitleCase(fullText);
+        const truncated = truncateAxisLabel(titleCased);
+        registerAxisLabel(truncated, fullText);
+        return getPaddedAxisLabel(truncated);
       },
     },
     ...(isPadded
@@ -308,11 +309,11 @@ export const buildTimeSeriesDimensionAxis = (
       formatter: (rawValue: number) => {
         const value = xAxisModel.fromEChartsAxisValue(rawValue);
         if (canRender(value)) {
-          return getPaddedAxisLabel(
-            truncateAxisLabel(
-              toTitleCase(formatter(value.format("YYYY-MM-DDTHH:mm:ss[Z]"))),
-            ),
-          );
+          const fullText = formatter(value.format("YYYY-MM-DDTHH:mm:ss[Z]"));
+          const titleCased = toTitleCase(fullText);
+          const truncated = truncateAxisLabel(titleCased);
+          registerAxisLabel(truncated, fullText);
+          return getPaddedAxisLabel(truncated);
         }
         return "";
       },
@@ -358,15 +359,16 @@ export const buildCategoricalDimensionAxis = (
       triggerEvent: true,
       formatter: (value: string) => {
         const numberValue = parseNumberValue(value);
+        let fullText: string;
         if (column && isNumericBaseType(column) && numberValue !== null) {
-          return getPaddedAxisLabel(
-            truncateAxisLabel(toTitleCase(formatter(numberValue))),
-          );
+          fullText = formatter(numberValue);
+        } else {
+          fullText = formatter(value);
         }
-
-        return getPaddedAxisLabel(
-          truncateAxisLabel(toTitleCase(formatter(value))),
-        );
+        const titleCased = toTitleCase(fullText);
+        const truncated = truncateAxisLabel(titleCased);
+        registerAxisLabel(truncated, fullText);
+        return getPaddedAxisLabel(truncated);
       },
     },
   };
