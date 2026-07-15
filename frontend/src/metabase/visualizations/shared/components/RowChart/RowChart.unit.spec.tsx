@@ -1,4 +1,3 @@
-import userEvent from "@testing-library/user-event";
 import type { NumberValue } from "d3-scale";
 
 import { render, screen } from "__support__/ui";
@@ -60,7 +59,7 @@ const defaultProps = {
 };
 
 const setup = (props?: Partial<RowChartProps<TestDatum>>) => {
-  const { container } = render(<RowChart {...defaultProps} {...props} />);
+  render(<RowChart {...defaultProps} {...props} />);
   const bars = screen
     .getAllByRole("graphics-symbol")
     .filter((el) => el.getAttribute("aria-roledescription") === "bar");
@@ -69,47 +68,36 @@ const setup = (props?: Partial<RowChartProps<TestDatum>>) => {
     .queryAllByRole("graphics-symbol")
     .find((el) => el.getAttribute("aria-roledescription") === "goal line");
 
-  const xTicks = Array.from(
-    container // eslint-disable-line testing-library/no-container
-      .getElementsByClassName("visx-axis-bottom")[0] // eslint-disable-line testing-library/no-node-access
-      ?.getElementsByTagName("tspan") || [], // eslint-disable-line testing-library/no-node-access
-  ).map((tspan) => tspan.textContent);
-
-  const yTicks = Array.from(
-    container // eslint-disable-line testing-library/no-container
-      .getElementsByClassName("visx-axis-left")[0] // eslint-disable-line testing-library/no-node-access
-      ?.getElementsByTagName("tspan") || [], // eslint-disable-line testing-library/no-node-access
-  ).map((tspan) => tspan.textContent);
-
   return {
     bars,
     dataLabels,
     goalLine,
-    xTicks,
-    yTicks,
   };
 };
 
 describe("RowChart", () => {
   describe("axes", () => {
     it("should render Y-ticks", () => {
-      const { yTicks } = setup({ series: [series1] });
+      setup({ series: [series1] });
 
-      expect(yTicks).toStrictEqual(["foo", "bar", "baz"]);
+      expect(screen.getByText("Foo")).toBeInTheDocument();
+      expect(screen.getByText("Bar")).toBeInTheDocument();
+      expect(screen.getByText("Baz")).toBeInTheDocument();
     });
 
     it("should not render Y-ticks when disabled", () => {
-      const { yTicks } = setup({
+      setup({
         series: [series1],
         hasYAxis: false,
       });
 
-      expect(yTicks).toStrictEqual([]);
+      expect(screen.queryByText("Foo")).not.toBeInTheDocument();
     });
 
     it("should render the last tick", () => {
-      const { xTicks } = setup({ series: [series1], xValueRange: [0, 1] });
-      expect(xTicks).toStrictEqual([
+      setup({ series: [series1], xValueRange: [0, 1] });
+
+      [
         "0",
         "0.1",
         "0.2",
@@ -121,34 +109,28 @@ describe("RowChart", () => {
         "0.8",
         "0.9",
         "1",
-      ]);
+      ].forEach((tick) => expect(screen.getByText(tick)).toBeInTheDocument());
     });
 
     it("should render nice values for X-ticks", () => {
-      const { xTicks } = setup({ series: [series1] });
+      setup({ series: [series1] });
 
-      expect(xTicks).toStrictEqual([
-        "0",
-        "50",
-        "100",
-        "150",
-        "200",
-        "250",
-        "300",
-      ]);
+      ["0", "50", "100", "150", "200", "250", "300"].forEach((tick) =>
+        expect(screen.getByText(tick)).toBeInTheDocument(),
+      );
     });
 
     it("should not render X-ticks when disabled", () => {
-      const { xTicks } = setup({
+      setup({
         series: [series1],
         hasXAxis: false,
       });
 
-      expect(xTicks).toStrictEqual([]);
+      expect(screen.queryByText("0")).not.toBeInTheDocument();
     });
 
     it("should apply formatting", () => {
-      const { xTicks, yTicks } = setup({
+      setup({
         series: [series1],
         tickFormatters: {
           xTickFormatter: (value: string) => `x_${value}`,
@@ -156,16 +138,58 @@ describe("RowChart", () => {
         },
       });
 
-      expect(xTicks).toStrictEqual([
-        "x_0",
-        "x_50",
-        "x_100",
-        "x_150",
-        "x_200",
-        "x_250",
-        "x_300",
-      ]);
-      expect(yTicks).toStrictEqual(["y_foo", "y_bar", "y_baz"]);
+      ["x_0", "x_50", "x_100", "x_150", "x_200", "x_250", "x_300"].forEach(
+        (tick) => expect(screen.getByText(tick)).toBeInTheDocument(),
+      );
+      expect(screen.getByText("Y_foo")).toBeInTheDocument();
+      expect(screen.getByText("Y_bar")).toBeInTheDocument();
+      expect(screen.getByText("Y_baz")).toBeInTheDocument();
+    });
+
+    it("should title case and truncate long Y-axis labels", () => {
+      const longSeries = {
+        seriesKey: "series 1",
+        seriesName: "Series 1",
+        xAccessor: (datum: TestDatum) => datum.x,
+        yAccessor: (datum: TestDatum) => datum.y,
+      };
+      setup({
+        width: 400,
+        height: 200,
+        data: [
+          { y: "verylonglabelname", x: 100, x1: 200 },
+          { y: "anotherverylonglabel", x: 200, x1: 400 },
+        ],
+        series: [longSeries],
+      });
+
+      expect(screen.getByText("Verylo...")).toBeInTheDocument();
+      expect(screen.getByText("Anothe...")).toBeInTheDocument();
+    });
+
+    it("should set the full Y-axis label as a title attribute on tick labels", () => {
+      const longSeries = {
+        seriesKey: "series 1",
+        seriesName: "Series 1",
+        xAccessor: (datum: TestDatum) => datum.x,
+        yAccessor: (datum: TestDatum) => datum.y,
+      };
+      render(
+        <RowChart
+          {...defaultProps}
+          width={400}
+          height={200}
+          data={[
+            { y: "verylonglabelname", x: 100, x1: 200 },
+            { y: "anotherverylonglabel", x: 200, x1: 400 },
+          ]}
+          series={[longSeries]}
+        />,
+      );
+
+      const firstTickText = screen.getByText("Verylo...");
+
+      expect(firstTickText).toHaveAttribute("title", "Verylonglabelname");
     });
 
     it("should render labels when specified", () => {
