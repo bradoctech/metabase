@@ -19,7 +19,7 @@ import { LegendHorizontal } from "./LegendHorizontal";
 import { LegendVertical } from "./LegendVertical";
 
 const GRID_ASPECT_RATIO = 4 / 3;
-const PADDING = 20;
+const PADDING = 8;
 
 const DEFAULT_GRID_SIZE = 100;
 export const HIDE_HORIZONTAL_LEGEND_THRESHOLD = 180;
