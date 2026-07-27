@@ -246,14 +246,7 @@ export const DataGrid = function DataGrid<TData>({
         data-testid={`${rowsSection}-center-quadrant`}
         style={{
           minHeight,
-          width: `${Math.max(
-            0,
-            columnVirtualizer.getTotalSize() -
-              (GRID_HORIZONTAL_PADDING * 2 +
-                (hasAddColumnButton && isAddColumnButtonSticky
-                  ? ADD_COLUMN_BUTTON_WIDTH
-                  : 0)),
-          )}px`,
+          width: `${columnVirtualizer.getTotalSize()}px`,
           backgroundColor,
         }}
       >
