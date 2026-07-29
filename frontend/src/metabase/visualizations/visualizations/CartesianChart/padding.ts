@@ -19,7 +19,6 @@ export const getChartPadding = ({
     return "1rem 1rem 1rem 2rem";
   }
 
-  // Use larger padding inside DashCards to increase spacing around charts.
-  // 1.5rem ~= 24px (assuming 16px root font size).
-  return "1.25rem";
+  // 0.5rem = 8px (assuming 16px root font size).
+  return "0.5rem";
 };

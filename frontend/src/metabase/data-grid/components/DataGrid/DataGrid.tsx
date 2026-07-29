@@ -15,6 +15,7 @@ import { getScrollBarSize } from "metabase/lib/dom";
 import {
   ADD_COLUMN_BUTTON_WIDTH,
   DEFAULT_FONT_SIZE,
+  GRID_HORIZONTAL_PADDING,
   HEADER_HEIGHT,
   PINNED_BORDER_SEPARATOR_WIDTH,
 } from "../../constants";
@@ -245,14 +246,7 @@ export const DataGrid = function DataGrid<TData>({
         data-testid={`${rowsSection}-center-quadrant`}
         style={{
           minHeight,
-          width: `${Math.max(
-            0,
-            columnVirtualizer.getTotalSize() -
-              (20 * 2 +
-                (hasAddColumnButton && isAddColumnButtonSticky
-                  ? ADD_COLUMN_BUTTON_WIDTH
-                  : 0)),
-          )}px`,
+          width: `${columnVirtualizer.getTotalSize()}px`,
           backgroundColor,
         }}
       >
@@ -299,11 +293,11 @@ export const DataGrid = function DataGrid<TData>({
               backgroundColor,
               color: theme?.cell?.textColor,
               boxSizing: "border-box",
-              paddingLeft: "1.25rem",
+              paddingLeft: `${GRID_HORIZONTAL_PADDING}px`,
               paddingRight:
                 hasAddColumnButton && isAddColumnButtonSticky
-                  ? `calc(1.25rem + ${ADD_COLUMN_BUTTON_WIDTH}px)`
-                  : "1.25rem",
+                  ? `calc(${GRID_HORIZONTAL_PADDING}px + ${ADD_COLUMN_BUTTON_WIDTH}px)`
+                  : `${GRID_HORIZONTAL_PADDING}px`,
               ...styles?.tableGrid,
             }}
             onWheel={onWheel}

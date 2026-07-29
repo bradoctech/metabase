@@ -144,7 +144,7 @@ export function Progress(props: VisualizationProps) {
           CS.flexColumn,
           CS.justifyCenter,
         )}
-        style={{ height: "calc(100% - 35px)", padding: 20, paddingTop: 0 }}
+        style={{ height: "calc(100% - 35px)", padding: 8, paddingTop: 0 }}
       >
         <div
           ref={containerRef}

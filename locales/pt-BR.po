@@ -15054,7 +15054,7 @@ msgstr "Falha ao fazer pull do remoto"
 
 #: enterprise/frontend/src/metabase-enterprise/remote_sync/components/GitSyncControls/GitSyncOptionsDropdown.tsx:29
 msgid "Failed to check for changes — check your authentication token"
-msgstr ""
+msgstr "Falha ao verificar alterações — confira seu token de autenticação"
 
 #: enterprise/frontend/src/metabase-enterprise/remote_sync/components/GitSyncControls/GitSyncOptionsDropdown.tsx:40
 #: enterprise/frontend/src/metabase-enterprise/remote_sync/components/GitSyncControls/GitSyncOptionsDropdown.tsx:50
@@ -21181,7 +21181,7 @@ msgstr "Encontrar ou criar uma branch..."
 
 #: enterprise/frontend/src/metabase-enterprise/remote_sync/components/GitSyncControls/BranchDropdown.tsx:127
 msgid "Failed to load branches — check your authentication token"
-msgstr ""
+msgstr "Falha ao carregar branches — confira seu token de autenticação"
 
 #: enterprise/frontend/src/metabase-enterprise/remote_sync/components/GitSyncControls/BranchDropdown.tsx:136
 msgid "No branches found"
@@ -26269,7 +26269,7 @@ msgstr "Filtro desconhecido"
 
 #: frontend/src/metabase/metrics-viewer/components/MetricsViewerTabs/MetricsViewerTabContent/MetricsViewerTabContent.tsx:87
 msgid "Non-numeric metrics are not supported"
-msgstr ""
+msgstr "Métricas não numéricas não são suportadas"
 
 #: frontend/src/metabase/metrics-viewer/components/MetricsViewerTabs/MetricsViewerTabs.tsx:87
 #, javascript-format

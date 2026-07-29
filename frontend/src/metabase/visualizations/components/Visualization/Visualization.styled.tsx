@@ -17,7 +17,7 @@ export const VisualizationRoot = styled.div`
 // `;
 
 export const VisualizationHeader = styled.div`
-  padding: 1.25rem 1.25rem 0.375rem 1.25rem;
+  padding: 0.5rem 0.5rem 0.375rem 0.5rem;
   flex-shrink: 0;
 `;
 
