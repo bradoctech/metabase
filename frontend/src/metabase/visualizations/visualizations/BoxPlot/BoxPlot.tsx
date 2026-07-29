@@ -22,10 +22,7 @@ import {
 } from "metabase/visualizations/echarts/boxplot";
 import { getChartLayout } from "metabase/visualizations/echarts/cartesian/layout";
 import { getLegendItems } from "metabase/visualizations/echarts/cartesian/model/legend";
-import {
-  toTitleCase,
-  truncateAxisLabel,
-} from "metabase/visualizations/echarts/cartesian/option/utils";
+import { getOriginalAxisLabel } from "metabase/visualizations/echarts/cartesian/option/utils";
 import {
   useClickedStateTooltipSync,
   useCloseTooltipOnScroll,
@@ -190,21 +187,6 @@ function BoxPlotInner({
     onChangeCardAndRun,
   });
 
-  const axisLabelMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const rawValue of chartModel.xValues) {
-      if (rawValue == null) {
-        continue;
-      }
-      const fullText = String(chartModel.xAxisModel.formatter(rawValue));
-      const displayText = truncateAxisLabel(toTitleCase(fullText));
-      if (displayText !== fullText && !map.has(displayText)) {
-        map.set(displayText, fullText);
-      }
-    }
-    return map;
-  }, [chartModel.xAxisModel, chartModel.xValues]);
-
   const [axisLabelTooltip, setAxisLabelTooltip] = useState<{
     text: string;
     x: number;
@@ -235,7 +217,7 @@ function BoxPlotInner({
       }
 
       const content = textEl.textContent?.trim() ?? "";
-      const fullText = axisLabelMap.get(content);
+      const fullText = getOriginalAxisLabel(content);
       if (fullText) {
         const containerRect = el.getBoundingClientRect();
         setAxisLabelTooltip({
@@ -257,7 +239,7 @@ function BoxPlotInner({
       el.removeEventListener("mousemove", handleMouseMove);
       el.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, [axisLabelMap, chartDom]);
+  }, [chartDom]);
 
   const handleResize = useCallback((width: number, height: number) => {
     setChartSize({ width, height });
