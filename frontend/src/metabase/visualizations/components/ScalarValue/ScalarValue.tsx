@@ -49,7 +49,7 @@ export const ScalarValue = ({
       text: value,
       targetHeight: height,
       targetWidth: width,
-      fontFamily: fontFamily ?? "Lato",
+      fontFamily: fontFamily ?? "Rawline",
       fontWeight: 700,
       unit: "rem",
       step: 0.2,

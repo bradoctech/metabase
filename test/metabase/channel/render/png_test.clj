@@ -31,7 +31,7 @@
   (testing "Are the correct fonts available for rendering?"
     (is (contains?
          (into #{} (map #(.getName ^Font %)) (.getAllFonts (GraphicsEnvironment/getLocalGraphicsEnvironment)))
-         "Lato Regular"))))
+         "Rawline"))))
 
 (defn- bytes->image
   [bytes]
@@ -42,7 +42,7 @@
   [content width]
   (-> [:html
        [:body {:style (style/style
-                       {:font-family      "Lato, 'Helvetica Neue', 'Lucida Grande', sans-serif"
+                       {:font-family      "Rawline, 'Helvetica Neue', 'Lucida Grande', sans-serif"
                         :margin           0
                         :padding          0
                         :background-color :white})}
@@ -57,25 +57,25 @@
       (png/render-html-to-png width)
       bytes->image))
 
-(deftest wrap-non-lato-characters-test
-  (testing "HTML Content inside tables with characters not supported by the Lato font are wrapped in a span."
+(deftest wrap-non-app-font-characters-test
+  (testing "HTML Content inside tables with characters not supported by the app font are wrapped in a span."
     (is (= [:td {:not-wrapped-in-here "안녕"}
             [:span {:style "font-family: sans-serif;"} "안녕"]]
-           (#'png/wrap-non-lato-chars [:td {:not-wrapped-in-here "안녕"} "안녕"])))
+           (#'png/wrap-non-app-font-chars [:td {:not-wrapped-in-here "안녕"} "안녕"])))
     (is (= [:table
             [:tr
              [:td "this is all Lato-compatible, baby!"]
              [:td "What do you think about різні шрифти в одному документі?"]
              [:td [:span {:style "font-family: sans-serif;"} "This part's English. This part is 英語ではありません"]]]]
-           (#'png/wrap-non-lato-chars
+           (#'png/wrap-non-app-font-chars
             [:table
              [:tr
               [:td "this is all Lato-compatible, baby!"]
               [:td "What do you think about різні шрифти в одному документі?"]
               [:td "This part's English. This part is 英語ではありません"]]])))))
 
-(deftest non-lato-characters-can-render-test
-  (testing "Strings containing characters that are not included in the Lato font can still be rendered."
+(deftest non-app-font-characters-can-render-test
+  (testing "Strings containing characters that are not included in the app font can still be rendered."
     (let [content                       [:span "안녕"]
           ^BufferedImage broken-render  (render-without-wrapping content 200)
           ^BufferedImage working-render (render-with-wrapping content 200)]

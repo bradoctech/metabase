@@ -173,7 +173,7 @@ export const createMockSettings = (
   "allowed-iframe-hosts": "*",
   "anon-tracking-enabled": false,
   "application-colors": {},
-  "application-font": "Lato",
+  "application-font": "Rawline",
   "application-font-files": [],
   // eslint-disable-next-line metabase/no-literal-metabase-strings -- This is a mock
   "application-name": "Metabase",

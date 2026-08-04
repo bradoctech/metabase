@@ -78,37 +78,38 @@
   [^Font font s]
   (neg? (.canDisplayUpTo font s)))
 
-(def ^:private get-lato
-  (letfn [(get-lato* []
-            (let [lato-names #{"Lato Regular" "Lato-Regular" "lato" "lato-regular"}
+(def ^:private get-app-font
+  (letfn [(get-app-font* []
+            (let [font-names #{"Rawline" "Rawline Regular" "Rawline-Regular" "rawline" "rawline-regular"
+                               "Lato Regular" "Lato-Regular" "lato" "lato-regular"}
                   env        (GraphicsEnvironment/getLocalGraphicsEnvironment)
                   fonts      (.getAllFonts env)
-                  font       ^Font (some #(when (lato-names (.getName ^Font %)) %) fonts)]
+                  font       ^Font (some #(when (font-names (.getName ^Font %)) %) fonts)]
               font))]
-    (memoize get-lato*)))
+    (memoize get-app-font*)))
 
-(defn- lato-can-render?
+(defn- app-font-can-render?
   [s]
-  (let [lato (get-lato)]
-    (when lato
-      (font-can-fully-render? lato s))))
+  (let [font (get-app-font)]
+    (when font
+      (font-can-fully-render? font s))))
 
-(defn- wrap-non-lato-chars
-  "Wrap characters not supported by the installed Lato font in a span so that we can explicitly set the font to sans-serif.
+(defn- wrap-non-app-font-chars
+  "Wrap characters not supported by the installed app font in a span so that we can explicitly set the font to sans-serif.
   We do this to work around unexpected font-fallback behaviours in CSSBox.
 
-  Lato is properly loaded/registered in `metabase.channel.render.style/regiter-fonts!`, which means the
-  java.awt GraphicsEnvironment has Lato available as a Physical font. The loaded physical font does not contain
+  Rawline is properly loaded/registered in `metabase.channel.render.style/register-fonts!`, which means the
+  java.awt GraphicsEnvironment has Rawline available as a Physical font. The loaded physical font does not contain
   glyphs to properly render many international characters, and instead of falling back to another font on a per-glyph basis,
   it simply renders a '[?]', which is no good.
 
-  If a given string, inside a `transformable-element` contains any character that isn't Lato-compatible, replace the entire string.
+  If a given string, inside a `transformable-element` contains any character that isn't font-compatible, replace the entire string.
   This is done to make the string as consistent as possible (no mixing fonts in a single string)."
   [content]
   (let [transformable-els #{:div :span :td :th :tr :table :p :tbody :thead}
         string-wrapper    (fn [part]
                             (if (and (string? part)
-                                     (not (lato-can-render? part)))
+                                     (not (app-font-can-render? part)))
                               [:span {:style (style/style {:font-family "sans-serif"})} part]
                               part))]
     (walk/postwalk
@@ -143,11 +144,11 @@
                             content)
            html (html [:html
                        [:body {:style (style/style
-                                       {:font-family      "Lato, 'Helvetica Neue', 'Lucida Grande', sans-serif"
+                                       {:font-family      "Rawline, 'Helvetica Neue', 'Lucida Grande', sans-serif"
                                         :margin           0
                                         :padding          0
                                         :background-color :white})}
-                        (wrap-non-lato-chars padded-content)]])]
+                        (wrap-non-app-font-chars padded-content)]])]
        (with-open [os (ByteArrayOutputStream.)]
          (-> (render-to-png html width)
              (write-image! "png" os))

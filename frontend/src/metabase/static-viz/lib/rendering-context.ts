@@ -34,7 +34,7 @@ export const createStaticRenderingContext = (
       measureTextHeight(
         typeof style.size === "number" ? style.size : parseInt(style.size),
       ),
-    fontFamily: "Lato, 'Helvetica Neue', Helvetica, Arial, sans-serif",
+    fontFamily: "Rawline, 'Helvetica Neue', Helvetica, Arial, sans-serif",
     theme: DEFAULT_VISUALIZATION_THEME,
   };
 };

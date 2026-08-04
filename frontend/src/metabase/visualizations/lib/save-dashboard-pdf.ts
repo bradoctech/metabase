@@ -137,7 +137,7 @@ export const getPageBreaks = (
 const createHeaderElement = (dashboardName: string, marginBottom: number) => {
   const header = document.createElement("div");
   header.style.cssText = `
-    font-family: "Lato", sans-serif;
+    font-family: "Rawline", sans-serif;
     font-size: 24px;
     font-weight: 700;
     color: var(--mb-color-text-primary);

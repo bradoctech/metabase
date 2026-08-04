@@ -111,7 +111,7 @@ export const calculateLegendRows = ({
           {
             size: fontSize,
             weight: fontWeight,
-            family: "Lato",
+            family: "Rawline",
           },
         ),
         left: horizontalPadding,
