@@ -134,7 +134,7 @@ export default function GaugeContainer({
             measureTextWidth(text, Number(style.size), Number(style.weight)),
           {
             size: SEGMENT_LABEL_FONT_SIZE,
-            family: "Lato",
+            family: "Rawline",
             weight: CHAR_SIZES_FONT_WEIGHT,
           },
         ),

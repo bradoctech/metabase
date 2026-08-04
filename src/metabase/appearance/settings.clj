@@ -136,7 +136,7 @@ To change the chart colors:
   :visibility :public
   :export?    true
   :type       :string
-  :default    "Lato"
+  :default    "Rawline"
   :feature    :whitelabel
   :audit      :getter
   :setter     (fn [new-value]

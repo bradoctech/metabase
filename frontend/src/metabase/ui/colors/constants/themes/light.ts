@@ -43,7 +43,7 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "brand-hover": "color-mix(in srgb, #FF161F, white 12%)", // SP Paleta Primaria: sp-red
     danger: spColors.redDark.base, // SP Paleta Secundaria: sp-red-dark
     error: spColors.status.error.base, // utiliza spColors.status.error
-    filter: baseColors.octopus[50], // original sem roxo na paleta SP
+    filter: spColors.blueMedium.base, // azul medio na paleta SP
     focus: spColors.grayLight.base, // SP Paleta Prim?ria: sp-gray-light
     "icon-brand": spColors.red[30], // SP Paleta Primaria: sp-red
     "icon-primary": spColors.black.alpha80, // SP Paleta Primaria: sp-black

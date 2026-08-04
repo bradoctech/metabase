@@ -110,7 +110,7 @@ export const StaticRowChart = ({
       xmlns="http://www.w3.org/2000/svg"
       width={width}
       height={fullChartHeight}
-      fontFamily="Lato"
+      fontFamily="Rawline"
     >
       {legend.items.length > 0 && (
         <Legend

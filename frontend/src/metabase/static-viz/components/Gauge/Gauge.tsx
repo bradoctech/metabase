@@ -74,7 +74,7 @@ export default function Gauge({
       xmlns="http://www.w3.org/2000/svg"
       width={CHART_WIDTH}
       height={CHART_HEIGHT}
-      fontFamily="Lato"
+      fontFamily="Rawline"
     >
       <g transform={`translate(${CHART_WIDTH / 2}, ${CHART_HEIGHT / 2})`}>
         {/* `transform-origin: center` doesn't work when rendered with Batik.

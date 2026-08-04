@@ -90,7 +90,7 @@
 (defn font-style
   "Font family to use in rendered Pulses."
   []
-  {:font-family "Lato, \"Helvetica Neue\", Helvetica, Arial, sans-serif"})
+  {:font-family "Rawline, \"Helvetica Neue\", Helvetica, Arial, sans-serif"})
 
 (defn section-style
   "CSS style for a Pulse section."
@@ -124,9 +124,9 @@
 
 (defn- register-fonts! []
   (try
-    (register-font! "frontend_client/app/fonts/Lato/Lato-Regular.ttf")
+    (register-font! "frontend_client/app/fonts/Rawline/rawline-400.ttf")
     (doseq [weight ["700" "900"]]
-      (register-font! (format "frontend_client/app/fonts/Lato/lato-v16-latin-%s.ttf" weight)))
+      (register-font! (format "frontend_client/app/fonts/Rawline/rawline-%s.ttf" weight)))
     (catch Throwable e
       (let [message (str (trs "Error registering fonts: Metabase will not be able to send Pulses.")
                          " "

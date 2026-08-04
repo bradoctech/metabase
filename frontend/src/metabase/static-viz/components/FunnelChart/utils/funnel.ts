@@ -46,7 +46,7 @@ export const getFormattedStep = (
   const fontStyle = {
     size: stepFontSize,
     weight: CHAR_SIZES_FONT_WEIGHT,
-    family: "Lato",
+    family: "Rawline",
   };
 
   const stepName = truncateText(

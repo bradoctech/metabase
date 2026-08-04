@@ -56,7 +56,7 @@ export const Legend = ({
                     Number(style.size),
                     Number(style.weight),
                   ),
-                { size: fontSize, weight: fontWeight, family: "Lato" },
+                { size: fontSize, weight: fontWeight, family: "Rawline" },
               )
             : originalName;
 

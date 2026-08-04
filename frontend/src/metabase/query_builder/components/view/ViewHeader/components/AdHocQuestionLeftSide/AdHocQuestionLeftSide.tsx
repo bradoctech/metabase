@@ -53,7 +53,7 @@ export function AdHocQuestionLeftSide(
         />
         <ViewHeading
           className={ViewTitleHeaderS.AdHocViewHeading}
-          c="text-secondary"
+          c="text-primary"
         >
           {isNative ? (
             t`New question`
