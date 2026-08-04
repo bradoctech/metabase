@@ -144,7 +144,7 @@
 }
 
 .SaveButton {
-  border-radius: 8px;
+  border-radius: 100px;
 
   &[data-disabled="true"] {
     pointer-events: all;
@@ -160,11 +160,17 @@
 }
 
 .ViewHeaderActionPanel {
+  --button-radius: 100px;
+
   display: flex;
   align-items: center;
   margin-left: auto;
   gap: 0.5rem;
   position: relative;
+
+  :global(button) {
+    border-radius: 100px;
+  }
 
   @container query-builder (max-width: 70em) {
     margin-left: 0;
