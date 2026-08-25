@@ -358,7 +358,7 @@ class Visualization extends PureComponent<
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("Error caught in <Visualization>", error, info);
     this.setState({
-      error: "An error occurred displaying this visualization.",
+      error: t`An error occurred displaying this visualization.`,
     });
   }
 

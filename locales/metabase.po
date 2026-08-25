@@ -40737,3 +40737,35 @@ msgstr ""
 #: frontend/src/metabase/query_builder/components/DataSelector/saved-entity-picker/SavedEntityPicker.jsx
 msgid "Everything else"
 msgstr ""
+
+#: frontend/src/metabase/visualizations/components/Visualization/Visualization.tsx
+msgid "An error occurred displaying this visualization."
+msgstr ""
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "Invalid comparison type specified."
+msgstr ""
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No date column was found."
+msgstr ""
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "There was a problem with the primary number you chose. Check the viz settings and select a valid column for the primary number field."
+msgstr ""
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No rows contain a valid value."
+msgstr ""
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No date unit supplied for periods ago comparison."
+msgstr ""
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No integer value supplied for periods ago comparison."
+msgstr ""
+
+#: frontend/src/metabase/visualizer/components/DataImporter/ColumnsList/ColumnsList.tsx
+msgid "Remove data source"
+msgstr ""

@@ -38777,3 +38777,35 @@ msgstr "Ícone de prompt de código"
 #: frontend/src/metabase/query_builder/components/DataSelector/saved-entity-picker/SavedEntityPicker.jsx
 msgid "Everything else"
 msgstr "Todo o resto"
+
+#: frontend/src/metabase/visualizations/components/Visualization/Visualization.tsx
+msgid "An error occurred displaying this visualization."
+msgstr "Ocorreu um erro ao exibir esta visualização."
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "Invalid comparison type specified."
+msgstr "Tipo de comparação inválido."
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No date column was found."
+msgstr "Nenhuma coluna de data foi encontrada."
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "There was a problem with the primary number you chose. Check the viz settings and select a valid column for the primary number field."
+msgstr "Houve um problema com o número principal escolhido. Verifique as configurações da visualização e selecione uma coluna válida para o campo do número principal."
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No rows contain a valid value."
+msgstr "Nenhuma linha contém um valor válido."
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No date unit supplied for periods ago comparison."
+msgstr "Nenhuma unidade de data fornecida para a comparação de períodos atrás."
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No integer value supplied for periods ago comparison."
+msgstr "Nenhum valor inteiro fornecido para a comparação de períodos atrás."
+
+#: frontend/src/metabase/visualizer/components/DataImporter/ColumnsList/ColumnsList.tsx
+msgid "Remove data source"
+msgstr "Remover fonte de dados"
