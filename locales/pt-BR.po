@@ -38809,3 +38809,39 @@ msgstr "Nenhum valor inteiro fornecido para a comparação de períodos atrás."
 #: frontend/src/metabase/visualizer/components/DataImporter/ColumnsList/ColumnsList.tsx
 msgid "Remove data source"
 msgstr "Remover fonte de dados"
+
+#: frontend/src/metabase/admin/permissions/components/PermissionsPageLayout/PermissionsPageLayout.tsx
+msgid "Someone just changed permissions"
+msgstr "Alguém acabou de alterar as permissões"
+
+#: frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
+msgid "User schema"
+msgstr "Esquema de usuário"
+
+#: frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
+msgid "Group schema"
+msgstr "Esquema de grupo"
+
+#: frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
+msgid "Check your parentheses"
+msgstr "Verifique seus parênteses"
+
+#: frontend/src/metabase/admin/settings/components/Email/BaseSMTPConnectionForm.tsx
+msgid "Must be either 465, 587 or 2525"
+msgstr "Deve ser 465, 587 ou 2525"
+
+#: frontend/src/metabase/admin/settings/components/Email/BaseSMTPConnectionForm.tsx
+msgid "Must be either SSL, TLS or STARTTLS"
+msgstr "Deve ser SSL, TLS ou STARTTLS"
+
+#: frontend/src/metabase/embedding/embedding-iframe-sdk/components/SdkIframeError.tsx
+msgid "A valid license is required for embedding."
+msgstr "Uma licença válida é necessária para embedding."
+
+#: frontend/src/metabase/embedding/embedding-iframe-sdk/components/SdkIframeError.tsx
+msgid "Using an API key in production is not allowed."
+msgstr "Não é permitido usar uma chave de API em produção."
+
+#: frontend/src/metabase/embedding/embedding-iframe-sdk/components/SdkIframeError.tsx
+msgid "Using the existing user's session in production is not allowed."
+msgstr "Não é permitido usar a sessão do usuário existente em produção."

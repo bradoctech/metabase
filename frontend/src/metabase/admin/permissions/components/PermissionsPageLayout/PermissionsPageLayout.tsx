@@ -157,7 +157,7 @@ export function PermissionsPageLayout({
         </PermissionPageSidebar>
       )}
       <NewModal
-        title="Someone just changed permissions"
+        title={t`Someone just changed permissions`}
         opened={showRefreshModal}
         size="lg"
         padding="2.5rem"
