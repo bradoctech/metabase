@@ -133,7 +133,7 @@ export function ViewTitleHeaderRightSide({
       return t`Cancel`;
     }
     if ([undefined, "nocache"].includes(cacheStrategyType)) {
-      return `Refresh`;
+      return t`Refresh`;
     }
     return t`Clear cache and refresh`;
   }, [isRunning, cacheStrategyType]);

@@ -20,10 +20,10 @@ const SQL_EXAMPLES: Record<string, NativeDatasetQuery> = {
         category: {
           id: uuid(),
           name: "category",
-          "display-name": "Category",
+          "display-name": "Categoria",
           type: "text",
           required: true,
-          default: "Widget",
+          default: "Acessório",
         },
       },
     },
@@ -37,7 +37,7 @@ const SQL_EXAMPLES: Record<string, NativeDatasetQuery> = {
         created_at: {
           id: uuid(),
           name: "created_at",
-          "display-name": "Created At",
+          "display-name": "Criado em",
           type: "dimension",
           required: false,
         },
@@ -54,7 +54,7 @@ const SQL_EXAMPLES: Record<string, NativeDatasetQuery> = {
         category: {
           id: uuid(),
           name: "category",
-          "display-name": "Category",
+          "display-name": "Categoria",
           type: "text",
           required: false,
         },
@@ -78,7 +78,7 @@ const SQL_EXAMPLES: Record<string, NativeDatasetQuery> = {
         category: {
           id: uuid(),
           name: "category",
-          "display-name": "Category",
+          "display-name": "Categoria",
           type: "text",
           required: false,
         },
@@ -95,7 +95,7 @@ const SQL_EXAMPLES: Record<string, NativeDatasetQuery> = {
         category: {
           id: uuid(),
           name: "category",
-          "display-name": "Category",
+          "display-name": "Categoria",
           type: "dimension",
           required: false,
         },
@@ -114,7 +114,7 @@ const MONGO_EXAMPLES: Record<string, NativeDatasetQuery> = {
         category: {
           id: uuid(),
           name: "price",
-          "display-name": "Price",
+          "display-name": "Preço",
           type: "number",
           required: true,
           default: "2",
@@ -131,7 +131,7 @@ const MONGO_EXAMPLES: Record<string, NativeDatasetQuery> = {
         created_at: {
           id: uuid(),
           name: "created_at",
-          "display-name": "Created At",
+          "display-name": "Criado em",
           type: "dimension",
           required: false,
         },
@@ -171,7 +171,7 @@ const MONGO_EXAMPLES: Record<string, NativeDatasetQuery> = {
         category: {
           id: uuid(),
           name: "category",
-          "display-name": "Category",
+          "display-name": "Categoria",
           type: "text",
           required: false,
         },
@@ -187,7 +187,7 @@ const MONGO_EXAMPLES: Record<string, NativeDatasetQuery> = {
         category: {
           id: uuid(),
           name: "category",
-          "display-name": "Category",
+          "display-name": "Categoria",
           type: "dimension",
           required: false,
         },
