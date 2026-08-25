@@ -38744,3 +38744,36 @@ msgstr "Aquisição de usuários por país"
 msgid "Top 10 countries by sales"
 msgstr "10 primeiros países em vendas"
 
+
+
+msgid "Static embedding example"
+msgstr "Exemplo de embedding estático"
+
+msgid "Modular embedding example"
+msgstr "Exemplo de embedding modular"
+
+msgid "How to find and use X-rays?"
+msgstr "Como encontrar e usar X-rays?"
+
+msgid "How to use the Notebook editor?"
+msgstr "Como usar o editor Notebook?"
+
+msgid "How to use the SQL/Native query editor?"
+msgstr "Como usar o editor SQL/nativo?"
+
+msgid "How to use dashboards?"
+msgstr "Como usar dashboards?"
+
+msgid "How to create a dashboard email subscription?"
+msgstr "Como criar uma assinatura de dashboard por e-mail?"
+
+msgid "How to create an alert?"
+msgstr "Como criar um alerta?"
+
+#: frontend/src/metabase/querying/components/QueryVisualization/QueryVisualization.jsx
+msgid "Code prompt icon"
+msgstr "Ícone de prompt de código"
+
+#: frontend/src/metabase/query_builder/components/DataSelector/saved-entity-picker/SavedEntityPicker.jsx
+msgid "Everything else"
+msgstr "Todo o resto"

@@ -147,7 +147,7 @@ export const ColumnsList = (props: ColumnListProps) => {
                         onRemoveDataSource(source);
                       }}
                       data-testid="remove-datasource-button"
-                      aria-label="Remove data source"
+                      aria-label="Remover fonte de dados"
                     >
                       {t`Remove`}
                     </Menu.Item>

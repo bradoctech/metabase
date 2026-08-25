@@ -40697,3 +40697,43 @@ msgstr ""
 #: resources/automagic_dashboards/table/TransactionTable/ByCountry.yaml
 msgid "Top 10 countries by sales"
 msgstr ""
+
+#: frontend/src/metabase/home/components/EmbedHomepage/StaticEmbedContent.tsx
+msgid "Static embedding example"
+msgstr ""
+
+#: frontend/src/metabase/home/components/EmbedHomepage/EmbedJsContent.tsx
+msgid "Modular embedding example"
+msgstr ""
+
+#: frontend/src/metabase/home/components/Onboarding/Onboarding.tsx
+msgid "How to find and use X-rays?"
+msgstr ""
+
+#: frontend/src/metabase/home/components/Onboarding/Onboarding.tsx
+msgid "How to use the Notebook editor?"
+msgstr ""
+
+#: frontend/src/metabase/home/components/Onboarding/Onboarding.tsx
+msgid "How to use the SQL/Native query editor?"
+msgstr ""
+
+#: frontend/src/metabase/home/components/Onboarding/Onboarding.tsx
+msgid "How to use dashboards?"
+msgstr ""
+
+#: frontend/src/metabase/home/components/Onboarding/Onboarding.tsx
+msgid "How to create a dashboard email subscription?"
+msgstr ""
+
+#: frontend/src/metabase/home/components/Onboarding/Onboarding.tsx
+msgid "How to create an alert?"
+msgstr ""
+
+#: frontend/src/metabase/querying/components/QueryVisualization/QueryVisualization.jsx
+msgid "Code prompt icon"
+msgstr ""
+
+#: frontend/src/metabase/query_builder/components/DataSelector/saved-entity-picker/SavedEntityPicker.jsx
+msgid "Everything else"
+msgstr ""

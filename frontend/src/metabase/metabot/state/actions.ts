@@ -168,13 +168,13 @@ export const executeSlashCommand = createAsyncThunk<
         dispatch(
           addUndo({
             message: newDebugMode
-              ? "Debug mode enabled"
-              : "Debug mode disabled",
+              ? "Modo de depuração ativado"
+              : "Modo de depuração desativado",
           }),
         );
       })
       .otherwise(() => {
-        dispatch(addUndo({ message: "Unknown command" }));
+        dispatch(addUndo({ message: "Comando desconhecido" }));
       });
   },
 );
