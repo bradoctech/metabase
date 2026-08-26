@@ -38744,3 +38744,104 @@ msgstr "Aquisição de usuários por país"
 msgid "Top 10 countries by sales"
 msgstr "10 primeiros países em vendas"
 
+
+
+msgid "Static embedding example"
+msgstr "Exemplo de embedding estático"
+
+msgid "Modular embedding example"
+msgstr "Exemplo de embedding modular"
+
+msgid "How to find and use X-rays?"
+msgstr "Como encontrar e usar X-rays?"
+
+msgid "How to use the Notebook editor?"
+msgstr "Como usar o editor Notebook?"
+
+msgid "How to use the SQL/Native query editor?"
+msgstr "Como usar o editor SQL/nativo?"
+
+msgid "How to use dashboards?"
+msgstr "Como usar dashboards?"
+
+msgid "How to create a dashboard email subscription?"
+msgstr "Como criar uma assinatura de dashboard por e-mail?"
+
+msgid "How to create an alert?"
+msgstr "Como criar um alerta?"
+
+#: frontend/src/metabase/querying/components/QueryVisualization/QueryVisualization.jsx
+msgid "Code prompt icon"
+msgstr "Ícone de prompt de código"
+
+#: frontend/src/metabase/query_builder/components/DataSelector/saved-entity-picker/SavedEntityPicker.jsx
+msgid "Everything else"
+msgstr "Todo o resto"
+
+#: frontend/src/metabase/visualizations/components/Visualization/Visualization.tsx
+msgid "An error occurred displaying this visualization."
+msgstr "Ocorreu um erro ao exibir esta visualização."
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "Invalid comparison type specified."
+msgstr "Tipo de comparação inválido."
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No date column was found."
+msgstr "Nenhuma coluna de data foi encontrada."
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "There was a problem with the primary number you chose. Check the viz settings and select a valid column for the primary number field."
+msgstr "Houve um problema com o número principal escolhido. Verifique as configurações da visualização e selecione uma coluna válida para o campo do número principal."
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No rows contain a valid value."
+msgstr "Nenhuma linha contém um valor válido."
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No date unit supplied for periods ago comparison."
+msgstr "Nenhuma unidade de data fornecida para a comparação de períodos atrás."
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No integer value supplied for periods ago comparison."
+msgstr "Nenhum valor inteiro fornecido para a comparação de períodos atrás."
+
+#: frontend/src/metabase/visualizer/components/DataImporter/ColumnsList/ColumnsList.tsx
+msgid "Remove data source"
+msgstr "Remover fonte de dados"
+
+#: frontend/src/metabase/admin/permissions/components/PermissionsPageLayout/PermissionsPageLayout.tsx
+msgid "Someone just changed permissions"
+msgstr "Alguém acabou de alterar as permissões"
+
+#: frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
+msgid "User schema"
+msgstr "Esquema de usuário"
+
+#: frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
+msgid "Group schema"
+msgstr "Esquema de grupo"
+
+#: frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
+msgid "Check your parentheses"
+msgstr "Verifique seus parênteses"
+
+#: frontend/src/metabase/admin/settings/components/Email/BaseSMTPConnectionForm.tsx
+msgid "Must be either 465, 587 or 2525"
+msgstr "Deve ser 465, 587 ou 2525"
+
+#: frontend/src/metabase/admin/settings/components/Email/BaseSMTPConnectionForm.tsx
+msgid "Must be either SSL, TLS or STARTTLS"
+msgstr "Deve ser SSL, TLS ou STARTTLS"
+
+#: frontend/src/metabase/embedding/embedding-iframe-sdk/components/SdkIframeError.tsx
+msgid "A valid license is required for embedding."
+msgstr "Uma licença válida é necessária para embedding."
+
+#: frontend/src/metabase/embedding/embedding-iframe-sdk/components/SdkIframeError.tsx
+msgid "Using an API key in production is not allowed."
+msgstr "Não é permitido usar uma chave de API em produção."
+
+#: frontend/src/metabase/embedding/embedding-iframe-sdk/components/SdkIframeError.tsx
+msgid "Using the existing user's session in production is not allowed."
+msgstr "Não é permitido usar a sessão do usuário existente em produção."

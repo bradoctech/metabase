@@ -29,18 +29,22 @@ import { PLUGIN_LDAP_FORM_FIELDS } from "metabase/plugins";
 import { Box, Divider, Flex, Group, Radio, Stack } from "metabase/ui";
 import type { EnterpriseSettings, Settings } from "metabase-types/api";
 
-const testParentheses: TestConfig<string | null | undefined> = {
-  name: "test-parentheses",
-  message: "Check your parentheses",
-  test: (value) =>
-    (value?.match(/\(/g) || []).length === (value?.match(/\)/g) || []).length,
-};
+function getLdapSchema() {
+  const testParentheses: TestConfig<string | null | undefined> = {
+    name: "test-parentheses",
+    message: t`Check your parentheses`,
+    test: (value) =>
+      (value?.match(/\(/g) || []).length === (value?.match(/\)/g) || []).length,
+  };
 
-const LDAP_SCHEMA = Yup.object({
-  "ldap-port": Yup.number().integer().nullable(),
-  "ldap-user-filter": Yup.string().nullable().test(testParentheses),
-  "ldap-group-membership-filter": Yup.string().nullable().test(testParentheses),
-});
+  return Yup.object({
+    "ldap-port": Yup.number().integer().nullable(),
+    "ldap-user-filter": Yup.string().nullable().test(testParentheses),
+    "ldap-group-membership-filter": Yup.string()
+      .nullable()
+      .test(testParentheses),
+  });
+}
 
 export type LdapSettings = Pick<
   EnterpriseSettings,
@@ -86,13 +90,13 @@ export const SettingsLdapForm = () => {
       <FormProvider
         initialValues={getFormValues(settingValues)}
         onSubmit={handleSubmit}
-        validationSchema={LDAP_SCHEMA}
+        validationSchema={getLdapSchema()}
         enableReinitialize
       >
         {({ dirty }) => (
           <Form>
             <SettingsSection>
-              <FormSection title={"Server settings"}>
+              <FormSection title={t`Server settings`}>
                 <Stack gap="md">
                   <FormTextInput
                     name="ldap-host"
@@ -147,7 +151,7 @@ export const SettingsLdapForm = () => {
                 </Stack>
               </FormSection>
               <Divider />
-              <FormSection title={"User schema"}>
+              <FormSection title={t`User schema`}>
                 <Stack gap="md">
                   <FormTextInput
                     name="ldap-user-base"
@@ -169,7 +173,7 @@ export const SettingsLdapForm = () => {
                 </Stack>
               </FormSection>
               <Divider />
-              <FormSection title={"Attributes"}>
+              <FormSection title={t`Attributes`}>
                 <Stack gap="md">
                   <FormTextInput
                     name="ldap-attribute-email"
@@ -198,7 +202,7 @@ export const SettingsLdapForm = () => {
                 </Stack>
               </FormSection>
               <Divider />
-              <FormSection title={"Group schema"}>
+              <FormSection title={t`Group schema`}>
                 <Stack gap="md">
                   <GroupMappingsWidget
                     isFormik

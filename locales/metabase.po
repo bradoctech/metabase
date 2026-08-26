@@ -40697,3 +40697,111 @@ msgstr ""
 #: resources/automagic_dashboards/table/TransactionTable/ByCountry.yaml
 msgid "Top 10 countries by sales"
 msgstr ""
+
+#: frontend/src/metabase/home/components/EmbedHomepage/StaticEmbedContent.tsx
+msgid "Static embedding example"
+msgstr ""
+
+#: frontend/src/metabase/home/components/EmbedHomepage/EmbedJsContent.tsx
+msgid "Modular embedding example"
+msgstr ""
+
+#: frontend/src/metabase/home/components/Onboarding/Onboarding.tsx
+msgid "How to find and use X-rays?"
+msgstr ""
+
+#: frontend/src/metabase/home/components/Onboarding/Onboarding.tsx
+msgid "How to use the Notebook editor?"
+msgstr ""
+
+#: frontend/src/metabase/home/components/Onboarding/Onboarding.tsx
+msgid "How to use the SQL/Native query editor?"
+msgstr ""
+
+#: frontend/src/metabase/home/components/Onboarding/Onboarding.tsx
+msgid "How to use dashboards?"
+msgstr ""
+
+#: frontend/src/metabase/home/components/Onboarding/Onboarding.tsx
+msgid "How to create a dashboard email subscription?"
+msgstr ""
+
+#: frontend/src/metabase/home/components/Onboarding/Onboarding.tsx
+msgid "How to create an alert?"
+msgstr ""
+
+#: frontend/src/metabase/querying/components/QueryVisualization/QueryVisualization.jsx
+msgid "Code prompt icon"
+msgstr ""
+
+#: frontend/src/metabase/query_builder/components/DataSelector/saved-entity-picker/SavedEntityPicker.jsx
+msgid "Everything else"
+msgstr ""
+
+#: frontend/src/metabase/visualizations/components/Visualization/Visualization.tsx
+msgid "An error occurred displaying this visualization."
+msgstr ""
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "Invalid comparison type specified."
+msgstr ""
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No date column was found."
+msgstr ""
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "There was a problem with the primary number you chose. Check the viz settings and select a valid column for the primary number field."
+msgstr ""
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No rows contain a valid value."
+msgstr ""
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No date unit supplied for periods ago comparison."
+msgstr ""
+
+#: frontend/src/metabase/visualizations/visualizations/SmartScalar/compute.ts
+msgid "No integer value supplied for periods ago comparison."
+msgstr ""
+
+#: frontend/src/metabase/visualizer/components/DataImporter/ColumnsList/ColumnsList.tsx
+msgid "Remove data source"
+msgstr ""
+
+#: frontend/src/metabase/admin/permissions/components/PermissionsPageLayout/PermissionsPageLayout.tsx
+msgid "Someone just changed permissions"
+msgstr ""
+
+#: frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
+msgid "User schema"
+msgstr ""
+
+#: frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
+msgid "Group schema"
+msgstr ""
+
+#: frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
+msgid "Check your parentheses"
+msgstr ""
+
+#: frontend/src/metabase/admin/settings/components/Email/BaseSMTPConnectionForm.tsx
+msgid "Must be either 465, 587 or 2525"
+msgstr ""
+
+#: frontend/src/metabase/admin/settings/components/Email/BaseSMTPConnectionForm.tsx
+msgid "Must be either SSL, TLS or STARTTLS"
+msgstr ""
+
+#: frontend/src/metabase/embedding/embedding-iframe-sdk/components/SdkIframeError.tsx
+msgid "A valid license is required for embedding."
+msgstr ""
+
+#: frontend/src/metabase/embedding/embedding-iframe-sdk/components/SdkIframeError.tsx
+msgid "Using an API key in production is not allowed."
+msgstr ""
+
+#: frontend/src/metabase/embedding/embedding-iframe-sdk/components/SdkIframeError.tsx
+msgid "Using the existing user's session in production is not allowed."
+msgstr ""

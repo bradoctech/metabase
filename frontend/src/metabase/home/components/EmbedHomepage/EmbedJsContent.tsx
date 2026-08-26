@@ -53,7 +53,7 @@ export const EmbedJsContent = ({
       {showImage && (
         <EmbedJsImage
           src="/app/assets/img/embed-js-example.png"
-          alt="Modular embedding example"
+          alt={t`Modular embedding example`}
         />
       )}
       <Group gap="md">

@@ -70,5 +70,5 @@ export function getTargetsHeading(
       ? t`Other available columns`
       : t`Available columns`;
   }
-  return "Unknown";
+  return t`Unknown`;
 }

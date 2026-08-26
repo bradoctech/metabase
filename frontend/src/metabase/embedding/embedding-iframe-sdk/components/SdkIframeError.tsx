@@ -1,3 +1,5 @@
+import { t } from "ttag";
+
 import noResultsSource from "assets/img/no_results.svg";
 import { Center, Image, Stack, Text, ThemeProvider } from "metabase/ui";
 
@@ -17,15 +19,17 @@ export const SdkIframeError = ({ message }: { message: string }) => (
 
 // Only shown when the app is running on production yet the license is invalid.
 export const SdkIframeInvalidLicenseError = () => (
-  <SdkIframeError message="A valid license is required for embedding." />
+  <SdkIframeError message={t`A valid license is required for embedding.`} />
 );
 
 // Only shown when the app is running on production yet they are using an API key.
 export const SdkIframeApiKeyInProductionError = () => (
-  <SdkIframeError message="Using an API key in production is not allowed." />
+  <SdkIframeError message={t`Using an API key in production is not allowed.`} />
 );
 
 // Only shown when the app is running on production yet they are using an existing user session.
 export const SdkIframeExistingUserSessionInProductionError = () => (
-  <SdkIframeError message="Using the existing user's session in production is not allowed." />
+  <SdkIframeError
+    message={t`Using the existing user's session in production is not allowed.`}
+  />
 );

@@ -1,5 +1,6 @@
 import PropTypes from "prop-types";
 import { useCallback, useMemo, useState } from "react";
+import { t } from "ttag";
 import _ from "underscore";
 
 import {
@@ -37,7 +38,7 @@ const propTypes = {
 const getOurAnalyticsCollection = (collectionEntity) => {
   return {
     ...collectionEntity,
-    schemaName: "Everything else",
+    schemaName: t`Everything else`,
     icon: "folder",
   };
 };

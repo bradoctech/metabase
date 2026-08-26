@@ -25,7 +25,7 @@ export const SearchButton = (props: ButtonProps) => {
         variant="subtle"
         onClick={handleClick}
         color="text-secondary"
-        aria-label="Search"
+        aria-label={t`Search`}
       />
     );
   }
@@ -48,7 +48,7 @@ export const SearchButton = (props: ButtonProps) => {
         },
       }}
       className={S.searchTextButton}
-      aria-label="Search"
+      aria-label={t`Search`}
       {...props}
     >
       <span>{t`Search...`}</span>

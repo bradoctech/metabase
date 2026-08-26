@@ -34,7 +34,7 @@ describe("ScheduleSection", () => {
     const { onScheduleChange } = setup({
       job: createMockTransformJob({ ui_display_type: "cron/raw" }),
     });
-    const cronInput = screen.getByPlaceholderText("For example 5 0 * Aug ?");
+    const cronInput = screen.getByPlaceholderText("Por exemplo 5 0 * Ago ?");
     await userEvent.clear(cronInput);
     await userEvent.type(cronInput, "0/12 * * * ?");
     await userEvent.tab();

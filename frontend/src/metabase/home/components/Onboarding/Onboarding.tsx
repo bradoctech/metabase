@@ -332,7 +332,7 @@ export const Onboarding = () => {
                   <VideoTutorial
                     id="FOAXF4p1AL0"
                     si="COmu2w0SqGagUoVp"
-                    title="How to find and use X-rays?"
+                    title={t`How to find and use X-rays?`}
                   />
                   {isXrayEnabled ? (
                     <>
@@ -379,7 +379,7 @@ export const Onboarding = () => {
                   <VideoTutorial
                     id="N9pR8KyaWzY"
                     si="EQbwmOGt733oWkXF"
-                    title="How to use the Notebook editor?"
+                    title={t`How to use the Notebook editor?`}
                   />
                   <Text>
                     {jt`Filter and summarize data, add custom columns, join data from other tables, and more - ${(
@@ -415,7 +415,7 @@ export const Onboarding = () => {
                   <VideoTutorial
                     id="_iiG_MoxdAE"
                     si="QInRPzkHpFamjsHw"
-                    title="How to use the SQL/Native query editor?"
+                    title={t`How to use the SQL/Native query editor?`}
                   />
                   <Text>
                     {jt`Use the ${(
@@ -459,7 +459,7 @@ export const Onboarding = () => {
                   <VideoTutorial
                     id="FAst1nabBck"
                     si="yVMfXeh0tkr1Yt8_"
-                    title="How to use dashboards?"
+                    title={t`How to use dashboards?`}
                   />
                   <Text>
                     {t`You can:`}
@@ -509,7 +509,7 @@ export const Onboarding = () => {
                   <VideoTutorial
                     id="IustSQH6bfQ"
                     si="GYTUdFsXfpc2QL8S"
-                    title="How to create a dashboard email subscription?"
+                    title={t`How to create a dashboard email subscription?`}
                   />
                   {shouldConfigureCommunicationChannels && (
                     <Text data-testid="subscription-communication-setup">
@@ -573,7 +573,7 @@ export const Onboarding = () => {
                   <VideoTutorial
                     id="MPw5__mVg58"
                     si="jaUgne1VDg6VXprJ"
-                    title="How to create an alert?"
+                    title={t`How to create an alert?`}
                   />
                   {shouldConfigureCommunicationChannels && (
                     <Text data-testid="alert-communication-setup">

@@ -113,7 +113,7 @@ const VisualizationEmptyState = ({ children }) => {
     <Flex w="100%" h="100%" align="center" justify="center">
       <Stack maw="25rem" gap={0} ta="center" align="center">
         <Box maw="3rem" mb="0.75rem">
-          <img src={EmptyCodeResult} alt="Code prompt icon" />
+          <img src={EmptyCodeResult} alt={t`Code prompt icon`} />
         </Box>
         <Text c="text-secondary">
           {c("{0} refers to the keyboard shortcut")

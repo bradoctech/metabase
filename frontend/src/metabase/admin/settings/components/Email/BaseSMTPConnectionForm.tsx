@@ -46,7 +46,7 @@ const getFormValueSchema = (
 ) => {
   const portSchema = secureMode
     ? Yup.string()
-        .oneOf(["465", "587", "2525"], "Must be either 465, 587 or 2525")
+        .oneOf(["465", "587", "2525"], t`Must be either 465, 587 or 2525`)
         .nullable()
         .default("465")
     : Yup.number()
@@ -59,7 +59,7 @@ const getFormValueSchema = (
     ? Yup.string()
         .oneOf(
           ["ssl", "tls", "starttls"],
-          "Must be either SSL, TLS or STARTTLS",
+          t`Must be either SSL, TLS or STARTTLS`,
         )
         .nullable()
         .default("ssl")
@@ -183,7 +183,7 @@ export const BaseSMTPConnectionForm = ({
     ];
 
     if (!secureMode) {
-      options.unshift({ value: "none", label: "None" });
+      options.unshift({ value: "none", label: t`None` });
     }
 
     return options;

@@ -69,7 +69,7 @@ export function OnboardingStepperStep({
         )}
 
         {isLocked && !isActive && (
-          <Icon name="lock" className={S.StepLockIcon} aria-label="Locked" />
+          <Icon name="lock" className={S.StepLockIcon} aria-label="Bloqueado" />
         )}
       </div>
 

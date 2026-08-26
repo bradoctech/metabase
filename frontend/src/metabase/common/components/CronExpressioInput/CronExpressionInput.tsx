@@ -60,7 +60,7 @@ export function CronExpressionInput({
     <Flex direction="column" {...flexProps}>
       <CustomScheduleInputHint />
       <TextInput
-        placeholder="For example 5   0   *   Aug   ?"
+        placeholder="Por exemplo 5   0   *   Ago   ?"
         size="md"
         fw={600}
         error={error}
