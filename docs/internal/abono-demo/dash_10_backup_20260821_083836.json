@@ -1,0 +1,3191 @@
+{
+  "description": "Protótipo nativo (nível A). Dados mock de jul–dez/2025. Clique numa bolha para filtrar o detalhe do órgão.",
+  "archived": false,
+  "view_count": 9,
+  "collection_position": null,
+  "dashcards": [
+    {
+      "size_x": 24,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [
+        "a1b2c3d4"
+      ],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "query_average_duration": null,
+        "download_perms": "none"
+      },
+      "updated_at": "2026-08-17T12:35:56.616049Z",
+      "col": 0,
+      "id": 102,
+      "parameter_mappings": [],
+      "card_id": null,
+      "entity_id": "brZlcw2EWDBnuvGBD8s9i",
+      "visualization_settings": {
+        "text": "",
+        "virtual_card": {
+          "name": null,
+          "display": "heading",
+          "visualization_settings": {},
+          "archived": false
+        },
+        "dashcard.background": false
+      },
+      "size_y": 2,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 0
+    },
+    {
+      "size_x": 6,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "query_average_duration": null,
+        "download_perms": "none"
+      },
+      "updated_at": "2026-08-17T12:36:40.333137Z",
+      "col": 12,
+      "id": 103,
+      "parameter_mappings": [],
+      "card_id": null,
+      "entity_id": "l0HGOZWVi-RhU4MpVdfKc",
+      "visualization_settings": {
+        "text": "Análise / detalhamento divergências",
+        "virtual_card": {
+          "name": null,
+          "display": "heading",
+          "visualization_settings": {},
+          "archived": false
+        },
+        "dashcard.background": false
+      },
+      "size_y": 2,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 2
+    },
+    {
+      "size_x": 6,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [
+        "b2c3d4e5"
+      ],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "query_average_duration": null,
+        "download_perms": "none"
+      },
+      "updated_at": "2026-08-17T12:36:40.333137Z",
+      "col": 18,
+      "id": 104,
+      "parameter_mappings": [
+        {
+          "parameter_id": "b2c3d4e5",
+          "target": [
+            "text-tag",
+            "orgao"
+          ]
+        }
+      ],
+      "card_id": null,
+      "entity_id": "RTJ26Pq7RuG5a5soCclh7",
+      "visualization_settings": {
+        "text": "{{orgao}}",
+        "virtual_card": {
+          "name": null,
+          "display": "heading",
+          "visualization_settings": {},
+          "archived": false
+        },
+        "dashcard.background": false
+      },
+      "size_y": 2,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 2
+    },
+    {
+      "size_x": 6,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "query_average_duration": null,
+        "download_perms": "none"
+      },
+      "updated_at": "2026-08-17T12:36:40.333137Z",
+      "col": 6,
+      "id": 105,
+      "parameter_mappings": [],
+      "card_id": null,
+      "entity_id": "eXpua-WEULEOPNXe88i96",
+      "visualization_settings": {
+        "text": "Top 3 divergências",
+        "virtual_card": {
+          "name": null,
+          "display": "heading",
+          "visualization_settings": {},
+          "archived": false
+        },
+        "dashcard.background": false
+      },
+      "size_y": 1,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 9
+    },
+    {
+      "size_x": 6,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": 171,
+        "result_metadata": [
+          {
+            "semantic_type": "type/Currency",
+            "lib/deduplicated-name": "sum",
+            "lib/original-name": "sum",
+            "name": "sum",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "sum",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              0
+            ],
+            "effective_type": "type/Float",
+            "lib/desired-column-alias": "sum",
+            "display_name": "Sum of Valor Total",
+            "base_type": "type/Float"
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "query",
+        "download_perms": "full",
+        "name": "Valor total",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:21.792882Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "source-table": 171,
+              "lib/type": "mbql.stage/mbql",
+              "aggregation": [
+                [
+                  "sum",
+                  {
+                    "lib/uuid": "354889ad-77ee-4351-9a23-b8479b789d0e"
+                  },
+                  [
+                    "field",
+                    {
+                      "base-type": "type/Float",
+                      "lib/uuid": "fb453e09-dd1c-44c9-9632-09558f28d133",
+                      "effective-type": "type/Float"
+                    },
+                    1611
+                  ]
+                ]
+              ]
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 119,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "scalar",
+        "archived_directly": false,
+        "entity_id": "QYx6xurEeEEk8z-MkV5s4",
+        "collection_preview": true,
+        "visualization_settings": {
+          "column_settings": {
+            "[\"name\",\"sum\"]": {
+              "number_style": "currency",
+              "currency": "BRL",
+              "currency_style": "symbol",
+              "decimals": 2
+            }
+          }
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:21.792882Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:33:25.109933Z",
+      "col": 0,
+      "id": 106,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 119,
+          "target": [
+            "dimension",
+            [
+              "field",
+              1610,
+              null
+            ]
+          ]
+        }
+      ],
+      "card_id": 119,
+      "entity_id": "HiTuxoXffv_0Sw42fwvo6",
+      "visualization_settings": {},
+      "size_y": 2,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 2
+    },
+    {
+      "size_x": 6,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": 171,
+        "result_metadata": [
+          {
+            "semantic_type": "type/Currency",
+            "lib/deduplicated-name": "media",
+            "lib/original-name": "media",
+            "name": "media",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "media",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              0
+            ],
+            "effective_type": "type/Float",
+            "lib/desired-column-alias": "media",
+            "display_name": "media",
+            "base_type": "type/Float"
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "query",
+        "download_perms": "full",
+        "name": "Valor mensal médio",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:22.271418Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "source-table": 171,
+              "lib/type": "mbql.stage/mbql",
+              "aggregation": [
+                [
+                  "avg",
+                  {
+                    "name": "media",
+                    "lib/uuid": "c486c6f8-4493-4e5c-80e5-cf2aae7fd622",
+                    "display-name": "media"
+                  },
+                  [
+                    "field",
+                    {
+                      "base-type": "type/Float",
+                      "lib/uuid": "ef158ea2-2a79-4743-905a-bcecb610f4be",
+                      "effective-type": "type/Float"
+                    },
+                    1611
+                  ]
+                ]
+              ]
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 120,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "scalar",
+        "archived_directly": false,
+        "entity_id": "wa70fCexoxI0kEmj-iWhH",
+        "collection_preview": true,
+        "visualization_settings": {
+          "column_settings": {
+            "[\"name\",\"media\"]": {
+              "number_style": "currency",
+              "currency": "BRL",
+              "currency_style": "symbol",
+              "decimals": 2
+            }
+          }
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:22.271418Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:33:25.109933Z",
+      "col": 0,
+      "id": 107,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 120,
+          "target": [
+            "dimension",
+            [
+              "field",
+              1610,
+              null
+            ]
+          ]
+        }
+      ],
+      "card_id": 120,
+      "entity_id": "WwUHkSfLoQqahCEDy7CPh",
+      "visualization_settings": {},
+      "size_y": 2,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 4
+    },
+    {
+      "size_x": 6,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": 171,
+        "result_metadata": [
+          {
+            "lib/deduplicated-name": "per_capita",
+            "lib/original-name": "per_capita",
+            "name": "per_capita",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "per_capita",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              0
+            ],
+            "effective_type": "type/Float",
+            "lib/desired-column-alias": "per_capita",
+            "display_name": "Valor por beneficiário/mês",
+            "base_type": "type/Float"
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "query",
+        "download_perms": "full",
+        "name": "Valor por beneficiário/mês",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:22.458681Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "source-table": 171,
+              "lib/type": "mbql.stage/mbql",
+              "aggregation": [
+                [
+                  "/",
+                  {
+                    "name": "per_capita",
+                    "lib/uuid": "7ed3f1e9-2b29-4add-8b13-2cea2e2f4d03",
+                    "display-name": "Valor por beneficiário/mês"
+                  },
+                  [
+                    "sum",
+                    {
+                      "lib/uuid": "d69d5c53-c484-4e7a-bc27-aba25d587a56"
+                    },
+                    [
+                      "field",
+                      {
+                        "base-type": "type/Float",
+                        "lib/uuid": "49e0793b-e532-4445-91f9-b210211c4661",
+                        "effective-type": "type/Float"
+                      },
+                      1611
+                    ]
+                  ],
+                  [
+                    "sum",
+                    {
+                      "lib/uuid": "3c86265b-864c-4d2a-8d93-7758dc168168"
+                    },
+                    [
+                      "field",
+                      {
+                        "base-type": "type/Integer",
+                        "lib/uuid": "8f61575b-4254-4e39-a89f-e53470426c7f",
+                        "effective-type": "type/Integer"
+                      },
+                      1612
+                    ]
+                  ]
+                ]
+              ]
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 121,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "scalar",
+        "archived_directly": false,
+        "entity_id": "qIfqVhu1PUOB288WCLWju",
+        "collection_preview": true,
+        "visualization_settings": {
+          "column_settings": {
+            "[\"name\",\"per_capita\"]": {
+              "number_style": "currency",
+              "currency": "BRL",
+              "currency_style": "symbol",
+              "decimals": 2
+            }
+          }
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:22.458681Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:33:25.109933Z",
+      "col": 0,
+      "id": 108,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 121,
+          "target": [
+            "dimension",
+            [
+              "field",
+              1610,
+              null
+            ]
+          ]
+        }
+      ],
+      "card_id": 121,
+      "entity_id": "5dfVCfTGlngoMnFMgQGHj",
+      "visualization_settings": {},
+      "size_y": 2,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 6
+    },
+    {
+      "size_x": 6,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": 171,
+        "result_metadata": [
+          {
+            "database_type": "DATE",
+            "semantic_type": "type/CreationDate",
+            "table_id": 171,
+            "lib/temporal-unit": "month",
+            "lib/deduplicated-name": "competencia",
+            "lib/original-name": "competencia",
+            "lib/breakout?": true,
+            "unit": "month",
+            "name": "competencia",
+            "lib/source": "source/table-defaults",
+            "lib/source-column-alias": "competencia",
+            "lib/original-display-name": "Competencia",
+            "source": "breakout",
+            "field_ref": [
+              "field",
+              1610,
+              {
+                "temporal-unit": "month"
+              }
+            ],
+            "lib/transformation-added-base-type": true,
+            "effective_type": "type/Date",
+            "active": true,
+            "id": 1610,
+            "lib/desired-column-alias": "competencia",
+            "position": 0,
+            "visibility_type": "normal",
+            "inherited_temporal_unit": "month",
+            "display_name": "Competencia: Month",
+            "fingerprint": {
+              "global": {
+                "distinct-count": 6,
+                "nil%": 0.0
+              },
+              "type": {
+                "type/DateTime": {
+                  "earliest": "2025-07-01",
+                  "latest": "2025-12-01"
+                }
+              }
+            },
+            "base_type": "type/Date"
+          },
+          {
+            "semantic_type": "type/Currency",
+            "lib/deduplicated-name": "Valor total",
+            "lib/original-name": "Valor total",
+            "name": "Valor total",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "Valor total",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              0
+            ],
+            "effective_type": "type/Float",
+            "lib/desired-column-alias": "Valor total",
+            "display_name": "Valor total",
+            "base_type": "type/Float"
+          },
+          {
+            "lib/deduplicated-name": "Beneficiários",
+            "lib/original-name": "Beneficiários",
+            "name": "Beneficiários",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "Beneficiários",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              1
+            ],
+            "effective_type": "type/Integer",
+            "lib/desired-column-alias": "Beneficiários",
+            "display_name": "Beneficiários",
+            "base_type": "type/Integer"
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "query",
+        "download_perms": "full",
+        "name": "Evolução",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:22.643422Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "aggregation": [
+                [
+                  "sum",
+                  {
+                    "name": "Valor total",
+                    "lib/uuid": "4f60efc8-7e28-47b3-8b27-5290ed326cf4",
+                    "display-name": "Valor total"
+                  },
+                  [
+                    "field",
+                    {
+                      "base-type": "type/Float",
+                      "lib/uuid": "f50f240a-fcff-4dd2-886e-8a0833f6f4b4",
+                      "effective-type": "type/Float"
+                    },
+                    1611
+                  ]
+                ],
+                [
+                  "sum",
+                  {
+                    "name": "Beneficiários",
+                    "lib/uuid": "b1f22f48-18ef-4661-b30a-587ec83f25bf",
+                    "display-name": "Beneficiários"
+                  },
+                  [
+                    "field",
+                    {
+                      "base-type": "type/Integer",
+                      "lib/uuid": "c5c7c656-14e9-4395-9a70-1df271c0f850",
+                      "effective-type": "type/Integer"
+                    },
+                    1612
+                  ]
+                ]
+              ],
+              "lib/type": "mbql.stage/mbql",
+              "source-table": 171,
+              "breakout": [
+                [
+                  "field",
+                  {
+                    "base-type": "type/Date",
+                    "temporal-unit": "month",
+                    "lib/uuid": "cbf76b04-3bba-48d7-94a4-414975899fa8",
+                    "effective-type": "type/Date"
+                  },
+                  1610
+                ]
+              ]
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 122,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "combo",
+        "archived_directly": false,
+        "entity_id": "kkxSj1qm8sT4mXHct8txX",
+        "collection_preview": true,
+        "visualization_settings": {
+          "graph.show_values": true,
+          "graph.x_axis.labels_enabled": false,
+          "graph.label_value_frequency": "all",
+          "graph.metrics": [
+            "Valor total",
+            "Beneficiários"
+          ],
+          "graph.label_value_formatting": "compact",
+          "column_settings": {
+            "[\"name\",\"Valor total\"]": {
+              "number_style": "currency",
+              "currency": "BRL",
+              "currency_style": "symbol",
+              "decimals": 1
+            }
+          },
+          "series_settings": {
+            "Valor total": {
+              "display": "line",
+              "color": "#509EE3",
+              "line.marker_enabled": true
+            },
+            "Beneficiários": {
+              "display": "bar",
+              "color": "#7BBCE7"
+            }
+          },
+          "graph.dimensions": [
+            "competencia"
+          ],
+          "graph.split_panels": true
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:22.643422Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:33:25.109933Z",
+      "col": 0,
+      "id": 109,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 122,
+          "target": [
+            "dimension",
+            [
+              "field",
+              1610,
+              null
+            ]
+          ]
+        }
+      ],
+      "card_id": 122,
+      "entity_id": "wY0HVUQoxpsxk1r7qXVB0",
+      "visualization_settings": {},
+      "size_y": 8,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 8
+    },
+    {
+      "size_x": 3,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": 171,
+        "result_metadata": [
+          {
+            "semantic_type": "type/Currency",
+            "lib/deduplicated-name": "sum",
+            "lib/original-name": "sum",
+            "name": "sum",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "sum",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              0
+            ],
+            "effective_type": "type/Float",
+            "lib/desired-column-alias": "sum",
+            "display_name": "Sum of Valor Analisado",
+            "base_type": "type/Float"
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "query",
+        "download_perms": "full",
+        "name": "Analisado — valor",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:22.799833Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "source-table": 171,
+              "lib/type": "mbql.stage/mbql",
+              "aggregation": [
+                [
+                  "sum",
+                  {
+                    "lib/uuid": "1c7db934-6881-45fc-9ba6-bda4473dfd2b"
+                  },
+                  [
+                    "field",
+                    {
+                      "base-type": "type/Float",
+                      "lib/uuid": "207b842f-23db-47e6-8d18-6487dac086b7",
+                      "effective-type": "type/Float"
+                    },
+                    1613
+                  ]
+                ]
+              ]
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 123,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "scalar",
+        "archived_directly": false,
+        "entity_id": "tbT9jaLBqvrlxtRU0uPPO",
+        "collection_preview": true,
+        "visualization_settings": {
+          "column_settings": {
+            "[\"name\",\"sum\"]": {
+              "number_style": "currency",
+              "currency": "BRL",
+              "currency_style": "symbol",
+              "decimals": 2
+            }
+          }
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:22.799833Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:33:25.109933Z",
+      "col": 6,
+      "id": 110,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 123,
+          "target": [
+            "dimension",
+            [
+              "field",
+              1610,
+              null
+            ]
+          ]
+        }
+      ],
+      "card_id": 123,
+      "entity_id": "60ML78TqpDBQVuI3Ur9Uw",
+      "visualization_settings": {},
+      "size_y": 3,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 2
+    },
+    {
+      "size_x": 3,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": 171,
+        "result_metadata": [
+          {
+            "semantic_type": "type/Currency",
+            "lib/deduplicated-name": "sum",
+            "lib/original-name": "sum",
+            "name": "sum",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "sum",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              0
+            ],
+            "effective_type": "type/Float",
+            "lib/desired-column-alias": "sum",
+            "display_name": "Sum of Valor Divergencias",
+            "base_type": "type/Float"
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "query",
+        "download_perms": "full",
+        "name": "Divergências — valor",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:22.918803Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "source-table": 171,
+              "lib/type": "mbql.stage/mbql",
+              "aggregation": [
+                [
+                  "sum",
+                  {
+                    "lib/uuid": "c0cf7fc4-69f4-4f9c-aa14-c160c65cd744"
+                  },
+                  [
+                    "field",
+                    {
+                      "base-type": "type/Float",
+                      "lib/uuid": "55f76a66-ab67-4dd2-8b3a-ec01ad8bf06c",
+                      "effective-type": "type/Float"
+                    },
+                    1615
+                  ]
+                ]
+              ]
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 124,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "scalar",
+        "archived_directly": false,
+        "entity_id": "iuEkiUctkJECWQObpq6u9",
+        "collection_preview": true,
+        "visualization_settings": {
+          "scalar.segments": [
+            {
+              "min": 0,
+              "max": null,
+              "color": "#E75C58",
+              "label": "Divergência"
+            }
+          ],
+          "column_settings": {
+            "[\"name\",\"sum\"]": {
+              "number_style": "currency",
+              "currency": "BRL",
+              "currency_style": "symbol",
+              "decimals": 2
+            }
+          }
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:22.918803Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:33:25.109933Z",
+      "col": 9,
+      "id": 111,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 124,
+          "target": [
+            "dimension",
+            [
+              "field",
+              1610,
+              null
+            ]
+          ]
+        }
+      ],
+      "card_id": 124,
+      "entity_id": "u-776DPLCiX8bf0PRmBq5",
+      "visualization_settings": {},
+      "size_y": 3,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 2
+    },
+    {
+      "size_x": 3,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": 171,
+        "result_metadata": [
+          {
+            "lib/deduplicated-name": "pessoas",
+            "lib/original-name": "pessoas",
+            "name": "pessoas",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "pessoas",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              0
+            ],
+            "effective_type": "type/Integer",
+            "lib/desired-column-alias": "pessoas",
+            "display_name": "pessoas",
+            "base_type": "type/Integer"
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "query",
+        "download_perms": "full",
+        "name": "Analisado — pessoas",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:23.04302Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "source-table": 171,
+              "lib/type": "mbql.stage/mbql",
+              "aggregation": [
+                [
+                  "sum",
+                  {
+                    "name": "pessoas",
+                    "lib/uuid": "e3bd3407-4437-4ab0-b32c-d82f46668a0a",
+                    "display-name": "pessoas"
+                  },
+                  [
+                    "field",
+                    {
+                      "base-type": "type/Integer",
+                      "lib/uuid": "e0092ad9-8cdc-4bea-894f-2bfc942e4045",
+                      "effective-type": "type/Integer"
+                    },
+                    1614
+                  ]
+                ]
+              ]
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 125,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "scalar",
+        "archived_directly": false,
+        "entity_id": "2-GfZDVOhbOfRHVSQD6gG",
+        "collection_preview": true,
+        "visualization_settings": {},
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:23.04302Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:33:25.109933Z",
+      "col": 6,
+      "id": 112,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 125,
+          "target": [
+            "dimension",
+            [
+              "field",
+              1610,
+              null
+            ]
+          ]
+        }
+      ],
+      "card_id": 125,
+      "entity_id": "K7rs3EtLRIhlRSA-X2C99",
+      "visualization_settings": {},
+      "size_y": 2,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 5
+    },
+    {
+      "size_x": 3,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": 171,
+        "result_metadata": [
+          {
+            "lib/deduplicated-name": "pessoas",
+            "lib/original-name": "pessoas",
+            "name": "pessoas",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "pessoas",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              0
+            ],
+            "effective_type": "type/Integer",
+            "lib/desired-column-alias": "pessoas",
+            "display_name": "pessoas",
+            "base_type": "type/Integer"
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "query",
+        "download_perms": "full",
+        "name": "Divergências — pessoas",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:23.162083Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "source-table": 171,
+              "lib/type": "mbql.stage/mbql",
+              "aggregation": [
+                [
+                  "sum",
+                  {
+                    "name": "pessoas",
+                    "lib/uuid": "5c71bcdb-afc1-4b2c-85d6-49fa6bce22a7",
+                    "display-name": "pessoas"
+                  },
+                  [
+                    "field",
+                    {
+                      "base-type": "type/Integer",
+                      "lib/uuid": "fe3b4557-e680-4808-a851-c0d9591cc06d",
+                      "effective-type": "type/Integer"
+                    },
+                    1616
+                  ]
+                ]
+              ]
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 126,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "scalar",
+        "archived_directly": false,
+        "entity_id": "dHvoxjnhXJIt6PJh8xLtm",
+        "collection_preview": true,
+        "visualization_settings": {
+          "scalar.segments": [
+            {
+              "min": 0,
+              "max": null,
+              "color": "#E75C58",
+              "label": "Divergência"
+            }
+          ]
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:23.162083Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:33:25.109933Z",
+      "col": 9,
+      "id": 113,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 126,
+          "target": [
+            "dimension",
+            [
+              "field",
+              1610,
+              null
+            ]
+          ]
+        }
+      ],
+      "card_id": 126,
+      "entity_id": "hos45pp1AJz8bzWZJUU67",
+      "visualization_settings": {},
+      "size_y": 2,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 5
+    },
+    {
+      "size_x": 3,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": 171,
+        "result_metadata": [
+          {
+            "lib/deduplicated-name": "pct",
+            "lib/original-name": "pct",
+            "name": "pct",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "pct",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              0
+            ],
+            "effective_type": "type/Float",
+            "lib/desired-column-alias": "pct",
+            "display_name": "% analisado",
+            "base_type": "type/Float"
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "query",
+        "download_perms": "full",
+        "name": "Analisado — % do valor",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:23.29242Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "source-table": 171,
+              "lib/type": "mbql.stage/mbql",
+              "aggregation": [
+                [
+                  "/",
+                  {
+                    "name": "pct",
+                    "lib/uuid": "e85038c8-9eac-4878-93ff-e5d568c4ff58",
+                    "display-name": "% analisado"
+                  },
+                  [
+                    "sum",
+                    {
+                      "lib/uuid": "fc70a984-aee5-4298-aabf-598aa22a5166"
+                    },
+                    [
+                      "field",
+                      {
+                        "base-type": "type/Float",
+                        "lib/uuid": "60fce310-ce23-46c6-86c6-198c35499df7",
+                        "effective-type": "type/Float"
+                      },
+                      1613
+                    ]
+                  ],
+                  [
+                    "sum",
+                    {
+                      "lib/uuid": "3471170d-e9b5-4491-9d9c-1b3abffba0ee"
+                    },
+                    [
+                      "field",
+                      {
+                        "base-type": "type/Float",
+                        "lib/uuid": "eeedae75-3b1e-479b-877d-ed58d81fa73b",
+                        "effective-type": "type/Float"
+                      },
+                      1611
+                    ]
+                  ]
+                ]
+              ]
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 127,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "scalar",
+        "archived_directly": false,
+        "entity_id": "iQ72jYHDj4uP93fdhAeCn",
+        "collection_preview": true,
+        "visualization_settings": {
+          "column_settings": {
+            "[\"name\",\"pct\"]": {
+              "number_style": "percent",
+              "decimals": 1
+            }
+          }
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:23.29242Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:36:40.333137Z",
+      "col": 6,
+      "id": 114,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 127,
+          "target": [
+            "dimension",
+            [
+              "field",
+              1610,
+              null
+            ]
+          ]
+        }
+      ],
+      "card_id": 127,
+      "entity_id": "M99R-NOXXA1RX9HoJSXBF",
+      "visualization_settings": {},
+      "size_y": 2,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 7
+    },
+    {
+      "size_x": 3,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": 171,
+        "result_metadata": [
+          {
+            "lib/deduplicated-name": "pct",
+            "lib/original-name": "pct",
+            "name": "pct",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "pct",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              0
+            ],
+            "effective_type": "type/Float",
+            "lib/desired-column-alias": "pct",
+            "display_name": "% divergências",
+            "base_type": "type/Float"
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "query",
+        "download_perms": "full",
+        "name": "Divergências — % do valor",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:23.41191Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "source-table": 171,
+              "lib/type": "mbql.stage/mbql",
+              "aggregation": [
+                [
+                  "/",
+                  {
+                    "name": "pct",
+                    "lib/uuid": "97a37d35-4605-466d-905c-cf3ed2c66c52",
+                    "display-name": "% divergências"
+                  },
+                  [
+                    "sum",
+                    {
+                      "lib/uuid": "e8898168-18fd-4cf2-bb3c-22220df841f7"
+                    },
+                    [
+                      "field",
+                      {
+                        "base-type": "type/Float",
+                        "lib/uuid": "d4e4b11b-53e3-4678-b7c7-d42da417901d",
+                        "effective-type": "type/Float"
+                      },
+                      1615
+                    ]
+                  ],
+                  [
+                    "sum",
+                    {
+                      "lib/uuid": "55d3b288-d36b-4798-b402-dff0d9015b43"
+                    },
+                    [
+                      "field",
+                      {
+                        "base-type": "type/Float",
+                        "lib/uuid": "d295443a-bb22-49b7-9f1e-8645754a5b4f",
+                        "effective-type": "type/Float"
+                      },
+                      1611
+                    ]
+                  ]
+                ]
+              ]
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 128,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "scalar",
+        "archived_directly": false,
+        "entity_id": "PmSxAO2nF0-OWjiwswqvS",
+        "collection_preview": true,
+        "visualization_settings": {
+          "scalar.segments": [
+            {
+              "min": 0,
+              "max": null,
+              "color": "#E75C58",
+              "label": "Divergência"
+            }
+          ],
+          "column_settings": {
+            "[\"name\",\"pct\"]": {
+              "number_style": "percent",
+              "decimals": 1
+            }
+          }
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:23.41191Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:36:40.333137Z",
+      "col": 9,
+      "id": 115,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 128,
+          "target": [
+            "dimension",
+            [
+              "field",
+              1610,
+              null
+            ]
+          ]
+        }
+      ],
+      "card_id": 128,
+      "entity_id": "iE-1mUvyNFBtuTMkMNlyD",
+      "visualization_settings": {},
+      "size_y": 2,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 7
+    },
+    {
+      "size_x": 2,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": 172,
+        "result_metadata": [
+          {
+            "database_type": "TEXT",
+            "semantic_type": "type/Category",
+            "table_id": 172,
+            "lib/deduplicated-name": "motivo",
+            "lib/original-name": "motivo",
+            "lib/breakout?": true,
+            "name": "motivo",
+            "lib/source": "source/table-defaults",
+            "lib/source-column-alias": "motivo",
+            "lib/original-display-name": "Motivo",
+            "source": "breakout",
+            "field_ref": [
+              "field",
+              1619,
+              null
+            ],
+            "lib/transformation-added-base-type": true,
+            "effective_type": "type/Text",
+            "active": true,
+            "id": 1619,
+            "lib/desired-column-alias": "motivo",
+            "position": 2,
+            "visibility_type": "normal",
+            "display_name": "Motivo",
+            "fingerprint": {
+              "global": {
+                "distinct-count": 5,
+                "nil%": 0.0
+              },
+              "type": {
+                "type/Text": {
+                  "percent-json": 0.0,
+                  "percent-url": 0.0,
+                  "percent-email": 0.0,
+                  "percent-state": 0.0,
+                  "average-length": 17.2
+                }
+              }
+            },
+            "base_type": "type/Text"
+          },
+          {
+            "semantic_type": "type/Currency",
+            "lib/deduplicated-name": "valor",
+            "lib/original-name": "valor",
+            "name": "valor",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "valor",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              0
+            ],
+            "effective_type": "type/Float",
+            "lib/desired-column-alias": "valor",
+            "display_name": "valor",
+            "base_type": "type/Float"
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "query",
+        "download_perms": "full",
+        "name": "Top 3 por motivo",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:23.547811Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "order-by": [
+                [
+                  "desc",
+                  {
+                    "lib/uuid": "78b5c760-1de5-4d1a-9eda-cfaf35e233f1"
+                  },
+                  [
+                    "aggregation",
+                    {
+                      "lib/uuid": "7b40b3d3-d001-4781-a8f6-e70e7941eabd"
+                    },
+                    "1cc93080-89b8-4b5e-bc58-05d70e85615f"
+                  ]
+                ]
+              ],
+              "lib/type": "mbql.stage/mbql",
+              "source-table": 172,
+              "aggregation": [
+                [
+                  "sum",
+                  {
+                    "name": "valor",
+                    "lib/uuid": "1cc93080-89b8-4b5e-bc58-05d70e85615f",
+                    "display-name": "valor"
+                  },
+                  [
+                    "field",
+                    {
+                      "base-type": "type/Float",
+                      "lib/uuid": "d13a7a4a-cad5-4050-b7fb-32a409b34580",
+                      "effective-type": "type/Float"
+                    },
+                    1621
+                  ]
+                ]
+              ],
+              "breakout": [
+                [
+                  "field",
+                  {
+                    "base-type": "type/Text",
+                    "lib/uuid": "f10c2471-906d-4e8e-951e-704481053e96",
+                    "effective-type": "type/Text"
+                  },
+                  1619
+                ]
+              ],
+              "limit": 3
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 129,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "bar",
+        "archived_directly": false,
+        "entity_id": "1A_KOysA3SOXKBKP9W9u2",
+        "collection_preview": true,
+        "visualization_settings": {
+          "graph.dimensions": [
+            "motivo"
+          ],
+          "graph.show_values": true,
+          "graph.label_value_formatting": "compact",
+          "graph.x_axis.labels_enabled": false,
+          "column_settings": {
+            "[\"name\",\"valor\"]": {
+              "number_style": "currency",
+              "currency": "BRL",
+              "currency_style": "symbol",
+              "decimals": 2
+            }
+          },
+          "graph.metrics": [
+            "valor"
+          ]
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:23.547811Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:36:40.333137Z",
+      "col": 6,
+      "id": 116,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 129,
+          "target": [
+            "dimension",
+            [
+              "field",
+              1617,
+              null
+            ]
+          ]
+        }
+      ],
+      "card_id": 129,
+      "entity_id": "zqEcvYVym7H3XriAp4lrb",
+      "visualization_settings": {},
+      "size_y": 7,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 10
+    },
+    {
+      "size_x": 2,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": 172,
+        "result_metadata": [
+          {
+            "database_type": "TEXT",
+            "semantic_type": "type/Category",
+            "table_id": 172,
+            "lib/deduplicated-name": "orgao",
+            "lib/original-name": "orgao",
+            "lib/breakout?": true,
+            "name": "orgao",
+            "lib/source": "source/table-defaults",
+            "lib/source-column-alias": "orgao",
+            "lib/original-display-name": "Orgao",
+            "source": "breakout",
+            "field_ref": [
+              "field",
+              1618,
+              null
+            ],
+            "lib/transformation-added-base-type": true,
+            "effective_type": "type/Text",
+            "active": true,
+            "id": 1618,
+            "lib/desired-column-alias": "orgao",
+            "position": 1,
+            "visibility_type": "normal",
+            "display_name": "Orgao",
+            "fingerprint": {
+              "global": {
+                "distinct-count": 6,
+                "nil%": 0.0
+              },
+              "type": {
+                "type/Text": {
+                  "percent-json": 0.0,
+                  "percent-url": 0.0,
+                  "percent-email": 0.0,
+                  "percent-state": 0.0,
+                  "average-length": 4.833333333333333
+                }
+              }
+            },
+            "base_type": "type/Text"
+          },
+          {
+            "semantic_type": "type/Currency",
+            "lib/deduplicated-name": "valor",
+            "lib/original-name": "valor",
+            "name": "valor",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "valor",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              0
+            ],
+            "effective_type": "type/Float",
+            "lib/desired-column-alias": "valor",
+            "display_name": "valor",
+            "base_type": "type/Float"
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "query",
+        "download_perms": "full",
+        "name": "Top 3 por órgão",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:23.685702Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "order-by": [
+                [
+                  "desc",
+                  {
+                    "lib/uuid": "4038f227-ba34-4045-b994-f7850fa64b80"
+                  },
+                  [
+                    "aggregation",
+                    {
+                      "lib/uuid": "15d37782-20f7-47b5-93e8-69a40e7f7a1e"
+                    },
+                    "fefe303e-de68-4034-a596-ba7295c1d4f5"
+                  ]
+                ]
+              ],
+              "lib/type": "mbql.stage/mbql",
+              "source-table": 172,
+              "aggregation": [
+                [
+                  "sum",
+                  {
+                    "name": "valor",
+                    "lib/uuid": "fefe303e-de68-4034-a596-ba7295c1d4f5",
+                    "display-name": "valor"
+                  },
+                  [
+                    "field",
+                    {
+                      "base-type": "type/Float",
+                      "lib/uuid": "564e5a4d-6dd6-44fa-befc-c958dc374d21",
+                      "effective-type": "type/Float"
+                    },
+                    1621
+                  ]
+                ]
+              ],
+              "breakout": [
+                [
+                  "field",
+                  {
+                    "base-type": "type/Text",
+                    "lib/uuid": "6acf80aa-8014-4eca-8b40-03ba9aa389c0",
+                    "effective-type": "type/Text"
+                  },
+                  1618
+                ]
+              ],
+              "limit": 3
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 130,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "bar",
+        "archived_directly": false,
+        "entity_id": "-S9qKF8u1TSLo8p9bRvIA",
+        "collection_preview": true,
+        "visualization_settings": {
+          "graph.dimensions": [
+            "orgao"
+          ],
+          "graph.show_values": true,
+          "graph.label_value_formatting": "compact",
+          "graph.x_axis.labels_enabled": false,
+          "column_settings": {
+            "[\"name\",\"valor\"]": {
+              "number_style": "currency",
+              "currency": "BRL",
+              "currency_style": "symbol",
+              "decimals": 2
+            }
+          },
+          "graph.metrics": [
+            "valor"
+          ]
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:23.685702Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:36:40.333137Z",
+      "col": 8,
+      "id": 117,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 130,
+          "target": [
+            "dimension",
+            [
+              "field",
+              1617,
+              null
+            ]
+          ]
+        }
+      ],
+      "card_id": 130,
+      "entity_id": "VbV4bzfCkF81vTFY-MT9u",
+      "visualization_settings": {},
+      "size_y": 7,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 10
+    },
+    {
+      "size_x": 2,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": 172,
+        "result_metadata": [
+          {
+            "database_type": "DATE",
+            "semantic_type": "type/CreationDate",
+            "table_id": 172,
+            "lib/temporal-unit": "month",
+            "lib/deduplicated-name": "competencia",
+            "lib/original-name": "competencia",
+            "lib/breakout?": true,
+            "unit": "month",
+            "name": "competencia",
+            "lib/source": "source/table-defaults",
+            "lib/source-column-alias": "competencia",
+            "lib/original-display-name": "Competencia",
+            "source": "breakout",
+            "field_ref": [
+              "field",
+              1617,
+              {
+                "temporal-unit": "month"
+              }
+            ],
+            "lib/transformation-added-base-type": true,
+            "effective_type": "type/Date",
+            "active": true,
+            "id": 1617,
+            "lib/desired-column-alias": "competencia",
+            "position": 0,
+            "visibility_type": "normal",
+            "inherited_temporal_unit": "month",
+            "display_name": "Competencia: Month",
+            "fingerprint": {
+              "global": {
+                "distinct-count": 6,
+                "nil%": 0.0
+              },
+              "type": {
+                "type/DateTime": {
+                  "earliest": "2025-07-01",
+                  "latest": "2025-12-01"
+                }
+              }
+            },
+            "base_type": "type/Date"
+          },
+          {
+            "semantic_type": "type/Currency",
+            "lib/deduplicated-name": "valor",
+            "lib/original-name": "valor",
+            "name": "valor",
+            "lib/source": "source/aggregations",
+            "lib/source-column-alias": "valor",
+            "source": "aggregation",
+            "field_ref": [
+              "aggregation",
+              0
+            ],
+            "effective_type": "type/Float",
+            "lib/desired-column-alias": "valor",
+            "display_name": "valor",
+            "base_type": "type/Float"
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "query",
+        "download_perms": "full",
+        "name": "Top 3 por mês",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:23.844399Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "order-by": [
+                [
+                  "desc",
+                  {
+                    "lib/uuid": "3883aaa0-170a-42de-b26b-4b6af320a0c4"
+                  },
+                  [
+                    "aggregation",
+                    {
+                      "lib/uuid": "a331bc43-924c-4a84-bc9d-d6a07d595bf6"
+                    },
+                    "4f3b282e-9b5b-4304-be7e-52991c99d18d"
+                  ]
+                ]
+              ],
+              "lib/type": "mbql.stage/mbql",
+              "source-table": 172,
+              "aggregation": [
+                [
+                  "sum",
+                  {
+                    "name": "valor",
+                    "lib/uuid": "4f3b282e-9b5b-4304-be7e-52991c99d18d",
+                    "display-name": "valor"
+                  },
+                  [
+                    "field",
+                    {
+                      "base-type": "type/Float",
+                      "lib/uuid": "388e9c8d-62fe-434a-80a4-a38ed2756327",
+                      "effective-type": "type/Float"
+                    },
+                    1621
+                  ]
+                ]
+              ],
+              "breakout": [
+                [
+                  "field",
+                  {
+                    "base-type": "type/Date",
+                    "temporal-unit": "month",
+                    "lib/uuid": "d74baf92-e339-4c90-85e8-059934db7922",
+                    "effective-type": "type/Date"
+                  },
+                  1617
+                ]
+              ],
+              "limit": 3
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 131,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "bar",
+        "archived_directly": false,
+        "entity_id": "L7pq4n5c7-MGZ5E_YcKd5",
+        "collection_preview": true,
+        "visualization_settings": {
+          "graph.dimensions": [
+            "competencia"
+          ],
+          "graph.show_values": true,
+          "graph.label_value_formatting": "compact",
+          "graph.x_axis.labels_enabled": false,
+          "column_settings": {
+            "[\"name\",\"valor\"]": {
+              "number_style": "currency",
+              "currency": "BRL",
+              "currency_style": "symbol",
+              "decimals": 2
+            }
+          },
+          "graph.metrics": [
+            "valor"
+          ]
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:23.844399Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:36:40.333137Z",
+      "col": 10,
+      "id": 118,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 131,
+          "target": [
+            "dimension",
+            [
+              "field",
+              1617,
+              null
+            ]
+          ]
+        }
+      ],
+      "card_id": 131,
+      "entity_id": "CKMmxawVZVw_aRir1ujup",
+      "visualization_settings": {},
+      "size_y": 7,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 10
+    },
+    {
+      "size_x": 6,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 5,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": null,
+        "result_metadata": [
+          {
+            "name": "orgao",
+            "database_type": "TEXT",
+            "base_type": "type/Text",
+            "display_name": "orgao",
+            "field_ref": [
+              "field",
+              "orgao",
+              {
+                "base-type": "type/Text"
+              }
+            ]
+          },
+          {
+            "name": "divergencia_financeira_bruta",
+            "database_type": "NUMERIC",
+            "base_type": "type/Float",
+            "display_name": "divergencia_financeira_bruta",
+            "field_ref": [
+              "field",
+              "divergencia_financeira_bruta",
+              {
+                "base-type": "type/Float"
+              }
+            ]
+          },
+          {
+            "name": "divergencia_normativa",
+            "database_type": "NUMERIC",
+            "base_type": "type/Float",
+            "display_name": "divergencia_normativa",
+            "field_ref": [
+              "field",
+              "divergencia_normativa",
+              {
+                "base-type": "type/Float"
+              }
+            ]
+          },
+          {
+            "name": "pessoas",
+            "database_type": "NUMERIC",
+            "base_type": "type/Float",
+            "display_name": "pessoas",
+            "field_ref": [
+              "field",
+              "pessoas",
+              {
+                "base-type": "type/Float"
+              }
+            ]
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "native",
+        "download_perms": "full",
+        "name": "Análise / detalhamento divergências",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:24.036299Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "template-tags": {
+                "periodo": {
+                  "dimension": [
+                    "field",
+                    {
+                      "base-type": "type/Date",
+                      "lib/uuid": "1e328897-87db-46fc-a06c-ea5391666b1d",
+                      "effective-type": "type/Date"
+                    },
+                    1617
+                  ],
+                  "id": "c0ffee01",
+                  "name": "periodo",
+                  "display-name": "Período",
+                  "type": "dimension",
+                  "widget-type": "date/all-options"
+                }
+              },
+              "lib/type": "mbql.stage/native",
+              "native": "SELECT\n  orgao,\n  SUM(valor) AS divergencia_financeira_bruta,\n  AVG(score_normativa) AS divergencia_normativa,\n  SUM(qtd_pessoas) AS pessoas\nFROM abono_divergencia\nWHERE {{periodo}}\nGROUP BY orgao"
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 132,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "scatter",
+        "archived_directly": false,
+        "entity_id": "9J5gkPgGm5-xamdiAHzQf",
+        "collection_preview": true,
+        "visualization_settings": {
+          "graph.dimensions": [
+            "divergencia_financeira_bruta"
+          ],
+          "scatter.bubble": "pessoas",
+          "graph.x_axis.title_text": "Divergência financeira bruta",
+          "graph.y_axis.title_text": "Divergência normativa",
+          "click_behavior": {
+            "type": "crossfilter",
+            "parameterMapping": {
+              "b2c3d4e5": {
+                "id": "b2c3d4e5",
+                "source": {
+                  "type": "column",
+                  "id": "orgao",
+                  "name": "orgao"
+                },
+                "target": {
+                  "type": "parameter",
+                  "id": "b2c3d4e5"
+                }
+              }
+            }
+          },
+          "column_settings": {
+            "[\"name\",\"divergencia_financeira_bruta\"]": {
+              "number_style": "currency",
+              "currency": "BRL",
+              "currency_style": "symbol",
+              "decimals": 2
+            },
+            "[\"name\",\"divergencia_normativa\"]": {
+              "decimals": 1
+            }
+          },
+          "graph.metrics": [
+            "divergencia_normativa"
+          ]
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:24.036299Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:36:40.333137Z",
+      "col": 12,
+      "id": 119,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 132,
+          "target": [
+            "dimension",
+            [
+              "template-tag",
+              "periodo"
+            ]
+          ]
+        }
+      ],
+      "card_id": 132,
+      "entity_id": "fPDcFAQrd5v7vb0IBLRzS",
+      "visualization_settings": {
+        "graph.dimensions": [
+          "divergencia_financeira_bruta"
+        ],
+        "scatter.bubble": "pessoas",
+        "graph.x_axis.title_text": "Divergência financeira bruta",
+        "graph.y_axis.title_text": "Divergência normativa",
+        "click_behavior": {
+          "type": "crossfilter",
+          "parameterMapping": {
+            "b2c3d4e5": {
+              "id": "b2c3d4e5",
+              "source": {
+                "type": "column",
+                "id": "orgao",
+                "name": "orgao"
+              },
+              "target": {
+                "type": "parameter",
+                "id": "b2c3d4e5"
+              }
+            }
+          }
+        },
+        "column_settings": {
+          "[\"name\",\"divergencia_financeira_bruta\"]": {
+            "number_style": "currency",
+            "currency": "BRL",
+            "currency_style": "symbol",
+            "decimals": 2
+          },
+          "[\"name\",\"divergencia_normativa\"]": {
+            "decimals": 1
+          }
+        },
+        "graph.metrics": [
+          "divergencia_normativa"
+        ]
+      },
+      "size_y": 14,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 4
+    },
+    {
+      "size_x": 6,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 15,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": null,
+        "result_metadata": [
+          {
+            "name": "motivo",
+            "database_type": "TEXT",
+            "base_type": "type/Text",
+            "display_name": "motivo",
+            "field_ref": [
+              "field",
+              "motivo",
+              {
+                "base-type": "type/Text"
+              }
+            ]
+          },
+          {
+            "name": "valor",
+            "database_type": "NUMERIC",
+            "base_type": "type/Float",
+            "display_name": "valor",
+            "field_ref": [
+              "field",
+              "valor",
+              {
+                "base-type": "type/Float"
+              }
+            ]
+          },
+          {
+            "name": "percentual",
+            "database_type": "NUMERIC",
+            "base_type": "type/Float",
+            "display_name": "percentual",
+            "semantic_type": "type/Share",
+            "field_ref": [
+              "field",
+              "percentual",
+              {
+                "base-type": "type/Float"
+              }
+            ]
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "native",
+        "download_perms": "full",
+        "name": "Divergência financeira por motivo",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:24.179014Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "template-tags": {
+                "periodo": {
+                  "dimension": [
+                    "field",
+                    {
+                      "base-type": "type/Date",
+                      "lib/uuid": "fb83508f-19c9-482b-b4bb-51f267fd1d68",
+                      "effective-type": "type/Date"
+                    },
+                    1617
+                  ],
+                  "id": "c0ffee01",
+                  "name": "periodo",
+                  "display-name": "Período",
+                  "type": "dimension",
+                  "widget-type": "date/all-options"
+                },
+                "orgao": {
+                  "dimension": [
+                    "field",
+                    {
+                      "base-type": "type/Text",
+                      "lib/uuid": "13da3a6d-80dc-43e5-b9f9-087a14616535",
+                      "effective-type": "type/Text"
+                    },
+                    1618
+                  ],
+                  "id": "c0ffee02",
+                  "name": "orgao",
+                  "display-name": "Órgão",
+                  "type": "dimension",
+                  "widget-type": "string/="
+                }
+              },
+              "lib/type": "mbql.stage/native",
+              "native": "SELECT\n  motivo,\n  SUM(valor) AS valor,\n  ROUND(100.0 * SUM(valor) / SUM(SUM(valor)) OVER (), 1) AS percentual\nFROM abono_divergencia\nWHERE {{periodo}} AND {{orgao}}\nGROUP BY motivo\nORDER BY valor DESC"
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 133,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "table",
+        "archived_directly": false,
+        "entity_id": "XfLFudnvzqfNC98dKk_Wa",
+        "collection_preview": true,
+        "visualization_settings": {
+          "table.pivot": false,
+          "column_settings": {
+            "[\"name\",\"valor\"]": {
+              "number_style": "currency",
+              "currency": "BRL",
+              "currency_style": "symbol",
+              "decimals": 2
+            },
+            "[\"name\",\"percentual\"]": {
+              "suffix": " %",
+              "decimals": 1
+            }
+          }
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:24.179014Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:36:40.333137Z",
+      "col": 18,
+      "id": 120,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 133,
+          "target": [
+            "dimension",
+            [
+              "template-tag",
+              "periodo"
+            ]
+          ]
+        },
+        {
+          "parameter_id": "b2c3d4e5",
+          "card_id": 133,
+          "target": [
+            "dimension",
+            [
+              "template-tag",
+              "orgao"
+            ]
+          ]
+        }
+      ],
+      "card_id": 133,
+      "entity_id": "hed_Asf0vATq89LmlRAEf",
+      "visualization_settings": {},
+      "size_y": 7,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 4
+    },
+    {
+      "size_x": 6,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 15,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": null,
+        "result_metadata": [
+          {
+            "name": "cargo",
+            "database_type": "TEXT",
+            "base_type": "type/Text",
+            "display_name": "cargo",
+            "field_ref": [
+              "field",
+              "cargo",
+              {
+                "base-type": "type/Text"
+              }
+            ]
+          },
+          {
+            "name": "pessoas",
+            "database_type": "NUMERIC",
+            "base_type": "type/Float",
+            "display_name": "pessoas",
+            "field_ref": [
+              "field",
+              "pessoas",
+              {
+                "base-type": "type/Float"
+              }
+            ]
+          },
+          {
+            "name": "percentual",
+            "database_type": "NUMERIC",
+            "base_type": "type/Float",
+            "display_name": "percentual",
+            "semantic_type": "type/Share",
+            "field_ref": [
+              "field",
+              "percentual",
+              {
+                "base-type": "type/Float"
+              }
+            ]
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "native",
+        "download_perms": "full",
+        "name": "Pessoal afetado",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:24.312324Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "template-tags": {
+                "periodo": {
+                  "dimension": [
+                    "field",
+                    {
+                      "base-type": "type/Date",
+                      "lib/uuid": "94a57599-7cee-4821-96f5-142c4e92c0d6",
+                      "effective-type": "type/Date"
+                    },
+                    1617
+                  ],
+                  "id": "c0ffee01",
+                  "name": "periodo",
+                  "display-name": "Período",
+                  "type": "dimension",
+                  "widget-type": "date/all-options"
+                },
+                "orgao": {
+                  "dimension": [
+                    "field",
+                    {
+                      "base-type": "type/Text",
+                      "lib/uuid": "106503ac-7707-458d-92a8-947378dd48d3",
+                      "effective-type": "type/Text"
+                    },
+                    1618
+                  ],
+                  "id": "c0ffee02",
+                  "name": "orgao",
+                  "display-name": "Órgão",
+                  "type": "dimension",
+                  "widget-type": "string/="
+                }
+              },
+              "lib/type": "mbql.stage/native",
+              "native": "SELECT\n  cargo,\n  SUM(qtd_pessoas) AS pessoas,\n  ROUND(100.0 * SUM(qtd_pessoas) / SUM(SUM(qtd_pessoas)) OVER (), 1) AS percentual\nFROM abono_divergencia\nWHERE {{periodo}} AND {{orgao}}\nGROUP BY cargo\nORDER BY pessoas DESC"
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 134,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "table",
+        "archived_directly": false,
+        "entity_id": "o8Y0mmKpi3Vx_gkN2mJws",
+        "collection_preview": true,
+        "visualization_settings": {
+          "column_settings": {
+            "[\"name\",\"percentual\"]": {
+              "suffix": " %",
+              "decimals": 1
+            }
+          }
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:24.312324Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:36:40.333137Z",
+      "col": 18,
+      "id": 121,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 134,
+          "target": [
+            "dimension",
+            [
+              "template-tag",
+              "periodo"
+            ]
+          ]
+        },
+        {
+          "parameter_id": "b2c3d4e5",
+          "card_id": 134,
+          "target": [
+            "dimension",
+            [
+              "template-tag",
+              "orgao"
+            ]
+          ]
+        }
+      ],
+      "card_id": 134,
+      "entity_id": "qdJR1Tn78xPwtPpYDtvag",
+      "visualization_settings": {},
+      "size_y": 5,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 11
+    },
+    {
+      "size_x": 6,
+      "dashboard_tab_id": null,
+      "series": [],
+      "inline_parameters": [],
+      "action_id": null,
+      "collection_authority_level": null,
+      "card": {
+        "cache_invalidated_at": null,
+        "description": null,
+        "archived": false,
+        "view_count": 15,
+        "collection_position": null,
+        "source_card_id": null,
+        "table_id": null,
+        "result_metadata": [
+          {
+            "name": "media_mensal",
+            "database_type": "NUMERIC",
+            "base_type": "type/Float",
+            "display_name": "media_mensal",
+            "field_ref": [
+              "field",
+              "media_mensal",
+              {
+                "base-type": "type/Float"
+              }
+            ]
+          }
+        ],
+        "embedding_type": null,
+        "initially_published_at": null,
+        "can_write": true,
+        "card_schema": 23,
+        "database_id": 2,
+        "enable_embedding": false,
+        "collection_id": 7,
+        "query_type": "native",
+        "download_perms": "full",
+        "name": "Divergência média mensal",
+        "document_id": null,
+        "last_used_at": "2026-08-21T12:37:47.363586Z",
+        "type": "question",
+        "dimensions": null,
+        "query_average_duration": null,
+        "creator_id": 1,
+        "moderation_reviews": [],
+        "updated_at": "2026-08-17T12:33:24.44477Z",
+        "made_public_by_id": null,
+        "embedding_params": null,
+        "cache_ttl": null,
+        "dataset_query": {
+          "lib/type": "mbql/query",
+          "database": 2,
+          "stages": [
+            {
+              "template-tags": {
+                "periodo": {
+                  "dimension": [
+                    "field",
+                    {
+                      "base-type": "type/Date",
+                      "lib/uuid": "665da6b5-015b-42cd-8e73-181a5793ce3a",
+                      "effective-type": "type/Date"
+                    },
+                    1617
+                  ],
+                  "id": "c0ffee01",
+                  "name": "periodo",
+                  "display-name": "Período",
+                  "type": "dimension",
+                  "widget-type": "date/all-options"
+                },
+                "orgao": {
+                  "dimension": [
+                    "field",
+                    {
+                      "base-type": "type/Text",
+                      "lib/uuid": "edad5dd5-7a33-457e-b363-ec0b3ef5fc83",
+                      "effective-type": "type/Text"
+                    },
+                    1618
+                  ],
+                  "id": "c0ffee02",
+                  "name": "orgao",
+                  "display-name": "Órgão",
+                  "type": "dimension",
+                  "widget-type": "string/="
+                }
+              },
+              "lib/type": "mbql.stage/native",
+              "native": "SELECT ROUND(SUM(valor) * 1.0 / COUNT(DISTINCT competencia), 2) AS media_mensal\nFROM abono_divergencia\nWHERE {{periodo}} AND {{orgao}}"
+            }
+          ]
+        },
+        "dimension_mappings": null,
+        "id": 135,
+        "legacy_query": null,
+        "parameter_mappings": [],
+        "display": "scalar",
+        "archived_directly": false,
+        "entity_id": "VgghGwXlbEGA1v6GcaKsS",
+        "collection_preview": true,
+        "visualization_settings": {
+          "column_settings": {
+            "[\"name\",\"media_mensal\"]": {
+              "number_style": "currency",
+              "currency": "BRL",
+              "currency_style": "symbol",
+              "decimals": 2
+            }
+          }
+        },
+        "metabase_version": "vLOCAL_DEV (06d1ba2ae111e66253209c01c244d6379acfc6dcb1911fa9ab6012cec9ce52e5)",
+        "parameters": [],
+        "dashboard_id": null,
+        "created_at": "2026-08-17T12:33:24.44477Z",
+        "public_uuid": null
+      },
+      "updated_at": "2026-08-17T12:36:40.333137Z",
+      "col": 18,
+      "id": 122,
+      "parameter_mappings": [
+        {
+          "parameter_id": "a1b2c3d4",
+          "card_id": 135,
+          "target": [
+            "dimension",
+            [
+              "template-tag",
+              "periodo"
+            ]
+          ]
+        },
+        {
+          "parameter_id": "b2c3d4e5",
+          "card_id": 135,
+          "target": [
+            "dimension",
+            [
+              "template-tag",
+              "orgao"
+            ]
+          ]
+        }
+      ],
+      "card_id": 135,
+      "entity_id": "O4IWtbIHEOAjquMUrE_yt",
+      "visualization_settings": {},
+      "size_y": 2,
+      "dashboard_id": 10,
+      "created_at": "2026-08-17T12:33:25.109933Z",
+      "row": 16
+    }
+  ],
+  "embedding_type": null,
+  "initially_published_at": null,
+  "can_write": true,
+  "can_set_cache_policy": true,
+  "tabs": [],
+  "enable_embedding": false,
+  "collection_id": 7,
+  "show_in_getting_started": false,
+  "name": "Abono de Permanência",
+  "is_remote_synced": false,
+  "width": "full",
+  "caveats": null,
+  "collection_authority_level": null,
+  "creator_id": 1,
+  "can_restore": false,
+  "moderation_reviews": [],
+  "updated_at": "2026-08-17T12:33:24.669349Z",
+  "made_public_by_id": null,
+  "embedding_params": null,
+  "cache_ttl": null,
+  "last_used_param_values": {
+    "a1b2c3d4": "2025-07-01~2025-12-31",
+    "b2c3d4e5": [
+      "SEFAZ"
+    ]
+  },
+  "id": 10,
+  "last_viewed_at": "2026-08-21T12:37:47.087805Z",
+  "position": null,
+  "archived_directly": false,
+  "entity_id": "TYFfGoyCbmJkLJqeZa90y",
+  "param_fields": {
+    "a1b2c3d4": [
+      {
+        "semantic_type": "type/CreationDate",
+        "table_id": 172,
+        "name": "competencia",
+        "has_field_values": "none",
+        "fk_target_field_id": null,
+        "dimensions": [],
+        "id": 1617,
+        "target": null,
+        "display_name": "Competencia",
+        "name_field": null,
+        "base_type": "type/Date"
+      },
+      {
+        "semantic_type": "type/CreationDate",
+        "table_id": 171,
+        "name": "competencia",
+        "has_field_values": "none",
+        "fk_target_field_id": null,
+        "dimensions": [],
+        "id": 1610,
+        "target": null,
+        "display_name": "Competencia",
+        "name_field": null,
+        "base_type": "type/Date"
+      }
+    ],
+    "b2c3d4e5": [
+      {
+        "semantic_type": "type/Category",
+        "table_id": 172,
+        "name": "orgao",
+        "has_field_values": "list",
+        "fk_target_field_id": null,
+        "dimensions": [],
+        "id": 1618,
+        "target": null,
+        "display_name": "Orgao",
+        "name_field": null,
+        "base_type": "type/Text"
+      }
+    ],
+    "c0ffee01": [
+      {
+        "semantic_type": "type/CreationDate",
+        "table_id": 172,
+        "name": "competencia",
+        "has_field_values": "none",
+        "fk_target_field_id": null,
+        "dimensions": [],
+        "id": 1617,
+        "target": null,
+        "display_name": "Competencia",
+        "name_field": null,
+        "base_type": "type/Date"
+      }
+    ],
+    "c0ffee02": [
+      {
+        "semantic_type": "type/Category",
+        "table_id": 172,
+        "name": "orgao",
+        "has_field_values": "list",
+        "fk_target_field_id": null,
+        "dimensions": [],
+        "id": 1618,
+        "target": null,
+        "display_name": "Orgao",
+        "name_field": null,
+        "base_type": "type/Text"
+      }
+    ]
+  },
+  "last-edit-info": {
+    "id": 1,
+    "email": "oxymus@gmail.com",
+    "first_name": "Felipe",
+    "last_name": "Zerede",
+    "timestamp": "2026-08-17T12:36:40.423306Z"
+  },
+  "collection": {
+    "authority_level": null,
+    "description": "Dashboard nativo de demonstração — dados mock, sem integração com a base do cliente.",
+    "archived": false,
+    "workspace_id": null,
+    "slug": "abono_de_permanencia__demo_",
+    "archive_operation_id": null,
+    "name": "Abono de Permanência (demo)",
+    "is_remote_synced": false,
+    "personal_owner_id": null,
+    "type": null,
+    "is_sample": false,
+    "effective_location": "/",
+    "id": 7,
+    "archived_directly": null,
+    "entity_id": "P7Af9XvTLKPPl3Taf5f2g",
+    "location": "/",
+    "namespace": null,
+    "is_personal": false,
+    "created_at": "2026-08-17T12:33:21.419024Z"
+  },
+  "parameters": [
+    {
+      "id": "a1b2c3d4",
+      "name": "Período",
+      "slug": "periodo",
+      "type": "date/all-options",
+      "sectionId": "date",
+      "default": "2025-07-01~2025-12-31"
+    },
+    {
+      "id": "b2c3d4e5",
+      "name": "Órgão",
+      "slug": "orgao",
+      "type": "string/=",
+      "sectionId": "string",
+      "default": "Seduc",
+      "isMultiSelect": false
+    }
+  ],
+  "auto_apply_filters": true,
+  "created_at": "2026-08-17T12:33:24.544229Z",
+  "public_uuid": null,
+  "points_of_interest": null,
+  "can_delete": false
+}
