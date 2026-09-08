@@ -128,7 +128,7 @@ export function DatabaseConnectionStringField({
   return (
     <Textarea
       inputWrapperOrder={["label", "input", "description", "error"]}
-      label="Connection string (optional)"
+      label={t`Connection string (optional)`}
       description={<ConnectionStringDescription status={status} />}
       value={connectionString}
       onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => {

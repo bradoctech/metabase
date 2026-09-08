@@ -4805,6 +4805,10 @@ msgstr ""
 msgid "Use a connection string"
 msgstr ""
 
+#: frontend/src/metabase/databases/components/DatabaseConnectionUri/DatabaseConnectionStringField.tsx
+msgid "Connection string (optional)"
+msgstr ""
+
 #: frontend/src/metabase/databases/components/DatabaseConnectionUri/DatabaseConnectionStringField.tsx:164
 msgid "You can use a connection string to pre-fill the details below."
 msgstr ""
@@ -18215,6 +18219,14 @@ msgstr ""
 #: frontend/src/metabase/admin/tools/components/TaskRunDetailsPage/TaskRunDetailsPage.tsx:81
 #: frontend/src/metabase/admin/tools/components/TaskRunsPage/TaskRunsTable.tsx:43
 msgid "Entity"
+msgstr ""
+
+#: frontend/src/metabase/list-view/components/ListView/ListViewConfiguration.tsx
+msgid "Entity icon"
+msgstr ""
+
+#: frontend/src/metabase/notifications/PulsesListSidebar.tsx
+msgid "Pulse Card"
 msgstr ""
 
 #: frontend/src/metabase/admin/tools/components/TaskRunsPage/TaskRunsTable.tsx:47

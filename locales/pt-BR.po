@@ -2603,7 +2603,7 @@ msgstr "Senha atual"
 #: frontend/src/metabase/auth/components/ResetPasswordForm/ResetPasswordForm.tsx:74
 #: frontend/src/metabase/setup/components/UserForm/UserForm.tsx:88
 msgid "Shhh..."
-msgstr "Xiu!"
+msgstr "Shhh..."
 
 #: frontend/src/metabase/account/password/components/UserPasswordForm/UserPasswordForm.tsx:87
 #: frontend/src/metabase/auth/components/ResetPasswordForm/ResetPasswordForm.tsx:73
@@ -2621,7 +2621,7 @@ msgstr "Confirme sua senha"
 #: frontend/src/metabase/auth/components/ResetPasswordForm/ResetPasswordForm.tsx:82
 #: frontend/src/metabase/setup/components/UserForm/UserForm.tsx:98
 msgid "Shhh... but one more time so we get it right"
-msgstr "Xiu… de novo, só pra ter certeza que está certo"
+msgstr "Shhh... de novo, só pra ter certeza que está certo"
 
 #: frontend/src/metabase/actions/components/ActionViz/Action.tsx:195
 msgid "No action assigned"
@@ -4661,6 +4661,10 @@ msgstr "Preencha host, porta e nome do banco de dados"
 #: frontend/src/metabase/databases/components/DatabaseConnectionSectionField/DatabaseConnectionSectionField.tsx:41
 msgid "Use a connection string"
 msgstr "Usar uma string de conexão"
+
+#: frontend/src/metabase/databases/components/DatabaseConnectionUri/DatabaseConnectionStringField.tsx
+msgid "Connection string (optional)"
+msgstr "String de conexão (opcional)"
 
 #: frontend/src/metabase/databases/components/DatabaseClientIdDescription/DatabaseClientIdDescription.tsx:27
 #, javascript-format
@@ -17552,6 +17556,14 @@ msgstr "Tipo de execução"
 #: frontend/src/metabase/admin/tools/components/TaskRunsPage/TaskRunsTable.tsx:43
 msgid "Entity"
 msgstr "Entidade"
+
+#: frontend/src/metabase/list-view/components/ListView/ListViewConfiguration.tsx
+msgid "Entity icon"
+msgstr "Ícone da entidade"
+
+#: frontend/src/metabase/notifications/PulsesListSidebar.tsx
+msgid "Pulse Card"
+msgstr "Cartão de assinatura"
 
 #: frontend/src/metabase/admin/tools/components/TaskRunsPage/TaskRunsTable.tsx:47
 msgid "Task Count"
