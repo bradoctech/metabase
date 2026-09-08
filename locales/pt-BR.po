@@ -11106,6 +11106,10 @@ msgstr "Mapeamentos permitem que o Metabase adicione e remova usuários de grupo
 msgid "Mappings allow Metabase to automatically add and remove users from groups based on the membership information provided by the directory server. If a group isn‘t mapped, its membership won‘t be synced."
 msgstr "Mapeamentos permitem que a Metabase adicione e remova usuários de grupos automaticamente, com base na informação do servidor de diretório. Se um grupo não estiver mapeado, seus membros não vão ser sincronizados."
 
+#: frontend/src/metabase/admin/settings/components/widgets/GroupMappingsWidget/GroupMappingsWidgetView.tsx:38
+msgid "No mappings yet, group sync is not on"
+msgstr "Ainda não há mapeamentos, a sincronização de grupos não está ativada"
+
 #: frontend/src/metabase/admin/settings/components/widgets/GroupMappingsWidget/GroupMappingsWidgetView.tsx:41
 msgid "No mappings yet, groups will be automatically assigned by exactly matching names"
 msgstr "Ainda não há mapeamentos; grupos serão atribuídos automaticamente ao corresponder exatamente aos nomes"
@@ -17426,6 +17430,10 @@ msgstr "Níveis de log disponíveis: {0}"
 msgid "Customize log levels"
 msgstr "Personalizar níveis de log"
 
+#: frontend/src/metabase/admin/tools/components/LogLevelsModal/LogLevelsModal.tsx
+msgid "Invalid JSON"
+msgstr "JSON inválido"
+
 #: frontend/src/metabase/admin/tools/components/LogLevelsModal/PresetPicker.tsx:15
 msgid "Load preset"
 msgstr "Carregar predefinição"
@@ -19375,9 +19383,13 @@ msgstr "Aqui é onde seus resultados serão exibidos"
 msgid "Edit SQL Query"
 msgstr "Editar query SQL"
 
-#: frontend/src/metabase/search/components/filters/NativeQueryFilter/NativeQueryLabel.tsx:8
-msgid "native"
-msgstr "nativo"
+#: frontend/src/metabase/search/components/filters/NativeQueryFilter/NativeQueryLabel.tsx
+msgid "Search the contents of native queries"
+msgstr "Buscar no conteúdo de consultas nativas"
+
+#: frontend/src/metabase/search/components/filters/NativeQueryFilter/NativeQueryLabel.tsx
+msgid "Search the contents of SQL queries"
+msgstr "Buscar no conteúdo de consultas SQL"
 
 #: frontend/src/metabase/search/components/filters/TypeFilter/TypeFilterDisplay.tsx:14
 msgid "1 type selected"
@@ -23442,6 +23454,10 @@ msgstr "Postgres, MySQL e H2"
 #: frontend/src/metabase/admin/settings/slack/SlackConfiguration.tsx:22
 msgid "Slack app icon"
 msgstr "Ícone do app do Slack"
+
+#: frontend/src/metabase/admin/settings/slack/SlackConfiguration.tsx:32
+msgid "Metabot icon"
+msgstr "Ícone do Metabot"
 
 #: frontend/src/metabase/admin/settings/slack/SlackConfiguration.tsx:24
 msgid "Give your app all the bells and whistles."

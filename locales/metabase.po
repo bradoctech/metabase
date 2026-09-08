@@ -11341,6 +11341,10 @@ msgid ""
 "group isn‘t mapped, its membership won‘t be synced."
 msgstr ""
 
+#: frontend/src/metabase/admin/settings/components/widgets/GroupMappingsWidget/GroupMappingsWidgetView.tsx:38
+msgid "No mappings yet, group sync is not on"
+msgstr ""
+
 #: frontend/src/metabase/admin/settings/components/widgets/GroupMappingsWidget/GroupMappingsWidgetView.tsx:41
 msgid ""
 "No mappings yet, groups will be automatically assigned by exactly matching "
@@ -18081,6 +18085,10 @@ msgstr ""
 msgid "Customize log levels"
 msgstr ""
 
+#: frontend/src/metabase/admin/tools/components/LogLevelsModal/LogLevelsModal.tsx
+msgid "Invalid JSON"
+msgstr ""
+
 #: frontend/src/metabase/admin/tools/components/LogLevelsModal/LogLevelsForm.tsx:50
 msgid "Override log configuration using"
 msgstr ""
@@ -20153,8 +20161,12 @@ msgstr ""
 msgid "Edit SQL Query"
 msgstr ""
 
-#: frontend/src/metabase/search/components/filters/NativeQueryFilter/NativeQueryLabel.tsx:8
-msgid "native"
+#: frontend/src/metabase/search/components/filters/NativeQueryFilter/NativeQueryLabel.tsx
+msgid "Search the contents of native queries"
+msgstr ""
+
+#: frontend/src/metabase/search/components/filters/NativeQueryFilter/NativeQueryLabel.tsx
+msgid "Search the contents of SQL queries"
 msgstr ""
 
 #: frontend/src/metabase/search/components/filters/TypeFilter/TypeFilterDisplay.tsx:14
@@ -24548,6 +24560,10 @@ msgstr ""
 
 #: frontend/src/metabase/admin/settings/slack/SlackConfiguration.tsx:22
 msgid "Slack app icon"
+msgstr ""
+
+#: frontend/src/metabase/admin/settings/slack/SlackConfiguration.tsx:32
+msgid "Metabot icon"
 msgstr ""
 
 #: frontend/src/metabase/admin/settings/slack/SlackConfiguration.tsx:24
