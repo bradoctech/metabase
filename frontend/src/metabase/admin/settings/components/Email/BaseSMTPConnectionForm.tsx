@@ -290,7 +290,7 @@ export const BaseSMTPConnectionForm = ({
                     name={getFullFormKey("password")}
                     type="password"
                     label={t`SMTP Password`}
-                    placeholder={"Shhh..."}
+                    placeholder={t`Shhh...`}
                   />
                 </SetByEnvVarWrapper>
 

@@ -5,6 +5,7 @@ import { canUserCreateNativeQueries } from "metabase/selectors/user";
 
 export const NativeQueryLabel = () => {
   const hasNativeWrite = useSelector(canUserCreateNativeQueries);
-  const filterLabel = hasNativeWrite ? t`native` : `SQL`;
-  return `Search the contents of ${filterLabel} queries`;
+  return hasNativeWrite
+    ? t`Search the contents of native queries`
+    : t`Search the contents of SQL queries`;
 };
