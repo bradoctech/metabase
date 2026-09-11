@@ -3,7 +3,8 @@
 Como os filtros se comportam no Metabase ao selecionar um valor — em especial se as opções dos demais filtros (ex.: filtros de coluna) se atualizam conforme a pré-seleção — e o suporte a cascata no Query Builder.
 
 **Público:** time de produto/engenharia.  
-**Escopo:** DataGrid, filtros do Query Builder, drill “Filter by this column” e Linked Filters de dashboard.
+**Escopo:** DataGrid, filtros do Query Builder, drill “Filter by this column” e Linked Filters de dashboard.  
+**Ticket:** EDD-565.
 
 ---
 
@@ -11,7 +12,7 @@ Como os filtros se comportam no Metabase ao selecionar um valor — em especial 
 
 No **Query Builder**, no **Filter Panel** e no drill **“Filter by this column”**, os value pickers **fazem cascata**: ao escolher um valor no filtro A, as opções do filtro B são restringidas pelos filtros irmãos já aplicados no mesmo stage (mesma base de `chain-filter` dos Linked Filters de dashboard).
 
-Cascata de opções em **dashboards** continua via **Linked Filters** (configuração explícita de pais/filhos).
+Cascata de opções em **dashboards** continua via **Linked Filters** (configuração explícita de pais/filhos). “Linked Filters” é o nome do recurso de dashboard; no QB a cascata é automática a partir dos filtros irmãos da query.
 
 ---
 
@@ -55,6 +56,16 @@ Fluxo:
 - Sem filtros irmãos: `GET /api/field/:id/values` e `GET /api/field/:id/search/:searchFieldId` (comportamento anterior).
 - Com filtros irmãos: `POST /api/field/:id/filtered-values` com `constraints` (e `query` opcional para busca).
 
+Body de `constraints` usa **snake_case** (`field_id`, `op`, `value`, `options` opcional), alinhado ao JSON da REST API. Exemplo:
+
+```json
+{
+  "constraints": [
+    { "field_id": 12, "op": "=", "value": "CA" }
+  ]
+}
+```
+
 Arquivos-chave:
 
 - `frontend/src/metabase/querying/filters/utils/chain-filter-constraints.ts`
@@ -89,8 +100,21 @@ A cascata do QB reutiliza `chain-filter`, então herda as mesmas limitações de
 
 ---
 
+## Como validar localmente
+
+Não use parâmetros de card (`?periodo=&orgao=`) nem o funil de **dashboard** — esses caminhos não exercitam o código novo do QB.
+
+1. Abra **New → Question** (notebook) em **Sample Database → People**.
+2. Em **Filtrar**, adicione e aplique `State = CA`.
+3. Adicione um segundo filtro em **City** e abra o dropdown de valores.
+4. No DevTools → Network, confirme `POST /api/field/<id>/filtered-values` com status 200 e `constraints` contendo o `field_id` de State.
+5. A lista de City deve restringir-se a cidades daquele estado; ao trocar State, a lista de City atualiza de novo.
+6. Opcional: visualize a pergunta, use o drill **“Filtrar por esta coluna”** em outra coluna (ex. Source) e confira o mesmo endpoint.
+
+---
+
 ## Conclusão prática
 
-1. Filtros do **QB / Filter Panel / drill de coluna** passam a cascatear opções via `filtered-values` + `chain-filter`.
+1. Filtros do **QB / Filter Panel / drill de coluna** passam a cascatear opções via `filtered-values` + `chain-filter` (EDD-565).
 2. Cascata em **dashboard** continua sendo **Linked Filters**.
 3. Evoluções futuras possíveis: cobrir mais tipos de filtro no conversor FE, ou um endpoint “query-context values” se o produto precisar refletir joins/stages/models na lista.
