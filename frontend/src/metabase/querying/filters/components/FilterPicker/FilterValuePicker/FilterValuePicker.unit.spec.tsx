@@ -4,6 +4,7 @@ import { createMockMetadata } from "__support__/metadata";
 import {
   setupFieldSearchValuesEndpoint,
   setupFieldValuesEndpoint,
+  setupFilteredFieldValuesEndpoint,
   setupRemappedFieldValueEndpoint,
 } from "__support__/server-mocks";
 import {
@@ -48,6 +49,7 @@ type EndpointOpts = {
   fieldId?: FieldId;
   searchFieldId?: FieldId;
   fieldValues?: GetFieldValuesResponse;
+  filteredFieldValues?: GetFieldValuesResponse;
   searchValues?: Record<string, GetFieldValuesResponse>;
   remappedValues?: Record<string, FieldValue>;
 };
@@ -56,11 +58,15 @@ function setupEndpoints({
   fieldId,
   searchFieldId = fieldId,
   fieldValues,
+  filteredFieldValues,
   searchValues = {},
   remappedValues = {},
 }: EndpointOpts) {
   if (fieldValues) {
     setupFieldValuesEndpoint(fieldValues);
+  }
+  if (filteredFieldValues) {
+    setupFilteredFieldValuesEndpoint(filteredFieldValues);
   }
   if (fieldId != null && searchFieldId != null) {
     Object.entries(searchValues).forEach(([value, response]) => {
@@ -90,6 +96,7 @@ interface SetupOpts<T> {
   fieldId?: FieldId;
   searchFieldId?: FieldId;
   fieldValues?: GetFieldValuesResponse;
+  filteredFieldValues?: GetFieldValuesResponse;
   searchValues?: Record<string, GetFieldValuesResponse>;
   remappedValues?: Record<string, FieldValue>;
 }
@@ -102,6 +109,7 @@ async function setupStringPicker({
   fieldId,
   searchFieldId = fieldId,
   fieldValues,
+  filteredFieldValues,
   searchValues = {},
   remappedValues = {},
 }: SetupOpts<string>) {
@@ -111,6 +119,7 @@ async function setupStringPicker({
     fieldId,
     searchFieldId,
     fieldValues,
+    filteredFieldValues,
     searchValues,
     remappedValues,
   });
@@ -168,6 +177,43 @@ async function setupNumberPicker({
 
 describe("StringFilterValuePicker", () => {
   const { query, stageIndex, findColumn } = createQueryWithMetadata();
+
+  describe("cascading values", () => {
+    it("should load constrained field values when sibling filters exist", async () => {
+      const category = findColumn("PRODUCTS", "CATEGORY");
+      const vendor = findColumn("PRODUCTS", "VENDOR");
+      const queryWithFilter = Lib.filter(
+        query,
+        stageIndex,
+        Lib.stringFilterClause({
+          operator: "=",
+          column: vendor,
+          values: ["Acme"],
+          options: {},
+        }),
+      );
+
+      const { onChange } = await setupStringPicker({
+        query: queryWithFilter,
+        stageIndex,
+        column: category,
+        values: [],
+        fieldId: PRODUCTS.CATEGORY,
+        filteredFieldValues: createMockFieldValues({
+          field_id: PRODUCTS.CATEGORY,
+          values: [["Gadget"], ["Widget"]],
+          has_more_values: false,
+        }),
+      });
+
+      expect(screen.getByText("Gadget")).toBeInTheDocument();
+      expect(screen.getByText("Widget")).toBeInTheDocument();
+      expect(screen.queryByText("Doohickey")).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByText("Gadget"));
+      expect(onChange).toHaveBeenCalledWith(["Gadget"]);
+    });
+  });
 
   describe("list values", () => {
     const column = findColumn("PRODUCTS", "CATEGORY");
