@@ -56,6 +56,29 @@ No WSL / jar / `clojure -M:dev` na mesma máquina, o path absoluto gerado pelo s
 - Divergências: **12%** da folha (o restante é “analisado”)
 - Órgãos: Seduc (maior bolha), SES, SSP, SEFAZ, SEINFRA, DETRAN
 
+## Aba Detalhamentos por Situação (proposta de navegação)
+
+Depois do seed principal, dá para acrescentar no **mesmo** dashboard (`/dashboard/10-…`) uma segunda aba com cards clicáveis por grupo semântico (mock da issue de detalhamentos):
+
+```
+python3 docs/internal/abono-demo/seed_detalhamentos_tab.py \
+  --url http://localhost:3001 \
+  --email SEU_ADMIN@empresa.com \
+  --password 'sua-senha' \
+  --dashboard-id 10
+```
+
+O que o script faz:
+
+| Aba | Conteúdo |
+| --- | --- |
+| **Visão analítica** | Layout original do protótipo (4 colunas) |
+| **Detalhamentos por Situação** | Hub por grupo + **painel de detalhe abaixo de cada tópico** |
+
+Clique no card atualiza o detalhe do grupo via **cross-filter** (sem nova página). **Período** e **Órgão** continuam no mesmo dashboard. Rodar de novo arquiva cards/dashboards antigos com prefixo `[Hub]` / `[Detalhe]` e recria a aba.
+
+Documento de análise/wireframe: [`docs/temp/proposta-aba-detalhamentos-por-situacao.md`](../../temp/proposta-aba-detalhamentos-por-situacao.md).
+
 ## O que ainda não é nativo neste protótipo
 
 Deixado de propósito para a próxima etapa:
