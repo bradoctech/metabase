@@ -29,7 +29,7 @@ export const SlackConfiguration = () => {
         <Box
           component="img"
           src={iconUrl}
-          alt="Metabot icon"
+          alt={t`Metabot icon`}
           w={80}
           h={80}
           bdrs="sm"

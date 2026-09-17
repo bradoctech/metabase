@@ -24,22 +24,24 @@ type FormState = {
   json: string;
 };
 
-const VALIDATION_SCHEMA = Yup.object({
-  duration: Yup.number().required().positive().integer(),
-  durationUnit: Yup.mixed<AllowedTimeUnit>()
-    .oneOf(["days", "hours", "minutes", "seconds"])
-    .required(),
-  json: Yup.string()
-    .required()
-    .test("is-json", "Invalid JSON", (value) => {
-      try {
-        JSON.parse(value ?? "");
-        return true;
-      } catch {
-        return false;
-      }
-    }),
-});
+function getValidationSchema() {
+  return Yup.object({
+    duration: Yup.number().required().positive().integer(),
+    durationUnit: Yup.mixed<AllowedTimeUnit>()
+      .oneOf(["days", "hours", "minutes", "seconds"])
+      .required(),
+    json: Yup.string()
+      .required()
+      .test("is-json", t`Invalid JSON`, (value) => {
+        try {
+          JSON.parse(value ?? "");
+          return true;
+        } catch {
+          return false;
+        }
+      }),
+  });
+}
 
 export const LogLevelsModal = ({ onClose }: Props) => {
   const {
@@ -93,7 +95,7 @@ export const LogLevelsModal = ({ onClose }: Props) => {
           durationUnit: "minutes",
           json: "",
         }}
-        validationSchema={VALIDATION_SCHEMA}
+        validationSchema={getValidationSchema()}
         onReset={handleReset}
         onSubmit={handleSubmit}
       >

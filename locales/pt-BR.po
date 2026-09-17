@@ -2603,7 +2603,7 @@ msgstr "Senha atual"
 #: frontend/src/metabase/auth/components/ResetPasswordForm/ResetPasswordForm.tsx:74
 #: frontend/src/metabase/setup/components/UserForm/UserForm.tsx:88
 msgid "Shhh..."
-msgstr "Xiu!"
+msgstr "Shhh..."
 
 #: frontend/src/metabase/account/password/components/UserPasswordForm/UserPasswordForm.tsx:87
 #: frontend/src/metabase/auth/components/ResetPasswordForm/ResetPasswordForm.tsx:73
@@ -2621,7 +2621,7 @@ msgstr "Confirme sua senha"
 #: frontend/src/metabase/auth/components/ResetPasswordForm/ResetPasswordForm.tsx:82
 #: frontend/src/metabase/setup/components/UserForm/UserForm.tsx:98
 msgid "Shhh... but one more time so we get it right"
-msgstr "Xiu… de novo, só pra ter certeza que está certo"
+msgstr "Shhh... de novo, só pra ter certeza que está certo"
 
 #: frontend/src/metabase/actions/components/ActionViz/Action.tsx:195
 msgid "No action assigned"
@@ -4661,6 +4661,10 @@ msgstr "Preencha host, porta e nome do banco de dados"
 #: frontend/src/metabase/databases/components/DatabaseConnectionSectionField/DatabaseConnectionSectionField.tsx:41
 msgid "Use a connection string"
 msgstr "Usar uma string de conexão"
+
+#: frontend/src/metabase/databases/components/DatabaseConnectionUri/DatabaseConnectionStringField.tsx
+msgid "Connection string (optional)"
+msgstr "String de conexão (opcional)"
 
 #: frontend/src/metabase/databases/components/DatabaseClientIdDescription/DatabaseClientIdDescription.tsx:27
 #, javascript-format
@@ -11106,6 +11110,10 @@ msgstr "Mapeamentos permitem que o Metabase adicione e remova usuários de grupo
 msgid "Mappings allow Metabase to automatically add and remove users from groups based on the membership information provided by the directory server. If a group isn‘t mapped, its membership won‘t be synced."
 msgstr "Mapeamentos permitem que a Metabase adicione e remova usuários de grupos automaticamente, com base na informação do servidor de diretório. Se um grupo não estiver mapeado, seus membros não vão ser sincronizados."
 
+#: frontend/src/metabase/admin/settings/components/widgets/GroupMappingsWidget/GroupMappingsWidgetView.tsx:38
+msgid "No mappings yet, group sync is not on"
+msgstr "Ainda não há mapeamentos, a sincronização de grupos não está ativada"
+
 #: frontend/src/metabase/admin/settings/components/widgets/GroupMappingsWidget/GroupMappingsWidgetView.tsx:41
 msgid "No mappings yet, groups will be automatically assigned by exactly matching names"
 msgstr "Ainda não há mapeamentos; grupos serão atribuídos automaticamente ao corresponder exatamente aos nomes"
@@ -16978,6 +16986,121 @@ msgstr "Ativar incorporações de convidado"
 msgid "A secure way to embed charts and dashboards, without single sign-on, when you don’t want to offer ad-hoc querying or chart drill-through."
 msgstr "Uma forma segura de incorporar gráficos e dashboards, sem login único, quando você não quer oferecer consultas ad-hoc ou detalhamento em gráficos."
 
+#: frontend/src/metabase/admin/settings/components/EmbeddingSettings/SharedCombinedEmbeddingSettings/SharedCombinedEmbeddingSettings.tsx:28
+msgid "A secure way to embed charts and dashboards, without single sign-on, when you don't want to offer ad-hoc querying or chart drill-through."
+msgstr "Uma forma segura de incorporar gráficos e dashboards, sem login único, quando você não quer oferecer consultas ad-hoc ou detalhamento em gráficos."
+
+#: frontend/src/metabase/admin/settings/components/EmbeddingSettings/EmbeddingSecuritySettings/CorsInputWidget.tsx:20
+#, javascript-format
+msgid "Add the website domains where you want to allow embedding. {0}"
+msgstr "Adicione os domínios dos sites em que você quer permitir a incorporação. {0}"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/AISettingsPage.tsx:98
+msgid "AI features"
+msgstr "Recursos de IA"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/AISettingsPage.tsx:99
+msgid "Manage AI integrations and Metabot."
+msgstr "Gerencie as integrações de IA e o Metabot."
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/AISettingsPage.tsx:125
+msgid "Agent API"
+msgstr "API do agente"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/AISettingsPage.tsx:117
+#, javascript-format
+msgid "Enable external access to the Agent API. {0}"
+msgstr "Ative o acesso externo à API do agente. {0}"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/AISettingsPage.tsx:135
+msgid "Turn this on to hide AI features across your instance."
+msgstr "Ative isto para ocultar os recursos de IA em toda a instância."
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/AISettingsPage.tsx:139
+msgid "Disable all AI features"
+msgstr "Desativar todos os recursos de IA"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/AISettingsPage.tsx:159
+msgid "Metabot settings"
+msgstr "Configurações do Metabot"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/MetabotSetup.tsx:160
+msgid "Select your AI provider to use AI explorations, SQL generation and Metabot."
+msgstr "Selecione o provedor de IA para usar explorações com IA, geração de SQL e o Metabot."
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/MetabotSetup.tsx:62
+msgid "Available models are provided by Metabase."
+msgstr "Os modelos disponíveis são fornecidos pela Metabase."
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/McpAppsSettings.tsx:63
+#, javascript-format
+msgid "Allow MCP clients to connect to your Metabase instance. {0}"
+msgstr "Permita que clientes MCP se conectem à sua instância do Metabase. {0}"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/McpAppsSettings.tsx:45
+msgid "MCP server"
+msgstr "Servidor MCP"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/MCPServerUrlSection.tsx:21
+msgid "MCP server URL"
+msgstr "URL do servidor MCP"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/MCPServerUrlSection.tsx:22
+msgid "This is the MCP server URL you can use to connect."
+msgstr "Esta é a URL do servidor MCP que você pode usar para conectar."
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/McpAppsSettings.tsx:113
+msgid "Supported MCP clients"
+msgstr "Clientes MCP compatíveis"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/McpAppsSettings.tsx:114
+msgid "Select which MCP clients you want to allow. Their sandbox domains will be automatically added to the CORS allowlist."
+msgstr "Selecione quais clientes MCP você quer permitir. Os domínios de sandbox deles serão adicionados automaticamente à lista de permissões de CORS."
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/McpAppsSettings.tsx:153
+msgid "Custom MCP client domains"
+msgstr "Domínios personalizados de clientes MCP"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/McpAppsSettings.tsx:154
+msgid "For self-hosted MCP clients. Separate values with a space."
+msgstr "Para clientes MCP auto-hospedados. Separe os valores com um espaço."
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/McpAppsSettings.tsx:164
+msgid "Changes will take effect within one minute."
+msgstr "As alterações terão efeito em até um minuto."
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/MetabotSetup.tsx:531
+#, javascript-format
+msgctxt "{0} is the name of an AI provider"
+msgid "Get or manage keys in {0}"
+msgstr "Obtenha ou gerencie as chaves em {0}"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/McpAppsSettings.tsx:17
+msgid "Claude"
+msgstr "Claude"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/McpAppsSettings.tsx:21
+msgid "Cursor and VS Code"
+msgstr "Cursor e VS Code"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/McpAppsSettings.tsx:25
+msgid "ChatGPT"
+msgstr "ChatGPT"
+
+#: frontend/src/metabase/metabot/components/MetabotAdmin/MetabotNavPane.tsx:15
+msgid "AI Settings"
+msgstr "Configurações de IA"
+
+#: frontend/src/metabase/admin/performance/components/ModelPersistenceConfiguration.tsx:119
+msgid "Enable model persistence to make your models (and the queries that use them) load faster."
+msgstr "Ative a persistência de modelos para que seus modelos (e as consultas que os usam) carreguem mais rápido."
+
+#: frontend/src/metabase/admin/performance/components/ModelPersistenceConfiguration.tsx:129
+#, javascript-format
+msgctxt "{0} is either \"Metabase\" or the customized name of the application."
+msgid "This will create a table for each of your models in a dedicated schema. {0} will refresh them on a schedule. Questions and queries that use your models will query these tables."
+msgstr "Isso vai criar uma tabela para cada modelo em um esquema dedicado. {0} vai atualizá-las em um agendamento. Perguntas e consultas que usam seus modelos vão consultar essas tabelas."
+
 #: frontend/src/metabase/admin/settings/components/EmbeddingSettings/SharedCombinedEmbeddingSettings/SharedCombinedEmbeddingSettings.tsx:58
 msgid "Upgrade to Metabase Pro for more powerful embedding methods"
 msgstr "Faça upgrade para o Metabase Pro para métodos de incorporação mais poderosos"
@@ -17426,6 +17549,10 @@ msgstr "Níveis de log disponíveis: {0}"
 msgid "Customize log levels"
 msgstr "Personalizar níveis de log"
 
+#: frontend/src/metabase/admin/tools/components/LogLevelsModal/LogLevelsModal.tsx
+msgid "Invalid JSON"
+msgstr "JSON inválido"
+
 #: frontend/src/metabase/admin/tools/components/LogLevelsModal/PresetPicker.tsx:15
 msgid "Load preset"
 msgstr "Carregar predefinição"
@@ -17544,6 +17671,14 @@ msgstr "Tipo de execução"
 #: frontend/src/metabase/admin/tools/components/TaskRunsPage/TaskRunsTable.tsx:43
 msgid "Entity"
 msgstr "Entidade"
+
+#: frontend/src/metabase/list-view/components/ListView/ListViewConfiguration.tsx
+msgid "Entity icon"
+msgstr "Ícone da entidade"
+
+#: frontend/src/metabase/notifications/PulsesListSidebar.tsx
+msgid "Pulse Card"
+msgstr "Cartão de assinatura"
 
 #: frontend/src/metabase/admin/tools/components/TaskRunsPage/TaskRunsTable.tsx:47
 msgid "Task Count"
@@ -19375,9 +19510,13 @@ msgstr "Aqui é onde seus resultados serão exibidos"
 msgid "Edit SQL Query"
 msgstr "Editar query SQL"
 
-#: frontend/src/metabase/search/components/filters/NativeQueryFilter/NativeQueryLabel.tsx:8
-msgid "native"
-msgstr "nativo"
+#: frontend/src/metabase/search/components/filters/NativeQueryFilter/NativeQueryLabel.tsx
+msgid "Search the contents of native queries"
+msgstr "Buscar no conteúdo de consultas nativas"
+
+#: frontend/src/metabase/search/components/filters/NativeQueryFilter/NativeQueryLabel.tsx
+msgid "Search the contents of SQL queries"
+msgstr "Buscar no conteúdo de consultas SQL"
 
 #: frontend/src/metabase/search/components/filters/TypeFilter/TypeFilterDisplay.tsx:14
 msgid "1 type selected"
@@ -23442,6 +23581,10 @@ msgstr "Postgres, MySQL e H2"
 #: frontend/src/metabase/admin/settings/slack/SlackConfiguration.tsx:22
 msgid "Slack app icon"
 msgstr "Ícone do app do Slack"
+
+#: frontend/src/metabase/admin/settings/slack/SlackConfiguration.tsx:32
+msgid "Metabot icon"
+msgstr "Ícone do Metabot"
 
 #: frontend/src/metabase/admin/settings/slack/SlackConfiguration.tsx:24
 msgid "Give your app all the bells and whistles."

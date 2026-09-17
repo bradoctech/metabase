@@ -196,7 +196,7 @@ export const PaletteResults = ({
 function PaletteEmptyState() {
   return (
     <Stack align="center" justify="center" py="6rem" px="2rem" gap={0}>
-      <Image src={NoResults} alt="no results" w={115} h={65} />
+      <Image src={NoResults} alt={t`No results`} w={115} h={65} />
       <Text c="text-secondary" fw={700} mt="xl">
         {t`No recent items`}
       </Text>

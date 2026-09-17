@@ -160,7 +160,12 @@ export const SdkIframeEmbedSetupContent = () => {
           ) : (
             <Card h="100%">
               <Flex h="100%" align="center" justify="center">
-                <Image w={120} h={120} src={noResultsSource} alt="No results" />
+                <Image
+                  w={120}
+                  h={120}
+                  src={noResultsSource}
+                  alt={t`No results`}
+                />
               </Flex>
             </Card>
           )}
