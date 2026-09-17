@@ -1,6 +1,6 @@
 # Estratégia de atualização do Metabase com customizações SP
 
-**Público:** time que vai planejar e executar EDD-1355, EDD-1356 e issues de preparo/refatoração.  
+**Público:** time que vai planejar e executar EDD-1355, EDD-1356, EDD-1361 e EDD-1362.  
 **Objetivo:** atualizar o Metabase com risco controlado, sem perder customizações SP, e deixar um processo reproduzível para as próximas releases.
 
 ---
@@ -52,18 +52,18 @@ Há **pouco isolamento**. A maior parte é edição direta no código upstream.
 ## Sequência correta de atuação
 
 ```text
-1) Prep (issue nova, escopo fino)
+1) EDD-1361 — inventário + isolamento mínimo
        ↓
 2) EDD-1356 — processo MVP (pode começar em paralelo com 1)
        ↓
 3) EDD-1355 — update real = PoC da 1356
        ↓
-4) Tema/marca pós-update (issue nova)
+4) EDD-1362 — tema/marca pós-update
        ↓
 5) EDD-1356 v2 — endurecer script/doc com aprendizados da 1355
 ```
 
-### 1. Issue nova — preparar o fork para updates (escopo curto)
+### 1. EDD-1361 — preparar o fork para updates (escopo curto)
 
 **Não** é o redesign completo de DS. É só o que reduz atrito sem depender da API de tema da 63:
 
@@ -72,7 +72,7 @@ Há **pouco isolamento**. A maior parte é edição direta no código upstream.
 - quick wins seguros na 0.60 (tokens em `sp-colors`, evitar hex solto, centralizar default de font/logo onde for óbvio);
 - **não** reescrever home, dashboard ou datagrid inteiros ainda.
 
-Rascunho completo: [rascunho-issue-prep.md](./rascunho-issue-prep.md).
+Detalhe da issue: [issue-edd-1361.md](./issue-edd-1361.md).
 
 ### 2. EDD-1356 — automatizar / semi-automatizar o transporte
 
@@ -82,7 +82,7 @@ Formalizar o processo reproduzível (evolução do script de 61):
 snapshot → merge upstream → restore SP-owned → report manuais → verify
 ```
 
-- Pode começar em paralelo com o prep, usando o inventário parcial.
+- Pode começar em paralelo com a EDD-1361, usando o inventário parcial.
 - Entrega MVP **antes** ou no início da 1355, para a 1355 já consumir o processo.
 - Não precisa estar “perfeita” antes do primeiro merge — o PoC é que vai endurecê-la.
 
@@ -93,11 +93,11 @@ snapshot → merge upstream → restore SP-owned → report manuais → verify
 - Executar o fluxo da 1356: restore automático + relatório do que exige intervenção manual.
 - Reaplicar/adaptar adapters e behavior patches.
 - Validar customizações SP, dashboards e fluxos do Trilhas.
-- **Registrar** conflitos reais — isso vira entrada da refatoração de tema e da 1356 v2.
+- **Registrar** conflitos reais — isso vira entrada da EDD-1362 e da 1356 v2.
 
 Dependência explícita: a 1355 **usa** o processo da 1356 (mesmo em MVP).
 
-### 4. Issue nova — refatorar tema/marca na base já atualizada
+### 4. EDD-1362 — refatorar tema/marca na base já atualizada
 
 Depois do merge na 63:
 
@@ -106,7 +106,7 @@ Depois do merge na 63:
 - arquivos upstream só referenciam tokens SP, não valores hardcoded.
 
 Objetivo: o **próximo** update (64, 65…) ter bem menos conflitos de visual.  
-Rascunho: [rascunho-issue-tema.md](./rascunho-issue-tema.md).
+Detalhe da issue: [issue-edd-1362.md](./issue-edd-1362.md).
 
 ### 5. Fechar o ciclo na EDD-1356
 
@@ -118,8 +118,9 @@ Atualizar script, listas (`restore-ours` / `dual-changed`), runbook e checklist 
 
 ```text
                     ┌─────────────────────┐
-                    │ Prep (inventário +  │
-                    │ quick wins)         │
+                    │ EDD-1361            │
+                    │ inventário +        │
+                    │ quick wins          │
                     └──────────┬──────────┘
                                │ alimenta
               ┌────────────────┼────────────────┐
@@ -133,27 +134,27 @@ Atualizar script, listas (`restore-ours` / `dual-changed`), runbook e checklist 
               │◄────────────────────────────────┤
               ▼                                 ▼
      ┌─────────────────┐               ┌─────────────────┐
-     │ EDD-1356 v2     │               │ Tema/marca      │
-     │ processo maduro │               │ pós-update      │
+     │ EDD-1356 v2     │               │ EDD-1362        │
+     │ processo maduro │               │ tema pós-update │
      └─────────────────┘               └─────────────────┘
 ```
 
-| Issue                 | Depende de                           | Alimenta                 |
-| --------------------- | ------------------------------------ | ------------------------ |
-| Prep                  | —                                    | 1356, 1355               |
-| EDD-1356 MVP          | Prep (inventário mínimo)             | 1355                     |
-| EDD-1355              | 1356 MVP + Prep                      | Tema pós-update, 1356 v2 |
-| Tema/marca pós-update | 1355 (base nova + mapa de conflitos) | próximos upgrades        |
-| EDD-1356 v2           | 1355                                 | releases futuras         |
+| Issue        | Depende de                           | Alimenta          |
+| ------------ | ------------------------------------ | ----------------- |
+| EDD-1361     | —                                    | 1356, 1355        |
+| EDD-1356 MVP | EDD-1361 (inventário mínimo)         | 1355              |
+| EDD-1355     | 1356 MVP + EDD-1361                  | EDD-1362, 1356 v2 |
+| EDD-1362     | 1355 (base nova + mapa de conflitos) | próximos upgrades |
+| EDD-1356 v2  | 1355                                 | releases futuras  |
 
 ---
 
 ## Se a 1355 for urgente
 
-Caminho mínimo (ainda na mesma estratégia, com escopo menor no prep):
+Caminho mínimo (ainda na mesma estratégia, com escopo menor na 1361):
 
 ```text
-prep mínimo → MVP 1356 → 1355 → refatoração tema → 1356 v2
+EDD-1361 mínima → MVP 1356 → 1355 → EDD-1362 → 1356 v2
 ```
 
 Não pule o inventário nem o report de manuais: sem isso a 1355 vira atualização ad hoc e a 1356 não tem PoC útil.
@@ -183,6 +184,6 @@ Não pule o inventário nem o report de manuais: sem isso a 1355 vira atualizaç
 
 ## Próximo passo sugerido
 
-1. Abrir as duas issues novas com base em [rascunho-issue-prep.md](./rascunho-issue-prep.md) e [rascunho-issue-tema.md](./rascunho-issue-tema.md).
-2. Ligar EDD-1355 ← depende de EDD-1356 (MVP) e do prep.
-3. Começar o prep (manifesto de customizações) enquanto o MVP da 1356 é esboçado.
+1. Executar a **EDD-1361** (inventário + quick wins) na branch `EDD-1361`.
+2. Ligar EDD-1355 ← depende de EDD-1356 (MVP) e da EDD-1361.
+3. Esboçar o MVP da EDD-1356 em paralelo ao inventário, quando fizer sentido.
