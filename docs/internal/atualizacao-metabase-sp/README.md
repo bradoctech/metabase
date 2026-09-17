@@ -10,12 +10,13 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 
 ## Documentos
 
-| Documento                                            | Conteúdo                                                                  |
-| ---------------------------------------------------- | ------------------------------------------------------------------------- |
-| [INSTRUCOES-AGENTE.md](./INSTRUCOES-AGENTE.md)       | Bootstrap de contexto para o agente em conversas novas (não perder o fio) |
-| [estratégia-sequencia.md](./estrategia-sequencia.md) | Cenário atual, ordem correta de atuação e dependências entre as issues    |
-| [issue-edd-1361.md](./issue-edd-1361.md)             | EDD-1361 — inventário + isolamento mínimo (prep)                          |
-| [issue-edd-1362.md](./issue-edd-1362.md)             | EDD-1362 — refatoração de tema/marca pós-update                           |
+| Documento                                                  | Conteúdo                                                                  |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [INSTRUCOES-AGENTE.md](./INSTRUCOES-AGENTE.md)             | Bootstrap de contexto para o agente em conversas novas (não perder o fio) |
+| [estratégia-sequencia.md](./estrategia-sequencia.md)       | Cenário atual, ordem correta de atuação e dependências entre as issues    |
+| [issue-edd-1361.md](./issue-edd-1361.md)                   | EDD-1361 — inventário + isolamento mínimo (prep)                          |
+| [issue-edd-1362.md](./issue-edd-1362.md)                   | EDD-1362 — refatoração de tema/marca pós-update                           |
+| [manifesto-customizacoes.md](./manifesto-customizacoes.md) | Inventário classificado (SP-owned / Adapter / Behavior) + quick wins      |
 
 ---
 

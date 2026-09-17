@@ -3,7 +3,7 @@
 **Como usar:** no início de uma nova conversa sobre EDD-1355, EDD-1356, EDD-1361, EDD-1362, tema SP ou upgrade do fork, peça ao agente para ler este arquivo (e, se precisar de detalhe, os outros `.md` desta pasta) antes de planejar ou editar código.
 
 **Pasta:** `docs/internal/atualizacao-metabase-sp/`  
-**Última consolidação de contexto:** IDs oficiais do tracker — EDD-1361 (prep) e EDD-1362 (tema pós-update); trabalho em andamento na branch `EDD-1361`.
+**Última consolidação de contexto:** manifesto EDD-1361 publicado; IDs EDD-1361 / EDD-1362 oficiais; branch de trabalho `EDD-1361`.
 
 ---
 
@@ -77,7 +77,7 @@ Textos das issues: [issue-edd-1361.md](./issue-edd-1361.md) e [issue-edd-1362.md
 | ------------ | ---------------------------------------------------------- | --------------------------------- |
 | **EDD-1355** | Atualizar Metabase + reaplicar customizações               | Planejada; PoC da 1356            |
 | **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | Planejada; MVP antes/durante 1355 |
-| **EDD-1361** | Inventário + quick wins de isolamento                      | Em andamento (branch `EDD-1361`)  |
+| **EDD-1361** | Inventário + quick wins de isolamento                      | Em andamento; manifesto publicado |
 | **EDD-1362** | Refatorar tema/marca na base já atualizada                 | Criada; **após** 1355             |
 
 ---
@@ -94,7 +94,7 @@ Textos das issues: [issue-edd-1361.md](./issue-edd-1361.md) e [issue-edd-1362.md
 
 - Preferir: commits `feat[EDD-…]`, `git diff --name-only` vs `upstream/release-x.60.x`, listas do script 61.
 - Classificar em SP-owned / adapter / behavior.
-- Documentar progresso nesta pasta (ex.: novo `manifesto-customizacoes.md` quando existir).
+- Documentar progresso nesta pasta; inventário atual em [manifesto-customizacoes.md](./manifesto-customizacoes.md).
 
 ### Ao atualizar versão (1355)
 
@@ -125,13 +125,14 @@ Textos das issues: [issue-edd-1361.md](./issue-edd-1361.md) e [issue-edd-1362.md
 
 ## Documentos desta pasta
 
-| Arquivo                                              | Uso                                              |
-| ---------------------------------------------------- | ------------------------------------------------ |
-| [README.md](./README.md)                             | Índice humano                                    |
-| [estrategia-sequencia.md](./estrategia-sequencia.md) | Cenário + sequência + dependências               |
-| [issue-edd-1361.md](./issue-edd-1361.md)             | Texto oficial / espelho da EDD-1361              |
-| [issue-edd-1362.md](./issue-edd-1362.md)             | Texto oficial / espelho da EDD-1362              |
-| **Este arquivo**                                     | Bootstrap de contexto para o agente em chat novo |
+| Arquivo                                                    | Uso                                              |
+| ---------------------------------------------------------- | ------------------------------------------------ |
+| [README.md](./README.md)                                   | Índice humano                                    |
+| [estrategia-sequencia.md](./estrategia-sequencia.md)       | Cenário + sequência + dependências               |
+| [issue-edd-1361.md](./issue-edd-1361.md)                   | Texto oficial / espelho da EDD-1361              |
+| [issue-edd-1362.md](./issue-edd-1362.md)                   | Texto oficial / espelho da EDD-1362              |
+| [manifesto-customizacoes.md](./manifesto-customizacoes.md) | Inventário path → EDD → bucket → risco           |
+| **Este arquivo**                                           | Bootstrap de contexto para o agente em chat novo |
 
 ---
 

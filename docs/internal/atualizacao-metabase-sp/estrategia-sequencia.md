@@ -184,6 +184,6 @@ Não pule o inventário nem o report de manuais: sem isso a 1355 vira atualizaç
 
 ## Próximo passo sugerido
 
-1. Executar a **EDD-1361** (inventário + quick wins) na branch `EDD-1361`.
-2. Ligar EDD-1355 ← depende de EDD-1356 (MVP) e da EDD-1361.
-3. Esboçar o MVP da EDD-1356 em paralelo ao inventário, quando fizer sentido.
+1. Revisar [manifesto-customizacoes.md](./manifesto-customizacoes.md) (EDD-1361).
+2. Configurar remote `upstream` e completar o diff vs `release-x.60.x` (pendência do manifesto).
+3. Seguir para MVP da EDD-1356 e depois EDD-1355; EDD-1362 só após o upgrade.
