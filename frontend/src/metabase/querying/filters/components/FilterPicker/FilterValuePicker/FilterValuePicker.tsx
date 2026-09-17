@@ -3,6 +3,7 @@ import { useMemo } from "react";
 
 import {
   useGetFieldValuesQuery,
+  useGetFilteredFieldValuesQuery,
   useGetRemappedFieldValueQuery,
   useSearchFieldValuesQuery,
 } from "metabase/api";
@@ -13,6 +14,7 @@ import {
   type UseGetRemappedFieldValueArgs,
   type UseSearchFieldValuesArgs,
 } from "metabase/querying/common/components/FieldValuePicker";
+import { getChainFilterConstraints } from "metabase/querying/filters/utils/chain-filter-constraints";
 import type { ComboboxProps } from "metabase/ui";
 import * as Lib from "metabase-lib";
 
@@ -61,6 +63,12 @@ function FilterValuePicker({
     [query, column],
   );
 
+  const constraints = useMemo(
+    () => getChainFilterConstraints(query, stageIndex, column),
+    [query, stageIndex, column],
+  );
+  const hasConstraints = constraints.length > 0;
+
   const searchColumnName = useMemo(() => {
     return fieldInfo.searchField
       ? Lib.displayInfo(query, stageIndex, fieldInfo.searchField).displayName
@@ -72,9 +80,20 @@ function FilterValuePicker({
   const canRemapValues = canRemapFieldValues(fieldInfo);
 
   const useGetFieldValues = ({ skip }: UseGetFieldValuesArgs) => {
-    return useGetFieldValuesQuery(
-      fieldInfo.fieldId == null || skip ? skipToken : fieldInfo.fieldId,
+    const unconstrained = useGetFieldValuesQuery(
+      fieldInfo.fieldId == null || skip || hasConstraints
+        ? skipToken
+        : fieldInfo.fieldId,
     );
+    const constrained = useGetFilteredFieldValuesQuery(
+      fieldInfo.fieldId == null || skip || !hasConstraints
+        ? skipToken
+        : {
+            fieldId: fieldInfo.fieldId,
+            constraints,
+          },
+    );
+    return hasConstraints ? constrained : unconstrained;
   };
 
   const useSearchFieldValues = ({
@@ -82,8 +101,11 @@ function FilterValuePicker({
     limit,
     skip,
   }: UseSearchFieldValuesArgs) => {
-    return useSearchFieldValuesQuery(
-      fieldInfo.fieldId == null || fieldInfo.searchFieldId == null || skip
+    const unconstrained = useSearchFieldValuesQuery(
+      fieldInfo.fieldId == null ||
+        fieldInfo.searchFieldId == null ||
+        skip ||
+        hasConstraints
         ? skipToken
         : {
             fieldId: fieldInfo.fieldId,
@@ -92,6 +114,24 @@ function FilterValuePicker({
             limit,
           },
     );
+    const constrained = useGetFilteredFieldValuesQuery(
+      fieldInfo.fieldId == null || skip || !hasConstraints
+        ? skipToken
+        : {
+            fieldId: fieldInfo.fieldId,
+            constraints,
+            query: value,
+            limit,
+          },
+    );
+
+    if (hasConstraints) {
+      return {
+        ...constrained,
+        data: constrained.data?.values,
+      };
+    }
+    return unconstrained;
   };
 
   const useGetRemappedFieldValue = ({

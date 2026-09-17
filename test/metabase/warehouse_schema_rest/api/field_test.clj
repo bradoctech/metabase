@@ -286,6 +286,44 @@
                                     [3 "Artisan"]]}
                         (mt/user-http-request :crowberto :get 200 (format "field/%d/values" (mt/id :venues :category_id))))))))))
 
+(deftest filtered-field-values-test
+  (testing "POST /api/field/:id/filtered-values"
+    (testing "returns values constrained by another field on the same table"
+      (is (= {:values
+              [["Dal Rae Restaurant"]
+               ["Lawry's The Prime Rib"]
+               ["Pacific Dining Car - Santa Monica"]
+               ["Sushi Nakazawa"]
+               ["Sushi Yasuda"]
+               ["Tanoshi Sushi & Sake Bar"]]
+              :has_more_values false
+              :field_id        (mt/id :venues :name)}
+             (mt/user-http-request :rasta :post 200 (format "field/%d/filtered-values" (mt/id :venues :name))
+                                   {:constraints [{:field_id (mt/id :venues :price)
+                                                   :op       "="
+                                                   :value    4}]}))))
+
+    (testing "returns values constrained via FK relationships"
+      (is (= {:values          [["Japanese"] ["Steakhouse"]]
+              :has_more_values false
+              :field_id        (mt/id :categories :name)}
+             (mt/user-http-request :rasta :post 200 (format "field/%d/filtered-values" (mt/id :categories :name))
+                                   {:constraints [{:field_id (mt/id :venues :price)
+                                                   :op       "="
+                                                   :value    4}]}))))
+
+    (testing "searches constrained values when query is provided"
+      (is (= {:values          [["Sushi Nakazawa"]
+                                ["Sushi Yasuda"]
+                                ["Tanoshi Sushi & Sake Bar"]]
+              :has_more_values false
+              :field_id        (mt/id :venues :name)}
+             (mt/user-http-request :rasta :post 200 (format "field/%d/filtered-values" (mt/id :venues :name))
+                                   {:constraints [{:field_id (mt/id :venues :price)
+                                                   :op       "="
+                                                   :value    4}]
+                                    :query       "sushi"}))))))
+
 (def ^:private list-field {:name "Field Test", :base_type :type/Integer, :has_field_values "list"})
 
 (deftest update-field-values-no-human-readable-values-test

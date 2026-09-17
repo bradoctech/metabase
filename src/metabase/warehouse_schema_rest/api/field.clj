@@ -7,12 +7,14 @@
    [metabase.events.core :as events]
    [metabase.lib.schema.metadata :as lib.schema.metadata]
    [metabase.models.interface :as mi]
+   [metabase.parameters.chain-filter :as chain-filter]
    [metabase.parameters.field :as parameters.field]
    [metabase.request.core :as request]
    [metabase.sync.core :as sync]
    [metabase.types.core :as types]
    [metabase.util :as u]
    [metabase.util.i18n :as i18n]
+   [metabase.util.malli :as mu]
    [metabase.util.malli.schema :as ms]
    [metabase.util.quick-task :as quick-task]
    [metabase.warehouse-schema.field :as schema.field]
@@ -274,6 +276,52 @@
                     [:id ms/PositiveInt]]]
   (let [field (api/query-check (t2/select-one :model/Field :id id))]
     (parameters.field/field->values field)))
+
+(def ^:private FieldValuesConstraint
+  "A single chain-filter constraint supplied by the Query Builder when cascading filter value pickers.
+  Request body uses snake_case keys to match the REST JSON convention."
+  [:map
+   [:field_id ms/PositiveInt]
+   [:op       [:or :keyword ms/NonBlankString]]
+   [:value    :any]
+   [:options  {:optional true} [:maybe :map]]])
+
+(def ^:private filtered-values-result-limit
+  "Same default as dashboard chain-filter value pickers."
+  1000)
+
+(mu/defn- normalize-field-values-constraints :- ::chain-filter/constraints
+  [constraints]
+  (mapv (fn [{:keys [field_id op value options]}]
+          (cond-> {:field-id field_id
+                   :op       (keyword op)
+                   :value    value}
+            (some? options) (assoc :options (update-keys options keyword))))
+        constraints))
+
+;; TODO (Cam 2025-11-25) please add a response schema to this API endpoint, it makes it easier for our customers to
+;; use our API + we will need it when we make auto-TypeScript-signature generation happen
+;;
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :post "/:id/filtered-values"
+  "Return possible values for a Field, optionally restricted by other Field constraints. Powers cascading filter
+  value pickers in the Query Builder and column filter drills. When `query` is provided, searches values (same as
+  chain-filter search). Constraints use snake_case keys (`field_id`, `op`, `value`, optional `options`)."
+  [{:keys [id]} :- [:map
+                    [:id ms/PositiveInt]]
+   _query-params
+   {:keys [constraints query limit]
+    :or   {constraints []}} :- [:map
+                                [:constraints {:optional true} [:maybe [:sequential FieldValuesConstraint]]]
+                                [:query       {:optional true} [:maybe ms/NonBlankString]]
+                                [:limit       {:optional true} [:maybe ms/PositiveInt]]]]
+  (api/query-check (t2/select-one :model/Field :id id))
+  (let [normalized   (normalize-field-values-constraints constraints)
+        result-limit (or limit filtered-values-result-limit)
+        result       (if (seq query)
+                       (chain-filter/chain-filter-search id normalized query :limit result-limit)
+                       (chain-filter/chain-filter id normalized :limit result-limit))]
+    (assoc result :field_id id)))
 
 (defn- validate-human-readable-pairs
   "Human readable values are optional, but if present they must be present for each field value. Throws if invalid,

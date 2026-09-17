@@ -146,6 +146,20 @@ export interface GetFieldValuesResponse {
   has_more_values: boolean;
 }
 
+export interface FieldValuesConstraint {
+  field_id: FieldId;
+  op: string;
+  value: unknown;
+  options?: Record<string, unknown> | null;
+}
+
+export interface GetFilteredFieldValuesRequest {
+  fieldId: FieldId;
+  constraints: FieldValuesConstraint[];
+  query?: string;
+  limit?: number;
+}
+
 export interface SearchFieldValuesRequest {
   fieldId: FieldId;
   searchFieldId: FieldId;
