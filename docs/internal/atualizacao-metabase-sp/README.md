@@ -4,7 +4,7 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 
 **Público:** engenharia e produto que planejam ou executam upgrades do Metabase neste repositório.  
 **Branch de referência atual:** `saopaulo` (base Metabase **0.60.x**).  
-**Issues relacionadas:** EDD-1355, EDD-1356 (+ issues novas propostas nesta pasta).
+**Issues relacionadas:** EDD-1355, EDD-1356, EDD-1361, EDD-1362.
 
 ---
 
@@ -14,8 +14,8 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 | ---------------------------------------------------- | ------------------------------------------------------------------------- |
 | [INSTRUCOES-AGENTE.md](./INSTRUCOES-AGENTE.md)       | Bootstrap de contexto para o agente em conversas novas (não perder o fio) |
 | [estratégia-sequencia.md](./estrategia-sequencia.md) | Cenário atual, ordem correta de atuação e dependências entre as issues    |
-| [rascunho-issue-prep.md](./rascunho-issue-prep.md)   | Rascunho da issue de inventário + isolamento mínimo (prep)                |
-| [rascunho-issue-tema.md](./rascunho-issue-tema.md)   | Rascunho da issue de refatoração de tema/marca pós-update                 |
+| [issue-edd-1361.md](./issue-edd-1361.md)             | EDD-1361 — inventário + isolamento mínimo (prep)                          |
+| [issue-edd-1362.md](./issue-edd-1362.md)             | EDD-1362 — refatoração de tema/marca pós-update                           |
 
 ---
 
