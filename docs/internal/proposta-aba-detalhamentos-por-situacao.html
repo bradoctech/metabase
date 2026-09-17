@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<title>Apresentação: Aba Detalhamentos por Situação</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  body {
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.45;
+    color: #1a1a1a;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 18pt; color: #b91c1c; border-bottom: 2px solid #b91c1c; padding-bottom: 8px; }
+  h2 { font-size: 13pt; color: #991b1b; margin-top: 1.4em; page-break-after: avoid; }
+  h3 { font-size: 11.5pt; color: #7f1d1d; margin-top: 1.1em; page-break-after: avoid; }
+  table { border-collapse: collapse; width: 100%; margin: 0.7em 0 1.1em; font-size: 9pt; page-break-inside: avoid; }
+  th, td { border: 1px solid #d1d5db; padding: 5px 7px; vertical-align: top; }
+  th { background: #fef2f2; text-align: left; }
+  code, pre { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 8pt; }
+  pre {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 10px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    page-break-inside: avoid;
+  }
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 1.3em 0; }
+  blockquote {
+    margin: 0.8em 0;
+    padding: 0.5em 0.9em;
+    border-left: 3px solid #fca5a5;
+    background: #fef2f2;
+    color: #374151;
+  }
+  p { orphans: 3; widows: 3; }
+</style>
+</head>
+<body>
+<h1>Apresentação: Aba Detalhamentos por Situação</h1>
+<p><strong>Produto:</strong> Abono de Permanência<br />
+<strong>Escopo:</strong> proposta de UX + protótipo navegável no Metabase local<br />
+<strong>Data:</strong> 15/09/2026<br />
+<strong>Status:</strong> Pronto para validação / apresentação à equipe<br />
+<strong>Protótipo local:</strong> <code>http://localhost:3001/dashboard/10-abono-de-permanencia</code> → aba <strong>Detalhamentos por Situação</strong></p>
+<hr />
+<h2>1. Em uma frase</h2>
+<p>Criamos um <strong>hub de navegação por situação de negócio</strong>: o analista escolhe um card (ex.: “Servidores com divergência”) e o <strong>detalhe abre abaixo do próprio grupo</strong>, sem sair da página, mantendo os filtros globais do dashboard.</p>
+<hr />
+<h2>2. Problema (contexto da issue)</h2>
+<p>Na aba atual de homologação (<strong>Detalhamento por Servidor</strong>), a investigação depende de:</p>
+<ul>
+<li>KPIs + <strong>tabelas-preview</strong> (~200 linhas)</li>
+<li>Vários gráficos empilhados na mesma aba</li>
+</ul>
+<p>Isso obriga o analista a “vasculhar” um painel longo em vez de ir direto à visão detalhada da situação que precisa investigar.</p>
+<h3>Objetivo de negócio</h3>
+<table>
+<thead>
+<tr>
+<th>Como analista…</th>
+<th>quero…</th>
+<th>para…</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>do painel de Abono de Permanência</td>
+<td>uma aba com cards navegáveis por situação</td>
+<td>chegar rápido às visões de investigação <strong>sem depender</strong> das tabelas resumidas</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>3. O que foi entregue neste protótipo</h2>
+<h3>3.1 Onde está</h3>
+<table>
+<thead>
+<tr>
+<th>Ambiente</th>
+<th>O quê</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Local</strong></td>
+<td>Dashboard demo <strong>Abono de Permanência</strong> (<code>/dashboard/10-…</code>)</td>
+</tr>
+<tr>
+<td>Aba 1</td>
+<td><strong>Visão analítica</strong> — mock anterior (4 colunas) preservado</td>
+</tr>
+<tr>
+<td>Aba 2</td>
+<td><strong>Detalhamentos por Situação</strong> — hub + detalhe in-page</td>
+</tr>
+</tbody>
+</table>
+<h3>3.2 Comportamento escolhido (versão final)</h3>
+<p>Após validar duas opções nativas do Metabase:</p>
+<table>
+<thead>
+<tr>
+<th>Opção</th>
+<th>Resultado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Abrir detalhe em <strong>nova página</strong> (dashboard filho)</td>
+<td>Funcionou (filtros na URL), mas tira o analista do contexto</td>
+</tr>
+<tr>
+<td><strong>Modal/dialog</strong> nativo</td>
+<td><strong>Não existe</strong> no Metabase para outro dashboard/pergunta</td>
+</tr>
+<tr>
+<td><strong>Cross-filter in-page</strong> ← adotado</td>
+<td>Clique atualiza o painel de detalhe <strong>abaixo do grupo</strong>, na mesma aba</td>
+</tr>
+</tbody>
+</table>
+<h3>3.3 Como os filtros funcionam</h3>
+<table>
+<thead>
+<tr>
+<th>Filtro</th>
+<th>Comportamento</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Período</strong> / <strong>Órgão</strong></td>
+<td>Continuam no <strong>mesmo</strong> dashboard (já aplicados aos cards ligados a eles)</td>
+</tr>
+<tr>
+<td><strong>Situação clicada</strong></td>
+<td>Atualiza um filtro por grupo via <strong>cross-filter</strong> e preenche o painel <strong>Detalhe — &lt;grupo&gt;</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Fluxo para apresentar:</p>
+<ol>
+<li>Abrir a aba <strong>Detalhamentos por Situação</strong></li>
+<li>Clicar em um card (ex.: barra “Servidores com divergência”)</li>
+<li>Observar o bloco <strong>Detalhe — Divergências</strong> atualizar <strong>sem mudar de página</strong></li>
+</ol>
+<hr />
+<h2>4. Estrutura da aba (o que a equipe verá)</h2>
+<pre><code>[Período] [Órgão]  …filtros globais…
+
+Detalhamentos por Situação
+Clique em um card → detalhe do grupo atualiza abaixo (cross-filter)
+
+▶ DIVERGÊNCIAS
+   [card] [card] [card]
+   ┌─ Detalhe — Divergências ─────────────────────────┐
+   │ Situação selecionada + tabela/texto placeholder  │
+   └──────────────────────────────────────────────────┘
+
+▶ ELEGIBILIDADE
+   [card] [card] [card] [card]
+   ┌─ Detalhe — Elegibilidade ────────────────────────┐
+   │ …                                                │
+   └──────────────────────────────────────────────────┘
+
+▶ SITUAÇÕES ESPECÍFICAS
+   [card] [card] [card] [card]
+   ┌─ Detalhe — Situações específicas ────────────────┐
+   │ …                                                │
+   └──────────────────────────────────────────────────┘
+
+▶ REGRA LEGISLATIVA
+   [card]
+   ┌─ Detalhe — Regra legislativa ────────────────────┐
+   │ …                                                │
+   └──────────────────────────────────────────────────┘
+</code></pre>
+<hr />
+<h2>5. Catálogo de cards (nomenclatura de negócio)</h2>
+<h3>Divergências</h3>
+<table>
+<thead>
+<tr>
+<th>Card</th>
+<th>Indicador mock</th>
+<th>Papel do detalhe (no cliente)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Servidores com divergência</td>
+<td>3.811</td>
+<td>Tabela completa (substitui preview)</td>
+</tr>
+<tr>
+<td>Divergência da contribuição previdenciária</td>
+<td>—</td>
+<td>Visão filtrada</td>
+</tr>
+<tr>
+<td>Detalhamento das ocorrências da contribuição previdenciária</td>
+<td>—</td>
+<td>Ranking/tabela completa</td>
+</tr>
+</tbody>
+</table>
+<h3>Elegibilidade</h3>
+<table>
+<thead>
+<tr>
+<th>Card</th>
+<th>Indicador mock</th>
+<th>Papel do detalhe (no cliente)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cargo comissionado recebendo abono indevidamente</td>
+<td>3.808</td>
+<td>Tabela detalhada</td>
+</tr>
+<tr>
+<td>Detalhamento dos vínculos que não permitem abono</td>
+<td>3.291</td>
+<td>Lista + contexto de vínculos</td>
+</tr>
+<tr>
+<td>Terceirizados que não podem receber</td>
+<td>—</td>
+<td>Visão filtrada</td>
+</tr>
+<tr>
+<td>Exclusivamente comissionados que não podem receber</td>
+<td>0</td>
+<td>Visão dedicada</td>
+</tr>
+</tbody>
+</table>
+<h3>Situações específicas</h3>
+<table>
+<thead>
+<tr>
+<th>Card</th>
+<th>Indicador mock</th>
+<th>Papel do detalhe (no cliente)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Servidores estabilizados com abono implantado</td>
+<td>R$ 2.447.568,66</td>
+<td>Visão detalhada</td>
+</tr>
+<tr>
+<td>Casos em análise judicial</td>
+<td>—</td>
+<td>Visão detalhada</td>
+</tr>
+<tr>
+<td>Casos de transição / após</td>
+<td>1.067</td>
+<td>Visão detalhada</td>
+</tr>
+<tr>
+<td>Cargo ou categoria extinta</td>
+<td>2.143</td>
+<td>Visão detalhada</td>
+</tr>
+</tbody>
+</table>
+<h3>Regra legislativa</h3>
+<table>
+<thead>
+<tr>
+<th>Card</th>
+<th>Indicador mock</th>
+<th>Papel do detalhe (no cliente)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cargos com restrição legal de elegibilidade parcial</td>
+<td>—</td>
+<td>Visão + valores por cargo</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Indicadores são <strong>mock de referência</strong> (derivados dos prints de homologação, período nov/2025). No local, o SQLite demo não é a base do cliente.</p>
+</blockquote>
+<hr />
+<h2>6. Critérios de aceite × status no protótipo</h2>
+<table>
+<thead>
+<tr>
+<th>Critério da issue</th>
+<th>Status no mock local</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nova aba (ou substituição de <em>Detalhamento por Servidor</em>)</td>
+<td><strong>Atendido</strong> — aba <em>Detalhamentos por Situação</em> no dashboard Abono</td>
+</tr>
+<tr>
+<td>Cards clicáveis com títulos padronizados</td>
+<td><strong>Atendido</strong></td>
+</tr>
+<tr>
+<td>Organização por grupos semânticos</td>
+<td><strong>Atendido</strong> — 4 grupos</td>
+</tr>
+<tr>
+<td>Cada card direciona à visão detalhada</td>
+<td><strong>Atendido (mock)</strong> — painel abaixo do grupo; no cliente vira pergunta/tabela real</td>
+</tr>
+<tr>
+<td>Reaproveita filtros globais</td>
+<td><strong>Atendido</strong> — Período/Órgão no mesmo dashboard + situação via cross-filter</td>
+</tr>
+<tr>
+<td>Nomenclatura compreensível para não técnico</td>
+<td><strong>Atendido</strong> — títulos do levantamento do cliente</td>
+</tr>
+<tr>
+<td>Elimina dependência das tabelas-preview</td>
+<td><strong>Atendido na proposta</strong> — hub não usa preview; detalhe real fica para homologação</td>
+</tr>
+<tr>
+<td>Presente no painel de Abono Permanência</td>
+<td><strong>Atendido</strong> no demo local (mesma ideia para o painel do cliente)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>7. Decisões técnicas relevantes (para a equipe)</h2>
+<ol>
+<li><strong>Sem modal nativo</strong> — Metabase não abre outro dashboard/pergunta em dialog; cross-filter foi a melhor opção nativa para “detalhe no contexto”.</li>
+<li><strong>Cards do hub</strong> — gráficos de barra horizontal (1 categoria) para o clique conseguir enviar o nome da situação no cross-filter (limitação do scalar puro).</li>
+<li><strong>Detalhe atual</strong> — placeholder (texto + tabela mock). Em homologação/produção, trocar pelo destino real (pergunta salva / tabela completa).</li>
+<li><strong>Aba Visão analítica</strong> — o mock anterior foi <strong>preservado</strong> na aba 1 para comparação na demo.</li>
+</ol>
+<hr />
+<h2>8. Como reproduzir / atualizar o protótipo</h2>
+<pre><code class="language-bash">python3 docs/internal/abono-demo/seed_detalhamentos_tab.py \
+  --url http://localhost:3001 \
+  --email SEU_ADMIN@empresa.com \
+  --password 'sua-senha' \
+  --dashboard-id 10
+</code></pre>
+<p>Documentação do seed: <a href="../internal/abono-demo/README.md"><code>docs/internal/abono-demo/README.md</code></a></p>
+<p>URL típica após o seed:</p>
+<p><code>http://localhost:3001/dashboard/10-abono-de-permanencia?orgao=Seduc&amp;periodo=2025-07-01~2025-12-31</code></p>
+<p>(selecionar a aba <strong>Detalhamentos por Situação</strong>, ou usar o <code>&amp;tab=…</code> impresso pelo script)</p>
+<hr />
+<h2>9. Próximos passos sugeridos (pós-apresentação)</h2>
+<ol>
+<li>Validar com negócio: <strong>aba nova</strong> vs <strong>substituir</strong> <em>Detalhamento por Servidor</em> em homologação.</li>
+<li>Definir destinos reais (IDs de perguntas/tabelas) por card — priorizar um MVP (ex.: só Divergências).</li>
+<li>Trocar os placeholders pelos detalhes reais, mantendo cross-filter + filtros globais.</li>
+<li>Ajustar visual dos cards (se quiser aproximar mais de “card KPI” sem perder o clique).</li>
+<li>Decidir o que acontece com a aba analítica longa atual (manter em outra aba, arquivar, ou reduzir).</li>
+</ol>
+<hr />
+<h2>10. Resumo para fechar a apresentação</h2>
+<ul>
+<li><strong>Problema:</strong> investigação lenta via previews numa aba densa.  </li>
+<li><strong>Proposta:</strong> hub por grupos semânticos + detalhe no contexto.  </li>
+<li><strong>Prova:</strong> protótipo local navegável com cross-filter e filtros globais.  </li>
+<li><strong>Pedido à equipe:</strong> validar o modelo e apontar os cards P1 para ligar aos dados reais em homologação.</li>
+</ul>
+</body>
+</html>
