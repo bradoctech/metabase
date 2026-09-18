@@ -16,7 +16,10 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 | [estratégia-sequencia.md](./estrategia-sequencia.md)       | Cenário atual, ordem correta de atuação e dependências entre as issues    |
 | [issue-edd-1361.md](./issue-edd-1361.md)                   | EDD-1361 — inventário + isolamento mínimo (prep)                          |
 | [issue-edd-1362.md](./issue-edd-1362.md)                   | EDD-1362 — refatoração de tema/marca pós-update                           |
+| [issue-edd-1356.md](./issue-edd-1356.md)                   | EDD-1356 — processo semi-automático de merge                              |
 | [manifesto-customizacoes.md](./manifesto-customizacoes.md) | Inventário classificado (SP-owned / Adapter / Behavior) + quick wins      |
+| [runbook-atualizacao.md](./runbook-atualizacao.md)         | Como executar o merge (`bin/merge-upstream-preserve-sp.sh`)               |
+| [lists/](./lists/)                                         | Listas canônicas restore-ours / dual-changed / behavior-manual            |
 
 ---
 

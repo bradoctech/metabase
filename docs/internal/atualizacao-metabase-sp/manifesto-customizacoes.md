@@ -141,7 +141,15 @@ _Total Behavior: 40 paths (lista completa abaixo)._
 
 ## Listas para o processo EDD-1356
 
-Sugestão inicial alinhada ao script 61 + este inventário:
+Listas **versionadas** (fonte de verdade do script):
+
+- [`lists/restore-ours.txt`](./lists/restore-ours.txt)
+- [`lists/dual-changed.txt`](./lists/dual-changed.txt)
+- [`lists/behavior-manual.txt`](./lists/behavior-manual.txt)
+
+Runbook: [runbook-atualizacao.md](./runbook-atualizacao.md) · Script: `bin/merge-upstream-preserve-sp.sh`
+
+Espelho abaixo (mantido para leitura rápida; preferir os `.txt` ao editar):
 
 ### Candidatos a `restore-ours` (SP-owned)
 
@@ -214,7 +222,7 @@ frontend/src/metabase/visualizations/components/settings/ChartSettingsTableForma
 | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------- |
 | Trocar hex SP duplicados em `light.ts` por referências `spColors.*` onde o token já existe (`#FF161F`, `sp-red`, `sp-gray`, etc.) | **Aplicar**                           | Baixo risco; não muda valores; encolhe drift de tokens                                      |
 | Centralizar `"Rawline"` (~18 arquivos) num único default/setting                                                                  | **Adiar** → EDD-1362                  | Muitos call sites em viz/static-viz; melhor com validação visual e ponto de injeção de tema |
-| Diff completo vs `upstream/release-x.60.x`                                                                                        | **Adiar** (pré-requisito operacional) | Remote `upstream` ausente; fetch pontual não concluiu                                       |
+| Diff completo vs `upstream/release-x.60.x`                                                                                        | **Feito** (EDD-1361)                  | Remote `upstream` + deepen; ~183 paths EDD no three-dot diff                                |
 | Refatorar home/dashboard/datagrid para overlays                                                                                   | **Adiar** → EDD-1362 / fora de escopo | Escopo explícito da 1361                                                                    |
 | Remover hex de medals/upsell (`copper`, `gold`, `upsell-gem`)                                                                     | **Adiar**                             | Não são tokens SP; risco de regressão sem ganho de isolamento SP                            |
 | Hex próximos mas não idênticos (`#F2F2F2` vs `bgSecondary` `#F1F1F1`, `#E2E2E2` border card)                                      | **Adiar**                             | Exigem validação visual (servidor local)                                                    |
