@@ -29,19 +29,27 @@
 3. Heurística de bucket (arquivo SP-named, docs internas, datagrid/eixos, i18n, estilo em core).
 4. Paths que não existem mais no tree foram omitidos.
 
-### Pendência: diff vs `upstream/release-x.60.x`
+### Pendência resolvida: diff vs `upstream/release-x.60.x`
 
-No momento do inventário **não havia remote `upstream`** configurado. Tentativa de `git fetch` pontual de `https://github.com/metabase/metabase.git` (`release-x.60.x`) não concluiu a tempo.
+**Causa do erro `no merge base`:** o clone local é _shallow_ e o primeiro `git fetch upstream release-x.60.x` trouxe só o tip da branch, sem histórico compartilhado com o fork.
 
-**Ação recomendada (fora ou ainda nesta issue):**
+**Correção aplicada:**
 
 ```bash
-git remote add upstream https://github.com/metabase/metabase.git   # uma vez
-git fetch upstream release-x.60.x
+git fetch --deepen=2000 upstream release-x.60.x
+```
+
+Depois disso, o merge-base existe e o diff funciona:
+
+```bash
 git diff --name-only upstream/release-x.60.x...HEAD
 ```
 
-Comparar o resultado com este manifesto e acrescentar paths que existam no diff mas não em commits `feat[EDD-…]` (customizações sem o prefixo, merges manuais, assets).
+**Resultado (EDD-1361):** ~836 paths no three-dot diff; **~183** cruzam com commits `feat[EDD-…]` (alinhado a este manifesto). Os demais (~650) são sobretudo ruído do sync 0.60 / docs / CI / deps — **não** são customizações SP faltando no inventário por EDD.
+
+Paths `feat[EDD]` ausentes do diff (irrelevantes ou já removidos): rascunhos antigos renomeados; `lib/colors/.../sp-colors.ts` (não existe no tree); um CSS de footer possivelmente movido.
+
+**Manter o remote:** `upstream` → `https://github.com/metabase/metabase.git` (somente leitura). Para a EDD-1355: `git fetch upstream release-x.63.x`.
 
 ---
 
