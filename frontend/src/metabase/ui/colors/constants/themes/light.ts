@@ -15,7 +15,7 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
   colors: {
     "admin-navbar": "#1a1a1a",
     "admin-navbar-secondary": "#404040",
-    "admin-navbar-inverse": "#FFFFFF",
+    "admin-navbar-inverse": baseColors.white,
     "background-brand": spColors.red[10], // SP Paleta Primaria: sp-red
     "background-filter": baseColors.filter[5],
     "background-disabled": baseColors.orionAlpha[10],
@@ -40,7 +40,7 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "background-error": spColors.redDark[10], // SP Paleta Secundaria: sp-red-dark
     "background-success": spColors.green.bg, // SP Paleta Secundaria: sp-green
     brand: spColors.red[40], // SP Paleta Primaria: sp-red
-    "brand-hover": "color-mix(in srgb, #FF161F, white 12%)", // SP Paleta Primaria: sp-red
+    "brand-hover": `color-mix(in srgb, ${spColors.red[40]}, white 12%)`, // SP Paleta Primaria: sp-red
     danger: spColors.redDark.base, // SP Paleta Secundaria: sp-red-dark
     error: spColors.status.error.base, // utiliza spColors.status.error
     filter: spColors.blueMedium.base, // azul medio na paleta SP
@@ -52,7 +52,7 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "illustration-brand-secondary": spColors.red[10], // SP Paleta Primária: sp-red
     "illustration-brand-tertiary": spColors.red[5], // SP Paleta Primaria: sp-red
     "metabase-brand": spColors.red[40], // SP Paleta Primaria: sp-red
-    "metabase-brand-hover": "color-mix(in srgb, #FF161F, white 12%)", // SP Paleta Primária: sp-red
+    "metabase-brand-hover": `color-mix(in srgb, ${spColors.red[40]}, white 12%)`, // SP Paleta Primária: sp-red
     "saturated-blue": spColors.blue.base, // SP Paleta Secundaria
     "saturated-green": spColors.green[60], // SP Paleta Secundaria: sp-green
     "saturated-purple": baseColors.octopus[60], // original sem roxo na paleta SP
@@ -103,24 +103,24 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "upsell-secondary": spColors.skyLight.base, // SP Paleta Secundaria: sp-sky-light
     "upsell-gem": "#00d4ff",
     // SP Design System Paleta Primaria
-    "sp-black": "#000000",
+    "sp-black": spColors.black.base,
     "sp-black-hover": spColors.black.hover,
-    "sp-red": "#FF161F",
-    "sp-white": "#FFFFFF",
-    "sp-gray": "#808080",
+    "sp-red": spColors.red[40],
+    "sp-white": baseColors.white,
+    "sp-gray": spColors.gray.base,
     "sp-gray-light": spColors.grayLight.base,
     "sp-gray-medium": spColors.grayMedium.base,
     "sp-primary-40": spColors.primary40,
     "sp-color-border": spColors.colorBorder,
     // SP Design System Paleta Secundaria
-    "sp-yellow": "#FBB900",
-    "sp-blue": "#034EA2",
-    "sp-green": "#0B9247",
-    "sp-sky-light": "#A1DDF7",
+    "sp-yellow": spColors.yellow.base,
+    "sp-blue": spColors.blue.base,
+    "sp-green": spColors.green.base,
+    "sp-sky-light": spColors.skyLight.base,
     "sp-sky": spColors.sky.base, // SP Paleta Secundaria: sp-sky #62C9E0
-    "sp-blue-medium": "#4297D3",
-    "sp-blue-dark": "#005992",
-    "sp-navy": "#233254",
+    "sp-blue-medium": spColors.blueMedium.base,
+    "sp-blue-dark": "#005992", // sem token equivalente em sp-colors ainda
+    "sp-navy": spColors.navy.base,
     "sp-olive": spColors.olive.base, // SP Paleta Secundaria: sp-olive #94AA54
     "sp-red-dark": spColors.redDark.base, // SP Paleta Secundaria: sp-red-dark #842519
     // SP Design System — Paleta ampliada (tons e variacoes)
