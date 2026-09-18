@@ -3,7 +3,7 @@
 **Como usar:** no início de uma nova conversa sobre EDD-1355, EDD-1356, EDD-1361, EDD-1362, tema SP ou upgrade do fork, peça ao agente para ler este arquivo (e, se precisar de detalhe, os outros `.md` desta pasta) antes de planejar ou editar código.
 
 **Pasta:** `docs/internal/atualizacao-metabase-sp/`  
-**Última consolidação de contexto:** manifesto EDD-1361 publicado; IDs EDD-1361 / EDD-1362 oficiais; branch de trabalho `EDD-1361`.
+**Última consolidação de contexto:** EDD-1361 concluída (manifesto); EDD-1356 MVP em andamento (`bin/merge-upstream-preserve-sp.sh` + runbook); branch típica `EDD-1356`.
 
 ---
 
@@ -17,17 +17,17 @@ Atualizar o fork Metabase São Paulo / Trilhas para uma versão mais recente **p
 
 Trate isto como verdade até alguém atualizar este arquivo após nova verificação:
 
-| Fato                        | Detalhe                                                                               |
-| --------------------------- | ------------------------------------------------------------------------------------- |
-| Remote do fork              | `origin` → `git@github.com:bradoctech/metabase.git`                                   |
-| Branch principal            | `saopaulo`                                                                            |
-| Base atual                  | **Metabase 0.60.x** (não 61, não 63)                                                  |
-| Evidência da base 0.60      | Commit `78190d89ae` — _“Atualizado SP com o upstream da v0.60”_                       |
-| Tentativa 0.61              | Branch `origin/update_with_upstream_61` — merge _não_ entrou em `saopaulo`            |
-| Script legado de merge      | `bin/merge-upstream-61-preserve-sp.sh` (existe na branch 61; padrão a generalizar)    |
-| Alvo discutido para upgrade | Linha **63.x**, ex. tag [`v0.63.18`](https://github.com/metabase/metabase/releases)   |
-| Customizações               | Muitos commits `feat[EDD-…]` em cima da 0.60; ~150 arquivos tocados por esses commits |
-| Isolamento atual            | Fraco — pouquíssimos arquivos “SP-named”; maioria é edição no core                    |
+| Fato                        | Detalhe                                                                                       |
+| --------------------------- | --------------------------------------------------------------------------------------------- |
+| Remote do fork              | `origin` → `git@github.com:bradoctech/metabase.git`                                           |
+| Branch principal            | `saopaulo`                                                                                    |
+| Base atual                  | **Metabase 0.60.x** (não 61, não 63)                                                          |
+| Evidência da base 0.60      | Commit `78190d89ae` — _“Atualizado SP com o upstream da v0.60”_                               |
+| Tentativa 0.61              | Branch `origin/update_with_upstream_61` — merge _não_ entrou em `saopaulo`                    |
+| Script de merge             | `bin/merge-upstream-preserve-sp.sh` (EDD-1356); legado 61 em `origin/update_with_upstream_61` |
+| Alvo discutido para upgrade | Linha **63.x**, ex. tag [`v0.63.18`](https://github.com/metabase/metabase/releases)           |
+| Customizações               | Muitos commits `feat[EDD-…]` em cima da 0.60; ~150 arquivos tocados por esses commits         |
+| Isolamento atual            | Fraco — pouquíssimos arquivos “SP-named”; maioria é edição no core                            |
 
 ### Arquivos SP / críticos (amostra)
 
@@ -73,12 +73,12 @@ Textos das issues: [issue-edd-1361.md](./issue-edd-1361.md) e [issue-edd-1362.md
 
 ## Issues
 
-| ID           | Papel                                                      | Estado                            |
-| ------------ | ---------------------------------------------------------- | --------------------------------- |
-| **EDD-1355** | Atualizar Metabase + reaplicar customizações               | Planejada; PoC da 1356            |
-| **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | Planejada; MVP antes/durante 1355 |
-| **EDD-1361** | Inventário + quick wins de isolamento                      | Em andamento; manifesto publicado |
-| **EDD-1362** | Refatorar tema/marca na base já atualizada                 | Criada; **após** 1355             |
+| ID           | Papel                                                      | Estado                              |
+| ------------ | ---------------------------------------------------------- | ----------------------------------- |
+| **EDD-1355** | Atualizar Metabase + reaplicar customizações               | Planejada; PoC da 1356              |
+| **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | Em andamento (MVP script + runbook) |
+| **EDD-1361** | Inventário + quick wins de isolamento                      | Concluída (manifesto publicado)     |
+| **EDD-1362** | Refatorar tema/marca na base já atualizada                 | Criada; **após** 1355               |
 
 ---
 
@@ -105,9 +105,11 @@ Textos das issues: [issue-edd-1361.md](./issue-edd-1361.md) e [issue-edd-1362.md
 
 ### Ao automatizar (1356)
 
-- Generalizar o padrão de `merge-upstream-61-preserve-sp.sh` (snapshot / merge / restore / report / verify).
-- Manter listas versionadas (`restore-ours`, `dual-changed`).
-- Aceitar intervenção manual nos adapters/behavior; automatizar o resto.
+- Usar `bin/merge-upstream-preserve-sp.sh` (`snapshot` / `merge` / `restore` / `report` / `verify`).
+- Listas canônicas em `docs/internal/atualizacao-metabase-sp/lists/`.
+- Runbook: [runbook-atualizacao.md](./runbook-atualizacao.md).
+- Aceitar intervenção manual nos adapters/behavior; automatizar SP-owned.
+- Não executar o merge 63.x “só para testar” sem estar na EDD-1355.
 
 ### Ao refatorar tema (EDD-1362, pós-1355)
 
@@ -132,6 +134,9 @@ Textos das issues: [issue-edd-1361.md](./issue-edd-1361.md) e [issue-edd-1362.md
 | [issue-edd-1361.md](./issue-edd-1361.md)                   | Texto oficial / espelho da EDD-1361              |
 | [issue-edd-1362.md](./issue-edd-1362.md)                   | Texto oficial / espelho da EDD-1362              |
 | [manifesto-customizacoes.md](./manifesto-customizacoes.md) | Inventário path → EDD → bucket → risco           |
+| [runbook-atualizacao.md](./runbook-atualizacao.md)         | Como rodar o merge semi-automático               |
+| [issue-edd-1356.md](./issue-edd-1356.md)                   | Entrega da EDD-1356                              |
+| [lists/](./lists/)                                         | Listas restore-ours / dual-changed / behavior    |
 | **Este arquivo**                                           | Bootstrap de contexto para o agente em chat novo |
 
 ---
@@ -148,6 +153,6 @@ Sugestão de prompt:
 
 - A base de `saopaulo` deixar de ser 0.60.x
 - O manifesto da EDD-1361 for publicado ou a issue for concluída
-- O script genérico de merge for criado/renomeado
+- O script genérico de merge for criado/renomeado / a EDD-1356 MVP fechar
 - A 1355 terminar (registrar versão alvo alcançada + lições)
 - Decisões da sequência oficial mudarem

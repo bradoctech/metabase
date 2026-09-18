@@ -1,0 +1,26 @@
+# SP-owned — restore from SP_REF during merge (EDD-1356). Source: manifesto EDD-1361.
+
+docs/internal/abono-demo/README.md
+docs/internal/abono-demo/build_sqlite.py
+docs/internal/abono-demo/dash_10_backup_20260821_083836.json
+docs/internal/abono-demo/seed_abono_demo.py
+docs/internal/abono-demo/seed_detalhamentos_tab.py
+docs/internal/atualizacao-metabase-sp/INSTRUCOES-AGENTE.md
+docs/internal/atualizacao-metabase-sp/README.md
+docs/internal/atualizacao-metabase-sp/estrategia-sequencia.md
+docs/internal/atualizacao-metabase-sp/issue-edd-1361.md
+docs/internal/atualizacao-metabase-sp/issue-edd-1362.md
+docs/internal/atualizacao-metabase-sp/manifesto-customizacoes.md
+docs/internal/filtros-cascata-datagrid.md
+docs/internal/proposta-aba-detalhamentos-por-situacao.html
+docs/internal/proposta-aba-detalhamentos-por-situacao.md
+docs/internal/proposta-aba-detalhamentos-por-situacao.pdf
+docs/internal/viabilidade-dashboard-abono-permanencia.md
+docs/internal/viabilidade-dashboard-abono-permanencia.pdf
+frontend/src/metabase/css/core/fonts.saopaulo.styled.ts
+frontend/src/metabase/ui/colors/constants/sp-colors.ts
+resources/frontend_client/app/assets/img/logo-sp-gov.png
+resources/frontend_client/app/assets/img/logo-sp-gov.svg
+resources/frontend_client/app/assets/img/logo-sp.svg
+src/metabase/config/core.clj
+src/metabase/version/settings.clj

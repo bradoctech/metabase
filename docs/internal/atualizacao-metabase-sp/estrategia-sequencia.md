@@ -184,6 +184,6 @@ Não pule o inventário nem o report de manuais: sem isso a 1355 vira atualizaç
 
 ## Próximo passo sugerido
 
-1. Revisar [manifesto-customizacoes.md](./manifesto-customizacoes.md) (EDD-1361).
-2. Configurar remote `upstream` e completar o diff vs `release-x.60.x` (pendência do manifesto).
-3. Seguir para MVP da EDD-1356 e depois EDD-1355; EDD-1362 só após o upgrade.
+1. Na **EDD-1356**, validar o runbook (`snapshot` / `report` / `verify` já ok nesta branch).
+2. Abrir **EDD-1355** e executar o merge com o script (`UPSTREAM_REF=upstream/release-x.63.x`).
+3. Registrar conflitos reais no manifesto; depois **EDD-1362**.

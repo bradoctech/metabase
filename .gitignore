@@ -176,3 +176,6 @@ CLAUDE.local.md
 __pycache__/
 .mcp.json
 .claude/worktrees
+
+# Working files from bin/merge-upstream-preserve-sp.sh (EDD-1356)
+.merge-sp/
