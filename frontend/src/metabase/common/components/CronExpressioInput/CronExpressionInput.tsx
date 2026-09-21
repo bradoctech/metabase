@@ -3,10 +3,6 @@ import { jt, msgid, ngettext, t } from "ttag";
 
 import { ExternalLink } from "metabase/common/components/ExternalLink";
 import {
-  getScheduleExplanation,
-  validateCronExpression,
-} from "metabase/lib/cron";
-import {
   Flex,
   type FlexProps,
   Icon,
@@ -15,6 +11,10 @@ import {
   type TextProps,
   Tooltip,
 } from "metabase/ui";
+import {
+  getScheduleExplanation,
+  validateCronExpression,
+} from "metabase/utils/cron";
 
 import S from "./CronExpressionInput.module.css";
 
@@ -60,7 +60,7 @@ export function CronExpressionInput({
     <Flex direction="column" {...flexProps}>
       <CustomScheduleInputHint />
       <TextInput
-        placeholder="Por exemplo 5   0   *   Ago   ?"
+        placeholder="For example 5   0   *   Aug   ?"
         size="md"
         fw={600}
         error={error}

@@ -101,6 +101,7 @@
    :table_id            :integer
    :table_schema        :text
    :table_name          :text
+   :table_display_name  :text
    :table_description   :text
    ;; returned for Metric, Segment, and Action
    :database_id         :integer
@@ -181,9 +182,9 @@
                     "table" clause
                     "search-index" [:or
                                     [:= :search_index.model nil]
-                                    [:!= :search_index.model [:inline "table"]]
+                                    [:!= :search_index.model "table"]
                                     [:and
-                                     [:= :search_index.model [:inline "table"]]
+                                     [:= :search_index.model "table"]
                                      clause]])))))
 
 (mu/defn add-collection-join-and-where-clauses
@@ -197,16 +198,16 @@
                                  "search-index"  :search_index.collection_id
                                  :collection_id)
         permitted-clause       (if (= model "table")
-                                ;; Tables have their own permission filter (add-table-where-clauses).
-                                ;; Skip collection filtering to avoid blocking tables where the user
-                                ;; has data permissions but no collection access.
+                                 ;; Tables have their own permission filter (add-table-where-clauses).
+                                 ;; Skip collection filtering to avoid blocking tables where the user
+                                 ;; has data permissions but no collection access.
                                  [:= [:inline 1] [:inline 1]]
                                  (search.permissions/permitted-collections-clause search-ctx collection-id-col))
         personal-clause        (search.filter/personal-collections-where-clause search-ctx collection-id-col)]
     (-> honeysql-query
         (sql.helpers/where permitted-clause)
         (cond->
-      ;; add a JOIN against Collection *unless* the source table is already Collection
+         ;; add a JOIN against Collection *unless* the source table is already Collection
          (not= model "collection") (sql.helpers/left-join [:collection :collection] [:= collection-id-col :collection.id])
          personal-clause           (sql.helpers/where personal-clause)))))
 
@@ -355,7 +356,8 @@
 
 (def ^:private dashboardcard-count-col
   "Subselect to get the count of associated DashboardCards"
-  [{:select [:%count.*]
+  [^:allow-subquery
+   {:select [:%count.*]
     :from   [:report_dashboardcard]
     :where  [:= :report_dashboardcard.card_id :card.id]}
    :dashboardcard_count])
@@ -452,6 +454,7 @@
    [:table.db_id       :database_id]
    [:table.schema      :table_schema]
    [:table.name        :table_name]
+   [:table.display_name :table_display_name]
    [:table.description :table_description]])
 
 (defmethod columns-for-model "metric"
@@ -474,7 +477,7 @@
    [:table.description :table_description]
    [:table.collection_id :collection_id]
    [[:case [:and [:= :table.collection_id nil] [:= :table.is_published true]]
-     [:inline "Our analytics"]
+     "Our analytics"
      :else
      :collection.name] :collection_name]
    [:collection.authority_level :collection_authority_level]
@@ -530,6 +533,7 @@
                           ;; from the collection picker or when browsing, so it shouldn't be visible in search either.
                           (when (:include-dashboard-questions? search-ctx)
                             [:exists
+                             ^:allow-subquery
                              {:select 1
                               :from [:report_dashboardcard]
                               :where [:= :card_id :card.id]}])])
@@ -663,10 +667,13 @@
                                         (assoc search-ctx :models search.config/all-models))]
                              (search-query-for-model model search-ctx)))
         {:keys [ctes queries]} (extract-and-hoist-ctes raw-queries)
-        nested-queries (mapv #(hash-map :nest (sql.helpers/limit % 1)) queries)
+        nested-queries (mapv (fn [query]
+                               ^:allow-subquery
+                               {:nest (vary-meta (sql.helpers/limit query 1) assoc :allow-subquery true)})
+                             queries)
         query          (when (pos-int? (count nested-queries))
                          (cond-> {:select [:*]
-                                  :from   [[{:union-all nested-queries} :dummy_alias]]}
+                                  :from   [[^:allow-subquery {:union-all nested-queries} :dummy_alias]]}
                            (seq ctes) (assoc :with ctes)))]
     (into #{} (map :model) (some-> query mdb/query))))
 
@@ -689,9 +696,10 @@
                                      :let [query (search-query-for-model model search-ctx)]
                                      :when (seq query)]
                                  query))
-            {:keys [ctes queries]} (extract-and-hoist-ctes model-queries)]
+            {:keys [ctes queries]} (extract-and-hoist-ctes model-queries)
+            subqueries    (mapv #(vary-meta % assoc :allow-subquery true) queries)]
         (cond-> {:select   [:*]
-                 :from     [[{:union-all queries} :alias_is_required_by_sql_but_not_needed_here]]
+                 :from     [[^:allow-subquery {:union-all subqueries} :alias_is_required_by_sql_but_not_needed_here]]
                  :order-by order-clause
                  :limit    search.config/*db-max-results*}
           (seq ctes) (assoc :with ctes))))))

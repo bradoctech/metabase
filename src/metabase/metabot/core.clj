@@ -2,6 +2,8 @@
   "API namespace for the `metabase.metabot` module."
   (:require
    [metabase.metabot.provider-util]
+   [metabase.metabot.scope]
+   [metabase.metabot.search-models]
    [metabase.metabot.usage]
    [potemkin :as p]))
 
@@ -9,7 +11,21 @@
  [metabase.metabot.provider-util
   metabase-provider?
   provider-and-model->provider]
+ [metabase.metabot.scope
+  agent-dashboard-create
+  agent-metric-read
+  agent-question-create
+  agent-query-construct
+  agent-query-execute
+  agent-search
+  agent-table-read]
+ [metabase.metabot.search-models
+  entity-type->search-model
+  search-model->entity-type])
+
+(p/import-vars
  [metabase.metabot.usage
+  check-usage-limits!
   log-ai-usage!])
 
 ;; TODO: Port analyze-chart to use the native LLM infrastructure

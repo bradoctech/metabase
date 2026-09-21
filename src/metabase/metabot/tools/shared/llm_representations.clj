@@ -8,13 +8,45 @@
    [metabase.metabot.tmpl :as te]
    [metabase.util :as u]
    [metabase.util.log :as log]
+   [ring.util.codec :as codec]
    [selmer.parser :as selmer]))
 
 (set! *warn-on-reflection* true)
 
 (def ^:private llm-template-name "llm_representations.selmer")
 
-(defn- escape-xml
+(defn- encode-uri-segment
+  "URL-encode a single URI path segment. Coerces keywords/numbers to strings first.
+   Per-segment encoding (vs encoding the whole URI) lets us preserve the literal `/`
+   between segments while still protecting against `/` characters inside a segment
+   value — e.g. a database schema name like `weird/name` that would otherwise
+   collide with the path separator and corrupt downstream URI parsing."
+  [s]
+  (codec/url-encode (cond
+                      (keyword? s) (name s)
+                      :else        (str s))))
+
+(defn metabase-uri
+  "Build a metabase:// URI for an entity. Optional trailing path segments append to the URI.
+
+   Each segment is URL-encoded so values containing `/`, `?`, `%`, etc. survive a
+   round-trip through `parse-uri`.
+
+   Examples:
+     (metabase-uri :table 5)              => \"metabase://table/5\"
+     (metabase-uri :table 5 \"fields\")    => \"metabase://table/5/fields\"
+     (metabase-uri :collection 7 \"items\") => \"metabase://collection/7/items\"
+     (metabase-uri :databases)            => \"metabase://databases\"
+     (metabase-uri :database 1 \"schemas\" \"weird/name\" \"tables\")
+                                          => \"metabase://database/1/schemas/weird%2Fname/tables\""
+  ([type]
+   (str "metabase://" (encode-uri-segment type)))
+  ([type id & path-segments]
+   (str "metabase://" (encode-uri-segment type) "/" (encode-uri-segment id)
+        (when (seq path-segments)
+          (str "/" (str/join "/" (map encode-uri-segment path-segments)))))))
+
+(defn escape-xml
   "Escape XML special characters in a string.
    Only needed for content that bypasses Selmer's auto-escaping (marked with |safe)."
   [s]
@@ -24,6 +56,17 @@
         (str/replace "<" "&lt;")
         (str/replace ">" "&gt;")
         (str/replace "\"" "&quot;"))))
+
+(defn- truncate
+  "Cap `s` at `max-len` characters, appending an ellipsis when truncated.
+  Useful to ensure long free text values (e.g. table descriptions) don't bloat the LLM context.
+  Returns nil for nil input."
+  [s max-len]
+  (when s
+    (let [s (str s)]
+      (if (> (count s) max-len)
+        (str (subs s 0 max-len) "...")
+        s))))
 
 (defn- database-type-or-unknown
   "Return database type or 'unknown' if nil."
@@ -43,6 +86,7 @@
    :is_field (= type :field)
    :is_collection (= type :collection)
    :is_related_table (= type :related_table)
+   :is_related_tables (= type :related_tables)
    :is_metric (= type :metric)
    :is_table (= type :table)
    :is_model (= type :model)
@@ -146,16 +190,57 @@
     :segment_definition   (when definition (pr-str definition))
     :segment_definition_description definition-description}))
 
+(defn- fully-qualified-name
+  "Get fully qualified name for a table."
+  [database_schema name]
+  (if database_schema
+    (str database_schema "." name)
+    name))
+
+(def ^:private max-related-table-description-length
+  "Cap on a related table's description."
+  512)
+
 (defn- related-table->xml
-  "Format a related table for LLM consumption."
-  [{:keys [id name related_by fully_qualified_name fields]}]
+  "Format a related table for LLM consumption.
+  Used for both :related_tables and :related_tables_without_columns."
+  [{:keys [id name related_by database_name database_schema description fields]}]
   (render-llm-template
    :related_table
-   {:related_table_id         (when (some? id) (str id))
-    :related_table_name       name
-    :related_table_related_by related_by
-    :related_table_fqn        fully_qualified_name
-    :related_table_fields_xml (when (seq fields) (str/join "\n" (map field->xml fields)))}))
+   {:related_table_id              (when (some? id) (str id))
+    :related_table_name            name
+    :related_table_related_by_name (:name related_by)
+    :related_table_related_by_id   (str (:id related_by))
+    :related_table_database_name   database_name
+    :related_table_fqn             (fully-qualified-name database_schema name)
+    :related_table_description     (when (not-empty description)
+                                     (truncate description max-related-table-description-length))
+    :related_table_fields_xml      (when (seq fields) (str/join "\n" (map field->xml fields)))}))
+
+(defn- related-tables->xml
+  "Render the related-tables block for a table/model.
+
+  `related-tables` carry their fields; `without-fields` do not.  They are rendered as the same `<related-table>`
+  element, but grouped under a note that their columns were omitted, so the LLM can fetch them individually if
+  needed. `total` is the full related-tables count before any cap.  When it exceeds the surfaced set we tell the LLM
+  the list is truncated.
+
+  Returns nil when there is nothing to render."
+  [related-tables without-fields total]
+  (let [with-fields-xml    (when (seq related-tables)
+                             (str/join "" (map related-table->xml related-tables)))
+        without-fields-xml (when (seq without-fields)
+                             (str/join "" (map related-table->xml without-fields)))
+        surfaced           (+ (count related-tables) (count without-fields))
+        truncated?         (boolean (and total (> total surfaced)))]
+    (when (or with-fields-xml without-fields-xml)
+      (render-llm-template
+       :related_tables
+       {:related_tables_with_fields_xml    with-fields-xml
+        :related_tables_without_fields_xml without-fields-xml
+        :related_tables_surfaced           surfaced
+        :related_tables_truncated          truncated?
+        :related_tables_total              total}))))
 
 (defn metric->xml
   "Format metric for LLM consumption.
@@ -173,18 +258,12 @@
     :metric_dimensions_table       (when (seq queryable-dimensions)
                                      (format-fields-table queryable-dimensions))}))
 
-(defn- fully-qualified-name
-  "Get fully qualified name for a table."
-  [database_schema name]
-  (if database_schema
-    (str database_schema "." name)
-    name))
-
 (defn table->xml
   "Format table for LLM consumption.
    Matches Python Table.get_llm_representation exactly."
   [{:keys [id name database_id database_engine database_schema
-           description fields related_tables measures segments]}]
+           description fields related_tables related_tables_total
+           related_tables_without_fields measures segments]}]
   (let [fqn (fully-qualified-name database_schema name)]
     (render-llm-template
      :table
@@ -196,8 +275,9 @@
       :table_description        description
       :table_fields_xml         (when (seq fields)
                                   (str/join "\n" (map field->xml fields)))
-      :table_related_tables_xml (when (seq related_tables)
-                                  (str/join "" (map related-table->xml related_tables)))
+      :table_related_tables_xml (related-tables->xml related_tables
+                                                     related_tables_without_fields
+                                                     related_tables_total)
       :table_measures_xml       (when (seq measures)
                                   (str/join "\n" (map measure->xml measures)))
       :table_segments_xml       (when (seq segments)
@@ -219,7 +299,8 @@
    Matches Python Model.get_llm_representation exactly.
    Note: Python uses <metabase-model> tag but closes with </model>."
   [{:keys [id name description verified fields database_id database_engine
-           related_tables measures segments]}]
+           related_tables related_tables_total related_tables_without_fields
+           measures segments]}]
   (let [fqn (model-fully-qualified-name id name)]
     (render-llm-template
      :model
@@ -232,8 +313,9 @@
       :model_description        description
       :model_fields_xml         (when (seq fields)
                                   (str/join "\n" (map field->xml fields)))
-      :model_related_tables_xml (when (seq related_tables)
-                                  (str/join "\n" (map related-table->xml related_tables)))
+      :model_related_tables_xml (related-tables->xml related_tables
+                                                     related_tables_without_fields
+                                                     related_tables_total)
       :model_measures_xml       (when (seq measures)
                                   (str/join "\n" (map measure->xml measures)))
       :model_segments_xml       (when (seq segments)
@@ -580,3 +662,66 @@
     (do
       (log/warn "Unknown entity type" {:type (:type entity)})
       (pr-str entity))))
+
+;; ----- Generic list / entity renderers used by the read-resource navigation tools -----
+
+(def ^:private item-attr-keys
+  "Attributes rendered as XML attrs on each <item> element. Order matters for stable output."
+  [:type :id :name :uri :database_id :collection_id :table_id
+   :schema :display_name :authority_level :is_personal :path :location
+   :engine :timestamp])
+
+(defn- item-attrs->xml
+  [item]
+  (->> item-attr-keys
+       (keep (fn [k]
+               (when-let [v (get item k)]
+                 (str (clojure.core/name k) "=\"" (escape-xml v) "\""))))
+       (str/join " ")))
+
+(defn- list-item->xml
+  "Render one item from a metabot-list response."
+  [{:keys [description] :as item}]
+  (let [attrs (item-attrs->xml item)]
+    (if description
+      (str "<item " attrs ">" (escape-xml description) "</item>")
+      (str "<item " attrs "/>"))))
+
+(defn metabot-list->xml
+  "Render a list-shaped read-resource response.
+
+   Input shape:
+     {:list-type :databases     ; keyword, becomes the type attribute
+      :items     [{:type \"database\" :id 1 :name \"Sample\" :uri \"...\" :description \"...\"} ...]
+      :total     5
+      :truncated false}
+
+   Output shape:
+     <list type=\"databases\" total=\"5\" truncated=\"false\">
+       <item type=\"database\" id=\"1\" name=\"Sample\" uri=\"metabase://database/1\">Description</item>
+       ...
+     </list>"
+  [{:keys [list-type items total truncated]}]
+  (let [type-attr (clojure.core/name (or list-type :items))
+        item-xml  (str/join "\n" (map list-item->xml items))
+        showing   (count items)
+        note      (when truncated
+                    (str "<truncation-note>Showing " showing " of " total ". "
+                         "More items exist — read individual items via their URIs above "
+                         "or refine via search.</truncation-note>"))]
+    (str "<list type=\"" type-attr "\" total=\"" total
+         "\" showing=\"" showing
+         "\" truncated=\"" (boolean truncated) "\">\n"
+         (when (seq items) (str item-xml "\n"))
+         (when note (str note "\n"))
+         "</list>")))
+
+(defn metabot-entity->xml
+  "Render a single entity as a flat XML element with attrs and an optional description body."
+  [{:keys [type description] :as entity}]
+  (let [tag   (clojure.core/name (or type :entity))
+        attrs (item-attrs->xml entity)]
+    (if description
+      (str "<" tag (when-not (str/blank? attrs) (str " " attrs)) ">"
+           (escape-xml description) "</" tag ">")
+      (str "<" tag (when-not (str/blank? attrs) (str " " attrs)) "/>"))))

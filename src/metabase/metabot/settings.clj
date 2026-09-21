@@ -4,7 +4,8 @@
    [metabase.llm.settings :as llm.settings]
    [metabase.metabot.provider-util :as provider-util]
    [metabase.settings.core :as setting :refer [defsetting]]
-   [metabase.util.i18n :refer [deferred-tru tru]]))
+   [metabase.util.i18n :refer [deferred-tru tru]]
+   [metabase.util.log :as log]))
 
 (defsetting metabot-id
   (deferred-tru "Override Metabot ID for agent streaming requests.")
@@ -21,8 +22,61 @@
   :default    true
   :getter     #(and (llm.settings/ai-features-enabled?)
                     (setting/get-value-of-type :boolean :metabot-enabled?))
+  :export?    true)
+
+(defsetting metabot-name
+  (deferred-tru "The display name for Metabot, shown throughout the Metabase UI.")
+  :type       :string
+  :default    "Metabot"
+  :visibility :public
+  :encryption :no
   :export?    true
-  :doc        false)
+  :feature    :ai-controls)
+
+(defsetting metabot-icon
+  (deferred-tru "The icon for Metabot. Set to `metabot` for the default icon, or a data URI for a custom uploaded image (up to 1MB).")
+  :type       :string
+  :default    "metabot"
+  :visibility :public
+  :encryption :no
+  :export?    true
+  :feature    :ai-controls)
+
+(defsetting metabot-show-illustrations
+  (deferred-tru "Whether to show Metabot illustrations in the UI.")
+  :type       :boolean
+  :default    true
+  :visibility :public
+  :encryption :no
+  :export?    true
+  :feature    :ai-controls)
+
+(defsetting metabot-chat-system-prompt
+  (deferred-tru "Custom instructions appended to Metabot''s system prompt for the chat experience (the AI sidebar and embedded Metabot).")
+  :type       :string
+  :default    ""
+  :visibility :admin
+  :encryption :when-encryption-key-set
+  :export?    true
+  :feature    :ai-controls)
+
+(defsetting metabot-nlq-system-prompt
+  (deferred-tru "Custom instructions appended to Metabot''s system prompt for the natural language query (AI exploration) experience.")
+  :type       :string
+  :default    ""
+  :visibility :admin
+  :encryption :when-encryption-key-set
+  :export?    true
+  :feature    :ai-controls)
+
+(defsetting metabot-sql-system-prompt
+  (deferred-tru "Custom instructions appended to Metabot''s system prompt for the SQL generation experience.")
+  :type       :string
+  :default    ""
+  :visibility :admin
+  :encryption :when-encryption-key-set
+  :export?    true
+  :feature    :ai-controls)
 
 (defsetting embedded-metabot-enabled?
   (deferred-tru "Whether Metabot is enabled for embedding.")
@@ -31,8 +85,7 @@
   :default    true
   :getter     #(and (llm.settings/ai-features-enabled?)
                     (setting/get-value-of-type :boolean :embedded-metabot-enabled?))
-  :export?    true
-  :doc        false)
+  :export?    true)
 
 ;;; ------------------------------------------------- LLM Provider ------------------------------------------------
 
@@ -157,7 +210,6 @@
   :visibility       :settings-manager
   :export?          false
   :deprecated-name  :ee-ai-metabot-provider
-  :doc              false
   :setter           (fn [new-value]
                       (when new-value
                         (validate-metabot-provider! new-value))
@@ -198,3 +250,55 @@
   :export?    false
   :getter     #(llm-provider-configured? (llm-metabot-provider))
   :doc        false)
+
+;;; ------------------------------------------------- AI Data Retention ------------------------------------------------
+
+(def ^:private min-retention-days
+  "Minimum allowed value for `ai-usage-max-retention-days`."
+  30)
+
+(def ^:private default-retention-days
+  "Default value for `ai-usage-max-retention-days` (~6 months)."
+  180)
+
+(defn- log-minimum-value-warning
+  [env-var-value]
+  (log/warnf "MB_AI_USAGE_MAX_RETENTION_DAYS is set to %d; using the minimum value of %d instead."
+             env-var-value
+             min-retention-days))
+
+(defn- -ai-usage-max-retention-days []
+  (let [env-var-value (setting/get-value-of-type :integer :ai-usage-max-retention-days)]
+    (cond
+      (nil? env-var-value)
+      default-retention-days
+
+      ;; Treat 0 as an alias for infinite retention
+      (zero? env-var-value)
+      nil
+
+      (< env-var-value min-retention-days)
+      (do
+        (log-minimum-value-warning env-var-value)
+        min-retention-days)
+
+      :else
+      env-var-value)))
+
+(defsetting ai-usage-max-retention-days
+  (deferred-tru "Number of days to retain rows in the ai_usage_log, metabot_conversation, and metabot_message tables. Minimum value is 30; set to 0 to retain data indefinitely.")
+  :type       :integer
+  :visibility :admin
+  :setter     :none
+  :audit      :never
+  :export?    true
+  :encryption :no
+  :getter     #'-ai-usage-max-retention-days
+  :doc "Sets the maximum number of days Metabase preserves rows for the following application database tables:
+
+- `ai_usage_log`
+- `metabot_conversation`
+- `metabot_message`
+
+Once a day, Metabase deletes rows older than this threshold. The minimum value is 30 days (Metabase will treat entered values of 1 to 29 the same as 30).
+If set to 0, Metabase will keep all rows.")

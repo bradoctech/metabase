@@ -1,5 +1,3 @@
-import type { IconName } from "metabase/ui";
-import type { ColorName } from "metabase/ui/colors/types";
 import type {
   BaseEntityId,
   CollectionEssentials,
@@ -56,22 +54,6 @@ export type LastEditInfo = Pick<
   timestamp: string;
 };
 
-export type CollectionAuthorityLevelConfig = {
-  type: CollectionAuthorityLevel;
-  name: string;
-  icon: IconName;
-  color?: ColorName;
-  tooltips?: Record<string, string>;
-};
-
-export type CollectionInstanceAnaltyicsConfig = {
-  type: CollectionType;
-  name?: string;
-  icon: IconName;
-  color?: ColorName;
-  tooltips?: Record<string, string>;
-};
-
 export interface Collection {
   id: CollectionId;
   name: string;
@@ -119,6 +101,7 @@ export const COLLECTION_ITEM_MODELS = [
   "document",
   "table",
   "transform",
+  "measure",
 ] as const;
 export type CollectionItemModel = (typeof COLLECTION_ITEM_MODELS)[number];
 
@@ -150,7 +133,6 @@ export interface CollectionItem {
   can_write?: boolean;
   can_restore?: boolean;
   can_delete?: boolean;
-  can_run_adhoc_query?: boolean; // available only for data picker (#60021)
   "last-edit-info"?: LastEditInfo;
   location?: string | null;
   effective_location?: string;
@@ -199,7 +181,6 @@ export type ListCollectionItemsRequest = {
   pinned_state?: "all" | "is_pinned" | "is_not_pinned";
   namespace?: CollectionNamespace;
   collection_type?: CollectionType;
-  include_can_run_adhoc_query?: boolean;
 } & PaginationRequest &
   Partial<SortingOptions<ListCollectionItemsSortColumn>>;
 

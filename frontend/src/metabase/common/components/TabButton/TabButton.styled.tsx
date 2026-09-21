@@ -17,8 +17,7 @@ export const TabButtonInputWrapper = styled.span<TabButtonProps>`
   padding: 0.25rem;
   border: 1px solid transparent;
   border-radius: 6px;
-  line-height: 1.5;
-  font-weight: ${(props) => (props.isSelected && !props.disabled ? 700 : 500)};
+  line-height: 1.15; /* Matches .tabLabel */
 `;
 
 export const TabButtonInputResizer = styled.span`
@@ -39,7 +38,7 @@ export const TabButtonInput = styled.input<TabButtonProps & { value: string }>`
   background-color: transparent;
   color: inherit;
   font-size: inherit;
-  font-weight: inherit;
+  font-weight: bold;
   text-align: center;
 
   ${(props) =>
@@ -55,10 +54,11 @@ export const TabButtonRoot = styled.div<TabButtonProps>`
   padding: calc(0.6875rem - 0.25rem - 1px) calc(0.5rem - 0.25rem - 2px); /* tab .list padding - input padding - borders/margins */
   color: ${(props) =>
     props.isSelected && !props.disabled
-      ? "var(--mb-color-text-primary)"
-      : "var(--mb-color-sp-gray)"};
+      ? "var(--mb-color-brand)"
+      : "var(--mb-color-text-primary)"};
   opacity: ${(props) => (props.disabled ? 0.3 : 1)};
   font-size: var(--mantine-font-size-md);
+  font-weight: 700;
   cursor: ${(props) => (props.disabled ? "default" : "pointer")};
   border-bottom: 0.125rem solid transparent;
 
@@ -66,8 +66,7 @@ export const TabButtonRoot = styled.div<TabButtonProps>`
     ${(props) =>
       !props.disabled &&
       css`
-        color: var(--mb-color-text-primary);
-        border-bottom: 0.125rem solid var(--mb-color-brand);
+        color: var(--mb-color-brand);
       `}
   }
 

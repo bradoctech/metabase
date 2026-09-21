@@ -34,7 +34,7 @@ export const StaticEmbedContent = ({
     {showImage && (
       <StaticEmbedImage
         src="/app/assets/img/static-embedding-example.png"
-        alt={t`Static embedding example`}
+        alt="Static embedding example"
       />
     )}
     <Group gap="md">

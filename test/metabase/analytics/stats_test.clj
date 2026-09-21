@@ -245,22 +245,19 @@
     (doseq [tz ["Pacific/Auckland" "Europe/Helsinki"]]
       (testing tz
         (mt/with-app-db-timezone-id! tz
-          (let [get-executions #(:executions (#'stats/execution-metrics))
-                before         (get-executions)]
-            (mt/with-temp [:model/QueryExecution _ (merge query-execution-defaults
-                                                          {:started_at (-> (t/offset-date-time (t/zone-id "UTC"))
-                                                                           (t/minus (t/days 30))
-                                                                           (t/plus (t/minutes 10)))})]
-              (is (= (inc before)
-                     (get-executions))
-                  "execution metrics include query executions since 30 days ago"))
-            (mt/with-temp [:model/QueryExecution _ (merge query-execution-defaults
-                                                          {:started_at (-> (t/offset-date-time (t/zone-id "UTC"))
-                                                                           (t/minus (t/days 30))
-                                                                           (t/minus (t/minutes 10)))})]
-              (is (= before
-                     (get-executions))
-                  "the executions metrics exclude query executions before 30 days ago"))))))))
+          (mt/with-temp [:model/QueryExecution {inside :id} (merge query-execution-defaults
+                                                                   {:started_at (-> (t/offset-date-time (t/zone-id "UTC"))
+                                                                                    (t/minus (t/days 30))
+                                                                                    (t/plus (t/minutes 10)))})
+                         :model/QueryExecution {outside :id} (merge query-execution-defaults
+                                                                    {:started_at (-> (t/offset-date-time (t/zone-id "UTC"))
+                                                                                     (t/minus (t/days 30))
+                                                                                     (t/minus (t/minutes 10)))})]
+            ;; QueryExecutions are written asynchronously in batches, so rows queued by other tests can commit at any
+            ;; moment. Count against a table holding only the two rows under test instead of against a delta.
+            (t2/delete! :model/QueryExecution :id [:not-in [inside outside]])
+            (is (= 1 (:executions (#'stats/execution-metrics)))
+                "the 30 day cutoff includes the execution 10 minutes after it and excludes the one 10 minutes before")))))))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                                Pulses & Alerts                                                 |
@@ -433,17 +430,13 @@
 (deftest activation-signals-test
   (mt/with-temp-empty-app-db [_conn :h2]
     (mdb/setup-db! :create-sample-content? true)
-
     (testing "sufficient-users? correctly counts the number of users within three days of instance creation"
       (is (false? (@#'stats/sufficient-users? 1)))
-
       (mt/with-temp [:model/User _ {:date_joined
                                     (t/plus (t/offset-date-time) (t/days 4))}]
         (is (false? (@#'stats/sufficient-users? 1))))
-
       (mt/with-temp [:model/User _ {:date_joined (t/offset-date-time)}]
         (is (true? (@#'stats/sufficient-users? 1)))))
-
     (testing "sufficient-queries? correctly counts the number of queries"
       (is (false? (@#'stats/sufficient-queries? 1)))
       (mt/with-temp [:model/QueryExecution _ query-execution-defaults]
@@ -452,26 +445,21 @@
 (deftest csv-upload-available-test
   (mt/with-temp-empty-app-db [_conn :h2]
     (mdb/setup-db! :create-sample-content? true)
-
     (testing "csv-upload-available? currently detects upload availability based on the current MB version"
       (mt/with-temp [:model/Database _ {:engine :postgres}]
         (with-redefs [config/current-major-version (constantly 46)
                       config/current-minor-version (constantly 0)]
           (is (false? (@#'stats/csv-upload-available?))))
-
         (with-redefs [config/current-major-version (constantly 47)
                       config/current-minor-version (constantly 1)]
           (is (true? (@#'stats/csv-upload-available?))))))
-
     (mt/with-temp [:model/Database _ {:engine :redshift}]
       (with-redefs [config/current-major-version (constantly 49)
                     config/current-minor-version (constantly 5)]
         (is (false? (@#'stats/csv-upload-available?))))
-
       (with-redefs [config/current-major-version (constantly 49)
                     config/current-minor-version (constantly 6)]
         (is (true? (@#'stats/csv-upload-available?))))))
-
   ;; If we can't detect the MB version, return nil
   (with-redefs [config/current-major-version (constantly nil)
                 config/current-minor-version (constantly nil)]
@@ -508,7 +496,6 @@
              (m/find-first (fn [{key-name :name}]
                              (= key-name :starburst-legacy-impersonation))
                            (#'stats/snowplow-features-data)))))
-
     (mt/with-temp [(t2/table-name :model/Database) _ {:engine "starburst"
                                                       :name "starburst-legacy-test"
                                                       :created_at (t/instant)
@@ -525,7 +512,6 @@
   (testing "deployment model correctly reports cloud/docker/jar"
     (with-redefs [premium-features.settings/is-hosted? (constantly true)]
       (is (= "cloud" (@#'stats/deployment-model))))
-
     ;; Lets just mock io/file to always return an existing (temp) file, to validate that we're doing a filesystem check
     ;; to determine whether we're in a Docker container
     (mt/with-temp-file [mock-file]
@@ -533,7 +519,6 @@
       (with-redefs [premium-features.settings/is-hosted? (constantly false)
                     io/file                              (constantly (java.io.File. mock-file))]
         (is (= "docker" (@#'stats/deployment-model)))))
-
     (with-redefs [premium-features.settings/is-hosted? (constantly false)
                   stats/in-docker?                     (constantly false)]
       (is (= "jar" (@#'stats/deployment-model))))))
@@ -558,6 +543,7 @@
   or to this set, so that [[every-feature-is-accounted-for-test]] passes."
   #{:audit-app ;; tracked under :mb-analytics
     :collection-cleanup
+    :data-complexity-score
     :development-mode
     :library
     :embedding
@@ -584,7 +570,6 @@
           all-features      @@#'premium-features.settings/premium-features]
       ;; make sure features are not missing
       (is (empty? (set/difference all-features included-features-set excluded-features)))
-
       ;; make sure features are not duplicated
       (is (= (count included-features) (count included-features-set))))))
 
@@ -650,7 +635,6 @@
       (is (= {:library_data 0
               :library_metrics 0}
              (#'stats/library-stats))))
-
     (testing "with library collections and data"
       (mt/with-temp [:model/User       {user-id :id}         {:email      "test@example.com"
                                                               :first_name "Test"

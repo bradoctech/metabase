@@ -6,7 +6,7 @@ import { t } from "ttag";
 import { ColorSelector } from "metabase/common/components/ColorSelector";
 import CS from "metabase/css/core/index.css";
 import { Flex } from "metabase/ui";
-import { SP_PALETTE_COLORS } from "metabase/ui/colors/constants/accent-colors";
+import { getAccentColors } from "metabase/ui/colors/groups";
 
 import {
   OptionsIcon,
@@ -61,7 +61,7 @@ export class ChartNestedSettingSeriesMultiple extends Component {
                   <ColorSelector
                     withinPortal={false}
                     value={settings.color}
-                    colors={SP_PALETTE_COLORS}
+                    colors={getAccentColors()}
                     onChange={(value) =>
                       onChangeObjectSettings(single, { color: value })
                     }

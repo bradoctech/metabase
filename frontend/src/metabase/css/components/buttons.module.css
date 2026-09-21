@@ -59,19 +59,19 @@
 
 .ButtonPrimary {
   color: var(--mb-color-text-primary-inverse);
-  background: var(--mb-color-button-primary);
-  border-color: var(--mb-color-button-primary);
+  background: var(--mb-color-brand);
+  border-color: var(--mb-color-brand);
 }
 
 .ButtonPrimary:hover {
   color: var(--mb-color-text-primary-inverse);
-  border-color: var(--mb-color-button-primary-hover);
-  background-color: var(--mb-color-button-primary-hover);
+  border-color: var(--mb-color-brand);
+  background-color: var(--mb-color-brand-hover);
 }
 
 .ButtonPrimary:focus-visible {
   border-color: var(--mb-color-background-primary);
-  outline-color: var(--mb-color-button-primary);
+  outline-color: var(--mb-color-brand);
 }
 
 .ButtonWarning {
@@ -173,9 +173,7 @@
 
 .Button:disabled {
   opacity: 0.5;
-  background-color: var(--mb-color-sp-color-border);
   cursor: not-allowed;
-  color: var(--mb-color-sp-white);
 }
 
 .ButtonDanger {
@@ -214,16 +212,4 @@
 
 .ButtonFullWidth {
   width: 100%;
-}
-
-/* Utility class to remove button border when needed (use via className)
-   Keeps background and text intact but removes border and focus outline. */
-.ButtonNoBorder {
-  border: none !important;
-  box-shadow: none !important;
-}
-
-.ButtonNoBorder:focus-visible {
-  border: none !important;
-  outline: none !important;
 }

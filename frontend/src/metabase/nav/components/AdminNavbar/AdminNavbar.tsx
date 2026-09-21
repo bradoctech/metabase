@@ -4,13 +4,13 @@ import { push } from "react-router-redux";
 import { t } from "ttag";
 
 import { LogoIcon } from "metabase/common/components/LogoIcon";
-import { useDispatch, useSelector } from "metabase/lib/redux";
 import { useRegisterShortcut } from "metabase/palette/hooks/useRegisterShortcut";
 import { PLUGIN_SECURITY_CENTER } from "metabase/plugins";
+import { useDispatch, useSelector } from "metabase/redux";
+import type { AdminPath } from "metabase/redux/store";
 import { getIsPaidPlan } from "metabase/selectors/settings";
 import { getUserIsAdmin } from "metabase/selectors/user";
 import { Button, Icon } from "metabase/ui";
-import type { AdminPath } from "metabase-types/store";
 
 import { AppSwitcher } from "../AppSwitcher";
 import StoreLink from "../StoreLink";

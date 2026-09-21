@@ -17,20 +17,21 @@ import {
   useListTransformsQuery,
 } from "metabase/api";
 import { DateTime } from "metabase/common/components/DateTime";
-import { Ellipsified } from "metabase/common/components/Ellipsified";
 import { ListEmptyState } from "metabase/common/components/ListEmptyState";
 import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
-import { useHasTokenFeature } from "metabase/common/hooks";
+import { UpsellGem } from "metabase/common/components/upsells/components/UpsellGem";
+import { useHasTokenFeature, useSetting } from "metabase/common/hooks";
 import CS from "metabase/css/core/index.css";
 import { DataStudioBreadcrumbs } from "metabase/data-studio/common/components/DataStudioBreadcrumbs";
 import { PageContainer } from "metabase/data-studio/common/components/PageContainer";
 import { PaneHeader } from "metabase/data-studio/common/components/PaneHeader";
-import { useSelector } from "metabase/lib/redux";
-import * as Urls from "metabase/lib/urls";
-import { type NamedUser, getUserName } from "metabase/lib/user";
 import { PLUGIN_REPLACEMENT, PLUGIN_TRANSFORMS_PYTHON } from "metabase/plugins";
+import { useSelector } from "metabase/redux";
 import { getMetadata } from "metabase/selectors/metadata";
+import { LockedTransformsBanner } from "metabase/transforms/components/LockedTransformsBanner/LockedTransformsBanner";
 import { useTransformPermissions } from "metabase/transforms/hooks/use-transform-permissions";
+import { getShouldShowPythonTransformsUpsell } from "metabase/transforms/selectors";
+import { Ellipsified } from "metabase/ui";
 import {
   Card,
   EntityNameCell,
@@ -45,6 +46,8 @@ import {
   useTreeTableInstance,
 } from "metabase/ui";
 import type { ColorName } from "metabase/ui/colors/types";
+import * as Urls from "metabase/urls";
+import { type NamedUser, getUserName } from "metabase/utils/user";
 
 import { CollectionRowMenu } from "./CollectionRowMenu";
 import { CreateTransformMenu } from "./CreateTransformMenu";
@@ -73,7 +76,7 @@ const countTransforms = (node: TreeNode): number => {
 };
 
 const isRowDisabled = (row: Row<TreeNode>) => {
-  return row.original.source_readable === false;
+  return row.original.can_read === false;
 };
 
 const NODE_ICON_COLORS: Record<TreeNode["nodeType"], ColorName> = {
@@ -111,6 +114,7 @@ export const TransformListPage = ({
   const hasScrolledRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
   const hasPythonTransformsFeature = useHasTokenFeature("transforms-python");
+  const isMeterLocked = useSetting("transforms-meter-locked");
 
   const { data: targetCollection } = useGetCollectionQuery(
     targetCollectionId
@@ -137,6 +141,10 @@ export const TransformListPage = ({
     isLoadingCollections || isLoadingTransforms || isLoadingDatabases;
   const error = collectionsError ?? transformsError;
   const metadata = useSelector(getMetadata);
+  const shouldShowPythonTransformsUpsell = useSelector(
+    getShouldShowPythonTransformsUpsell,
+  );
+
   const warningsByTransformId = useMemo(() => {
     const warnings = new Map<number, string>();
     for (const transform of transforms ?? []) {
@@ -150,10 +158,10 @@ export const TransformListPage = ({
 
   const treeData = useMemo(() => {
     const data = buildTreeData(collections, transforms);
-    // Only show Python library item if there's at least one item in the table
+
     // It will trigger the upsell modal if the feature isn't enabled.
     const shouldShowPythonLibraryRow =
-      data.length > 0 && hasPythonTransformsFeature;
+      hasPythonTransformsFeature || shouldShowPythonTransformsUpsell;
 
     if (shouldShowPythonLibraryRow) {
       data.push({
@@ -164,13 +172,14 @@ export const TransformListPage = ({
         url: Urls.transformPythonLibrary({
           path: PLUGIN_TRANSFORMS_PYTHON.sharedLibImportPath,
         }),
-        source_readable: transformsDatabases.length > 0,
+        can_read: transformsDatabases.length > 0,
       });
     }
     return data;
   }, [
     collections,
     hasPythonTransformsFeature,
+    shouldShowPythonTransformsUpsell,
     transforms,
     transformsDatabases.length,
   ]);
@@ -334,6 +343,7 @@ export const TransformListPage = ({
         py={0}
       />
       <Stack className={CS.overflowHidden}>
+        {isMeterLocked && <LockedTransformsBanner />}
         <Flex gap="md">
           <TextInput
             placeholder={t`Search...`}
@@ -407,6 +417,9 @@ function getNameCell({
     return undefined;
   };
 
+  const isLibraryWithoutFeature =
+    row.original.nodeType === "library" && !hasPythonTransformsFeature;
+
   const hasWarning = !!getWarningMessage();
 
   return (
@@ -418,6 +431,7 @@ function getNameCell({
         name={row.original.name}
         ellipsifiedProps={{ ...getTooltipProps(getWarningMessage()) }}
       />
+      {isLibraryWithoutFeature && <UpsellGem.New size={14} />}
     </Group>
   );
 }

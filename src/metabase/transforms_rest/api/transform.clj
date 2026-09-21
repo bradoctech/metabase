@@ -9,6 +9,7 @@
    [metabase.transforms-rest.api.transform-job]
    [metabase.transforms-rest.api.transform-tag]
    [metabase.transforms.core :as transforms.core]
+   [metabase.transforms.feature-gating :as transforms.gating]
    [metabase.transforms.schema :as transforms.schema]
    [metabase.transforms.util :as transforms.u]
    [metabase.util.i18n :refer [deferred-tru]]
@@ -91,10 +92,14 @@
    [:last_run {:optional true} [:maybe TransformLastRunResponse]]
    [:tag_ids {:optional true} [:sequential pos-int?]]
    [:table {:optional true} [:maybe :map]]
+   [:target_table_id {:optional true} [:maybe pos-int?]]
    [:owner_user_id {:optional true} [:maybe pos-int?]]
    [:owner_email {:optional true} [:maybe :string]]
    [:owner {:optional true} [:maybe OwnerResponse]]
-   [:last_checkpoint_value {:optional true} [:maybe :string]]])
+   [:last_checkpoint_value {:optional true} [:maybe :string]]
+   [:can_read {:optional true} :boolean]
+   [:can_write {:optional true} :boolean]
+   [:can_execute {:optional true} :boolean]])
 
 (def ^:private TransformRunResponse
   [:map {:closed true}
@@ -163,11 +168,10 @@
             [:collection_id {:optional true} [:maybe ms/PositiveInt]]
             [:owner_user_id {:optional true} [:maybe ms/PositiveInt]]
             [:owner_email {:optional true} [:maybe :string]]]]
+  (transforms.core/check-feature-enabled! body)
   (api/create-check :model/Transform body)
   (transforms.core/check-database-feature body)
-  (transforms.core/check-feature-enabled! body)
   (transforms.core/validate-incremental-column-type! body)
-
   (api/check (not (transforms-base.u/target-table-exists? body))
              403
              (deferred-tru "A table with that name already exists."))
@@ -186,39 +190,11 @@
                     [:id ms/PositiveInt]]]
   (api/read-check :model/Transform id)
   (let [id->transform (t2/select-pk->fn identity :model/Transform)
-        global-ordering (transforms.core/transform-ordering (vals id->transform))
-        dep-ids         (get global-ordering id)
+        {graph :dependencies} (transforms.core/transform-ordering #{id} (vals id->transform))
+        dep-ids         (get graph id)
         dependencies    (map id->transform dep-ids)]
-    (->> (t2/hydrate dependencies :creator :owner)
+    (->> (t2/hydrate dependencies :creator :owner :can_read :can_write :can_execute)
          transforms.u/add-source-readable)))
-
-(def ^:private MergeHistoryEntry
-  [:map
-   [:id ms/PositiveInt]
-   [:workspace_merge_id ms/PositiveInt]
-   [:commit_message :string]
-   [:workspace_id [:maybe ms/PositiveInt]]
-   [:workspace_name :string]
-   [:merging_user_id ms/PositiveInt]
-   [:created_at :any]])
-
-(api.macros/defendpoint :get "/:id/merge-history"
-  :- [:sequential MergeHistoryEntry]
-  "Get merge history for a transform. Returns all merge events that affected this transform,
-   ordered by created_at descending (newest first)."
-  [{:keys [id]} :- [:map [:id ms/PositiveInt]]]
-  (api/check-superuser)
-  (api/check-404 (t2/select-one :model/Transform id))
-  (t2/select [:model/WorkspaceMergeTransform
-              :id
-              :workspace_merge_id
-              :commit_message
-              :workspace_id
-              :workspace_name
-              :merging_user_id
-              :created_at]
-             {:where    [:= :transform_id id]
-              :order-by [[:created_at :desc]]}))
 
 (api.macros/defendpoint :get "/run" :- [:map {:closed true}
                                         [:data [:sequential TransformRunResponse]]
@@ -308,6 +284,9 @@
    The transform must already be fetched and validated."
   [transform]
   (transforms.core/check-feature-enabled! transform)
+  (api/check (not (transforms.gating/transform-locked? transform))
+             [402 {:message    (deferred-tru "Transforms are temporarily locked because the trial quota has been reached.")
+                   :error-code "metabase_transforms_locked"}])
   (let [start-promise (promise)]
     (u.jvm/in-virtual-thread*
      (transforms.core/execute! transform {:start-promise start-promise

@@ -8,12 +8,13 @@ import {
   SettingsPageWrapper,
   SettingsSection,
 } from "metabase/admin/components/SettingsSection";
+import { UpsellBetterSupport } from "metabase/admin/upsells";
 import { CopyButton } from "metabase/common/components/CopyButton";
 import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { useSetting } from "metabase/common/hooks";
 import CS from "metabase/css/core/index.css";
-import { useSelector } from "metabase/lib/redux";
 import { PLUGIN_SUPPORT } from "metabase/plugins";
+import { useSelector } from "metabase/redux";
 import { getIsPaidPlan } from "metabase/selectors/settings";
 import { UtilApi } from "metabase/services";
 import { Box, Code, Group } from "metabase/ui";
@@ -121,6 +122,8 @@ export const Help = ({ children }: PropsWithChildren) => {
           link={githubIssueLink(detailString)}
         />
       </Group>
+
+      <UpsellBetterSupport location="settings-troubleshooting" />
 
       {PLUGIN_SUPPORT.isEnabled && <PLUGIN_SUPPORT.SupportSettings />}
 

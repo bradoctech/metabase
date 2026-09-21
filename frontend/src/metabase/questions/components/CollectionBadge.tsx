@@ -1,17 +1,17 @@
 import type { ComponentType, PropsWithChildren } from "react";
 
 import { Badge } from "metabase/common/components/Badge";
+import { getIcon } from "metabase/common/utils/icon";
 import { Collections } from "metabase/entities/collections";
 import { useTranslateContent } from "metabase/i18n/hooks";
-import { getIcon } from "metabase/lib/icon";
-import { modelToUrl } from "metabase/lib/urls/modelToUrl";
 import { PLUGIN_COLLECTIONS } from "metabase/plugins";
+import type { State } from "metabase/redux/store";
+import { modelToUrl } from "metabase/urls/modelToUrl";
 import type {
   CollectionId,
   Collection as CollectionType,
 } from "metabase-types/api";
 import type { WrappedEntity } from "metabase-types/entities";
-import type { State } from "metabase-types/store";
 
 const IRREGULAR_ICON_WIDTH = 16;
 const IRREGULAR_ICON_PROPS = {
@@ -26,8 +26,6 @@ type CollectionBadgeProps = {
   className?: string;
   collection: WrappedEntity<CollectionType>;
   isSingleLine?: boolean;
-  activeColor?: string;
-  inactiveColor?: string;
   onClick?: () => void;
 };
 
@@ -35,8 +33,6 @@ const CollectionBadgeInner = ({
   className,
   collection,
   isSingleLine,
-  activeColor,
-  inactiveColor = "text-tertiary",
   onClick,
 }: CollectionBadgeProps) => {
   const tc = useTranslateContent();
@@ -58,8 +54,8 @@ const CollectionBadgeInner = ({
     <Badge
       className={className}
       icon={icon}
-      activeColor={activeColor ?? icon.color}
-      inactiveColor={inactiveColor}
+      activeColor={icon.color}
+      inactiveColor="text-tertiary"
       isSingleLine={isSingleLine}
       {...clickActionProps}
     >

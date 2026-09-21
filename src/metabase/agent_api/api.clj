@@ -3,20 +3,29 @@
   Endpoints are versioned (e.g., /v1/search) and use standard HTTP semantics."
   (:require
    [clojure.string :as str]
-   [malli.core :as mc]
    [metabase.agent-api.validation :as agent-api.validation]
+   [metabase.agent-lib.core :as agent-lib]
    [metabase.api.common :as api]
    [metabase.api.macros :as api.macros]
    [metabase.api.macros.scope :as scope]
    [metabase.api.routes.common :as api.routes.common]
    [metabase.auth-identity.core :as auth-identity]
-   [metabase.lib.schema.temporal-bucketing :as lib.schema.temporal-bucketing]
-   [metabase.metabot.tools.deftool :as deftool]
+   [metabase.collections.models.collection :as collection]
+   [metabase.dashboards.autoplace :as autoplace]
+   [metabase.events.core :as events]
+   [metabase.lib-be.core :as lib-be]
+   [metabase.lib-be.schema :as lib-be.schema]
+   [metabase.lib.core :as lib]
+   [metabase.lib.schema.common :as lib.schema.common]
+   [metabase.lib.schema.id :as lib.schema.id]
+   [metabase.metabot.core :as metabot]
+   [metabase.metabot.tools.construct :as metabot-construct]
    [metabase.metabot.tools.entity-details :as entity-details]
    [metabase.metabot.tools.field-stats :as field-stats]
-   [metabase.metabot.tools.filters :as metabot-filters]
    [metabase.metabot.tools.search :as metabot-search]
    [metabase.metabot.util :as metabot.u]
+   [metabase.queries.core :as queries]
+   [metabase.query-permissions.core :as query-perms]
    [metabase.query-processor.core :as qp]
    [metabase.query-processor.streaming :as qp.streaming]
    [metabase.request.core :as request]
@@ -35,15 +44,46 @@
   30)
 
 (def ^:private ^:const default-query-row-limit
-  "Default row limit for table queries when no limit is specified."
+  "Default row cap when :limit is omitted from a table query request."
   200)
 
-(def ^:private ^:const max-query-row-limit
-  "Hard cap on rows returned by the combined query endpoint, keeping result sets lean for LLM context windows.
-   Agents can paginate via continuation tokens for more."
+(def ^:private ^:const page-size
+  "Rows returned per page when paginating the combined query endpoint via continuation tokens.
+   Also used as the query processor's per-call row constraint."
   200)
+
+(def ^:private ^:const max-total-row-limit
+  "Ceiling on the user-requested :limit for the combined query endpoint. Agents can paginate
+   through up to this many rows across pages."
+  2000)
 
 ;;; ---------------------------------------------------- Helpers ------------------------------------------------------
+
+(defn- personal-collection-id
+  "Id of the current caller's personal collection, created on demand; `nil` for API-key callers,
+  which have none. Agent-created content defaults here rather than the root collection REST uses —
+  the user's own space, not shared \"Our analytics\"."
+  []
+  (:id (collection/user->personal-collection api/*current-user-id*)))
+
+(defn- collection-path
+  "Permission-filtered location breadcrumb of `collection-id`, e.g. \"Our analytics / Marketing / Q3\".
+  Ancestors the caller can't read are omitted, matching the app breadcrumb.
+  A `nil` `collection-id` is the root collection (\"Our analytics\"), not a personal collection."
+  [collection-id]
+  (if-not collection-id
+    (:name (collection/root-collection-with-ui-details nil))
+    (let [coll      (t2/select-one [:model/Collection :id :name :location :personal_owner_id
+                                    :namespace :archived_directly]
+                                   collection-id)
+          ;; `:effective_ancestors` is the app breadcrumb: it leads with the "Our analytics" root and
+          ;; drops ancestors the caller can't read. A personal subtree leads with the personal
+          ;; collection instead, so drop that root crumb for them.
+          ancestors (cond->> (:effective_ancestors (t2/hydrate coll :effective_ancestors))
+                      (collection/is-personal-collection-or-descendant-of-one? coll)
+                      (remove #(= "root" (:id %))))
+          chain     (collection/personal-collections-with-ui-details (conj (vec ancestors) coll))]
+      (str/join " / " (map :name chain)))))
 
 (defn- check-tool-result
   "Extract :structured-output from a tool result, or throw with the appropriate HTTP status code.
@@ -61,14 +101,25 @@
 ;; - Use :encode/api transformers to convert kebab-case data from internal functions
 ;; - Convert keyword enum values (like :table, :metric) to strings for JSON
 
+(mr/def ::field-type
+  "A data type for a field derived from Metabase's type hierarchy."
+  [:enum :boolean :date :datetime :time :number :string])
+
+(mr/def ::field-id
+  "Field id as accepted by agent_api endpoints — either a real app-DB field id (positive integer)
+  or a string alias for expression/aggregation columns."
+  [:or ::lib.schema.id/field :string])
+
 (mr/def ::field
-  "A field from a table or metric. The field_id format is '<prefix><entity-id>-<field-index>' where prefix indicates the source (t=table, c=metric) and index is the position in the entity's fields."
+  "A field from a table or metric. field_id is the real database field ID (integer) for concrete fields,
+  or a string alias for expression/aggregation columns."
   [:map {:encode/api #(update-keys % metabot.u/safe->snake_case_en)}
-   [:field_id :string]
+   [:field_id ::field-id]
    [:name :string]
    [:display_name :string]
+   [:type {:optional true} [:maybe ::field-type]]
    [:description {:optional true} [:maybe :string]]
-   [:base_type :string]
+   [:base_type {:optional true} [:maybe :string]]
    [:effective_type {:optional true} [:maybe :string]]
    [:semantic_type {:optional true} [:maybe :string]]
    [:database_type {:optional true} [:maybe :string]]
@@ -86,7 +137,7 @@
    [:type [:= :metric]]
    [:name :string]
    [:description {:optional true} [:maybe :string]]
-   [:default_time_dimension_field_id {:optional true} [:maybe :string]]])
+   [:default_time_dimension_field_id {:optional true} [:maybe ::field-id]]])
 
 (mr/def ::segment
   "A predefined filter condition that can be applied to queries via the segment_id in filters."
@@ -105,7 +156,7 @@
    [:description {:optional true} [:maybe :string]]])
 
 (mr/def ::related-table
-  "A table related to the queried entity via foreign key. The related_by field indicates the FK field name."
+  "A table related to the queried entity via foreign key. The related_by field is a {:id :name} map identifying the FK field."
   [:map {:encode/api #(update-keys % metabot.u/safe->snake_case_en)}
    [:id :int]
    [:type [:= :table]]
@@ -116,7 +167,7 @@
    [:database_schema {:optional true} [:maybe :string]]
    [:description {:optional true} [:maybe :string]]
    [:fields {:optional true} [:maybe [:sequential ::field]]]
-   [:related_by {:optional true} [:maybe :string]]])
+   [:related_by {:optional true} [:maybe [:map [:id ::field-id] [:name :string]]]]])
 
 (mr/def ::table
   "Full details of a table including its fields, related tables, metrics, and segments."
@@ -142,7 +193,7 @@
    [:type [:= :metric]]
    [:name :string]
    [:description {:optional true} [:maybe :string]]
-   [:default_time_dimension_field_id {:optional true} [:maybe :string]]
+   [:default_time_dimension_field_id {:optional true} [:maybe ::field-id]]
    [:verified {:optional true} [:maybe :boolean]]
    [:queryable_dimensions {:optional true} [:maybe [:sequential ::field]]]
    [:segments {:optional true} [:maybe [:sequential ::segment]]]])
@@ -169,7 +220,7 @@
 (mr/def ::field-values
   "Statistics and sample values for a specific field."
   [:map {:encode/api #(update-keys % metabot.u/safe->snake_case_en)}
-   [:field_id {:optional true} [:maybe :string]]
+   [:field_id {:optional true} [:maybe ::field-id]]
    [:statistics {:optional true} [:maybe ::statistics]]
    [:values {:optional true} [:maybe [:sequential :any]]]])
 
@@ -203,7 +254,7 @@
 
 (api.macros/defendpoint :get "/v1/table/:id" :- ::table
   "Get details for a table by ID."
-  {:scope "agent:table:read"
+  {:scope metabot/agent-table-read
    :tool  {:name "get_table"
            :description "Get details about a table including its fields, related tables, and metrics."}}
   [{:keys [id]} :- [:map [:id ms/PositiveInt]]
@@ -230,7 +281,7 @@
 
 (api.macros/defendpoint :get "/v1/table/:id/field/:field-id/values" :- ::field-values
   "Get statistics and sample values for a table field."
-  {:scope "agent:table:read"
+  {:scope metabot/agent-table-read
    :tool  {:name "get_table_field_values"
            :description "Get sample values and statistics for a field in a table."}}
   [{:keys [id field-id]} :- [:map
@@ -246,7 +297,7 @@
 
 (api.macros/defendpoint :get "/v1/metric/:id" :- ::metric
   "Get details for a metric by ID."
-  {:scope "agent:metric:read"
+  {:scope metabot/agent-metric-read
    :tool  {:name "get_metric"
            :description "Get details about a metric including its queryable dimensions."}}
   [{:keys [id]} :- [:map [:id ms/PositiveInt]]
@@ -268,7 +319,7 @@
 
 (api.macros/defendpoint :get "/v1/metric/:id/field/:field-id/values" :- ::field-values
   "Get statistics and sample values for a metric field."
-  {:scope "agent:metric:read"
+  {:scope metabot/agent-metric-read
    :tool  {:name "get_metric_field_values"
            :description "Get sample values and statistics for a field in a metric."}}
   [{:keys [id field-id]} :- [:map
@@ -282,25 +333,51 @@
      :field-id    field-id
      :limit       (or (request/limit) default-field-values-limit)})))
 
+(defn- coerce-query-list
+  "Defensive coercion for `/v1/search`'s query arguments. Some MCP clients (notably
+   Codex) serialize array args through a string layer, so a caller that intended to
+   send `[\"orders\"]` may actually send `\"[\\\"orders\\\"]\"`. Accept either shape:
+   an array is returned as-is; a string that parses as a JSON array of non-blank
+   strings is unwrapped; any other string is treated as a single-element query."
+  [v]
+  (cond
+    (nil? v)        nil
+    (sequential? v) v
+    (string? v)     (or (try
+                          (let [parsed (json/decode+kw v)]
+                            (when (and (sequential? parsed)
+                                       (every? #(and (string? %) (not (str/blank? %))) parsed))
+                              parsed))
+                          (catch Exception _ nil))
+                        [v])
+    :else           v))
+
 (api.macros/defendpoint :post "/v1/search" :- ::search-response
   "Search for tables and metrics.
 
   Supports both term-based and semantic search queries. Results are ranked using
   Reciprocal Rank Fusion when both query types are provided."
-  {:scope "agent:search"
+  {:scope metabot/agent-search
    :tool  {:name "search"
-           :description "Search for tables and metrics in Metabase. Use term_queries for keyword search or semantic_queries for natural language search."
+           :title "Search Tables and Metrics"
+           :description (str "Search for tables and metrics in Metabase. "
+                             "Use term_queries for keyword search or semantic_queries for natural language search. "
+                             "Both arguments are arrays of strings, for example term_queries: [\"orders\", \"revenue\"].")
            :annotations {:read-only? true}}}
   [_route-params
    _query-params
    {term-queries     :term_queries
     semantic-queries :semantic_queries}
    :- [:map
-       [:term_queries     {:optional true} [:maybe [:sequential ms/NonBlankString]]]
-       [:semantic_queries {:optional true} [:maybe [:sequential ms/NonBlankString]]]]]
+       [:term_queries {:optional true
+                       :tool/description "Keyword search queries as an array of strings, for example [\"orders\", \"revenue\"]."}
+        [:maybe [:or [:sequential ms/NonBlankString] ms/NonBlankString]]]
+       [:semantic_queries {:optional true
+                           :tool/description "Natural-language search queries as an array of strings, for example [\"how much revenue did we make\"]."}
+        [:maybe [:or [:sequential ms/NonBlankString] ms/NonBlankString]]]]]
   (let [results (metabot-search/search
-                 {:term-queries     (or term-queries [])
-                  :semantic-queries (or semantic-queries [])
+                 {:term-queries     (or (coerce-query-list term-queries) [])
+                  :semantic-queries (or (coerce-query-list semantic-queries) [])
                   :entity-types     ["table" "metric"]
                   :limit            (or (request/limit) 50)})]
     {:data        results
@@ -308,376 +385,328 @@
 
 ;;; ------------------------------------------------ Construct Query -------------------------------------------------
 
-;; Request schemas for the Agent API.
-;; These use snake_case keys for validation and OpenAPI generation,
-;; with :encode/tool-api-request transformers for converting to the internal format.
-
-(mr/def ::bucket
-  (into [:enum {:error/message           "Valid bucket"
-                :encode/tool-api-request keyword}]
-        (map name)
-        lib.schema.temporal-bucketing/ordered-datetime-bucketing-units))
-
-(mr/def ::existence-filter
-  [:and
-   [:map
-    [:field_id :string]
-    [:operation [:enum {:encode/tool-api-request keyword}
-                 "is-null"         "is-not-null"
-                 "string-is-empty" "string-is-not-empty"
-                 "is-true"         "is-false"]]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::temporal-extraction-filter
-  [:and
-   [:map
-    [:field_id :string]
-    [:operation [:enum {:encode/tool-api-request keyword}
-                 "year-equals"        "year-not-equals"
-                 "quarter-equals"     "quarter-not-equals"
-                 "month-equals"       "month-not-equals"
-                 "day-of-week-equals" "day-of-week-not-equals"
-                 "hour-equals"        "hour-not-equals"
-                 "minute-equals"      "minute-not-equals"
-                 "second-equals"      "second-not-equals"]]
-    [:value :int]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::disjunctive-temporal-extraction-filter
-  [:and
-   [:map
-    [:field_id :string]
-    [:operation [:enum {:encode/tool-api-request keyword}
-                 "year-equals"        "year-not-equals"
-                 "quarter-equals"     "quarter-not-equals"
-                 "month-equals"       "month-not-equals"
-                 "day-of-week-equals" "day-of-week-not-equals"
-                 "hour-equals"        "hour-not-equals"
-                 "minute-equals"      "minute-not-equals"
-                 "second-equals"      "second-not-equals"]]
-    [:values [:sequential :int]]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::temporal-filter
-  [:and
-   [:map
-    [:field_id :string]
-    [:bucket {:optional true} ::bucket]
-    [:operation [:enum {:encode/tool-api-request keyword}
-                 "equals"       "not-equals"
-                 "greater-than" "greater-than-or-equal"
-                 "less-than"    "less-than-or-equal"]]
-    [:value [:or :string :int]]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::disjunctive-temporal-filter
-  [:and
-   [:map
-    [:field_id :string]
-    [:bucket {:optional true} ::bucket]
-    [:operation [:enum {:encode/tool-api-request keyword}
-                 "equals"       "not-equals"
-                 "greater-than" "greater-than-or-equal"
-                 "less-than"    "less-than-or-equal"]]
-    [:values [:sequential [:or :string :int]]]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::string-filter
-  [:and
-   [:map
-    [:field_id :string]
-    [:operation [:enum {:encode/tool-api-request keyword}
-                 "equals"             "not-equals"
-                 "string-contains"    "string-not-contains"
-                 "string-starts-with" "string-ends-with"]]
-    [:value :string]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::disjunctive-string-date-filter
-  [:and
-   [:map
-    [:field_id :string]
-    [:operation [:enum {:encode/tool-api-request keyword}
-                 "equals"             "not-equals"
-                 "string-contains"    "string-not-contains"
-                 "string-starts-with" "string-ends-with"]]
-    [:values [:sequential :string]]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::numeric-filter
-  [:and
-   [:map
-    [:field_id :string]
-    [:operation [:enum {:encode/tool-api-request keyword}
-                 "equals"       "not-equals"
-                 "greater-than" "greater-than-or-equal"
-                 "less-than"    "less-than-or-equal"]]
-    [:value [:or :int :double]]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::disjunctive-numeric-filter
-  [:and
-   [:map
-    [:field_id :string]
-    [:operation [:enum {:encode/tool-api-request keyword}
-                 "equals" "not-equals"]]
-    [:values [:sequential [:or :int :double]]]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::segment-filter
-  "Filter using a pre-defined segment."
-  [:and
-   [:map
-    [:segment_id :int]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::filter
-  [:or
-   ::segment-filter
-   ::existence-filter
-   ::temporal-extraction-filter ::disjunctive-temporal-extraction-filter
-   ::temporal-filter ::disjunctive-temporal-filter
-   ::string-filter ::disjunctive-string-date-filter
-   ::numeric-filter ::disjunctive-numeric-filter])
-
-(mr/def ::group-by
-  [:and
-   [:map
-    [:field_id :string]
-    [:field_granularity {:optional true}
-     [:maybe [:enum {:encode/tool-api-request keyword}
-              "minute", "hour" "day" "week" "month" "quarter" "year" "day-of-week"]]]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::count-aggregation
-  "Count aggregation — counts rows, no field_id needed.
-   Use sort_order to order results by this aggregation ('asc' or 'desc')."
-  [:and
-   [:map
-    [:function [:= {:encode/tool-api-request keyword} "count"]]
-    [:bucket {:optional true} ::bucket]
-    [:sort_order {:optional true} [:maybe [:enum {:encode/tool-api-request keyword} "asc" "desc"]]]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::field-aggregation
-  "Aggregation using a field and function. field_id is required.
-   Use sort_order to order results by this aggregation ('asc' or 'desc')."
-  [:and
-   [:map
-    [:field_id :string]
-    [:bucket {:optional true} ::bucket]
-    [:sort_order {:optional true} [:maybe [:enum {:encode/tool-api-request keyword} "asc" "desc"]]]
-    [:function [:enum {:encode/tool-api-request keyword}
-                "avg" "count-distinct" "max" "min" "sum"]]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::measure-aggregation
-  "Aggregation using a pre-defined measure."
-  [:and
-   [:map
-    [:measure_id :int]
-    [:sort_order {:optional true} [:maybe [:enum {:encode/tool-api-request keyword} "asc" "desc"]]]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::aggregation
-  "Aggregation — count (field optional), field-based (field required), or measure-based."
-  [:or ::count-aggregation ::field-aggregation ::measure-aggregation])
-
-(mr/def ::field
-  [:and
-   [:map
-    [:field_id :string]
-    [:bucket {:optional true} ::bucket]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::order-by
-  "Order by item specifying a field and sort direction."
-  [:map
-   [:field ::field]
-   [:direction [:enum {:encode/tool-api-request keyword} "asc" "desc"]]])
-
-(mr/def ::construct-query-table-request
-  "Request schema for constructing a query from a table.
-
-   Query components:
-   - filters: Filter conditions to apply
-   - fields: Specific fields to select (omit for all fields)
-   - aggregations: Aggregation functions (sum, count, avg, etc.). Use sort_order on the aggregation to order by it.
-   - group_by: Fields to group by, with optional temporal granularity
-   - order_by: Order by regular fields only. To order by an aggregation result, use sort_order on the aggregation instead.
-   - limit: Maximum rows to return"
-  [:and
-   [:map
-    [:table_id ms/PositiveInt]
-    [:filters      {:optional true} [:maybe [:sequential ::filter]]]
-    [:fields       {:optional true} [:maybe [:sequential ::field]]]
-    [:aggregations {:optional true} [:maybe [:sequential ::aggregation]]]
-    [:group_by     {:optional true} [:maybe [:sequential ::group-by]]]
-    [:order_by     {:optional true
-                    :description "Order by regular fields only. To order by aggregation results, use sort_order on the aggregation."}
-     [:maybe [:sequential ::order-by]]]
-    [:limit        {:optional true} [:maybe ms/PositiveInt]]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::construct-query-metric-request
-  "Request schema for constructing a query from a metric.
-   Only supports filters and group_by (aggregation is defined by the metric)."
-  [:and
-   [:map
-    [:metric_id ms/PositiveInt]
-    [:filters  {:optional true} [:maybe [:sequential ::filter]]]
-    [:group_by {:optional true} [:maybe [:sequential ::group-by]]]]
-   [:map {:encode/tool-api-request #(update-keys % metabot.u/safe->kebab-case-en)}]])
-
-(mr/def ::construct-query-request
-  "Request schema for /v1/construct-query. Accepts either table_id or metric_id."
-  [:or ::construct-query-table-request ::construct-query-metric-request])
-
-(mr/def ::query-request
-  "Request schema for /v1/query. Accepts construct params (table_id or metric_id) or a continuation_token."
-  [:multi {:dispatch (fn [m]
-                       (cond
-                         (:continuation_token m) :continuation
-                         (:metric_id m)          :metric
-                         :else                   :table))}
-   [:continuation [:map [:continuation_token ms/NonBlankString]]]
-   [:table        ::construct-query-table-request]
-   [:metric       ::construct-query-metric-request]])
+(mr/def ::program-request
+  "Request body for /v2/construct-query and /v2/query.
+  An agent-lib structured program with `:source` and `:operations`. The top-level
+  `:source` must reference a database entity (`table`, `card`, `dataset`, or
+  `metric`); `context` and nested `program` sources are rejected at the HTTP
+  boundary by [[evaluate-program-for-execution]] because they require an
+  in-process evaluation context."
+  agent-lib/program-schema)
 
 (mr/def ::construct-query-response
   "Response containing a base64-encoded MBQL query for use with /v1/execute."
   [:map
    [:query ms/NonBlankString]])
 
-(defn- construct-query*
-  "Shared query construction: encodes args, calls the appropriate tool fn, returns the raw lib query."
-  [body]
-  (if (:table_id body)
-    (let [args (mc/encode ::construct-query-table-request body deftool/request-transformer)]
-      (:query (check-tool-result (metabot-filters/query-datasource args))))
-    (let [args (mc/encode ::construct-query-metric-request body deftool/request-transformer)]
-      (:query (check-tool-result (metabot-filters/query-metric args))))))
+(def ^:private allowed-program-source-types
+  "Top-level program source types that the HTTP boundary accepts. `context` and
+  nested `program` sources require an in-process evaluation context and are
+  rejected here."
+  #{"table" "card" "dataset" "metric"})
 
-(defn- construct-table-query
-  "Build a query from a table using the provided query components."
-  [body]
-  (let [body  (cond-> body (not (:limit body)) (assoc :limit default-query-row-limit))
-        query (construct-query* body)]
-    {:query (-> query json/encode u/encode-base64)}))
+(defn- evaluate-program-to-live-query
+  "Resolve a program's source entity, evaluate the program via agent-lib, and return
+  the live lib query (with lib metadata attached)."
+  [program]
+  (let [source-type (get-in program [:source :type])]
+    (api/check (contains? allowed-program-source-types source-type)
+               [400 (str "top-level program source must be one of: "
+                         (str/join ", " (sort allowed-program-source-types)))]))
+  (let [source-entity (metabot-construct/program-source->source-entity (:source program))
+        result        (metabot-construct/execute-program source-entity nil program)]
+    (get-in result [:structured-output :query])))
 
-(defn- construct-metric-query
-  "Build a query from a metric using filters and group_by."
-  [body]
-  {:query (-> (construct-query* body) json/encode u/encode-base64)})
+(defn- evaluate-program-for-execution
+  "Evaluate a program and return a plain MBQL 5 query map suitable for serialization
+  into a continuation token and execution by the QP."
+  [program]
+  (lib/prepare-for-serialization (evaluate-program-to-live-query program)))
 
-(api.macros/defendpoint :post "/v1/construct-query" :- ::construct-query-response
-  "Construct an MBQL query from a table or metric.
+(api.macros/defendpoint :post "/v2/construct-query" :- ::construct-query-response
+  "Construct an MBQL query from a structured agent-lib program.
 
-  Returns a base64-encoded MBQL query that can be used with the query API.
-
-  For tables, supports: filters, fields, aggregations, group_by, order_by, limit.
-  For metrics, supports: filters, group_by (aggregation is defined by the metric)."
-  {:scope "agent:query:construct"
+  The body is the program itself: a JSON object with `source` (identifying the
+  table/card/dataset/metric to query) and `operations` (an array of operator
+  tuples). Returns a base64-encoded MBQL query that can be executed via
+  /v1/execute. See the agent_api reference for the full program syntax."
+  {:scope metabot/agent-query-construct
    :tool  {:name "construct_query"
-           :description (str "Construct a query against a Metabase table or metric. "
-                             "Returns an opaque query string that can be executed with execute_query.\n\n"
-                             "For table queries: provide table_id. "
-                             "Supports filters, fields, aggregations, group_by, order_by, and limit.\n\n"
-                             "For metric queries: provide metric_id. "
-                             "Supports only filters and group_by (aggregation is defined by the metric).\n\n"
-                             "Provide either table_id or metric_id, not both.")
+           :description (str "Construct a Metabase query from a structured program with `source` and "
+                             "`operations`. Returns an opaque query string for execute_query. "
+                             "See the `metabase://docs/construct-query.md` resource for the full "
+                             "program syntax (sources, operations, operator forms, worked examples, "
+                             "and pitfalls).")
            :annotations {:read-only? true :idempotent? true}}}
   [_route-params
    _query-params
-   body :- ::construct-query-request]
-  (if (:table_id body)
-    (construct-table-query body)
-    (construct-metric-query body)))
+   program :- ::program-request]
+  (let [query (evaluate-program-for-execution program)]
+    {:query (-> query json/encode u/encode-base64)}))
 
 ;;; ------------------------------------------------- Combined Query -------------------------------------------------
 
 (defn- generate-continuation-token
-  "Build a base64-encoded continuation token containing the query and next-page pagination info."
-  [query-map limit page]
+  "Build a base64-encoded continuation token carrying the query and next-page pagination info.
+   :limit is the user's total row cap across all pages, not the per-page size."
+  [query-map total-limit page]
   (-> {:query      query-map
-       :pagination {:limit limit :page (inc page)}}
+       :pagination {:limit total-limit :page (inc page)}}
       json/encode
       u/encode-base64))
 
-(defn- decode-continuation-token
-  "Decode a base64-encoded continuation token into {:query ... :pagination ...}."
-  [token]
-  (-> token u/decode-base64 json/decode+kw))
+(defn- decode-base64-json-map
+  "Decode a base64-encoded JSON object to a Clojure map, returning a 400 (not a 500) on malformed input.
+   The query_handle and continuation-token payloads are client-reachable, so garbage in must surface as
+   a clean 400 rather than a decode exception that bubbles up as a 500."
+  [encoded]
+  (let [decoded (try
+                  (-> encoded u/decode-base64 json/decode+kw)
+                  (catch Exception _ ::invalid))]
+    (if (map? decoded)
+      decoded
+      (throw (ex-info "Invalid request: expected a base64-encoded JSON object."
+                      {:status-code 400})))))
 
-(defn- build-query-for-execution
-  "Construct a pMBQL query map from table_id or metric_id params. Returns {:query <map> :limit <int>}.
-   The JSON round-trip strips lib metadata so the query is a plain pMBQL map suitable for token serialization."
-  [body]
-  (let [limit (min (or (:limit body) default-query-row-limit) max-query-row-limit)
-        query (construct-query* (assoc body :limit limit))]
-    {:query (json/decode+kw (json/encode query)) :limit limit}))
+(defn- decode-continuation-token
+  "Decode a base64-encoded continuation token into {:query ... :pagination ...}.
+   The token is client-supplied, so sanity-check the pagination ints to turn
+   garbage into a 400 rather than a downstream 500. This is robustness, not a
+   security boundary — a caller can always issue a fresh program to run any
+   query they want."
+  [token]
+  (let [decoded (decode-base64-json-map token)
+        {:keys [limit page]} (:pagination decoded)]
+    (api/check (and (int? limit) (pos? limit))
+               [400 "Invalid continuation token: limit must be a positive integer"])
+    (api/check (and (int? page) (pos? page))
+               [400 "Invalid continuation token: page must be a positive integer"])
+    decoded))
+
+(defn- clamp-total-limit
+  "Default a missing :limit and cap it at the combined endpoint's hard maximum.
+   This is the app-level total-row budget enforced across paginated responses; each page's QP-level
+   cap comes from `:page.items`, which `remaining-page-rows` clamps to respect this total."
+  [limit]
+  (min (or limit default-query-row-limit) max-total-row-limit))
+
+(defn- total-row-limit
+  "The user's requested :limit read from a resolved lib query, defaulted and capped."
+  [live-query]
+  (clamp-total-limit (lib/current-limit live-query)))
+
+(defn- serialized-query-limit
+  "Read the last-stage :limit from a serialized MBQL 5 query map — the `lib/current-limit`
+   equivalent for the plain-map form carried by a query_handle (already resolved, so we read it
+   off the map rather than rehydrating a live query)."
+  [query-map]
+  (get-in query-map [:stages (dec (count (:stages query-map))) :limit]))
+
+(defn- rows-before-page
+  "Total rows consumed by the pages preceding `page`. Single source of truth for
+   the page-size * (page - 1) arithmetic used by both sizing and pagination-exit."
+  [page]
+  (* (dec page) page-size))
+
+(defn- remaining-page-rows
+  "Rows to request for this page, respecting the user's total cap.
+   Returns at most page-size, and never more than remaining rows under the cap."
+  [total-limit page]
+  (max 0 (min page-size (- total-limit (rows-before-page page)))))
+
+(defn- more-pages-available?
+  "True when this page was filled to its requested size *and* the total cap still
+   has room for more rows — i.e. we should emit a continuation token."
+  [page total-limit rows-returned items]
+  (and (= rows-returned items)
+       (< (rows-before-page (inc page)) total-limit)))
 
 (defn- apply-page-to-query
-  "Apply :page clause to the last stage of a pMBQL query map."
+  "Set `:page` on the last stage of a serialized MBQL 5 query map. Operates on the
+  plain-map form because the continuation-token path only has that shape available —
+  rehydrating to a live lib query here would require a metadata provider we don't
+  currently plumb through the token."
   [query-map page items]
   (let [stages   (:stages query-map)
         last-idx (dec (count stages))]
     (assoc-in query-map [:stages last-idx :page] {:page page :items items})))
 
 (defn- prepare-agent-query
-  "Apply standard Agent API query preparation: middleware defaults and execution info."
+  "Apply standard Agent API query preparation: middleware defaults and execution info.
+
+  `:info` is assoc'd rather than merged so it comes entirely from the server. `execute_query` runs a whole query
+  decoded straight out of the request, and every `:info` key the server does not itself supply would otherwise be the
+  caller's: `:card-id` names the Card whose `result_metadata` gets rewritten once the query finishes, and whose
+  `visualization_settings` the QP loads."
   [query]
   (-> query
       (update-in [:middleware :js-int-to-string?] (fnil identity true))
       qp/userland-query-with-default-constraints
-      (update :info merge {:executed-by api/*current-user-id*
-                           :context     :agent})))
+      (assoc :info {:executed-by api/*current-user-id*
+                    :context     :agent})))
 
 (defn- prepare-combined-query
-  "Apply the tighter row cap used by the combined query endpoint."
+  "Apply the tighter row cap used by the combined query endpoint. Each page is bounded
+   by page-size; the user's total-limit is enforced separately via pagination."
   [query]
   (assoc (prepare-agent-query query)
-         :constraints {:max-results           max-query-row-limit
-                       :max-results-bare-rows max-query-row-limit}))
+         :constraints {:max-results           page-size
+                       :max-results-bare-rows page-size}))
 
-(api.macros/defendpoint :post "/v1/query"
+(defn- normalize-and-validate-query
+  "Normalize a decoded query map to a well-formed MBQL 5 query and return it, stripping undeclared keys and
+  throwing a 400 if it is not valid. Also converts legacy MBQL to MBQL 5."
+  [q]
+  (api.macros/decode-and-validate-params :body ::lib-be.schema/maybe-legacy-query q))
+
+(defn- decode-and-validate-query
+  "Decode a base64-encoded JSON query string into a validated MBQL query map."
+  [s]
+  (normalize-and-validate-query (-> s u/decode-base64 json/decode)))
+
+(mr/def ::query-request
+  "Request body for /v2/query, one of three shapes:
+    - `{:continuation_token <string>}` from a prior response (pagination);
+    - `{:query <base64-string>}` — a query_handle resolved by the MCP layer to its stored base64
+      MBQL; already resolved, so it's executed directly (like /v1/execute) rather than re-run
+      through the representations pipeline;
+    - `{:query <external-query-object>}` — a fresh portable MBQL 5 payload, same shape as
+      /v2/construct-query.
+
+  The string-vs-object `:query` distinction is what the `:dispatch` keys on. Each branch is a
+  closed map, so top-level keys it doesn't declare (e.g. the legacy `source_entity` /
+  `referenced_entities` envelope, or a `:query` sent alongside a `:continuation_token`) are
+  dropped before the handler runs."
+  [:multi {:decode/normalize lib.schema.common/normalize-map-no-kebab-case
+           :dispatch         (fn [m]
+                               (cond
+                                 (:continuation_token m) :continuation
+                                 (string? (:query m))    :handle
+                                 :else                   :fresh))}
+   [:continuation [:map {:closed true} [:continuation_token ms/NonBlankString]]]
+   [:handle       [:map {:closed true} [:query ms/NonBlankString]]]
+   [:fresh        ::program-request]])
+
+(defn- reject-native-query!
+  "Throw a 400 if `query-map` is a native query anywhere — top-level, nested, or in a join, in either the
+  legacy or the MBQL 5 form. Normalizes the payload to MBQL 5 (best-effort) and checks for a native stage
+  with [[lib/any-native-stage?]], so the check reads keyword `:lib/type`s regardless of how the JSON was
+  decoded; a payload too malformed to normalize is left for the shape and validation checks that follow.
+
+  `/v2/query` and `/v1/execute` are gated by the MBQL-execution scopes (`agent:query` /
+  `agent:query:execute`), not `agent:sql:execute`. The opaque base64 payloads they accept (a
+  query_handle, a continuation token) could carry a native query; allowing it would let a token
+  without the SQL-execution scope run raw SQL, defeating the scope split and bypassing the
+  execute-sql kill switch. Force native execution onto `/v1/execute-sql`, which is correctly scoped."
+  [query-map]
+  (when (some-> (u/ignore-exceptions (lib-be/normalize-query query-map))
+                not-empty
+                lib/any-native-stage?)
+    (throw (ex-info "Native queries are not supported here; use execute_sql instead."
+                    {:status-code 400}))))
+
+(defn- validate-serialized-query!
+  "Sanity-check a decoded MBQL query map from a client-reachable base64 payload (query_handle or token).
+   Require `:stages` to be a non-empty sequence of maps, and the last-stage `:limit` (if present) an
+   integer; otherwise `serialized-query-limit`, `clamp-total-limit`, and `apply-page-to-query` would
+   throw on the malformed shape and surface a 500 instead of a clean 400.
+   Deep MBQL validation still happens in the QP at execution."
+  [query-map]
+  (let [stages (:stages query-map)]
+    (when-not (and (sequential? stages) (seq stages) (every? map? stages))
+      (throw (ex-info "Invalid query: expected a serialized MBQL query with a non-empty :stages of maps."
+                      {:status-code 400 :query-map query-map})))
+    ;; `contains?` (not `when-let`) so an explicit `false`/`nil` limit is caught, not skipped.
+    (when (contains? (last stages) :limit)
+      (let [limit (:limit (last stages))]
+        (when-not (and (int? limit) (pos? limit))
+          (throw (ex-info "Invalid query: last-stage :limit must be a positive integer."
+                          {:status-code 400 :query-map query-map})))))))
+
+(defn- check-token-query-permissions!
+  "Re-validate query permissions on the continuation-token path.
+
+  The token body is client-supplied and could in principle name a different source table than
+  the one the fresh `/v2/query` call was authorized against (a user's data perms can also
+  change between pages). The QP middleware would catch this at execution time, but running
+  the explicit `api/query-check` first gives a cleaner 403 and avoids spinning up the
+  streaming response just to abort."
+  [query-map]
+  (when-let [table-id (get-in query-map [:stages 0 :source-table])]
+    (when (int? table-id)
+      (api/query-check :model/Table table-id))))
+
+(defn- initial-page-state
+  "Normalize the three /v2/query entry points into a single {:query :total-limit :page} shape.
+
+   - A continuation token carries the query + pagination state from a prior response (and
+     re-validates query permissions, since the token is client-supplied and per-user permissions
+     can change between pages).
+   - A base64 `:query` string is a query_handle the MCP layer already resolved to its stored MBQL;
+     it's decoded and executed directly (like /v1/execute), skipping the representations pipeline.
+     Permissions are enforced by the QP at execution time, as on /v1/execute.
+   - A fresh request body is evaluated through the representations pipeline and the total-row budget
+     is derived from the resolved query's `:limit`."
+  [body]
+  (cond
+    (:continuation_token body)
+    (let [{:keys [query pagination]} (decode-continuation-token (:continuation_token body))]
+      (reject-native-query! query)
+      (validate-serialized-query! query)
+      (let [query (normalize-and-validate-query query)]
+        (check-token-query-permissions! query)
+        {:query query :total-limit (:limit pagination) :page (:page pagination)}))
+
+    (string? (:query body))
+    (let [query (decode-base64-json-map (:query body))]
+      (reject-native-query! query)
+      (validate-serialized-query! query)
+      (let [query (normalize-and-validate-query query)]
+        {:query       query
+         :total-limit (clamp-total-limit (serialized-query-limit query))
+         :page        1}))
+
+    :else
+    (let [live-query (evaluate-program-to-live-query body)]
+      {:query       (lib/prepare-for-serialization live-query)
+       :total-limit (total-row-limit live-query)
+       :page        1})))
+
+(api.macros/defendpoint :post "/v2/query"
   :- (streaming-response/streaming-response-schema ::query-response)
-  "Query a Metabase table or metric, or continue paginating a previous query.
+  "Execute a structured program and stream the results, with continuation-token pagination.
 
-  Accepts either construct params (table_id/metric_id + filters, aggregations, etc.)
-  or a continuation_token from a previous response. Returns results with column metadata
-  and an optional continuation_token for fetching the next page."
+  Accepts either a program (same shape as /v2/construct-query) or a
+  `continuation_token` from a previous response. Returns results with column
+  metadata and an optional `continuation_token` for fetching the next page."
   {:scope "agent:query"
    :tool  {:name "query"
-           :description (str "Query a Metabase table or metric. Returns results with column metadata. "
-                             "If more rows are available, the response includes a continuation_token — "
-                             "pass it back to get the next page.\n\n"
-                             "For table queries: provide table_id. "
-                             "Supports filters, fields, aggregations, group_by, order_by, and limit.\n\n"
-                             "For metric queries: provide metric_id. "
-                             "Supports only filters and group_by (aggregation is defined by the metric).\n\n"
-                             "For pagination: provide only continuation_token from a previous response.\n\n"
-                             "Provide exactly one of table_id, metric_id, or continuation_token.")}}
+           :title "Query Tables and Metrics"
+           :description (str "Execute a Metabase query and return results with column "
+                             "metadata. If more rows are available, the response includes a "
+                             "continuation_token — pass it back to get the next page.\n\n"
+                             "Provide one of: a `query_handle` returned by construct_query "
+                             "(preferred when you have one); a `{\"query\": <object>}` body "
+                             "(same shape as construct_query; see the `construct_notebook_query` "
+                             "tool for the format reference); or a `{\"continuation_token\": "
+                             "\"...\"}` from a previous response.")
+           :annotations {:read-only? true}}}
   [_route-params
    _query-params
    body :- ::query-request]
-  (let [{:keys [query limit page]}
-        (if-let [token (:continuation_token body)]
-          (let [{:keys [query pagination]} (decode-continuation-token token)]
-            {:query query :limit (:limit pagination) :page (:page pagination)})
-          (let [{:keys [query limit]} (build-query-for-execution body)]
-            {:query query :limit limit :page 1}))
-        pmbql-with-page (apply-page-to-query query page limit)]
+  (let [{:keys [query total-limit page]} (initial-page-state body)
+        items           (remaining-page-rows total-limit page)
+        mbql5-with-page (apply-page-to-query query page items)]
     (qp.streaming/streaming-response
      [rff :api]
       (qp/process-query
-       (prepare-combined-query pmbql-with-page)
+       (prepare-combined-query mbql5-with-page)
        (qp.streaming/transforming-query-response
         rff
         (fn [result]
           (assoc result :continuation_token
-                 (when (= (:row_count result) limit)
-                   (generate-continuation-token query limit page)))))))))
+                 (when (more-pages-available? page total-limit (:row_count result) items)
+                   (generate-continuation-token query total-limit page)))))))))
 
 ;;; ------------------------------------------------- Execute Query --------------------------------------------------
 
@@ -724,18 +753,167 @@
   - On success: {:data {:cols [...] :rows [...]} :row_count N :status :completed :running_time M}
   - On failure: {:status :failed :error \"message\" ...}
 
-  Agent query row limits are enforced (200 rows per request)."
-  {:scope "agent:query:execute"
+  Standard userspace query limits are enforced (2000 rows for simple queries, 10000 for aggregated)."
+  {:scope metabot/agent-query-execute
    :tool  {:name "execute_query"
-           :description "Execute a previously constructed query and return the results with column metadata, row count, and execution time."}}
+           :description "Execute a previously constructed query and return the results with column metadata, row count, and execution time."
+           :annotations {:read-only? true :idempotent? true}}}
   [_route-params
    _query-params
    {encoded-query :query} :- ::execute-query-request]
-  (let [query (-> encoded-query
-                  u/decode-base64
-                  json/decode+kw)]
-    (qp.streaming/streaming-response [rff :api]
-      (qp/process-query (prepare-combined-query query) rff))))
+  (let [decoded (-> encoded-query u/decode-base64 json/decode)]
+    (reject-native-query! decoded)
+    (let [query (normalize-and-validate-query decoded)]
+      (qp.streaming/streaming-response [rff :api]
+        (qp/process-query (prepare-combined-query query) rff)))))
+
+;;; ------------------------------------------------- Create Question ------------------------------------------------
+
+(mr/def ::create-question-request
+  [:map
+   [:name                   ms/NonBlankString]
+   [:query                  ms/NonBlankString]
+   [:display                {:optional true} [:maybe :string]]
+   [:description            {:optional true} [:maybe :string]]
+   [:collection_id          {:optional true} [:maybe ms/PositiveInt]]
+   [:visualization_settings {:optional true} [:maybe ms/Map]]])
+
+(mr/def ::create-question-response
+  [:map
+   [:id              ms/PositiveInt]
+   [:name            ms/NonBlankString]
+   [:display         :string]
+   [:collection_id   [:maybe ms/PositiveInt]]
+   [:collection_path :string]
+   [:description     [:maybe :string]]])
+
+(api.macros/defendpoint :post "/v1/question" :- ::create-question-response
+  "Save a previously constructed query as a named question (card).
+
+  The `query` parameter should be a base64-encoded string returned by construct_query.
+  Optionally specify display type, description, collection, and visualization settings.
+  If `collection_id` is omitted the question is saved to the caller's personal collection.
+  Pass an explicit `null` to save it to the root collection.
+  The response `collection_path` is the saved location."
+  {:scope metabot/agent-question-create
+   :tool  {:name "create_question"
+           :description (str "Save a query as a named question in Metabase. "
+                             "Pass the base64 query string from construct_query. "
+                             "Optionally set display type (table, bar, line, pie, etc.), "
+                             "description, and target collection. "
+                             "If you omit collection_id it's saved to the user's personal collection; "
+                             "pass an explicit null to save it to the root collection. "
+                             "Report the saved location from the response `collection_path`.")}}
+  [_route-params
+   _query-params
+   {:keys [query display description visualization_settings]
+    question-name :name
+    :as body}
+   :- ::create-question-request]
+  (let [dataset-query (decode-and-validate-query query)
+        ;; `nil` means the root collection, so only default to the personal collection when the
+        ;; key is absent. `(or ...)` would silently turn an explicit `null` into personal.
+        collection_id (if (contains? body :collection_id)
+                        (:collection_id body)
+                        (personal-collection-id))]
+    ;; Mirror REST `POST /api/card/` pre-checks before calling `queries/create-card!`.
+    ;; `create-card!` itself does NOT run permissions checks; without these mirroring the
+    ;; REST endpoint, an LLM caller could (a) save a card whose query references data the
+    ;; user cannot run, and (b) plant the card in a collection they cannot write to.
+    ;; (REST also calls `check-if-card-can-be-saved`, which only fires for `card-type :metric`;
+    ;; this endpoint always creates a question, so we omit it.)
+    (query-perms/check-run-permissions-for-query dataset-query)
+    (api/create-check :model/Card {:collection_id collection_id})
+    (let [card (queries/create-card!
+                {:name                   question-name
+                 :dataset_query          dataset-query
+                 :display                (keyword (or display "table"))
+                 :description            description
+                 :collection_id          collection_id
+                 :visualization_settings (or visualization_settings {})}
+                {:id api/*current-user-id*})]
+      {:id              (:id card)
+       :name            (:name card)
+       :display         (name (:display card))
+       :collection_id   (:collection_id card)
+       :collection_path (collection-path (:collection_id card))
+       :description     (:description card)})))
+
+;;; ------------------------------------------------ Create Dashboard -----------------------------------------------
+
+(mr/def ::create-dashboard-request
+  [:map
+   [:name          ms/NonBlankString]
+   [:description   {:optional true} [:maybe :string]]
+   [:collection_id {:optional true} [:maybe ms/PositiveInt]]
+   [:question_ids  {:optional true} [:maybe [:sequential ms/PositiveInt]]]])
+
+(mr/def ::create-dashboard-response
+  [:map
+   [:id              ms/PositiveInt]
+   [:name            ms/NonBlankString]
+   [:collection_id   [:maybe ms/PositiveInt]]
+   [:collection_path :string]
+   [:description     [:maybe :string]]
+   [:dashcard_ids    [:sequential ms/PositiveInt]]])
+
+(api.macros/defendpoint :post "/v1/dashboard" :- ::create-dashboard-response
+  "Create a new dashboard, optionally populated with saved questions.
+
+  Pass `question_ids` to add existing saved questions as cards on the dashboard.
+  Cards are automatically positioned on the grid based on their display type.
+  If `collection_id` is omitted the dashboard is saved to the caller's personal collection.
+  Pass an explicit `null` to save it to the root collection.
+  The response `collection_path` is the saved location."
+  {:scope metabot/agent-dashboard-create
+   :tool  {:name "create_dashboard"
+           :description (str "Create a dashboard in Metabase. "
+                             "Optionally pass question_ids to add saved questions as cards. "
+                             "Cards are auto-positioned on the dashboard grid. "
+                             "If you omit collection_id it's saved to the user's personal collection; "
+                             "pass an explicit null to save it to the root collection. "
+                             "Report the saved location from the response `collection_path`.")}}
+  [_route-params
+   _query-params
+   {:keys [description question_ids]
+    dashboard-name :name
+    :as body}
+   :- ::create-dashboard-request]
+  ;; `nil` means the root collection, so only default to the personal collection when the
+  ;; key is absent. `(or ...)` would silently turn an explicit `null` into personal.
+  (let [collection_id (if (contains? body :collection_id)
+                        (:collection_id body)
+                        (personal-collection-id))]
+    (api/create-check :model/Dashboard {:collection_id collection_id})
+    (let [cards (when (seq question_ids)
+                  (mapv #(api/read-check :model/Card %) question_ids))
+          dash  (t2/with-transaction [_conn]
+                  (let [dash (first (t2/insert-returning-instances!
+                                     :model/Dashboard
+                                     {:name          dashboard-name
+                                      :description   description
+                                      :parameters    []
+                                      :creator_id    api/*current-user-id*
+                                      :collection_id collection_id}))]
+                    (when (seq cards)
+                      (reduce (fn [placed card]
+                                (let [display  (or (:display card) :table)
+                                      position (autoplace/get-position-for-new-dashcard placed display)]
+                                  (t2/insert-returning-instance!
+                                   :model/DashboardCard
+                                   (merge position {:dashboard_id (:id dash)
+                                                    :card_id      (:id card)}))
+                                  (conj placed position)))
+                              []
+                              cards))
+                    dash))]
+      (events/publish-event! :event/dashboard-create {:object dash :user-id api/*current-user-id*})
+      {:id              (:id dash)
+       :name            (:name dash)
+       :collection_id   (:collection_id dash)
+       :collection_path (collection-path (:collection_id dash))
+       :description     (:description dash)
+       :dashcard_ids    (mapv :id (t2/select :model/DashboardCard :dashboard_id (:id dash)))})))
 
 ;;; ------------------------------------------------- Authentication -------------------------------------------------
 ;;
@@ -815,9 +993,8 @@
   [handler]
   (fn [{:keys [headers metabase-user-id token-scopes] :as request} respond raise]
     (cond
-      ;; Already authenticated via X-Metabase-Session (standard middleware handled it).
-      ;; Preserve any pre-existing :token-scopes (e.g., forwarded from internal MCP calls);
-      ;; default to unrestricted for normal session-authenticated browser requests.
+      ;; Already authenticated via X-Metabase-Session or synthetic request (e.g. MCP dispatch).
+      ;; Preserve existing :token-scopes when present (MCP sets them on the synthetic request).
       metabase-user-id
       (handler (cond-> request
                  (not token-scopes) (assoc :token-scopes #{::scope/unrestricted}))
@@ -864,5 +1041,5 @@
 ;;; ---------------------------------------------------- Routes ------------------------------------------------------
 
 (def ^{:arglists '([request respond raise])} routes
-  "`/api/agent/` routes. Workspace routes are mounted separately via the EE routes file."
+  "`/api/agent/` routes."
   (api.macros/ns-handler *ns* +auth))

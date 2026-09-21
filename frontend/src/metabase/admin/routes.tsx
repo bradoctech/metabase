@@ -14,7 +14,10 @@ import { DatabasePage } from "metabase/admin/databases/containers/DatabasePage";
 import { RevisionHistoryApp } from "metabase/admin/datamodel/containers/RevisionHistoryApp";
 import { SegmentApp } from "metabase/admin/datamodel/containers/SegmentApp";
 import { SegmentListApp } from "metabase/admin/datamodel/containers/SegmentListApp";
+import { EmbeddingThemeEditorApp } from "metabase/admin/embedding/components/ThemeEditor";
+import { EmbeddingThemeListingApp } from "metabase/admin/embedding/components/ThemeListing";
 import { AdminEmbeddingApp } from "metabase/admin/embedding/containers/AdminEmbeddingApp";
+import { EmbeddingHubAdminSettingsPage } from "metabase/admin/embedding/embedding-hub";
 import { AdminPeopleApp } from "metabase/admin/people/containers/AdminPeopleApp";
 import { EditUserModal } from "metabase/admin/people/containers/EditUserModal";
 import { GroupDetailApp } from "metabase/admin/people/containers/GroupDetailApp";
@@ -41,16 +44,21 @@ import {
   ModelCacheRefreshJobModal,
 } from "metabase/admin/tools/components/ModelCacheRefreshJobs";
 import {
-  EmbeddingHubAdminSettingsPage,
   SetupPermissionsAndTenantsPage,
   SetupSsoPage,
 } from "metabase/embedding/embedding-hub";
 import { ModalRoute } from "metabase/hoc/ModalRoute";
-import { getAdminRoutes as getMetabotAdminRoutes } from "metabase/metabot/components/MetabotAdmin/MetabotAdminPage";
+import {
+  AISettingsPage,
+  McpSettingsPage,
+} from "metabase/metabot/components/MetabotAdmin/AISettingsPage";
+import { MetabotAdminLayout } from "metabase/metabot/components/MetabotAdmin/MetabotAdminLayout";
 import { DataModelV1 } from "metabase/metadata/pages/DataModelV1";
 import {
   PLUGIN_ADMIN_TOOLS,
   PLUGIN_ADMIN_USER_MENU_ROUTES,
+  PLUGIN_AI_CONTROLS,
+  PLUGIN_AUDIT,
   PLUGIN_CACHING,
   PLUGIN_DB_ROUTING,
   PLUGIN_DEPENDENCIES,
@@ -59,14 +67,15 @@ import {
   PLUGIN_TENANTS,
   PLUGIN_WRITABLE_CONNECTION,
 } from "metabase/plugins";
+import type { State } from "metabase/redux/store";
 import { getTokenFeature } from "metabase/setup";
-import type { State } from "metabase-types/store";
 
 import { ModelPersistenceConfiguration } from "./performance/components/ModelPersistenceConfiguration";
 import { StrategyEditorForDatabases } from "./performance/components/StrategyEditorForDatabases";
 import { PerformanceTabId } from "./performance/types";
 import { getSettingsRoutes } from "./settingsRoutes";
 import { ToolsApp } from "./tools/components/ToolsApp";
+import { ToolsUpsell } from "./tools/components/ToolsUpsell";
 import { getTasksRoutes } from "./tools/routes";
 import {
   RedirectToAllowedSettings,
@@ -204,6 +213,8 @@ export const getRoutes = (
             )}
 
             <Route path="security" component={EmbeddingSecuritySettings} />
+            <Route path="themes" component={EmbeddingThemeListingApp} />
+            <Route path="themes/:themeId" component={EmbeddingThemeEditorApp} />
           </Route>
         </Route>
 
@@ -259,7 +270,26 @@ export const getRoutes = (
 
         {/* Metabot */}
         <Route path="metabot" component={createAdminRouteGuard("metabot")}>
-          {getMetabotAdminRoutes()}
+          {PLUGIN_AUDIT.getAiAnalyticsRoutes()}
+          <Route key="index-layout" component={MetabotAdminLayout}>
+            <IndexRoute key="index" component={AISettingsPage} />
+            <Route key="mcp" path="mcp" component={McpSettingsPage} />
+          </Route>
+          <Route
+            key="layout"
+            component={(props) => (
+              <MetabotAdminLayout
+                {...props}
+                fullWidth={!PLUGIN_AI_CONTROLS.isEnabled}
+                innerContentProps={{
+                  fullWidth: !PLUGIN_AI_CONTROLS.isEnabled,
+                  fullHeight: !PLUGIN_AI_CONTROLS.isEnabled,
+                }}
+              />
+            )}
+          >
+            {PLUGIN_AI_CONTROLS.getAiControlsRoutes()}
+          </Route>
         </Route>
 
         {PLUGIN_SECURITY_CENTER.isEnabled && (
@@ -275,7 +305,9 @@ export const getRoutes = (
             <Route
               key="error-overview"
               path="errors"
-              component={PLUGIN_ADMIN_TOOLS.COMPONENT || ToolsApp}
+              // If the audit_app feature flag is present, our enterprise plugin system kicks in and we render the
+              // appropriate enterprise component. The upsell component is shown in all other cases.
+              component={PLUGIN_ADMIN_TOOLS.COMPONENT || ToolsUpsell}
             />
             <Route path="model-caching" component={ModelCachePage}>
               <ModalRoute path=":jobId" modal={ModelCacheRefreshJobModal} />

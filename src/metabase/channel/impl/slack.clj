@@ -11,13 +11,26 @@
    [metabase.parameters.shared :as shared.params]
    [metabase.premium-features.core :as premium-features]
    [metabase.system.core :as system]
+   [metabase.util.i18n :refer [tru]]
+   [metabase.util.log :as log]
    [metabase.util.malli :as mu]
    [metabase.util.markdown :as markdown]))
 
+(def SlackDetails
+  "Schema for the connection `:details` of a `:channel/slack` channel. The frontend only sends these to
+  `POST /api/channel/test`, to check that the globally configured Slack integration can post to `:channel`."
+  [:map {:closed true}
+   [:channel :string]])
+
 (defn- notification-recipient->channel
+  "Returns the Slack channel target for a raw-value notification recipient.
+  Prefers the immutable `:channel_id` (e.g. \"C0ABC123\") over the display `:value`
+  (e.g. \"#my-channel\") so that delivery survives channel renames. Falls back to
+  `:value` for legacy subscriptions that pre-date channel ID storage."
   [notification-recipient]
   (when (= (:type notification-recipient) :notification-recipient/raw-value)
-    (-> notification-recipient :details :value)))
+    (let [details (:details notification-recipient)]
+      (or (:channel_id details) (:value details)))))
 
 (defn- escape-mkdwn
   "Escapes slack mkdwn special characters in the string, as specified here:
@@ -232,7 +245,16 @@
         top-level-params (impl.util/remove-inline-parameters all-params (:dashboard_parts payload))
         dashboard        (:dashboard payload)
         blocks           (->> [(slack-dashboard-header dashboard (:common_name creator) all-params top-level-params)
-                               (mapcat (partial part->sections! all-params) (:dashboard_parts payload))]
+                               ;; Isolate each part: rendering one part (e.g. realizing its Hiccup into a PNG)
+                               ;; must not abort the whole subscription. On failure, substitute an error
+                               ;; placeholder block so the remaining cards still deliver (#74007).
+                               (mapcat (fn [part]
+                                         (try
+                                           (part->sections! all-params part)
+                                           (catch Throwable e
+                                             (log/error e "Error rendering dashboard subscription part for Slack; substituting error placeholder")
+                                             [(text->markdown-section (str (tru "An error occurred while displaying this card.")))])))
+                                       (:dashboard_parts payload))]
                               flatten
                               (remove nil?))]
     (for [channel-id (map notification-recipient->channel recipients)]

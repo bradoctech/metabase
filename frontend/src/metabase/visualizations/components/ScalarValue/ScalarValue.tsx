@@ -25,6 +25,7 @@ interface ScalarValueProps {
   totalNumGridCols?: number;
   fontFamily: string;
   color?: string;
+  disableHover?: boolean;
 }
 
 export const ScalarValue = ({
@@ -35,6 +36,7 @@ export const ScalarValue = ({
   totalNumGridCols,
   fontFamily,
   color = "inherit",
+  disableHover,
 }: ScalarValueProps) => {
   const {
     other: { number: numberTheme },
@@ -49,7 +51,7 @@ export const ScalarValue = ({
       text: value,
       targetHeight: height,
       targetWidth: width,
-      fontFamily: fontFamily ?? "Rawline",
+      fontFamily: fontFamily ?? "Lato",
       fontWeight: 700,
       unit: "rem",
       step: 0.2,
@@ -75,6 +77,7 @@ export const ScalarValue = ({
       lineHeight={numberTheme?.value?.lineHeight}
       data-testid="scalar-value"
       color={color}
+      disableHover={disableHover}
     >
       {value ?? t`null`}
     </ScalarValueWrapper>

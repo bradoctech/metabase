@@ -6,9 +6,13 @@
    [metabase.lib.metadata :as lib.metadata]
    [metabase.lib.test-metadata :as meta]
    [metabase.metabot.agent.user-context :as user-context]
+   [metabase.metabot.context :as metabot.context]
    [metabase.metabot.tools.entity-details :as entity-details]
    [metabase.metabot.tools.shared.llm-representations :as llm-rep]
-   [metabase.test :as mt]))
+   [metabase.permissions.core :as perms]
+   [metabase.permissions.models.permissions-group :as perms-group]
+   [metabase.test :as mt]
+   [toucan2.core :as t2]))
 
 (deftest format-current-time-test
   (testing "formats time from context with timezone"
@@ -19,12 +23,10 @@
       ;; Should contain date components
       (is (re-find #"2024" result))
       (is (re-find #"14:30" result))))
-
   (testing "uses current_user_time when provided"
     (let [context {:current_user_time "2024-02-01T09:15:00"}
           result  (user-context/format-current-time context)]
       (is (= "2024-02-01T09:15:00" result))))
-
   (testing "handles missing timezone by using current time"
     (let [context {}
           result  (user-context/format-current-time context)]
@@ -32,7 +34,6 @@
       (is (string? result))
       ;; Should contain some date
       (is (re-find #"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}" result))))
-
   (testing "handles invalid timezone gracefully"
     (is (string?
          (user-context/format-current-time {:current_time_with_timezone "invalid"})))))
@@ -43,26 +44,22 @@
                                       :sql_engine "PostgreSQL"}]}
           result (user-context/extract-sql-dialect context)]
       (is (= "postgresql" result))))
-
   (testing "extracts sql_engine from adhoc item with native dataset-query (frontend payload)"
     (let [context {:user_is_viewing [{:type "adhoc"
                                       :query (lib/native-query (mt/metadata-provider) "select 1")
                                       :sql_engine "PostgreSQL"}]}
           result (user-context/extract-sql-dialect context)]
       (is (= "postgresql" result))))
-
   (testing "returns nil for adhoc notebook (MBQL) query"
     (let [context {:user_is_viewing [{:type  "adhoc"
                                       :query (let [mp (mt/metadata-provider)]
                                                (lib/query mp (lib.metadata/table mp (mt/id :venues))))}]}
           result (user-context/extract-sql-dialect context)]
       (is (nil? result))))
-
   (testing "returns nil when no viewing context"
     (let [context {}
           result (user-context/extract-sql-dialect context)]
       (is (nil? result))))
-
   (testing "returns nil when no sql_engine in context"
     (let [context {:user_is_viewing [{:type "table" :id 1}]}
           result (user-context/extract-sql-dialect context)]
@@ -77,7 +74,6 @@
               (user-context/format-viewing-context
                {:user_is_viewing [{:type  "adhoc"
                                    :query (lib/query mp (lib.metadata/table mp (meta/id :venues)))}]}))))
-
     (testing "formats adhoc native SQL query from frontend (type: adhoc, query.type: native)"
       (let [result (user-context/format-viewing-context
                     {:user_is_viewing [{:type       "adhoc"
@@ -87,7 +83,6 @@
         (is (re-find #"SQL editor" result))
         (is (re-find #"SELECT \* FROM orders WHERE total > 100" result))
         (is (re-find #"postgres" result))))
-
     (testing "formats adhoc native SQL query with error"
       (let [result (user-context/format-viewing-context
                     {:user_is_viewing [{:type       "adhoc"
@@ -97,7 +92,6 @@
         (is (re-find #"SQL editor" result))
         (is (re-find #"SELECT \* FROM invalid" result))
         (is (re-find #"Table 'invalid' not found" result))))
-
     (testing "formats transform context"
       (let [context {:user_is_viewing [{:type "transform"
                                         :id 123
@@ -108,7 +102,6 @@
         (is (re-find #"Transform" result))
         (is (re-find #"Daily Revenue" result))
         (is (re-find #"sql" result))))
-
     (testing "formats transform context with error"
       (let [context {:user_is_viewing [{:type "transform"
                                         :id 123
@@ -119,7 +112,6 @@
         (is (some? result))
         (is (re-find #"Transform error" result))
         (is (re-find #"ERROR: relation \"missing_table\" does not exist" result))))
-
     (testing "formats code editor context"
       (let [context {:user_is_viewing [{:type "code_editor"
                                         :buffers [{:id "buffer1"
@@ -131,7 +123,6 @@
         (is (re-find #"code editor" result))
         (is (re-find #"python" result))
         (is (re-find #"Line 10" result))))
-
     (testing "formats code editor with selection"
       (let [context {:user_is_viewing [{:type "code_editor"
                                         :buffers [{:id "buffer1"
@@ -145,7 +136,6 @@
         (is (some? result))
         (is (re-find #"Selected lines:" result))
         (is (re-find #"SELECT \* FROM foo" result))))
-
     (testing "formats code editor with no buffers"
       (let [context {:user_is_viewing [{:type "code_editor"
                                         :buffers []}]}
@@ -154,75 +144,76 @@
         (is (re-find #"no active buffers" result))))))
 
 (deftest format-viewing-context-test-2
-  (testing "formats table entity"
-    (let [context {:user_is_viewing [{:type "table"
-                                      :id 123
-                                      :name "users"
-                                      :description "User accounts"}]}
-          result (user-context/format-viewing-context context)]
-      (is (some? result))
-      (is (re-find #"table" result))
-      (is (re-find #"users" result))
-      (is (re-find #"User accounts" result))))
-
-  (testing "formats model entity"
-    (let [context {:user_is_viewing [{:type "model"
-                                      :id 456
-                                      :name "Revenue Model"
-                                      :description "Daily revenue metrics"}]}
-          result (user-context/format-viewing-context context)]
-      (is (some? result))
-      (is (re-find #"model" result))
-      (is (re-find #"Revenue Model" result))))
-
-  (testing "formats question entity"
-    (let [context {:user_is_viewing [{:type "question"
-                                      :id 789
-                                      :name "Top Customers"}]}
-          result (user-context/format-viewing-context context)]
-      (is (some? result))
-      (is (re-find #"question" result))
-      (is (re-find #"Top Customers" result))))
-
-  (testing "formats metric entity"
-    (let [context {:user_is_viewing [{:type "metric"
-                                      :id 111
-                                      :name "Total Revenue"}]}
-          result (user-context/format-viewing-context context)]
-      (is (some? result))
-      (is (re-find #"metric" result))
-      (is (re-find #"Total Revenue" result))))
-
-  (testing "formats dashboard entity"
-    (let [context {:user_is_viewing [{:type "dashboard"
-                                      :id 222
-                                      :name "Executive Dashboard"}]}
-          result (user-context/format-viewing-context context)]
-      (is (some? result))
-      (is (re-find #"dashboard" result))
-      (is (re-find #"Executive Dashboard" result))))
-
-  (testing "handles keyword types in viewing context"
-    (let [context {:user_is_viewing [{:type :table
-                                      :id 321
-                                      :name "orders"}]}
-          result (user-context/format-viewing-context context)]
-      (is (some? result))
-      (is (re-find #"table" result))
-      (is (re-find #"orders" result))))
-
-  (testing "handles empty viewing context"
-    (let [context {}
-          result (user-context/format-viewing-context context)]
-      (is (= "" result))))
-
-  (testing "handles multiple viewing items"
-    (let [context {:user_is_viewing [{:type "table" :id 1 :name "users"}
-                                     {:type "question" :id 2 :name "Top Users"}]}
-          result (user-context/format-viewing-context context)]
-      (is (some? result))
-      (is (re-find #"users" result))
-      (is (re-find #"Top Users" result)))))
+  ;; Stub every entity-details fetcher so the test doesn't depend on whether the fake IDs happen
+  ;; to correspond to real rows in the app DB. When a fetcher throws 403 (id exists but the
+  ;; current test user can't read it), `fetch-and-format` returns nil and `format-viewing-context`
+  ;; collapses to "".
+  (mt/with-dynamic-fn-redefs [entity-details/get-table-details     (constantly nil)
+                              entity-details/get-report-details    (constantly nil)
+                              entity-details/get-metric-details    (constantly nil)
+                              entity-details/get-dashboard-details (constantly nil)]
+    (testing "formats table entity"
+      (let [context {:user_is_viewing [{:type "table"
+                                        :id 123
+                                        :name "users"
+                                        :description "User accounts"}]}
+            result (user-context/format-viewing-context context)]
+        (is (some? result))
+        (is (re-find #"table" result))
+        (is (re-find #"users" result))
+        (is (re-find #"User accounts" result))))
+    (testing "formats model entity"
+      (let [context {:user_is_viewing [{:type "model"
+                                        :id 456
+                                        :name "Revenue Model"
+                                        :description "Daily revenue metrics"}]}
+            result (user-context/format-viewing-context context)]
+        (is (some? result))
+        (is (re-find #"model" result))
+        (is (re-find #"Revenue Model" result))))
+    (testing "formats question entity"
+      (let [context {:user_is_viewing [{:type "question"
+                                        :id 789
+                                        :name "Top Customers"}]}
+            result (user-context/format-viewing-context context)]
+        (is (some? result))
+        (is (re-find #"question" result))
+        (is (re-find #"Top Customers" result))))
+    (testing "formats metric entity"
+      (let [context {:user_is_viewing [{:type "metric"
+                                        :id 111
+                                        :name "Total Revenue"}]}
+            result (user-context/format-viewing-context context)]
+        (is (some? result))
+        (is (re-find #"metric" result))
+        (is (re-find #"Total Revenue" result))))
+    (testing "formats dashboard entity"
+      (let [context {:user_is_viewing [{:type "dashboard"
+                                        :id 222
+                                        :name "Executive Dashboard"}]}
+            result (user-context/format-viewing-context context)]
+        (is (some? result))
+        (is (re-find #"dashboard" result))
+        (is (re-find #"Executive Dashboard" result))))
+    (testing "handles keyword types in viewing context"
+      (let [context {:user_is_viewing [{:type :table
+                                        :id 321
+                                        :name "orders"}]}
+            result (user-context/format-viewing-context context)]
+        (is (some? result))
+        (is (re-find #"table" result))
+        (is (re-find #"orders" result))))
+    (testing "handles empty viewing context"
+      (let [context {}
+            result (user-context/format-viewing-context context)]
+        (is (= "" result))))
+    (testing "handles multiple viewing items"
+      (let [context {:user_is_viewing [{:type "table" :id 321 :name "users"}
+                                       {:type "question" :id 2 :name "Top Users"}]}
+            result (user-context/format-viewing-context context)]
+        (is (some? result))
+        (is (re-find #"users" result))
+        (is (re-find #"Top Users" result))))))
 
 (deftest format-recent-views-test
   (testing "formats recent views"
@@ -239,15 +230,17 @@
       (is (re-find #"Revenue Query" result))
       (is (re-find #"Sales Dashboard" result))
       (is (re-find #"Daily revenue" result))))
-
   (testing "includes guidance text"
     (let [context {:user_recently_viewed [{:type "table" :id 1 :name "users"}]}
           result (user-context/format-recent-views context)]
       (is (re-find #"might be relevant" result))
       (is (re-find #"search tool" result))))
-
   (testing "returns empty string when no recent views"
     (let [context {}
+          result (user-context/format-recent-views context)]
+      (is (= "" result))))
+  (testing "returns empty string when recent views is an empty vector (e.g. after verified-only filter)"
+    (let [context {:user_recently_viewed []}
           result (user-context/format-recent-views context)]
       (is (= "" result)))))
 
@@ -263,7 +256,6 @@
                                  :email    "jane@example.com"
                                  :glossary {"ARR" "Annual Recurring Revenue"}})
              (user-context/format-current-user-info {})))))
-
   (testing "returns nil when there is no current user"
     (with-redefs [entity-details/get-current-user (fn [_]
                                                     {:output "current user not found"})]
@@ -293,7 +285,6 @@
         (is (= "<user>Jane Doe</user>" (:current_user_info result)))
         (is (string? (:viewing_context result)))
         (is (string? (:recent_views result))))))
-
   (testing "enriches context from frontend adhoc native query payload"
     (let [context {:current_time_with_timezone "2024-01-15T14:30:00-05:00"
                    :first_day_of_week "Monday"
@@ -307,12 +298,10 @@
       (is (= "postgresql" (:sql_dialect result)))
       (is (re-find #"SQL editor" (:viewing_context result)))
       (is (re-find #"SELECT \* FROM users" (:viewing_context result)))))
-
   (testing "uses default first_day_of_week when not provided"
     (let [context {}
           result (user-context/enrich-context-for-template context)]
       (is (= "Sunday" (:first_day_of_week result)))))
-
   (testing "handles minimal context"
     (let [context {}
           result (user-context/enrich-context-for-template context)]
@@ -350,7 +339,6 @@
         (is (re-find #"Average Order Value" result))
         (is (re-find #"Segments \(Pre-defined Filter Conditions\)" result))
         (is (re-find #"Q4 Orders" result)))))
-
   (testing "model viewing context includes measures and segments when present"
     (with-redefs [entity-details/get-table-details
                   (fn [{:keys [model-id with-measures? with-segments?]}]
@@ -375,7 +363,6 @@
         (is (re-find #"Total Revenue" result))
         (is (re-find #"Segments" result))
         (is (re-find #"Enterprise Accounts" result)))))
-
   (testing "table viewing context omits measures/segments sections when none exist"
     (with-redefs [entity-details/get-table-details
                   (fn [{:keys [entity-id]}]
@@ -407,7 +394,6 @@
                       {:user_is_viewing [{:type "question" :id card-id}]})]
           (is (re-find #"Retention Cohorts" result))
           (is (re-find #"Shows retention by cohort" result))))))
-
   (testing "question includes display_type in formatted output"
     (mt/with-test-user :rasta
       (mt/with-temp [:model/Card {card-id :id} {:name          "Revenue Pie Chart"
@@ -420,7 +406,6 @@
         (let [result (user-context/format-viewing-context
                       {:user_is_viewing [{:type "question" :id card-id}]})]
           (is (re-find #"display_type=\"pie\"" result))))))
-
   (testing "dashboard with only type+id fetches name and description from DB"
     (mt/with-test-user :rasta
       (mt/with-temp [:model/Dashboard {dash-id :id} {:name        "Executive Dashboard"
@@ -429,7 +414,6 @@
                       {:user_is_viewing [{:type "dashboard" :id dash-id}]})]
           (is (re-find #"Executive Dashboard" result))
           (is (re-find #"Top-level KPIs" result))))))
-
   (testing "table with only type+id fetches details including fields from DB"
     (mt/with-test-user :rasta
       (let [result (user-context/format-viewing-context
@@ -454,3 +438,186 @@
         "Formatting result should contain the native query string")
     (is (str/includes? result "1111")
         "Formatting result should contain database id")))
+
+(defn- do-with-orders-readable-people-blocked!
+  [thunk]
+  (mt/with-no-data-perms-for-all-users!
+    (perms/set-table-permission! (perms-group/all-users) (mt/id :orders) :perms/view-data :unrestricted)
+    (perms/set-table-permission! (perms-group/all-users) (mt/id :orders) :perms/create-queries :query-builder)
+    (perms/set-table-permission! (perms-group/all-users) (mt/id :people) :perms/view-data :blocked)
+    (perms/set-table-permission! (perms-group/all-users) (mt/id :people) :perms/create-queries :no)
+    (mt/with-test-user :rasta
+      (thunk))))
+
+(defn- render-viewing
+  "Run a client-supplied context through the same enrichment the endpoint applies, then render it."
+  [user-is-viewing]
+  (user-context/format-viewing-context
+   (metabot.context/create-context {:user_is_viewing user-is-viewing})))
+
+(deftest adhoc-viewing-context-includes-readable-used-tables-test
+  (testing "control: a readable source table is still named in the used-tables enrichment"
+    (do-with-orders-readable-people-blocked!
+     (fn []
+       (let [out (render-viewing [{:type  "adhoc"
+                                   :query {:database (mt/id)
+                                           :type     "query"
+                                           :query    {:source-table (mt/id :orders)}}}])]
+         (is (str/includes? out "notebook editor"))
+         (is (str/includes? out "ORDERS")))))))
+
+(deftest used-tables-context-is-permission-filtered-test
+  (testing "used-tables enrichment does not name a table the user has no permission on at all"
+    (mt/with-no-data-perms-for-all-users!
+      (mt/with-test-user :rasta
+        (let [out (render-viewing [{:type  "adhoc"
+                                    :query {:database (mt/id)
+                                            :type     "query"
+                                            :query    {:source-table (mt/id :people)}}}])]
+          (is (str/includes? out "notebook editor"))
+          (is (not (str/includes? out "PEOPLE"))))))))
+
+(deftest entity-details-403-renders-nothing-test
+  (testing "a read-check failure renders nothing rather than falling back to the simple formatter,
+            which would print the name/schema/description the check just refused"
+    (do-with-orders-readable-people-blocked!
+     (fn []
+       (let [stub (fn [table-id] {:type :table :id table-id :name "leaked-name"
+                                  :database_schema "leaked-schema" :description "leaked-description"})]
+         (testing "blocked table"
+           (let [out (user-context/format-viewing-context {:user_is_viewing [(stub (mt/id :people))]})]
+             (is (not (str/includes? out "leaked-name")))
+             (is (not (str/includes? out "leaked-schema")))
+             (is (not (str/includes? out "leaked-description")))))
+         (testing "readable table (control)"
+           (let [out (user-context/format-viewing-context {:user_is_viewing [(stub (mt/id :orders))]})]
+             (is (str/includes? out "ORDERS")))))))))
+
+(deftest transform-source-query-omits-blocked-tables-test
+  (testing "a client-supplied transform source query is not exported when it names a blocked table"
+    (do-with-orders-readable-people-blocked!
+     (fn []
+       (let [source (fn [field-clause table-id field-id]
+                      [{:type        "transform"
+                        :id          1
+                        :name        "draft"
+                        :source_type "query"
+                        :source      {:type  "query"
+                                      :query {:database (mt/id)
+                                              :type     "query"
+                                              :query    {:source-table table-id
+                                                         :fields       [(field-clause field-id)]}}}}])
+             kw-clause  (fn [field-id] [:field field-id nil])
+             str-clause (fn [field-id] ["field" field-id nil])]
+         (testing "blocked table"
+           (let [out (render-viewing (source kw-clause (mt/id :people) (mt/id :people :email)))]
+             (is (str/includes? out "viewing a Transform"))
+             (is (not (str/includes? out "mbql/query")))
+             (is (not (str/includes? out "PEOPLE")))
+             (is (not (str/includes? out "EMAIL")))))
+         (testing "a field clause whose head is the string \"field\", as JSON decoding delivers it,
+                   still resolves to its table and blocks the rendering"
+           (let [out (render-viewing (source str-clause (mt/id :orders) (mt/id :people :email)))]
+             (is (str/includes? out "viewing a Transform"))
+             (is (not (str/includes? out "mbql/query")))
+             (is (not (str/includes? out "PEOPLE")))
+             (is (not (str/includes? out "EMAIL")))))
+         (testing "readable table (control)"
+           (let [out (render-viewing (source kw-clause (mt/id :orders) (mt/id :orders :id)))]
+             (is (str/includes? out "mbql/query")))))))))
+
+(deftest transform-source-query-omits-blocked-source-field-test
+  (testing (str "a field id planted in `:source-field` names a column just as much as one in the clause's "
+                "own slot")
+    (do-with-orders-readable-people-blocked!
+     (fn []
+       (let [item (fn [field-clause]
+                    [{:type        "transform"
+                      :id          1
+                      :name        "draft"
+                      :source_type "query"
+                      :source      {:type  "query"
+                                    :query {:database (mt/id)
+                                            :type     "query"
+                                            :query    {:source-table (mt/id :orders)
+                                                       :fields       [field-clause]}}}}])]
+         (testing "blocked table reached only through :source-field"
+           (let [out (render-viewing (item [:field (mt/id :orders :id)
+                                            {:source-field (mt/id :people :email)}]))]
+             (is (str/includes? out "viewing a Transform"))
+             (is (not (str/includes? out "mbql/query")))
+             (is (not (str/includes? out "PEOPLE")))
+             (is (not (str/includes? out "EMAIL")))))
+         (testing "readable table (control)"
+           (let [out (render-viewing (item [:field (mt/id :orders :id)
+                                            {:source-field (mt/id :orders :user_id)}]))]
+             (is (str/includes? out "mbql/query")))))))))
+
+(deftest transform-source-native-query-is-permission-gated-test
+  (testing "a native stage extracts no ids for the set comparison, so it must not pass vacuously"
+    (do-with-orders-readable-people-blocked!
+     (fn []
+       (let [item (fn [sql]
+                    [{:type        "transform"
+                      :id          1
+                      :name        "draft"
+                      :source_type "native"
+                      :source      {:type  "query"
+                                    :query {:database (mt/id)
+                                            :type     "native"
+                                            :native   {:query sql}}}}])]
+         (testing "SQL reading a blocked table"
+           (let [out (render-viewing (item "SELECT EMAIL FROM PEOPLE"))]
+             (is (str/includes? out "viewing a Transform"))
+             (is (not (str/includes? out "PEOPLE")))))
+         (testing "SQL reading a queryable table (control)"
+           (let [out (render-viewing (item "SELECT ID FROM ORDERS"))]
+             (is (str/includes? out "ORDERS")))))))))
+
+(deftest transform-source-card-query-is-permission-gated-test
+  (testing "a `card__N` source is dropped by `pos-int?` before normalization, so the gate must read it
+            off the normalized `:source-card` instead"
+    (do-with-orders-readable-people-blocked!
+     (fn []
+       (let [item (fn [card-id]
+                    [{:type        "transform"
+                      :id          1
+                      :name        "draft"
+                      :source_type "query"
+                      :source      {:type  "query"
+                                    :query {:database (mt/id)
+                                            :type     "query"
+                                            :query    {:source-table (str "card__" card-id)}}}}])]
+         (mt/with-temp [:model/Collection coll {}
+                        :model/Card       card {:name          "hidden"
+                                                :collection_id (:id coll)
+                                                :dataset_query (let [mp (mt/metadata-provider)]
+                                                                 (lib/query mp (lib.metadata/table mp (mt/id :orders))))}]
+           (testing "a card the caller cannot read"
+             (mt/with-non-admin-groups-no-collection-perms coll
+               (let [out (render-viewing (item (:id card)))]
+                 (is (str/includes? out "viewing a Transform"))
+                 (is (not (str/includes? out "mbql/query"))))))
+           (testing "a card the caller can read (control)"
+             (let [out (render-viewing (item (:id card)))]
+               (is (str/includes? out "mbql/query"))))))))))
+
+(deftest queryable-normalized-query-rejects-non-integer-database-test
+  (testing (str ":database comes from the client, and a non-integer would reach Toucan's queryable "
+                "position. The gate rejects it without touching the app DB")
+    (do-with-orders-readable-people-blocked!
+     (fn []
+       (doseq [database-id ["1; DROP TABLE metabase_table" {:x 1} [1] "1" nil]]
+         (testing (pr-str database-id)
+           (is (nil? (t2/with-call-count [calls]
+                       (let [result (#'user-context/queryable-normalized-query
+                                     {:database database-id
+                                      :type     "query"
+                                      :query    {:source-table (mt/id :orders)}})]
+                         (is (zero? (calls)))
+                         result))))))
+       (testing "a readable table under an integer database still passes"
+         (is (some? (#'user-context/queryable-normalized-query
+                     {:database (mt/id)
+                      :type     "query"
+                      :query    {:source-table (mt/id :orders)}}))))))))

@@ -31,7 +31,6 @@
       (is (str/includes? (:chart-content result) "line"))
       (is (str/starts-with? (:chart-link result) "metabase://chart/"))
       (is (contains? result :instructions))))
-
   (testing "edits chart to various types"
     (let [mp (mt/metadata-provider)
           charts-state {"chart-456" {:chart-id "chart-456"
@@ -43,7 +42,6 @@
                                  :charts-state charts-state})]
           (is (= new-type (:chart-type result))
               (str "New chart type " new-type " should be set correctly"))))))
-
   (testing "throws error for invalid chart type"
     (let [charts-state {"chart-789" {:chart-id "chart-789"}}]
       (is (thrown-with-msg?
@@ -53,7 +51,6 @@
             {:chart-id "chart-789"
              :new-chart-type :invalid-type
              :charts-state charts-state})))))
-
   (testing "throws error when chart not found"
     (is (thrown-with-msg?
          clojure.lang.ExceptionInfo
@@ -70,19 +67,18 @@
           {[{{table :structured-output} :content}] :resources}
           (tools.resources/read-resource-tool {:uris [table-fields-uri]})
 
+          table-id (:id table)
+          category-field-id (some (fn [{:keys [display_name field_id]}]
+                                    (when (= "Category" display_name)
+                                      field_id))
+                                  (:fields table))
           ;; (1) construct a query
           construct-result (tools.construct/construct-notebook-query-tool
-                            {:query
-                             {:query_type "aggregate"
-                              :source {:table_id (:id table)}
-                              :aggregations [{:function "count"}]
-                              :filters []
-                              :group_by [{:field_id (some (fn [{:keys [display_name field_id]}]
-                                                            (when (= "Category" display_name)
-                                                              field_id))
-                                                          (:fields table))}]
-                              :limit nil
-                              :visualization {:chart_type "bar"}}})
+                            {:source_entity {:type "table" :id table-id}
+                             :program       {:source     {:type "table" :id table-id}
+                                             :operations [["aggregate" ["count"]]
+                                                          ["breakout" ["field" category-field-id]]]}
+                             :visualization {:chart_type "bar"}})
           query-id (get-in construct-result [:structured-output :query-id])
           query (get-in construct-result [:structured-output :query])
           chart-id (get-in construct-result [:structured-output :chart-id])]

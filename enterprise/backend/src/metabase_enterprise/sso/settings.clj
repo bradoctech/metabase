@@ -7,7 +7,6 @@
    [metabase-enterprise.scim.core :as scim]
    [metabase.appearance.core :as appearance]
    [metabase.settings.core :as setting :refer [define-multi-setting-impl defsetting]]
-   [metabase.sso.settings :as sso-settings]
    [metabase.system.core :as system]
    [metabase.util.i18n :refer [deferred-tru tru]]
    [metabase.util.log :as log]
@@ -74,7 +73,7 @@ using, this usually looks like `https://your-org-name.example.com` or `https://e
 open it in a text editor, then copy and paste the certificate''s contents here.")
   :feature    :sso-saml
   :audit      :no-value
-  :encryption :no
+  :encryption :when-encryption-key-set
   :setter     (fn [new-value]
                 ;; when setting the idp cert validate that it's something we
                 (when new-value
@@ -346,14 +345,14 @@ using, this usually looks like `https://your-org-name.example.com` or `https://e
 ;; TODO - maybe we want to add a csv setting type?
 (defsetting ldap-sync-user-attributes-blacklist
   (deferred-tru "Comma-separated list of user attributes to skip syncing for LDAP users.")
-  :encryption :no
+  :encryption :when-encryption-key-set
   :default    "userPassword,dn,distinguishedName"
   :type       :csv
   :audit      :getter)
 
 (defsetting ldap-group-membership-filter
   (deferred-tru "Group membership lookup filter. The placeholders '{dn}' and '{uid}' will be replaced by the user''s Distinguished Name and UID, respectively.")
-  :encryption :no
+  :encryption :when-encryption-key-set
   :default    "(member={dn})"
   :audit      :getter)
 
@@ -378,7 +377,7 @@ using, this usually looks like `https://your-org-name.example.com` or `https://e
             provider))
         (oidc-providers)))
 
-(defsetting oidc-configured?
+(defsetting oidc-configured
   (deferred-tru "Are any OIDC providers configured with required fields?")
   :type    :boolean
   :default false
@@ -392,7 +391,7 @@ using, this usually looks like `https://your-org-name.example.com` or `https://e
                          (oidc-providers))))
   :export?     false)
 
-(defsetting oidc-enabled?
+(defsetting oidc-enabled
   (deferred-tru "Is any OIDC provider enabled?")
   :type    :boolean
   :default false
@@ -403,6 +402,7 @@ using, this usually looks like `https://your-org-name.example.com` or `https://e
 
 (defsetting oidc-login-providers
   (deferred-tru "Public-facing list of enabled OIDC providers for the login page.")
+  :encryption :no
   :type       :json
   :default    []
   :feature    :sso-oidc
@@ -431,7 +431,8 @@ using, this usually looks like `https://your-org-name.example.com` or `https://e
 
 (defsetting other-sso-enabled?
   "Are we using an SSO integration other than LDAP or Google Auth or OIDC? These integrations use the `/auth/sso` endpoint
-  (SAML/JWT) or `/auth/sso/slack-connect` (Slack Connect) for authorization rather than the normal login form or Google Auth button."
+  (SAML/JWT) for authorization rather than the normal login form or Google Auth button."
+  :encryption :no
   :visibility :public
   :setter     :none
-  :getter     (fn [] (or (saml-enabled) (jwt-enabled-and-configured) (sso-settings/slack-connect-enabled))))
+  :getter     (fn [] (or (saml-enabled) (jwt-enabled-and-configured))))

@@ -8,7 +8,9 @@
    [metabase.lib.metadata :as lib.metadata]
    [metabase.lib.types.isa :as lib.types.isa]
    [metabase.metabot.config :as metabot.config]
+   [metabase.metabot.metadata-perms :as metabot.perms]
    [metabase.metabot.tools.util :as metabot.tools.u]
+   [metabase.models.interface :as mi]
    [metabase.parameters.field-values :as params.field-values]
    [metabase.util :as u]
    [metabase.util.humanization :as u.humanization]
@@ -83,6 +85,12 @@
 (defn get-dashboard-details
   "Get information about the dashboard with ID `dashboard-id`."
   [{:keys [dashboard-id]}]
+  ;; `dashboard-id` is caller-supplied via the Metabot viewing context and reaches `t2/select-one`'s queryable
+  ;; position, where a non-integer is executed as a raw query against the app DB. Require an integer PK,
+  ;; the same guard `get-report-details`/`get-metric-details` already apply.
+  (when-not (int? dashboard-id)
+    (throw (ex-info "Invalid dashboard_id format"
+                    {:agent-error? true :status-code 400})))
   (if-let [dashboard (t2/select-one [:model/Dashboard :id :description :name :collection_id] dashboard-id)]
     (do (api/read-check dashboard)
         {:structured-output
@@ -96,9 +104,12 @@
   "Get field values for a field, creating them if they don't exist.
    Uses the user-aware API that respects sandboxing/impersonation."
   [id->values id]
-  (-> (get id->values id)
-      (or (params.field-values/get-or-create-field-values! (t2/select-one :model/Field :id id)))
-      :values))
+  (if-some [field-values (get id->values id)]
+    (:values field-values)
+    (let [field (t2/select-one :model/Field :id id)]
+      (when (and field
+                 (params.field-values/current-user-can-fetch-field-values? field))
+        (:values (params.field-values/get-or-create-field-values! field))))))
 
 (defn- add-field-values
   [cols]
@@ -106,6 +117,53 @@
     (let [id->values (params.field-values/field-id->field-values-for-current-user field-ids)]
       (map #(m/assoc-some % :field-values (some->> % :id (get-field-values id->values))) cols))
     cols))
+
+(defn- permission-filter-columns
+  "Remove columns hidden by Table or sandbox permissions and hide inaccessible FK targets on retained columns.
+
+  Two bars, matching [[metabase.metabot.tools.field-stats]]: a table the entity itself selects from takes
+  data access, so a card published as a permissions boundary keeps its columns; a table reached only by an
+  FK hop takes query permission, since joining to it is something the caller would have to do themselves."
+  [columns]
+  (let [columns                (vec columns)
+        referenced-field-ids   (into #{}
+                                     (comp (mapcat (juxt :fk-field-id :fk-target-field-id))
+                                           (filter some?))
+                                     columns)
+        referenced-field-table (when (seq referenced-field-ids)
+                                 (metabot.perms/field-id->table-id referenced-field-ids))
+        table-ids              (into #{}
+                                     (filter pos-int?)
+                                     (concat (keep :table-id columns)
+                                             (vals referenced-field-table)))
+        queryable-table-ids    (metabot.perms/queryable-table-ids table-ids)
+        accessible-table-ids   (metabot.perms/data-accessible-table-ids table-ids)
+        sandbox-restricted-ids (metabot.perms/sandbox-restricted-fields table-ids)
+        field-visible?         (fn [visible-table-ids table-id field-id]
+                                 (and (contains? visible-table-ids table-id)
+                                      (if-let [allowed-field-ids (get sandbox-restricted-ids table-id)]
+                                        (contains? allowed-field-ids field-id)
+                                        true)))
+        referenced-field-visible?
+        (fn [visible-table-ids field-id]
+          (when-let [table-id (get referenced-field-table field-id)]
+            (field-visible? visible-table-ids table-id field-id)))
+        column-visible?        (fn [{:keys [fk-field-id table-id] :as column}]
+                                 (and (or (not (pos-int? table-id))
+                                          (field-visible? (if (= :source/implicitly-joinable (:lib/source column))
+                                                            queryable-table-ids
+                                                            accessible-table-ids)
+                                                          table-id
+                                                          (u/id column)))
+                                      (or (nil? fk-field-id)
+                                          (referenced-field-visible? accessible-table-ids fk-field-id))))]
+    (->> columns
+         (filter column-visible?)
+         (mapv (fn [{:keys [fk-target-field-id] :as column}]
+                 (cond-> column
+                   (and fk-target-field-id
+                        (not (referenced-field-visible? queryable-table-ids fk-target-field-id)))
+                   (dissoc :fk-target-field-id)))))))
 
 (defn metric-details
   "Get metric details as returned by tools."
@@ -120,6 +178,14 @@
                                    with-queryable-dimensions?      true
                                    with-segments?                  false}}]
    (let [id (:id card)
+         ;; Reading the metric Card is collection-based and does not imply permission to see
+         ;; metadata for its physical source Table. Dimensions are filtered column by column
+         ;; below; segments come straight off the Table, so gate them on the table being
+         ;; queryable — not merely readable, which a `manage-table-metadata` grant satisfies
+         ;; with `view-data` still `:blocked`.
+         ;; t2 rows carry `:table_id`; `lib.metadata/card` maps reject snake_case, so `:table-id`.
+         source-table-readable? (when-let [table-id (or (:table-id card) (:table_id card))]
+                                  (mi/can-query? :model/Table table-id))
          query-needed? (or with-default-temporal-breakout? with-queryable-dimensions? with-segments?)
          metric-query (when query-needed?
                         (lib/query metadata-provider (lib.metadata/card metadata-provider id)))
@@ -129,37 +195,31 @@
                       (lib/remove-all-breakouts metric-query))
          visible-cols (when query-needed?
                         (->> (lib/visible-columns base-query)
+                             permission-filter-columns
                              (map #(metabot.tools.u/add-table-reference base-query %))))
-         col->index (when query-needed?
-                      (into {} (map-indexed (fn [i col] [col i])) visible-cols))
-         col-index (when query-needed?
-                     #(-> % (dissoc :operators :field-values) col->index))
          default-temporal-breakout (when with-default-temporal-breakout?
                                      (->> breakouts
                                           (map #(lib/find-matching-column % visible-cols))
                                           (m/find-first lib.types.isa/temporal?)))
-         field-id-prefix (metabot.tools.u/card-field-id-prefix id)]
+         queryable-columns (when with-queryable-dimensions?
+                             (->> (lib/filterable-columns base-query)
+                                  permission-filter-columns
+                                  field-values-fn))]
      (cond-> {:id id
               :type :metric
               :name (:name card)
               :description (:description card)
-              :default_time_dimension_field_id (when default-temporal-breakout
-                                                 (-> (metabot.tools.u/->result-column
-                                                      metric-query
-                                                      default-temporal-breakout
-                                                      (col-index default-temporal-breakout)
-                                                      field-id-prefix)
-                                                     :field_id))
+              :default_time_dimension_field_id (some-> default-temporal-breakout
+                                                       (->> (metabot.tools.u/->result-column metric-query))
+                                                       :field_id)
               :verified (verified-review? id "card")}
        with-queryable-dimensions?
        (assoc :queryable-dimensions (into []
                                           (comp (map #(metabot.tools.u/add-table-reference base-query %))
-                                                (map #(metabot.tools.u/->result-column
-                                                       metric-query % (col-index %) field-id-prefix)))
-                                          (->> (lib/filterable-columns base-query)
-                                               field-values-fn)))
+                                                (map #(metabot.tools.u/->result-column metric-query %)))
+                                          queryable-columns))
 
-       with-segments?
+       (and source-table-readable? with-segments?)
        (assoc :segments (if-let [segments (lib/available-segments metric-query)]
                           (mapv #(convert-measure-or-segment % :filters) segments)
                           []))))))
@@ -172,7 +232,23 @@
        (metric-details metadata-provider (assoc options :with-queryable-dimensions? false))
        (select-keys  [:id :type :name :description :default_time_dimension_field_id]))))
 
-(declare related-tables)
+(declare ^:private related-tables)
+
+(def ^:private max-related-tables-with-fields
+  "Maximum number of related-tables to expand with their full column set.
+
+  Each expanded table fetches and formats all of its columns. On a highly-connected schema with wide tables, this can
+  exhaust the heap (metabase#76493). We fetch only this many related tables with column metadata; the rest (up
+  to [[max-related-tables]]) are surfaced without columns."
+  10)
+
+(def ^:private max-related-tables
+  "Maximum number of related-tables to surface at all.
+
+  The first [[max-related-tables-with-fields]] of these carry their columns; the remainder are surfaced by identity
+  only (id/name/description/FK/FQN, no column fetch) so the LLM still knows they exist and can look them up
+  individually. Any related-tables beyond this are dropped with a note presented to the LLM in rendering."
+  50)
 
 (defn- table-details
   ([id] (table-details id nil))
@@ -185,6 +261,9 @@
                with-measures?       false
                with-segments?       false}
         :as   options}]
+   (when-not (int? id)
+     (throw (ex-info "Invalid table id format"
+                     {:agent-error? true :status-code 400})))
    (when-let [base (if metadata-provider
                      (lib.metadata/table metadata-provider id)
                      (metabot.tools.u/get-table id :db_id :description :name :schema))]
@@ -201,15 +280,14 @@
                          (lib/query mp (lib.metadata/table mp id)))
            cols (when with-fields?
                   (->> (lib/visible-columns table-query -1 {:include-implicitly-joinable? false})
+                       permission-filter-columns
                        field-values-fn
                        (map #(metabot.tools.u/add-table-reference table-query %))))
-           field-id-prefix (when (or with-fields? with-related-tables?)
-                             (metabot.tools.u/table-field-id-prefix id))
-           related-tables (when with-related-tables?
-                            (related-tables table-query field-id-prefix with-fields? field-values-fn))]
+           related (when with-related-tables?
+                     (related-tables table-query with-fields? field-values-fn))]
        (-> {:id id
             :type :table
-            :fields (into [] (map-indexed #(metabot.tools.u/->result-column table-query %2 %1 field-id-prefix)) cols)
+            :fields (mapv #(metabot.tools.u/->result-column table-query %) cols)
             :name (:name base)
             ;; :display_name should be (lib/display-name table-query), but we want to avoid creating the query if possible
             :display_name (some->> (:name base)
@@ -218,7 +296,6 @@
             :database_engine db-engine
             :database_schema (:schema base)}
            (m/assoc-some :description (:description base)
-                         :related_tables related-tables
                          :metrics (when with-metrics?
                                     (not-empty (mapv #(convert-metric % mp options)
                                                      (lib/available-metrics table-query))))
@@ -227,49 +304,93 @@
                                                       (lib/available-measures table-query))))
                          :segments (when with-segments?
                                      (not-empty (mapv #(convert-measure-or-segment % :filters)
-                                                      (lib/available-segments table-query))))))))))
+                                                      (lib/available-segments table-query)))))
+           (merge related))))))
 
-(defn related-tables
+(defn- fk-related-table-groups
+  "Sorted `[target-table-id fk-field-id fk-field-name]` tuples for every direct FK from `query`'s source table.
+
+  The FK paths that become [[related-tables]]. Each tuple means \"`fk-field-id` (named `fk-field-name`) points at
+  `target-table-id`\", so a table reachable through several FKs appears once per FK.
+
+  This deliberately does NOT `:include-implicitly-joinable?` when calling `lib/visible-columns` to find related
+  tables: that fetches and caches the full column set of every FK-target table, even though we only
+  expand [[max-related-tables]] of them (metabase#76493). Instead we read the source table's own FK columns and do a
+  single bulk lookup of just the target fields (not their sibling columns) to map each FK to its table."
+  [query]
+  (let [all-cols           (lib/visible-columns query -1 {:include-implicitly-joinable? false})
+        ;; The FK columns are permission-filtered because their targets get named and expanded.
+        ;; `existing-table-ids` is not, because it is only ever used to *exclude*: a table whose
+        ;; columns are all hidden here is still already joined, and filtering it would let it
+        ;; resurface as a related table it was never eligible to be.
+        existing-table-ids (into #{} (keep :table-id) all-cols)
+        fk-cols            (filter (every-pred :fk-target-field-id (comp number? :id))
+                                   (permission-filter-columns all-cols))
+        id->target-field   (m/index-by :id (lib.metadata/bulk-metadata
+                                            query :metadata/column (into #{} (map :fk-target-field-id) fk-cols)))]
+    (->> fk-cols
+         (keep (fn [{fk-field-id :id, fk-field-name :name, :keys [fk-target-field-id]}]
+                 ;; the target field might not exist; skip self/already-joined tables
+                 (when-let [target (id->target-field fk-target-field-id)]
+                   (when-not (contains? existing-table-ids (:table-id target))
+                     [(:table-id target) fk-field-id fk-field-name]))))
+         distinct
+         ;; sort for a deterministic selection when we cap, so the same tables are kept
+         sort)))
+
+(defn- related-tables
   "Constructs a list of tables, optionally including their fields, that are related to the given query via foreign key.
-   Creates separate entries for each FK path when the same table is reachable through multiple foreign keys."
-  [query main-field-id-prefix with-fields? field-values-fn]
-  (let [all-main-cols    (lib/visible-columns query)
-        ;; Map [table-id fk-field-id field-name] -> index in the main query
-        contextual-index (into {}
-                               (keep-indexed
-                                (fn [idx {:keys [fk-field-id table-id name]}]
-                                  (when fk-field-id
-                                    {[table-id fk-field-id name] idx})))
-                               all-main-cols)
-        fk-cols          (filter :fk-field-id all-main-cols)
-        ;; { [table-id fk-field-id] [fk-col ...] }
-        grouped-fks      (group-by (juxt :table-id :fk-field-id) fk-cols)]
-    (when (seq grouped-fks)
-      (mapv
-       (fn [[[table-id fk-field-id] _]]
-         (let [base-details   (table-details table-id
-                                             {:with-fields?          with-fields?
-                                              :field-values-fn       field-values-fn
-                                              :with-related-tables?  false
-                                              :with-metrics?         false})
-               base-table-col (lib.metadata/field query fk-field-id)
-               fk-field-name  (:name base-table-col)
-               updated-fields
-               (when with-fields?
-                 (->> (:fields base-details)
-                      (keep
-                       (fn [{:keys [name] :as field}]
-                         (when-let [idx (get contextual-index [table-id fk-field-id name])]
-                           (assoc field :field_id (str main-field-id-prefix idx)))))))]
-           (-> (cond-> base-details
-                 updated-fields (assoc :fields updated-fields))
-               (assoc :related_by fk-field-name))))
-       grouped-fks))))
+  Creates separate entries for each FK path when the same table is reachable through multiple foreign keys. We surface
+  up to [[max-related-tables]] FK paths; only the first [[max-related-tables-with-fields]] carry their column set to
+  keep memory usage bounded (metabase#76493), even when `with-fields?` is true. Returns nil when the query has no
+  FK-related tables, otherwise a map:
+
+    :related_tables                vector of related-table maps, one per FK path. When `with-fields?` is true they
+                                   carry their column set and the list is capped at [[max-related-tables-with-fields]];
+                                   when `with-fields?` is false they carry no columns and the list holds the whole
+                                   surfaced set (capped at [[max-related-tables]]).
+    :related_tables_without_fields (optional) the remaining surfaced FK paths, built the same way but without
+                                   columns. Present only when `with-fields?` is true and there are more FK paths
+                                   than [[max-related-tables-with-fields]], capped so the two lists together hold at
+                                   most [[max-related-tables]]. Omitted entirely when `with-fields?` is false, since
+                                   without columns there is no distinction between the two lists.
+    :related_tables_total          (optional) total number of related-tables before capping. Present only when
+                                   that total exceeds [[max-related-tables]] (i.e. some were dropped entirely), so
+                                   the LLM knows the surfaced set is truncated."
+  [query with-fields? field-values-fn]
+  (let [fk-groups (fk-related-table-groups query)
+        total     (count fk-groups)]
+    (when (pos? total)
+      (when (and with-fields? (> total max-related-tables-with-fields))
+        (log/infof "Capping related-tables column expansion to %d of %d." max-related-tables-with-fields total))
+      (when (> total max-related-tables)
+        (log/infof "Capping related-tables to %d of %d." max-related-tables total))
+      (let [capped (take max-related-tables fk-groups)
+            ;; Only split into a with-fields/without-fields pair when the caller actually asked for columns.
+            [with-groups without-groups] (if with-fields?
+                                           (split-at max-related-tables-with-fields capped)
+                                           [capped nil])
+            build (fn [include-fields? [table-id fk-field-id fk-field-name]]
+                    (-> (table-details table-id
+                                       {:metadata-provider    query
+                                        :field-values-fn      field-values-fn
+                                        :with-fields?         include-fields?
+                                        :with-related-tables? false
+                                        :with-metrics?        false})
+                        (assoc :related_by {:id fk-field-id :name fk-field-name})))
+            maybe-with-fields (mapv #(build (boolean with-fields?) %) with-groups)
+            without-fields    (mapv #(build false %) without-groups)]
+        (cond-> {:related_tables maybe-with-fields}
+          (seq without-fields)         (assoc :related_tables_without_fields without-fields)
+          (> total max-related-tables) (assoc :related_tables_total total))))))
 
 (defn- card-details
   "Get details for a card."
   ([id] (card-details id nil))
   ([id options]
+   (when-not (int? id)
+     (throw (ex-info "Invalid card id format"
+                     {:agent-error? true :status-code 400})))
    (when-let [card (metabot.tools.u/get-card id)]
      (card-details card (lib-be/application-database-metadata-provider (:database_id card)) options)))
   ([base metadata-provider {:keys [field-values-fn with-fields? with-related-tables? with-metrics?
@@ -298,12 +419,11 @@
          returned-fields (when with-fields?
                            (->> (lib/returned-columns card-query)
                                 field-values-fn))
-         field-id-prefix (metabot.tools.u/card-field-id-prefix id)
-         related-tables (when with-related-tables?
-                          (related-tables card-query field-id-prefix with-fields? field-values-fn))]
+         related (when with-related-tables?
+                   (related-tables card-query with-fields? field-values-fn))]
      (-> {:id id
           :type card-type
-          :fields (into [] (map-indexed #(metabot.tools.u/->result-column card-query %2 %1 field-id-prefix)) returned-fields)
+          :fields (mapv #(metabot.tools.u/->result-column card-query %) returned-fields)
           :name (:name base)
           :display_name (some->> (:name base)
                                  (u.humanization/name->human-readable-name :simple))
@@ -312,7 +432,6 @@
           :verified (verified-review? id "card")}
          (m/assoc-some
           :description (:description base)
-          :related_tables related-tables
           :metrics (when with-metrics?
                      (not-empty (mapv #(convert-metric % metadata-provider options)
                                       (lib/available-metrics card-query))))
@@ -321,7 +440,8 @@
                                        (lib/available-measures card-query))))
           :segments (when with-segments?
                       (not-empty (mapv #(convert-measure-or-segment % :filters)
-                                       (lib/available-segments card-query)))))))))
+                                       (lib/available-segments card-query)))))
+         (merge related)))))
 
 (defn cards-details
   "Get the details of metrics or models as specified by `card-type` and `cards`
@@ -431,7 +551,11 @@
                       (let [card    (t2/hydrate (metabot.tools.u/get-card report-id)
                                                 :average_query_time)
                             mp      (lib-be/application-database-metadata-provider (:database_id card))
-                            details (card-details card mp options)]
+                            ;; The select-keys below drops :related_tables and :metrics, so don't compute them. On
+                            ;; wide-FK source tables the related-tables cost can be substantial (metabase#76493).
+                            details (card-details card mp (assoc options
+                                                                 :with-related-tables? false
+                                                                 :with-metrics? false))]
                         (-> details
                             (select-keys [:id :type :description :name :verified])
                             (assoc :result-columns (:fields details))
@@ -463,7 +587,6 @@
 (defn- execute-query
   [query-id query-input]
   (let [normalized-query (lib-be/normalize-query query-input)
-        field-id-prefix (metabot.tools.u/query-field-id-prefix query-id)
         database-id (:database normalized-query)
         _ (api/read-check :model/Database database-id)
         mp (lib-be/application-database-metadata-provider database-id)
@@ -472,9 +595,7 @@
     {:type :query
      :query-id query-id
      :query normalized-query
-     :result-columns (into []
-                           (map-indexed #(metabot.tools.u/->result-column query %2 %1 field-id-prefix))
-                           returned-cols)}))
+     :result-columns (mapv #(metabot.tools.u/->result-column query %) returned-cols)}))
 
 (defn get-query-details
   "Get the details of a query (supports both MBQL v4 and v5)."

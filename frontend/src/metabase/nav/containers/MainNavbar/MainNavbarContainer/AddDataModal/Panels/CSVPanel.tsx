@@ -1,6 +1,7 @@
 import { t } from "ttag";
 
-import * as Urls from "metabase/lib/urls";
+import { UpsellStorage } from "metabase/common/components/upsells/UpsellStorage";
+import * as Urls from "metabase/urls";
 
 import { CSVPanelEmptyState } from "./AddDataModalEmptyStates";
 import { CSVUpload } from "./CSVUpload";
@@ -40,6 +41,7 @@ export const CSVPanel = ({
           text: t`Enable uploads`,
           to: Urls.uploadsSettings(),
         }}
+        upsell={<UpsellStorage location="add-data-modal-csv" />}
       />
     );
   }

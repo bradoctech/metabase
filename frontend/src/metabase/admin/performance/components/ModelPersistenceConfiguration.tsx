@@ -11,7 +11,7 @@ import { ModelCachingScheduleWidget } from "metabase/admin/settings/components/w
 import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { DelayedLoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper/DelayedLoadingAndErrorWrapper";
 import { useDocsUrl, useSetting, useToast } from "metabase/common/hooks";
-import { useDispatch, useSelector } from "metabase/lib/redux";
+import { useDispatch, useSelector } from "metabase/redux";
 import { refreshSiteSettings } from "metabase/redux/settings";
 import {
   getApplicationName,
@@ -85,7 +85,7 @@ export const ModelPersistenceConfiguration = () => {
     try {
       loadingToastId = await showLoadingToast();
       await Promise.all(promises);
-      sendToast({ message: "Salvo" });
+      sendToast({ message: "Saved" });
     } catch (e) {
       sendToast({
         icon: "warning",

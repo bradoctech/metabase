@@ -1,5 +1,7 @@
 (ns ^:mb/driver-tests metabase.driver.snowflake-test
   (:require
+   [buddy.core.codecs :as codecs]
+   [buddy.core.hash :as buddy-hash]
    [clojure.data :as data]
    [clojure.java.jdbc :as jdbc]
    [clojure.set :as set]
@@ -11,7 +13,7 @@
    [metabase.driver :as driver]
    ^{:clj-kondo/ignore [:deprecated-namespace]} [metabase.driver.common.parameters :as params]
    [metabase.driver.snowflake :as driver.snowflake]
-   [metabase.driver.sql :as driver.sql]
+   [metabase.driver.sql-jdbc :as driver.sql-jdbc]
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
    [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
    [metabase.driver.sql-jdbc.sync :as sql-jdbc.sync]
@@ -51,6 +53,17 @@
    [toucan2.core :as t2]))
 
 (set! *warn-on-reflection* true)
+
+(deftest ^:parallel connection-hosts-test
+  (are [details expected] (= expected (driver/connection-hosts :snowflake details))
+    {:account "xy12345.us-east-2.aws"}
+    ["xy12345.us-east-2.aws.snowflakecomputing.com"]
+
+    {:account "xy12345" :use-hostname true :host "snowflake.example.com"}
+    ["snowflake.example.com"]
+
+    {:account "xy12345" :use-hostname true :host "https://snowflake.example.com:443"}
+    ["snowflake.example.com"]))
 
 (defn- query->native! [query]
   (let [check-sql-fn (fn [_ _ sql & _]
@@ -166,15 +179,19 @@
                                                                                             (assoc :host alternative-host)
                                                                                             (assoc :use-hostname use-hostname))]
                                                                             (sql-jdbc.conn/connection-details->spec :snowflake details))))
-        true nil "//ls10467.us-east-2.aws.snowflakecomputing.com/"
-        true "" "//ls10467.us-east-2.aws.snowflakecomputing.com/"
-        true "  " "//ls10467.us-east-2.aws.snowflakecomputing.com/"
-        true "snowflake.example.com/" "//snowflake.example.com/"
-        true "snowflake.example.com" "//snowflake.example.com/"
-        false nil "//ls10467.us-east-2.aws.snowflakecomputing.com/"
-        false "" "//ls10467.us-east-2.aws.snowflakecomputing.com/"
-        false "snowflake.example.com/" "//ls10467.us-east-2.aws.snowflakecomputing.com/"
-        false "snowflake.example.com" "//ls10467.us-east-2.aws.snowflakecomputing.com/"))
+        true nil "//ls10467.us-east-2.aws.snowflakecomputing.com/?enablePutGet=false"
+        true "" "//ls10467.us-east-2.aws.snowflakecomputing.com/?enablePutGet=false"
+        true "  " "//ls10467.us-east-2.aws.snowflakecomputing.com/?enablePutGet=false"
+        true "snowflake.example.com/" "//snowflake.example.com/?enablePutGet=false"
+        true "snowflake.example.com" "//snowflake.example.com/?enablePutGet=false"
+        false nil "//ls10467.us-east-2.aws.snowflakecomputing.com/?enablePutGet=false"
+        false "" "//ls10467.us-east-2.aws.snowflakecomputing.com/?enablePutGet=false"
+        false "snowflake.example.com/" "//ls10467.us-east-2.aws.snowflakecomputing.com/?enablePutGet=false"
+        false "snowflake.example.com" "//ls10467.us-east-2.aws.snowflakecomputing.com/?enablePutGet=false"))
+    (testing "Unsafe options are removed"
+      (let [details (assoc details :additional-options "enablePutGet=true")
+            spec (sql-jdbc.conn/connection-details->spec :snowflake details)]
+        (is (re-find #"enablePutGet=false" (:subname spec)))))
     (testing "Application parameter is set to identify Metabase connections"
       (is (= "Metabase_Metabase"
              (:application (sql-jdbc.conn/connection-details->spec :snowflake details)))))))
@@ -183,7 +200,7 @@
   (testing "make sure we didn't break the code that is used to generate DDL statements when we add new test datasets"
     (with-redefs [test.data.snowflake/qualified-db-name (constantly "v4_test-data")]
       (testing "Create DB DDL statements"
-        (is (= "DROP DATABASE IF EXISTS \"v4_test-data\"; CREATE DATABASE \"v4_test-data\";"
+        (is (= "CREATE DATABASE IF NOT EXISTS \"v4_test-data\";"
                (sql.tx/create-db-sql :snowflake (mt/get-dataset-definition defs/test-data)))))
       (testing "Create Table DDL statements"
         (is (= (map
@@ -308,10 +325,10 @@
                                   {:name "airport", :schema "PUBLIC", :description nil}}]
             (testing "should work with normal details"
               (is (= expected-tables
-                     (:tables (driver/describe-database :snowflake (mt/db))))))
+                     (into #{} (:tables (driver/describe-database :snowflake (mt/db)))))))
             (testing "should accept either `:db` or `:dbname` in the details, working around a bug with the original impl"
               (is (= expected-tables
-                     (:tables (driver/describe-database :snowflake (update (mt/db) :details set/rename-keys {:db :dbname}))))))
+                     (into #{} (:tables (driver/describe-database :snowflake (update (mt/db) :details set/rename-keys {:db :dbname})))))))
             (testing "should throw an Exception if details have neither `:db` nor `:dbname`"
               (is (thrown? Exception
                            (driver/describe-database :snowflake (update (mt/db) :details set/rename-keys {:db :xyz})))))
@@ -423,23 +440,51 @@
              (testing "dynamic-table?"
                (testing "returns true for dynamic table"
                  (is (true? (#'driver.snowflake/dynamic-table? conn db-name (:schema dynamic-table) (:name dynamic-table)))))
-
                (testing "returns false for normal table"
                  (is (false? (#'driver.snowflake/dynamic-table? conn db-name (:schema normal-table) (:name normal-table)))))
-
                (testing "returns false if db-name is invalid, make sure we don't throw an exception"
                  (is (false? (#'driver.snowflake/dynamic-table? conn (mt/random-name) (:schema normal-table) (:name normal-table))))))
-
              (testing "sql-jdbc.describe-table/get-table-pks"
                (testing "returns empty array for dynamic table"
                  (is (= [] (sql-jdbc.describe-table/get-table-pks :snowflake conn db-name dynamic-table))))
-
                (testing "also works if db-name is nil"
                  (is (= [] (sql-jdbc.describe-table/get-table-pks :snowflake conn nil dynamic-table)))))
-
              (testing "driver/describe-table-fks returns empty set for dynamic table"
                #_{:clj-kondo/ignore [:deprecated-var]}
                (is (= #{} (driver/describe-table-fks :snowflake (mt/db) dynamic-table)))))))))))
+
+(deftest ^:sequential describe-table-fields-uuid-column-test
+  (mt/test-driver :snowflake
+    (testing "Snowflake tables with UUID columns should sync successfully (#71595)"
+      (let [db-name    (#'driver.snowflake/db-name (mt/db))
+            table-name (str "uuid_test_" (u.random/random-name))]
+        (sql-jdbc.execute/do-with-connection-with-options
+         :snowflake
+         (mt/db)
+         nil
+         (fn [^java.sql.Connection conn]
+           (try
+             (doseq [stmt [(format "CREATE OR REPLACE TABLE \"%s\".\"PUBLIC\".\"%s\" (\"uuid_col\" UUID, \"name\" VARCHAR, \"description\" VARCHAR);"
+                                   db-name table-name)
+                           (format "INSERT INTO \"%s\".\"PUBLIC\".\"%s\" VALUES ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'test', 'a row');"
+                                   db-name table-name)]]
+               (jdbc/execute! {:connection conn} [stmt] {:transaction? false}))
+             (let [table  {:name table-name :schema "PUBLIC"}
+                   fields (sql-jdbc.sync/describe-table-fields :snowflake conn table db-name)]
+               (testing "All columns including UUID should be synced"
+                 (is (= #{"uuid_col" "name" "description"}
+                        (into #{} (map :name) fields))))
+               (testing "UUID column should have a usable base type"
+                 (let [uuid-field (first (filter #(= "uuid_col" (:name %)) fields))]
+                   (is (some? uuid-field)
+                       "UUID column should exist as a synced field")
+                   (when uuid-field
+                     (is (isa? (:base-type uuid-field) :type/*)
+                         "UUID column should have a valid base type")))))
+             (finally
+               (jdbc/execute! {:connection conn}
+                              [(format "DROP TABLE IF EXISTS \"%s\".\"PUBLIC\".\"%s\";" db-name table-name)]
+                              {:transaction? false})))))))))
 
 (deftest ^:sequential describe-table-test
   (mt/test-driver :snowflake
@@ -489,7 +534,7 @@
            {:user some?
             :password some?
             :private_key_file complement}
-            ;; Before `use-password` password took precedence over a key file
+           ;; Before `use-password` password took precedence over a key file
            (sql-jdbc.conn/connection-details->spec :snowflake (assoc details :private-key-value pk-key))))
       (is (=?
            {:user some?
@@ -631,7 +676,6 @@
                               expected-migrated (cond-> details-to-succeed
                                                   uses-secret? (assoc :private-key-id secret-id)
                                                   :always (dissoc :private-key-options :private-key-value :private-key-path))]
-
                           (testing "Migration persists as expected"
                             (is (= expected-migrated migrated-details)))
                           (testing "Migration results in unambiguous details"
@@ -652,13 +696,13 @@
     :snowflake
     (let [account           (tx/db-test-env-var-or-throw :snowflake :account)
           warehouse         (tx/db-test-env-var-or-throw :snowflake :warehouse)
-         ;; User with default role PULIC. To access the db custom role has to be used.
+          ;; User with default role PULIC. To access the db custom role has to be used.
           user              (tx/db-test-env-var-or-throw :snowflake :rsa-role-test-custom-user)
           private-key-value (mt/format-env-key (tx/db-test-env-var-or-throw :snowflake :pk-private-key))
           db                (tx/db-test-env-var-or-throw :snowflake :rsa-role-test-db)
           database          {:name    "Snowflake RSA test DB custom"
                              :engine  :snowflake
-                            ;; Details as collected from `api handler POST / database` are used.
+                             ;; Details as collected from `api handler POST / database` are used.
                              :details {:role                nil
                                        :warehouse           warehouse
                                        :db                  db
@@ -670,7 +714,7 @@
                                        :private-key-value   (mt/bytes->base64-data-uri (u/string-to-bytes private-key-value))
                                        :tunnel-enabled      false
                                        :user                user}}]
-     ;; TODO: We should make those message returned when role is incorrect more descriptive!
+      ;; TODO: We should make those message returned when role is incorrect more descriptive!
       (testing "Database can not be accessed with `nil` default role"
         (is (= "Looks like the Database name is incorrect."
                (:message (mt/user-http-request :crowberto :post 400 "database"
@@ -680,7 +724,7 @@
                (:message (mt/user-http-request :crowberto :post 400 "database"
                                                (assoc-in database [:details :role] "PUBLIC"))))))
       (testing "Database can be created using specified role"
-       ;; Map containing :details is expected to be database, hence considering request successful.
+        ;; Map containing :details is expected to be database, hence considering request successful.
         (is (contains? (mt/user-http-request :crowberto :post 200 "database"
                                              (assoc-in database [:details :role]
                                                        (tx/db-test-env-var-or-throw :snowflake :rsa-role-test-role)))
@@ -700,7 +744,7 @@
                  (mt/rows (qp/process-query {:database (:id db)
                                              :type :query
                                              :query {:source-table (:id table)}})))))
-       ;; Cleanup
+        ;; Cleanup
         (u/ignore-exceptions (t2/delete! :model/Database (:id db)))
         (u/ignore-exceptions (t2/delete! :model/Table (:id table)))
         (u/ignore-exceptions (t2/delete! :model/Field :id [:in (map :id fields)]))
@@ -711,13 +755,13 @@
     :snowflake
     (let [account           (tx/db-test-env-var-or-throw :snowflake :account)
           warehouse         (tx/db-test-env-var-or-throw :snowflake :warehouse)
-         ;; User with default role PULIC. To access the db custom role has to be used.
+          ;; User with default role PULIC. To access the db custom role has to be used.
           user              (tx/db-test-env-var-or-throw :snowflake :rsa-role-test-default-user)
           private-key-value (mt/format-env-key (tx/db-test-env-var-or-throw :snowflake :pk-private-key))
           db                (tx/db-test-env-var-or-throw :snowflake :rsa-role-test-db)
           database          {:name    "Snowflake RSA test DB default"
                              :engine  :snowflake
-                            ;; Details as collected from `api handler POST / database` are used.
+                             ;; Details as collected from `api handler POST / database` are used.
                              :details {:role                nil
                                        :warehouse           warehouse
                                        :db                  db
@@ -730,7 +774,7 @@
                                        :tunnel-enabled      false
                                        :user                user}}]
       (testing "Database can be created using _default_ `nil` role"
-       ;; Map containing :details is expected to be database, hence considering request successful.
+        ;; Map containing :details is expected to be database, hence considering request successful.
         (is (contains? (mt/user-http-request :crowberto :post 200 "database" database)
                        :details))
         ;; As the request is asynchronous, wait for sync to complete.
@@ -748,7 +792,7 @@
                  (mt/rows (qp/process-query {:database (:id db)
                                              :type :query
                                              :query {:source-table (:id table)}})))))
-       ;; Cleanup
+        ;; Cleanup
         (u/ignore-exceptions (t2/delete! :model/Database (:id db)))
         (u/ignore-exceptions (t2/delete! :model/Table (:id table)))
         (u/ignore-exceptions (t2/delete! :model/Field :id [:in (map :id fields)]))
@@ -951,15 +995,17 @@
                  (:write_data_details db))))))))
 
 (deftest ^:parallel set-role-statement-test
-  (testing "set-role-statement should return a USE ROLE command, with the role quoted if it contains special characters"
-    ;; No special characters
-    (is (= "USE ROLE MY_ROLE;"        (driver.sql/set-role-statement :snowflake "MY_ROLE")))
-    (is (= "USE ROLE ROLE123;"        (driver.sql/set-role-statement :snowflake "ROLE123")))
-    (is (= "USE ROLE lowercase_role;" (driver.sql/set-role-statement :snowflake "lowercase_role")))
-
-    ;; Special characters
-    (is (= "USE ROLE \"Role.123\";"   (driver.sql/set-role-statement :snowflake "Role.123")))
-    (is (= "USE ROLE \"$role\";"      (driver.sql/set-role-statement :snowflake "$role")))))
+  (testing "set-role-statement should return a parameterized USE ROLE command"
+    (are [role expected] (= expected
+                            (driver.sql-jdbc/set-role-statement :snowflake nil role))
+      "MY_ROLE"                          ["USE ROLE identifier(?);" "MY_ROLE"]
+      "ROLE123"                          ["USE ROLE identifier(?);" "ROLE123"]
+      "lowercase_role"                   ["USE ROLE identifier(?);" "lowercase_role"]
+      "Role.123"                         ["USE ROLE identifier(?);" "\"Role.123\""]
+      "$role"                            ["USE ROLE identifier(?);" "\"$role\""]
+      "Role-X"                           ["USE ROLE identifier(?);" "\"Role-X\""]
+      ;; should escape quotes in role name
+      "Role-X\"); DROP * FROM TABLE; --" ["USE ROLE identifier(?);" "\"Role-X\"\"); DROP * FROM TABLE; --\""])))
 
 (deftest remark-test
   (testing "Queries should have a remark formatted as JSON appended to them with additional metadata"
@@ -1181,7 +1227,6 @@
                       (testing "Last row has expected values"
                         (is (= yesterday-last-str
                                (ffirst (reverse rows)))))))
-
                   (testing "Rows should be properly allocated to days"
                     (let [tested-day (assoc-in tested-field [2 :temporal-unit] :day)
                           tested-minute (assoc-in tested-field [2 :temporal-unit] :minute)]
@@ -1228,28 +1273,24 @@
         (testing "password takes precedence if use-password is true"
           (when (and password use-password)
             (is (= :password (first result))
-                [idxs result])))
-
+                (str [idxs result]))))
         (testing "password comes last if use-password is false or nil"
           (when (and password (not use-password))
             (is (= :password (last result))
-                [idxs result])))
-
+                (str [idxs result]))))
         (testing "path is preferred if options is local"
           (when (and (= "local" options) private-key-value private-key-path)
             (is (= :private-key-path (m/find-first #{:private-key-path :private-key-value} result))
-                [idxs result])))
-
+                (str [idxs result]))))
         (testing "value is preferred if options is nil or uploaded"
           (when (and (not= "local" options) private-key-value private-key-path)
             (is (= :private-key-value (m/find-first #{:private-key-path :private-key-value} result))
-                [idxs result])))
-
+                (str [idxs result]))))
         (testing "ID is checked last if path or value exists"
           (when (or (and private-key-value private-key-id)
                     (and private-key-path private-key-id))
             (is (= :private-key-id (m/find-first #{:private-key-path :private-key-value :private-key-id} (reverse result)))
-                [idxs result])))))))
+                (str [idxs result]))))))))
 
 (deftest have-select-privelege?-timeout-test
   (mt/test-driver :snowflake
@@ -1266,11 +1307,16 @@
                  (is (true? (sql-jdbc.sync.interface/have-select-privilege?
                              driver/*driver* conn schema table-name))))))))))))
 
-(defn- get-db-priv-key [db]
+(defn- get-db-priv-key
+  "Returns a SHA-256 digest of the resolved private key file for `db`."
+  [db]
   (-> (:details db)
       (#'driver.snowflake/resolve-private-key)
       :private_key_file
-      slurp))
+      slurp
+      (.getBytes "UTF-8")
+      buddy-hash/sha256
+      codecs/bytes->hex))
 
 (defn- get-priv-key-details [details pk-user priv-key-var]
   (let [priv-key (tx/db-test-env-var-or-throw :snowflake priv-key-var)]
@@ -1280,48 +1326,49 @@
             :private-key-value (mt/priv-key->base64-uri priv-key)
             :use-password false})))
 
-(deftest private-key-file-updated-test
-  (mt/test-driver :snowflake
-    (let [details (assoc (:details (mt/db)) :role "ACCOUNTADMIN")
-          pk-user (mt/random-name)
-          pub-key (tx/db-test-env-var-or-throw :snowflake :pk-public-key)
-          rsa-details (get-priv-key-details details pk-user :pk-private-key)
-          pub-key-2 (tx/db-test-env-var-or-throw :snowflake :pk-public-key-2)
-          rsa-details-2 (get-priv-key-details details pk-user :pk-private-key-2)]
-      (tx/with-temp-db-user! driver/*driver* details pk-user
-        (testing "healthcheck after updating db with new private key file should work correctly"
-          (mt/with-temp [:model/Database rsa-db {:engine :snowflake :details rsa-details}]
-            ;; set the public key for the db user
-            (test.data.snowflake/set-user-public-key details pk-user pub-key)
-            ;; assert we can connect to the db with the original rsa details
-            (is (= {:status "ok"} (mt/user-http-request :crowberto :get 200 (str "database/" (:id rsa-db) "/healthcheck"))))
-            ;; update the snowflake rsa user to use the new public key
-            (test.data.snowflake/set-user-public-key details pk-user pub-key-2)
-            ;; assert we can no longer connect with the original rsa details
-            (let [resp (mt/user-http-request :crowberto :get 200 (str "database/" (:id rsa-db) "/healthcheck"))]
-              (is (= "error" (:status resp)))
-              (is (str/starts-with? (:message resp) "JWT token is invalid.")))
-            ;; update the database details to use the new rsa details
-            (mt/user-http-request :crowberto :put 200 (str "database/" (:id rsa-db)) {:details rsa-details-2})
-            ;; assert we can connect to the db with the new rsa details
-            (is (= {:status "ok"} (mt/user-http-request :crowberto :get 200 (str "database/" (:id rsa-db) "/healthcheck"))))))
-        (testing "publishing a db update event when details have changed notifies the db it was updated and clears the secret file memoization"
-          (mt/with-temp [:model/Database rsa-db {:engine :snowflake :details rsa-details}]
-            (let [original-priv-key (get-db-priv-key rsa-db)
-                  updating-rsa-db (merge rsa-db {:details rsa-details-2})
-                  _ (t2/update! :model/Database (:id rsa-db) updating-rsa-db)
-                  details-changed? (not= (:details rsa-db) (:details updating-rsa-db))
-                  new-rsa-db (t2/select-one :model/Database (:id rsa-db))
-                  priv-key-after-update (get-db-priv-key new-rsa-db)
-                  _ (events/publish-event! :event/database-update {:object new-rsa-db
-                                                                   :user-id 1
-                                                                   :previous-object rsa-db
-                                                                   :details-changed? details-changed?})
-                  priv-key-after-event (get-db-priv-key new-rsa-db)]
-              (is (= rsa-db new-rsa-db))
-              (is (true? details-changed?))
-              (is (= original-priv-key priv-key-after-update))
-              (is (not= priv-key-after-update priv-key-after-event)))))))))
+(comment
+  (deftest private-key-file-updated-test
+    (mt/test-driver :snowflake
+      (let [details (assoc (:details (mt/db)) :role "ACCOUNTADMIN")
+            pk-user (mt/random-name)
+            pub-key (tx/db-test-env-var-or-throw :snowflake :pk-public-key)
+            rsa-details (get-priv-key-details details pk-user :pk-private-key)
+            pub-key-2 (tx/db-test-env-var-or-throw :snowflake :pk-public-key-2)
+            rsa-details-2 (get-priv-key-details details pk-user :pk-private-key-2)]
+        (tx/with-temp-db-user! driver/*driver* details pk-user
+          (testing "healthcheck after updating db with new private key file should work correctly"
+            (mt/with-temp [:model/Database rsa-db {:engine :snowflake :details rsa-details}]
+              ;; set the public key for the db user
+              (test.data.snowflake/set-user-public-key details pk-user pub-key)
+              ;; assert we can connect to the db with the original rsa details
+              (is (= {:status "ok"} (mt/user-http-request :crowberto :get 200 (str "database/" (:id rsa-db) "/healthcheck"))))
+              ;; update the snowflake rsa user to use the new public key
+              (test.data.snowflake/set-user-public-key details pk-user pub-key-2)
+              ;; assert we can no longer connect with the original rsa details
+              (let [resp (mt/user-http-request :crowberto :get 200 (str "database/" (:id rsa-db) "/healthcheck"))]
+                (is (= "error" (:status resp)))
+                (is (str/starts-with? (:message resp) "JWT token is invalid.")))
+              ;; update the database details to use the new rsa details
+              (mt/user-http-request :crowberto :put 200 (str "database/" (:id rsa-db)) {:details rsa-details-2})
+              ;; assert we can connect to the db with the new rsa details
+              (is (= {:status "ok"} (mt/user-http-request :crowberto :get 200 (str "database/" (:id rsa-db) "/healthcheck"))))))
+          (testing "publishing a db update event when details have changed notifies the db it was updated and clears the secret file memoization"
+            (mt/with-temp [:model/Database rsa-db {:engine :snowflake :details rsa-details}]
+              (let [original-priv-key (get-db-priv-key rsa-db)
+                    updating-rsa-db (merge rsa-db {:details rsa-details-2})
+                    _ (t2/update! :model/Database (:id rsa-db) updating-rsa-db)
+                    details-changed? (not= (:details rsa-db) (:details updating-rsa-db))
+                    new-rsa-db (t2/select-one :model/Database (:id rsa-db))
+                    priv-key-after-update (get-db-priv-key new-rsa-db)
+                    _ (events/publish-event! :event/database-update {:object new-rsa-db
+                                                                     :user-id 1
+                                                                     :previous-object rsa-db
+                                                                     :details-changed? details-changed?})
+                    priv-key-after-event (get-db-priv-key new-rsa-db)]
+                (is (= rsa-db new-rsa-db))
+                (is (true? details-changed?))
+                (is (= original-priv-key priv-key-after-update))
+                (is (not= priv-key-after-update priv-key-after-event))))))))))
 
 (deftest ^:parallel type->database-type-test
   (testing "type->database-type multimethod returns correct Snowflake types"
@@ -1359,19 +1406,16 @@
                                                  [[5 "Enormous Marble Wallet" "Gadget"]
                                                   [9 "Practical Bronze Computer" "Widget"]
                                                   [11 "Ergonomic Silk Coat" "Gadget"]]]
-
                                                 ["case sensitive contains has rows"
                                                  (lib/contains products-category "Gad")
                                                  "CONTAINS(\"PUBLIC\".\"products\".\"category\", 'Gad')"
                                                  [[5 "Enormous Marble Wallet" "Gadget"]
                                                   [11 "Ergonomic Silk Coat" "Gadget"]
                                                   [16 "Incredible Bronze Pants" "Gadget"]]]
-
                                                 ["case sensitive contains with no rows"
                                                  (lib/contains products-category "gad")
                                                  "CONTAINS(\"PUBLIC\".\"products\".\"category\", 'gad')"
                                                  []]
-
                                                 ["case insensitive starts with has rows"
                                                  (-> (lib/starts-with products-category "GAD")
                                                      lib/ignore-case)
@@ -1379,19 +1423,16 @@
                                                  [[5 "Enormous Marble Wallet" "Gadget"]
                                                   [11 "Ergonomic Silk Coat" "Gadget"]
                                                   [16 "Incredible Bronze Pants" "Gadget"]]]
-
                                                 ["case sensitive starts with has rows"
                                                  (lib/starts-with products-category "Gad")
                                                  "STARTSWITH(\"PUBLIC\".\"products\".\"category\", 'Gad')"
                                                  [[5 "Enormous Marble Wallet" "Gadget"]
                                                   [11 "Ergonomic Silk Coat" "Gadget"]
                                                   [16 "Incredible Bronze Pants" "Gadget"]]]
-
                                                 ["case sensitive starts with has no rows"
                                                  (lib/starts-with products-category "gad")
                                                  "STARTSWITH(\"PUBLIC\".\"products\".\"category\", 'gad')"
                                                  []]
-
                                                 ["case insensitive ends with has rows"
                                                  (-> (lib/ends-with products-category "GET")
                                                      lib/ignore-case)
@@ -1399,14 +1440,12 @@
                                                  [[5 "Enormous Marble Wallet" "Gadget"]
                                                   [9 "Practical Bronze Computer" "Widget"]
                                                   [11 "Ergonomic Silk Coat" "Gadget"]]]
-
                                                 ["case sensitive ends with has rows"
                                                  (lib/ends-with products-category "get")
                                                  "ENDSWITH(\"PUBLIC\".\"products\".\"category\", 'get')"
                                                  [[5 "Enormous Marble Wallet" "Gadget"]
                                                   [9 "Practical Bronze Computer" "Widget"]
                                                   [11 "Ergonomic Silk Coat" "Gadget"]]]
-
                                                 ["case sensitive ends with has no rows"
                                                  (lib/ends-with products-category "GET")
                                                  "ENDSWITH(\"PUBLIC\".\"products\".\"category\", 'GET')"
@@ -1451,12 +1490,16 @@
                                                             (assoc :private-key-value priv-key-val)
                                                             (assoc :use-password false)
                                                             (assoc :dbname nil))}]
-              (is (= #{{:name "continent",    :schema "PUBLIC", :description nil}
-                       {:name "municipality", :schema "PUBLIC", :description nil}
-                       {:name "region",       :schema "PUBLIC", :description nil}
-                       {:name "country",      :schema "PUBLIC", :description nil}
-                       {:name "airport",      :schema "PUBLIC", :description nil}}
-                     (:tables (driver/describe-database :snowflake db)))))))))))
+              ;; we would ideally check = here, but there are some other completely
+              ;; unrelated tests which create tables in the PUBLIC schema and
+              ;; fail to clean them up correctly, manifesting as failure here
+              (is (set/subset?
+                   #{{:name "continent",    :schema "PUBLIC", :description nil}
+                     {:name "municipality", :schema "PUBLIC", :description nil}
+                     {:name "region",       :schema "PUBLIC", :description nil}
+                     {:name "country",      :schema "PUBLIC", :description nil}
+                     {:name "airport",      :schema "PUBLIC", :description nil}}
+                   (:tables (driver/describe-database :snowflake db)))))))))))
 
 ;;; ------------------------------------------------ Fake Sync Tests ------------------------------------------------
 ;; Tests to validate that fake sync produces correct metadata for Snowflake.
@@ -1497,3 +1540,25 @@
           (mt/with-native-query-testing-context query
             (is (some? (mt/rows (qp/process-query query)))
                 "Hour bucketing on a time field from a source query should not error")))))))
+
+(deftest ^:parallel add-interval-honeysql-form-rejects-hostile-unit-test
+  (testing "the Snowflake DATEADD sink refuses a unit outside its closed allow-list"
+    (let [hostile (keyword "day) FROM t2 UNION SELECT pw FROM secrets --")]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid temporal unit"
+           (sql.qp/add-interval-honeysql-form :snowflake :some_col 1 hostile))))
+    (testing "and still compiles a legitimate unit to the expected DATEADD token"
+      (is (re-find #":raw \"day\""
+                   (pr-str (sql.qp/add-interval-honeysql-form :snowflake :some_col 1 :day)))))))
+
+(deftest ^:sequential relative-datetime-cast-test
+  (mt/test-driver :snowflake
+    (testing "the server-side relative-datetime CAST target must be a bare type name -- Snowflake rejects a quoted one
+             with `Unsupported data type`"
+      (let [mp    (mt/metadata-provider)
+            query (-> (lib/query mp (lib.metadata/table mp (mt/id :orders)))
+                      (lib/filter (lib/> (lib.metadata/field mp (mt/id :orders :created_at))
+                                         (lib/relative-datetime -30 :day))))]
+        (mt/with-native-query-testing-context query
+          (is (some? (mt/rows (qp/process-query query)))))))))

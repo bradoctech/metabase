@@ -1,9 +1,10 @@
 (ns metabase.channel.impl.email
   (:require
    [clojure.string :as str]
-   [hiccup.core :refer [html]]
+   [hiccup.core :refer [h html]]
    [medley.core :as m]
-   [metabase.analytics.prometheus :as prometheus]
+   [metabase.analytics-interface.core :as analytics]
+   [metabase.analytics.core :as analytics.core]
    [metabase.channel.core :as channel]
    [metabase.channel.email :as email]
    [metabase.channel.email.logo :as email.logo]
@@ -31,10 +32,15 @@
 
 (set! *warn-on-reflection* true)
 
-(defmethod prometheus/known-labels :metabase-notification/template-render [_]
+(defmethod analytics.core/known-labels :metabase-notification/template-render [_]
   (for [template-type [:email/handlebars-text :email/handlebars-resource]]
     {:template-type template-type
      :channel-type  :channel/email}))
+
+(def EmailDetails
+  "Schema for the connection `:details` of a `:channel/email` channel. Email channels reference the globally
+  configured SMTP integration and carry no details of their own."
+  [:map {:closed true}])
 
 (def ^:private EmailMessage
   [:map
@@ -95,7 +101,8 @@
           rendered-params (when (seq inline-params) (render.util/render-parameters inline-params))
           heading-text    (:text part)
           style           (style/style (if (seq inline-params) {:margin-bottom "4px"} {}))]
-      {:content (str (html [:h2 {:style style} heading-text])
+      ;; hiccup 1 doesn't escape strings and :content reaches `{{{computed.dashboard_content}}}` as-is
+      {:content (str (html [:h2 {:style style} (h heading-text)])
                      rendered-params)})
     :tab-title
     {:content (markdown/process-markdown (format "# %s\n---" (:text part)) :html)}))
@@ -103,9 +110,9 @@
 (defn- render-body
   [{:keys [details] :as _template} payload]
   (let [template-type (keyword (:type details))]
-    (prometheus/inc! :metabase-notification/template-render
-                     {:template-type template-type
-                      :channel-type  :channel/email})
+    (analytics/inc! :metabase-notification/template-render
+                    {:template-type template-type
+                     :channel-type  :channel/email})
     (case template-type
       :email/handlebars-resource
       (handlebars/render (:path details) payload)
@@ -197,11 +204,11 @@
   {:notification/dashboard {:channel_type :channel/email
                             :details      {:type    :email/handlebars-resource
                                            :subject "{{payload.dashboard.name}}"
-                                           :path    "metabase/channel/email/dashboard_subscription.hbs"}}
+                                           :path    "dashboard_subscription"}}
    :notification/card      {:channel_type :channel/email
                             :details      {:type    :email/handlebars-resource
                                            :subject "{{computed.subject}}"
-                                           :path    "metabase/channel/email/notification_card.hbs"}}})
+                                           :path    "notification_card"}}})
 
 ;; ------------------------------------------------------------------------------------------------;;
 ;;                                      Notification Card                                          ;;
@@ -269,13 +276,23 @@
          result-attachments
          html-contents]     (reduce
                              (fn [[merged-attachments result-attachments html-contents] part]
-                               (let [{:keys [attachments content]} (render-part timezone part {:channel.render/include-title? true
-                                                                                               :channel.render/disable-links? (boolean (:disable_links dashboard_subscription))})
-                                     result-attachment             (email.result-attachment/result-attachment part creator_id)]
-                                 [(merge merged-attachments attachments)
-                                  (into result-attachments result-attachment)
-                                  (when-not attachment_only
-                                    (conj html-contents (html content)))]))
+                               ;; Isolate each part: realizing one part's Hiccup (here, via `html`) must not
+                               ;; abort the whole subscription. On failure, substitute the error placeholder so
+                               ;; the remaining cards still deliver (#74007).
+                               (try
+                                 (let [{:keys [attachments content]} (render-part timezone part {:channel.render/include-title? true
+                                                                                                 :channel.render/disable-links? (boolean (:disable_links dashboard_subscription))})
+                                       result-attachment             (email.result-attachment/result-attachment part creator_id)]
+                                   [(merge merged-attachments attachments)
+                                    (into result-attachments result-attachment)
+                                    (when-not attachment_only
+                                      (conj html-contents (html content)))])
+                                 (catch Throwable e
+                                   (log/error e "Error rendering dashboard subscription part; substituting error placeholder")
+                                   [merged-attachments
+                                    result-attachments
+                                    (when-not attachment_only
+                                      (conj html-contents (html (:content (channel.render/error-rendered-part)))))])))
                              [{} [] []]
                              (assoc-attachment-booleans (:dashboard_subscription_dashcards dashboard_subscription) dashboard_parts))
         icon-attachment     (make-message-attachment (first (icon-bundle :dashboard)))
@@ -314,9 +331,12 @@
                      :let [details (:details recipient)
                            emails (case (:type recipient)
                                     :notification-recipient/user
-                                    [(-> recipient :user :email)]
+                                    (when (not= :api-key (-> recipient :user :type))
+                                      [(-> recipient :user :email)])
                                     :notification-recipient/group
-                                    (->> recipient :permissions_group :members (map :email))
+                                    (->> recipient :permissions_group :members
+                                         (remove #(= :api-key (:type %)))
+                                         (map :email))
                                     :notification-recipient/raw-value
                                     [(:value details)]
                                     :notification-recipient/template

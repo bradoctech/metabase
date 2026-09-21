@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { t } from "ttag";
 import * as Yup from "yup";
 
-import ButtonsS from "metabase/css/components/buttons.module.css";
 import {
   Form,
   FormCheckbox,
@@ -11,7 +10,7 @@ import {
   FormSubmitButton,
   FormTextInput,
 } from "metabase/forms";
-import * as Errors from "metabase/lib/errors";
+import * as Errors from "metabase/utils/errors";
 
 import type { LoginData } from "../../types";
 
@@ -67,7 +66,7 @@ export const LoginForm = ({
             isLdapEnabled ? t`Username or email address` : t`Email address`
           }
           type={isLdapEnabled ? "input" : "email"}
-          placeholder="seuemail@sp.gov.br"
+          placeholder="nicetoseeyou@email.com"
           autoFocus
           mb="1.25rem"
         />
@@ -75,24 +74,13 @@ export const LoginForm = ({
           name="password"
           label={t`Password`}
           type="password"
-          placeholder="Sua senha"
+          placeholder="Shhh..."
           mb="1.25rem"
         />
         {!hasSessionCookies && (
-          <FormCheckbox
-            name="remember"
-            label={t`Remember me`}
-            mb="1.25rem"
-            size="lg"
-          />
+          <FormCheckbox name="remember" label={t`Remember me`} mb="1.25rem" />
         )}
-        <FormSubmitButton
-          label={t`Sign in`}
-          variant="primary"
-          w="100%"
-          radius="100px"
-          className={ButtonsS.ButtonNoBorder}
-        />
+        <FormSubmitButton label={t`Sign in`} variant="filled" w="100%" />
         <FormErrorMessage mt="1rem" />
       </Form>
     </FormProvider>

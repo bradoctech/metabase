@@ -17,6 +17,7 @@
 (deftest properties-token-features-test
   (mt/with-premium-features #{:admin-security-center
                               :advanced-permissions
+                              :ai-controls
                               :attached-dwh
                               :audit-app
                               :cache-granular-controls
@@ -24,6 +25,7 @@
                               :config-text-file
                               :content-translation
                               :content-verification
+                              :data-complexity-score
                               :dashboard-subscription-filters
                               :disable-password-login
                               :database-auth-providers
@@ -63,10 +65,10 @@
                               :database-routing
                               :tenants
                               :cloud-custom-smtp
-                              :workspaces
                               :writable-connection}
     (is (= {:admin_security_center          false ;; requires self-hosted (non-cloud)
             :advanced_permissions           true
+            :ai_controls                    true
             :attached_dwh                   true
             :audit_app                      true
             :cache_granular_controls        true
@@ -74,6 +76,7 @@
             :config_text_file               true
             :content_translation            true
             :content_verification           true
+            :data-complexity-score          true
             :dashboard_subscription_filters true
             :disable_password_login         true
             :database_auth_providers        true
@@ -115,7 +118,6 @@
             :etl_connections                false
             :etl_connections_pg             false
             :dependencies                   false
-            :workspaces                     true
             :writable_connection            true}
            (:token-features (mt/user-http-request :crowberto :get 200 "session/properties"))))))
 
@@ -139,13 +141,11 @@
                         {:id session-id :key_hashed key-hashed :user_id user-id :created_at :%now
                          :last_active_at :%now})
             (is (some? (#'mw.session/current-user-info-for-session session-key nil))))
-
           (testing "Session with last_active_at older than timeout should be expired"
             (t2/query-one {:update (t2/table-name :model/Session)
                            :set    {:last_active_at (h2x/add-interval-honeysql-form (mdb/db-type) :%now -301 :second)}
                            :where  [:= :key_hashed key-hashed]})
             (is (nil? (#'mw.session/current-user-info-for-session session-key nil))))
-
           (testing "Session with last_active_at just within timeout should be valid"
             (t2/query-one {:update (t2/table-name :model/Session)
                            :set    {:last_active_at (h2x/add-interval-honeysql-form (mdb/db-type) :%now -299 :second)}
@@ -160,12 +160,10 @@
         (let [session-id  (session/generate-session-id)
               session-key (str (random-uuid))
               key-hashed  (session/hash-session-key session-key)]
-
           (testing "newly created session (NULL last_active_at) should be valid"
             (t2/insert! (t2/table-name :model/Session)
                         {:id session-id :key_hashed key-hashed :user_id user-id :created_at :%now})
             (is (some? (#'mw.session/current-user-info-for-session session-key nil))))
-
           (testing "old session with NULL last_active_at should be expired"
             (t2/query-one {:update (t2/table-name :model/Session)
                            :set    {:created_at (h2x/add-interval-honeysql-form (mdb/db-type) :%now -301 :second)}
@@ -184,11 +182,9 @@
             (session/clear-session-activity-cache!)
             (t2/insert! (t2/table-name :model/Session)
                         {:id session-id :key_hashed key-hashed :user_id user-id :created_at :%now})
-
             (testing "first call should update last_active_at"
               (#'mw.session/maybe-update-session-activity! session-key)
               (is (some? (t2/select-one-fn :last_active_at (t2/table-name :model/Session) :key_hashed key-hashed))))
-
             (testing "immediate second call should be throttled (no error, just skipped)"
               (let [first-value (t2/select-one-fn :last_active_at (t2/table-name :model/Session) :key_hashed key-hashed)]
                 (#'mw.session/maybe-update-session-activity! session-key)

@@ -4,19 +4,16 @@ import { t } from "ttag";
 
 import DataStudioLogo from "assets/img/data-studio-logo.svg";
 import { ForwardRefLink } from "metabase/common/components/Link";
+import { UpsellGem } from "metabase/common/components/upsells/components/UpsellGem";
 import { useHasTokenFeature } from "metabase/common/hooks";
 import { useUserKeyValue } from "metabase/common/hooks/use-user-key-value";
-import { isMac } from "metabase/lib/browser";
-import { useSelector } from "metabase/lib/redux";
-import * as Urls from "metabase/lib/urls";
 import { useRegisterShortcut } from "metabase/palette/hooks/useRegisterShortcut";
 import {
   PLUGIN_FEATURE_LEVEL_PERMISSIONS,
   PLUGIN_REMOTE_SYNC,
-  PLUGIN_WORKSPACES,
 } from "metabase/plugins";
+import { useSelector } from "metabase/redux";
 import { getLocation } from "metabase/selectors/routing";
-import { getUserIsAdmin } from "metabase/selectors/user";
 import {
   canAccessTransforms as canAccessTransformsSelector,
   getTransformsFeatureAvailable,
@@ -34,6 +31,8 @@ import {
   Text,
   Tooltip,
 } from "metabase/ui";
+import * as Urls from "metabase/urls";
+import { isMac } from "metabase/utils/browser";
 
 import S from "./DataStudioLayout.module.css";
 import { getCurrentTab } from "./utils";
@@ -87,7 +86,6 @@ type DataStudioNavProps = {
 
 function DataStudioNav({ isNavbarOpened, onNavbarToggle }: DataStudioNavProps) {
   const { pathname } = useSelector(getLocation);
-  const isAdmin = useSelector(getUserIsAdmin);
   const canAccessDataModel = useSelector(
     PLUGIN_FEATURE_LEVEL_PERMISSIONS.canAccessDataModel,
   );
@@ -181,9 +179,6 @@ function DataStudioNav({ isNavbarOpened, onNavbarToggle }: DataStudioNavProps) {
               }
             />
           )}
-          {(canAccessTransforms || isAdmin) && (
-            <PLUGIN_WORKSPACES.WorkspacesSection showLabel={isNavbarOpened} />
-          )}
         </Stack>
         <Stack gap="0.75rem">
           {hasRemoteSyncFeature ? (
@@ -250,7 +245,8 @@ function DataStudioTab({
   rightSection,
   isGated,
 }: DataStudioTabProps) {
-  const effectiveRightSection = rightSection ?? null;
+  const upsellGem = isGated ? <UpsellGem.New size={14} /> : null;
+  const effectiveRightSection = rightSection ?? upsellGem;
 
   return (
     <Tooltip

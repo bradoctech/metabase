@@ -14,7 +14,6 @@
    [metabase.util :as u]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
-   [metabase.workspaces.core :as workspaces]
    [methodical.core :as methodical]
    [toucan2.core :as t2]))
 
@@ -173,7 +172,8 @@
 (t2/define-before-insert :model/Table
   [table]
   (let [defaults {:display_name (humanization/name->human-readable-name (:name table))
-                  :field_order  (driver/default-field-order (t2/select-one-fn :engine :model/Database :id (:db_id table)))
+                  :field_order  (or (:field_order table)
+                                    (driver/default-field-order (t2/select-one-fn :engine :model/Database :id (:db_id table))))
                   :data_layer   :internal}]
     (merge defaults table)))
 
@@ -189,14 +189,14 @@
         original-table (t2/original table)
         current-active (:active original-table)
         new-active     (:active changes)]
-
     ;; Prevent setting data_authority back to unconfigured once configured
     (when (and (not= (keyword (:data_authority original-table :unconfigured)) :unconfigured)
                (= (keyword (:data_authority changes)) :unconfigured))
       (throw (ex-info "Cannot set data_authority back to unconfigured once it has been configured"
                       {:status-code 400})))
-
-    ;; Prevent changing data_source to/from metabase-transform
+    ;; Prevent changing data_source to/from metabase-transform.
+    ;; The "to metabase-transform" direction is allowed during deserialization so an existing synced table
+    ;; can be migrated to a transform-managed table via serdes.
     (when (contains? changes :data_source)
       (let [original-data-source (some-> (:data_source original-table) keyword)
             new-data-source      (some-> (:data_source changes) keyword)]
@@ -204,11 +204,11 @@
                    (not= new-data-source :metabase-transform))
           (throw (ex-info "Cannot change data_source from metabase-transform"
                           {:status-code 400})))
-        (when (and (not= original-data-source :metabase-transform)
+        (when (and (not mi/*deserializing?*)
+                   (not= original-data-source :metabase-transform)
                    (= new-data-source :metabase-transform))
           (throw (ex-info "Cannot set data_source to metabase-transform"
                           {:status-code 400})))))
-
     ;; Sync visibility_type and data_layer fields
     (let [changes (sync-visibility-fields changes original-table)]
       (cond
@@ -388,22 +388,11 @@
    user-info          :- perms/UserInfo
    permission-mapping :- perms/PermissionMapping
    & [{:keys [include-published-via-collection? active-only?]}]]
-  (let [opts (cond-> {}
-               (some? active-only?) (assoc :active-only? active-only?))
-        {:keys [clause with]} (perms/visible-table-filter-with-cte column-or-exp user-info permission-mapping opts)]
-    (if-let [published-clause (and include-published-via-collection?
-                                   (perms/published-table-visible-clause column-or-exp user-info))]
-      {:clause [:or clause
-                [:and
-                 [:in column-or-exp (perms/visible-table-filter-select
-                                     :id
-                                     user-info
-                                     {:perms/view-data :unrestricted}
-                                     opts)]
-                 published-clause]]
-       :with with}
-      {:clause clause
-       :with with})))
+  (perms/visible-table-filter-with-cte
+   column-or-exp user-info permission-mapping
+   (cond-> {}
+     (some? active-only?) (assoc :active-only? active-only?)
+     include-published-via-collection? (assoc :include-published-via-collection? true))))
 
 ;;; ------------------------------------------------ Serdes Hashing -------------------------------------------------
 
@@ -437,19 +426,27 @@
         :data_authority      :computed
         :initial_sync_status "complete"}))))
 
-(defn- remove-referenced-candidates
-  "Short-circuiting reduce: removes matched triples from triple->table."
-  [triple->table target-triples]
-  (reduce (fn [triple->table triple]
-            (if (empty? triple->table)
-              (reduced triple->table)
-              (dissoc triple->table triple)))
-          triple->table
-          target-triples))
+(defn delete-orphaned-provisional-table!
+  "If `table-id` points at an inactive provisional table that is not referenced by any other
+   transform (excluding `exclude-transform-id`), delete it."
+  [table-id exclude-transform-id]
+  (when table-id
+    (when-let [table (t2/select-one :model/Table :id table-id
+                                    :active false :transform_target true :deactivated_at nil
+                                    :data_source :metabase-transform)]
+      (let [referenced?
+            (seq
+             (t2/query {:select [[[:inline 1] :ref]]
+                        :from   [:transform]
+                        :where  [:and
+                                 [:= :target_table_id (:id table)]
+                                 [:not= :id exclude-transform-id]]}))]
+        (when-not referenced?
+          (t2/delete! :model/Table :id (:id table)))))))
 
 (defn gc-transform-target-tables!
   "Deletes provisional table rows (created by [[upsert-transform-target-table!]]) that are no longer
-   referenced by any Transform or WorkspaceTransform. Safe because these rows were never active,
+   referenced by any Transform. Safe because these rows were never active,
    so they have no child records.
 
    Note: this only handles *inactive* provisional tables. Active tables that were previously
@@ -457,29 +454,22 @@
    A separate process to reset `transform_target` on active, unreferenced tables is not yet
    implemented.
 
-   Future optimizations:
-   - Add target_table_id FKs to avoid scanning transform rows.
-   - Pre-filter via workspace_input/workspace_output table references."
+   Uses FK-based NOT IN queries rather than scanning JSON columns."
   []
-  (let [candidates (t2/select [:model/Table :id :db_id :schema :name]
-                              :active false :transform_target true :deactivated_at nil
-                              :data_source :metabase-transform)]
-    (when (seq candidates)
-      (let [db-ids        (into #{} (map :db_id) candidates)
-            triple->table (into {} (map (juxt (juxt :db_id :schema :name) identity)) candidates)
-            remaining     (remove-referenced-candidates
-                           triple->table
-                           (eduction
-                            (map (fn [{:keys [target target_db_id]}]
-                                   (-> target
-                                       (update :database #(or % target_db_id))
-                                       workspaces/target->triple)))
-                            (t2/reducible-select [:model/Transform :target :target_db_id] :target_db_id [:in db-ids])))
-            remaining     (when (seq remaining)
-                            (remove-referenced-candidates
-                             remaining
-                             (workspaces/reducible-target-triples db-ids)))]
-        (when-let [dead-ids (seq (mapv :id (vals remaining)))]
+  (let [candidate-ids (t2/select-fn-set :id :model/Table
+                                        :active false :transform_target true :deactivated_at nil
+                                        :data_source :metabase-transform)]
+    (when (seq candidate-ids)
+      (let [referenced-ids
+            (into #{}
+                  (map :id)
+                  (t2/query {:select [[:target_table_id :id]]
+                             :from   [:transform]
+                             :where  [:and
+                                      [:not= :target_table_id nil]
+                                      [:in :target_table_id candidate-ids]]}))
+            dead-ids (into [] (remove referenced-ids) candidate-ids)]
+        (when (seq dead-ids)
           (log/infof "Deleting %d orphaned transform target table(s)" (count dead-ids))
           (t2/delete! :model/Table :id [:in dead-ids]))))))
 
@@ -639,9 +629,10 @@
   (t2/select-one :model/Database :id (:db_id table)))
 
 ;;; ------------------------------------------------- Serialization -------------------------------------------------
-(defmethod serdes/dependencies "Table" [{:keys [db_id collection_id]}]
+(defmethod serdes/dependencies "Table" [{:keys [db_id collection_id transform_id]}]
   (cond-> [[{:model "Database" :id db_id}]]
-    collection_id (conj [{:model "Collection" :id collection_id}])))
+    collection_id (conj [{:model "Collection" :id collection_id}])
+    transform_id  (conj [{:model "Transform" :id transform_id}])))
 
 (defmethod serdes/descendants "Table" [_model-name id {:keys [skip-archived]}]
   (let [fields   (into {} (for [field-id (t2/select-pks-set :model/Field {:where [:= :table_id id]})]
@@ -699,6 +690,36 @@
   (conj (serdes/storage-path-prefixes (serdes/path table))
         {:label (:name table) :key (:name table)}))
 
+(defmethod serdes/metadata-query :model/Table
+  [model opts]
+  (t2/reducible-query
+   {:select [[:t.id :id]
+             [:t.db_id :db_id]
+             [:t.name :name]
+             [:t.schema :schema]
+             [:t.description :description]]
+    :from   [[(t2/table-name model) :t]]
+    :join   [[(t2/table-name :model/Database) :db] [:= :t.db_id :db.id]]
+    :where  [:and
+             (serdes/metadata-query-filter :model/Database :db opts)
+             (serdes/metadata-query-filter model :t opts)]}))
+
+(defmethod serdes/metadata-query-filter :model/Table
+  [_model alias {:keys [user-info table-ids schema-ids]}]
+  (let [perm-mapping {:perms/view-data      :unrestricted
+                      :perms/create-queries :query-builder}]
+    (cond-> [:and
+             [:= (u/qualified-key alias :active) true]
+             [:= (u/qualified-key alias :visibility_type) nil]
+             [:in (u/qualified-key alias :id)
+              (perms/visible-table-filter-select :id user-info perm-mapping)]]
+      (seq schema-ids) (conj (into [:or]
+                                   (for [[db-id schemas] schema-ids]
+                                     [:and
+                                      [:= (u/qualified-key alias :db_id) db-id]
+                                      [:in (u/qualified-key alias :schema) schemas]])))
+      (seq table-ids)  (conj [:in (u/qualified-key alias :id) table-ids]))))
+
 ;;;; ------------------------------------------------- Search ----------------------------------------------------------
 
 (search.spec/define-spec "table"
@@ -729,7 +750,7 @@
                   :collection-name            [:coalesce :collection.name
                                                [:case
                                                 [:and :this.is_published
-                                                 [:= :this.collection_id nil]] [:inline "Our analytics"]
+                                                 [:= :this.collection_id nil]] "Our analytics"
                                                 :else nil]]
                   :collection-type            :collection.type}
    :where        [:and

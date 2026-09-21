@@ -1,21 +1,23 @@
 (ns metabase.metabot.context
   (:require
    [clojure.java.io :as io]
-   [malli.core]
+   [malli.core :as mc]
    [medley.core :as m]
    [metabase.activity-feed.core :as activity-feed]
    [metabase.api.common :as api]
    [metabase.config.core :as config]
-   ^{:clj-kondo/ignore [:discouraged-namespace :metabase/modules]} [metabase.legacy-mbql.schema :as mbql.s]
    [metabase.lib-be.core :as lib-be]
    [metabase.lib.core :as lib]
-   [metabase.lib.schema :as lib.schema]
+   [metabase.metabot.config :as metabot.config]
+   [metabase.metabot.metadata-perms :as metabot.perms]
    [metabase.metabot.table-utils :as table-utils]
+   [metabase.premium-features.core :as premium-features]
    [metabase.transforms-base.util :as transforms-base.u]
    [metabase.util.json :as json]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
    [metabase.util.malli.registry :as mr]
+   [metabase.util.malli.schema :as ms]
    [toucan2.core :as t2])
   (:import
    (java.time OffsetDateTime)
@@ -67,34 +69,38 @@
   "Schema for the `:type` key of `:user_is_viewing` item."
   (into [:enum] item-types))
 
+(def ^:private ItemQuerySchema
+  "Schema for the `:query` of a viewing context item: whatever query the client currently has open, in any MBQL
+  version.
+
+  Open ([[ms/Map]]) rather than `[:or ::lib.schema/query ::mbql.s/Query]`. Request decoding strips keys a map schema
+  doesn't declare, and both of those schemas would have gutted the query on its way in — a legacy query arrived as
+  `{:database 1}`, which then failed validation and 400'd the request. The real shape is checked downstream anyway:
+  every consumer routes the query through `lib-be/normalize-query` / `lib/query`, which normalize and validate it."
+  ms/Map)
+
 (def DefaultItemSchema
   "Default schema of viewing context item."
   [:map
+   ;; `::mc/default` because the rest of the item is forwarded to the model as the client sent it -- the FE grows
+   ;; these fields (`:id`, `:name`, `:source`, `:sql_engine`, ...) faster than this schema could name them, and
+   ;; dropping one degrades Metabot silently rather than erroring.
+   [::mc/default :any]
    [:type item-type-schema]
-   [:query
-    {:optional true}
-    [:or
-     ::lib.schema/query
-     ::mbql.s/Query]]])
+   [:query {:optional true} ItemQuerySchema]])
 
 (def QcItemSchema
   "Schema viewing context item with query and charts."
   [:map
+   [::mc/default :any]
    [:type (into [:enum] item-types-qc)]
-   [:query
-    {:optional true}
-    [:or
-     ::lib.schema/query
-     ::mbql.s/Query]]
+   [:query {:optional true} ItemQuerySchema]
    [:chart_configs
     {:optional true}
     [:vector
      [:map
-      [:query
-       {:optional true}
-       [:or
-        ::lib.schema/query
-        ::mbql.s/Query]]]]]])
+      [::mc/default :any]
+      [:query {:optional true} ItemQuerySchema]]]]])
 
 (def ViewingItemSchema
   "Schema of user is viewing item."
@@ -104,6 +110,7 @@
   [:and
    [:map-of :keyword :any]
    [:map
+    [::mc/default :any]
     [:user_is_viewing {:optional true} [:vector ViewingItemSchema]]]])
 
 (defn- query-for-sql-parsing
@@ -120,17 +127,30 @@
         (when (lib/native-only-query? normalized-query)
           normalized-query)))))
 
+(defn- table-stub
+  "Reference to a table used by a viewing-context item.
+
+  Excludes columns. [[metabase.metabot.agent.user-context/format-entity]] only reads `:type` and `:id` and calculates
+  column details via [[metabase.metabot.tools.entity-details/get-table-details]], so fetching columns here is wasted
+  work. On large, highly-connected schemas it can contribute to heap exhaustion (metabase#76493).
+  `:name`/`:database_schema`/`:description` are kept for the `format-simple-entity` fallback"
+  [{:keys [id name schema description]}]
+  {:id id
+   :type :table
+   :name name
+   :database_schema schema
+   :description description})
+
 (defn- database-tables-for-context
-  "Get database tables formatted for metabot context. Only includes tables used in the query, formatted for API output.
-   Removes duplicate tables by id while preserving first occurrence order."
+  "Get database tables formatted for metabot context. Only includes tables used in the query.
+  Removes duplicate tables by id while preserving first occurrence order."
   [{:keys [query]}]
   (try
     (if query
-      (let [used-tables (table-utils/used-tables query)
-            tables (table-utils/enhanced-database-tables (:database query)
-                                                         {:priority-tables used-tables
-                                                          :all-tables-limit (count used-tables)})]
-        (m/distinct-by :id tables))
+      (into []
+            (comp (m/distinct-by :id)
+                  (map table-stub))
+            (table-utils/used-tables query))
       [])
     (catch Exception e
       (log/error e "Error getting database tables for context")
@@ -151,17 +171,14 @@
   [{:keys [database-id table-ids]}]
   (try
     (when (and database-id (seq table-ids))
-      (when-let [tables (not-empty (table-utils/used-tables-from-ids database-id table-ids))]
-        (table-utils/enhanced-database-tables database-id
-                                              {:priority-tables tables
-                                               :all-tables-limit (count tables)})))
+      (not-empty (mapv table-stub (table-utils/used-tables-from-ids database-id table-ids))))
     (catch Exception e
       (log/error e "Error getting Python transform tables for context")
       [])))
 
 (defn- mbql-source-table-ids
-  "Given a context item with an MBQL query, return [database-id [table-id ...]] if it has
-  source-table references, or nil otherwise. Handles both MLv2/pMBQL and legacy formats."
+  "Given a context item with an MBQL query, return [database-id [table-id ...]] if it has source-table references, or
+  nil otherwise. Handles both MBQL 4 (legacy) and MBQL 5 formats."
   [item]
   (when (= "adhoc" (:type item))
     (let [query       (:query item)
@@ -176,24 +193,24 @@
         [database-id table-ids]))))
 
 (defn- mbql-source-tables-for-context
-  "Get source tables for an MBQL query, formatted for metabot context (with :type, :display_name, :fields, etc.).
+  "Get source tables for an MBQL query, formatted for metabot context.
 
-  Uses a direct table lookup without native-query permission checks. The user is already
-  viewing these tables in the notebook editor, so they have at least query-builder access.
-  The standard `used-tables-from-ids` requires `:query-builder-and-native` permissions
-  which is too restrictive for MBQL viewing context enrichment."
+  Uses a direct table lookup filtered by query permission. The standard `used-tables-from-ids`
+  requires `:query-builder-and-native` permissions which is too restrictive for MBQL viewing
+  context enrichment."
   [[database-id table-ids]]
   (try
-    (let [raw-tables (t2/select [:model/Table :id :name :schema]
-                                :db_id database-id
-                                :id [:in table-ids]
-                                :active true
-                                :visibility_type nil)
-          tables     (when (seq raw-tables)
-                       (table-utils/enhanced-database-tables database-id
-                                                             {:priority-tables  raw-tables
-                                                              :all-tables-limit (count raw-tables)}))]
-      (m/distinct-by :id tables))
+    (let [raw-tables    (t2/select [:model/Table :id :name :schema :description]
+                                   :db_id database-id
+                                   :id [:in table-ids]
+                                   :active true
+                                   :visibility_type nil)
+          queryable-ids (metabot.perms/queryable-table-ids (map :id raw-tables))]
+      (into []
+            (comp (filter (comp queryable-ids :id))
+                  (m/distinct-by :id)
+                  (map table-stub))
+            raw-tables))
     (catch Exception e
       (log/error e "Error getting MBQL source tables for context")
       nil)))
@@ -209,17 +226,14 @@
                    (when-let [query (query-for-sql-parsing item)]
                      (when-let [tables (seq (database-tables-for-context {:query query}))]
                        (assoc item :used_tables tables)))
-
                    ;; Handle MBQL/notebook queries
                    (when-let [db-and-table-ids (mbql-source-table-ids item)]
                      (when-let [tables (seq (mbql-source-tables-for-context db-and-table-ids))]
                        (assoc item :used_tables tables)))
-
                    ;; Handle Python transforms
                    (when-let [db-and-table-ids (python-transform-db-and-table-ids item)]
                      (when-let [tables (seq (python-transform-tables-for-context db-and-table-ids))]
                        (assoc item :used_tables tables)))
-
                    ;; Unknown item: return unchanged
                    item))
                 user-viewing)]
@@ -246,15 +260,66 @@
       (assoc context :user_is_viewing annotated-viewing))
     context))
 
+(defn- get-metabot
+  "Look up the metabot row for the given UUID/entity-id, mirroring the resolution used by `metabase.metabot.tools.search`."
+  [metabot-id]
+  (when metabot-id
+    (t2/select-one :model/Metabot
+                   :entity_id (get-in metabot.config/metabot-config
+                                      [metabot-id :entity-id]
+                                      metabot-id))))
+
+(defn- verified-only?
+  [metabot]
+  (and (:use_verified_content metabot)
+       (premium-features/has-feature? :content-verification)))
+
+(defn- batch-verified-ids
+  "Of the given `ids`, return the set whose most-recent ModerationReview for `item-type` has status \"verified\"."
+  [ids item-type]
+  (if (empty? ids)
+    #{}
+    (t2/select-fn-set :moderated_item_id :model/ModerationReview
+                      :moderated_item_id   [:in ids]
+                      :moderated_item_type item-type
+                      :most_recent         true
+                      :status              "verified")))
+
+(defn- filter-recents-to-verified
+  "Drop card/dataset/metric/dashboard recents that aren't verified. Tables (and any other
+  non-moderatable model) pass through unchanged."
+  [recents]
+  (let [card-like-ids       (->> recents
+                                 (filter #(#{:card :dataset :metric} (:model %)))
+                                 (map :id))
+        dashboard-ids       (->> recents
+                                 (filter #(= :dashboard (:model %)))
+                                 (map :id))
+        verified-cards      (batch-verified-ids card-like-ids "card")
+        verified-dashboards (batch-verified-ids dashboard-ids "dashboard")]
+    (filter (fn [{:keys [id model]}]
+              (case model
+                (:card :dataset :metric) (contains? verified-cards id)
+                :dashboard               (contains? verified-dashboards id)
+                true))
+            recents)))
+
 (defn- add-recent-views
   "Add user's recent views to the context since these have a higher likelihood of being relevant to a user's query.
   Includes the 5 most recent items across cards, datasets, metrics, dashboards, and tables.
-  (Excludes collections and documents for now, which aren't searchable by Metabot.)"
-  [context]
+  (Excludes collections and documents for now, which aren't searchable by Metabot.)
+
+  When `metabot-id` is provided and the metabot has `use_verified_content` enabled (and the
+  `:content-verification` premium feature is active), filters out unverified cards/datasets/metrics
+  /dashboards before taking the top 5. Tables are not moderatable and always pass through."
+  [context {:keys [metabot-id] :as _opts}]
   (try
     (let [recents (:recents (activity-feed/get-recents api/*current-user-id*
                                                        [:views :selections]
                                                        {:models [:card :dataset :metric :dashboard :table]}))
+          recents (cond->> recents
+                    (verified-only? (get-metabot metabot-id))
+                    filter-recents-to-verified)
           processed-recents (mapv (fn [item]
                                     (let [item-type
                                           (case (:model item)
@@ -284,8 +349,11 @@
    (create-context context nil))
   ([context :- ::context
     opts    :- [:maybe [:map-of :keyword :any]]]
-   (-> context
-       enhance-context-with-schema
-       annotate-transform-source-types
-       add-recent-views
-       (set-user-time opts))))
+   ;; Every viewing item asks the same tables the same permission questions, and this runs on its own
+   ;; scope — the agent turn that consumes the context is a separate reduction with its own cache.
+   (metabot.perms/with-cache
+     (-> context
+         enhance-context-with-schema
+         annotate-transform-source-types
+         (add-recent-views (or opts {}))
+         (set-user-time opts)))))

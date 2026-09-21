@@ -3,6 +3,8 @@
    [clojure.java.io :as io]
    [clojure.string :as str]
    [java-time.api :as t]
+   [metabase-enterprise.serialization.export :as export]
+   [metabase-enterprise.serialization.schema :as schema]
    [metabase-enterprise.serialization.v2.extract :as extract]
    [metabase-enterprise.serialization.v2.ingest :as v2.ingest]
    [metabase-enterprise.serialization.v2.load :as v2.load]
@@ -68,30 +70,37 @@
 
 ;;; Logic
 
+(def ^:private serialization-logger-prefixes
+  "log4j2 logger-name prefixes whose logs are forked into the `export.log`/`import.log` files inside the archive.
+  These are not loaded namespaces; each prefix captures every logger nested under it (e.g.
+  `metabase-enterprise.serialization` captures `metabase-enterprise.serialization.v2.extract`)."
+  ['metabase-enterprise.serialization
+   'metabase.models.serialization])
+
 (defn- serialize-to-stream!
-  "Serialize directly to an OutputStream as streaming tar.gz. Returns result map."
-  [^java.io.OutputStream output ^String dirname entities {:keys [full-stacktrace]}]
-  (let [log-output (ByteArrayOutputStream.)
-        writer     (v2.storage.tar/tar-writer output dirname)
-        error      (atom nil)
-        report     (with-open [_logger (logger/for-ns log-output ['metabase-enterprise.serialization
-                                                                  'metabase.models.serialization]
-                                                      {:additive *additive-logging*})]
-                     (try
-                       (let [report (serdes/with-cache
-                                      (v2.storage/store! entities writer))]
-                         (v2.protocols/store-log! writer (.toByteArray log-output))
-                         (v2.protocols/finish! writer)
-                         report)
-                       (catch Exception e
-                         (reset! error e)
-                         (if full-stacktrace
-                           (log/error e "Error during serialization export")
-                           (log/error (u/strip-error e "Error during serialization export")))
-                         (try
-                           (v2.protocols/store-log! writer (.toByteArray log-output))
-                           (v2.protocols/finish! writer)
-                           (catch Exception _)))))]
+  "Serialize directly to an OutputStream as streaming tar.gz. Returns result map.
+
+  Storage logs are appended to `log-output`, whose full contents are then written to `export.log` inside the
+  archive."
+  [^java.io.OutputStream output ^String dirname entities ^ByteArrayOutputStream log-output {:keys [full-stacktrace]}]
+  (let [writer (v2.storage.tar/tar-writer output dirname)
+        error  (atom nil)
+        report (with-open [_logger (logger/for-ns log-output serialization-logger-prefixes
+                                                  {:additive *additive-logging*})]
+                 (try
+                   (serdes/with-cache
+                     (v2.storage/store! entities writer))
+                   (catch Exception e
+                     (reset! error e)
+                     (if full-stacktrace
+                       (log/error e "Error during serialization export")
+                       (log/error (u/strip-error e "Error during serialization export")))
+                     nil)))]
+    ;; Read the buffer and write the log after the appender has closed (and thus flushed) so nothing is lost.
+    (try
+      (v2.protocols/store-log! writer (.toByteArray log-output))
+      (v2.protocols/finish! writer)
+      (catch Exception _))
     {:report        report
      :success       (nil? @error)
      :error-message (when @error
@@ -117,8 +126,7 @@
         log-file (io/file dst "import.log")
         err      (atom nil)
         reindex? (if (nil? reindex?) true reindex?)
-        report   (with-open [_logger (logger/for-ns log-file ['metabase-enterprise.serialization
-                                                              'metabase.models.serialization]
+        report   (with-open [_logger (logger/for-ns log-file serialization-logger-prefixes
                                                     {:additive *additive-logging*})]
                    (try                 ; try/catch inside logging to log errors
                      (log/infof "Serdes import, size %s" size)
@@ -164,7 +172,8 @@
                            :data_model      (not (:no-data-model opts))
                            :settings        (not (:no-settings opts))
                            :field_values    (:include-field-values opts)
-                           :secrets         (:include-database-secrets opts)
+                           ;; Database connection secrets are never exported; kept in the schema for compatibility.
+                           :secrets         false
                            :success         (boolean success)
                            :error_message   error-message}))
 
@@ -186,7 +195,6 @@
   [_route-params
    {:keys                     [collection dirname]
     include-field-values?     :field_values
-    include-database-secrets? :database_secrets
     all-collections?          :all_collections
     data-model?               :data_model
     settings?                 :settings
@@ -210,7 +218,6 @@
        [:settings          {:default true}  (mu/with ms/BooleanValue {:description "Serialize Metabase settings"})]
        [:data_model        {:default true}  (mu/with ms/BooleanValue {:description "Serialize Metabase data model"})]
        [:field_values      {:default false} (mu/with ms/BooleanValue {:description "Serialize cached field values"})]
-       [:database_secrets  {:default false} (mu/with ms/BooleanValue {:description "Serialize details how to connect to each db"})]
        [:continue_on_error {:default false} (mu/with ms/BooleanValue {:description "Do not break execution on errors"})]
        [:full_stacktrace   {:default false} (mu/with ms/BooleanValue {:description "Show full stacktraces in the logs"})]]]
   (api/check-superuser)
@@ -221,7 +228,6 @@
                             :no-data-model            (not data-model?)
                             :no-settings              (not settings?)
                             :include-field-values     include-field-values?
-                            :include-database-secrets include-database-secrets?
                             :continue-on-error        continue-on-error?
                             :full-stacktrace          full-stacktrace?}
         export-dirname (or dirname
@@ -229,13 +235,18 @@
                                    (u/slugify (appearance/site-name))
                                    (u.date/format "YYYY-MM-dd_HH-mm" (t/local-date-time))))
         ;; extract/extract runs eager setup (target resolution, escape analysis) which can throw
-        ;; for invalid inputs (e.g. bad collection ID). This must happen before streaming starts.
-        entities (extract/extract opts)]
+        ;; for invalid inputs (e.g. bad collection ID). This must happen before streaming starts so the error
+        ;; can set a non-200 status. Its eager logs (e.g. escape-analysis warnings) are captured into `log-output`
+        ;; so they end up in export.log alongside the storage logs captured later.
+        log-output (ByteArrayOutputStream.)
+        entities (with-open [_logger (logger/for-ns log-output serialization-logger-prefixes
+                                                    {:additive *additive-logging*})]
+                   (extract/extract opts))]
     (sr/streaming-response {:content-type "application/gzip" :status 200} [output _cancel-chan]
       (sr/set-header! "Content-Disposition"
                       (format "attachment; filename=\"%s.tar.gz\"" export-dirname))
       (let [start  (System/nanoTime)
-            result (serialize-to-stream! output export-dirname entities opts)]
+            result (serialize-to-stream! output export-dirname entities log-output opts)]
         (track-export-event! collection opts start result)))))
 
 ;; TODO (Cam 10/28/25) -- fix this endpoint so it uses kebab-case for query parameters for consistency with the rest
@@ -266,11 +277,8 @@
        ;;      ideally we'd fix the underlying issue (by delaying realtime indexing updates until the tx closes)
        ;;      for now, we let users opt out, in case they're indexing a lot, so they can only reindex on the last step
        [:reindex           {:default true}  (mu/with ms/BooleanValue {:description "Rebuild the search index afterwards"})]]
-   _body
-   {{:strs [file]} :multipart-params, :as _request} :- [:map
-                                                        [:multipart-params
-                                                         [:map
-                                                          ["file" (mu/with ms/File {:description ".tgz with serialization data"})]]]]]
+   {:keys [file]} :- [:map
+                      [:file (mu/with ms/File {:description ".tgz with serialization data"})]]]
   (api/check-superuser)
   (try
     (let [start              (System/nanoTime)
@@ -305,6 +313,30 @@
          :body    (on-response! log-file callback)}))
     (finally
       (io/delete-file (:tempfile file)))))
+
+;;; ----------------------------------- POST /api/ee/serialization/metadata/export -----------------------------------
+
+(api.macros/defendpoint :post "/metadata/export"
+  :- (sr/streaming-response-schema ::schema/export-metadata-response)
+  "Get warehouse metadata (databases, tables, and fields) for all databases visible to the
+  current user. References between rows are emitted as raw numeric ids (`db_id`,
+  `table_id`, `parent_id`, `fk_target_field_id`).
+
+  Sections must be opted into with the `with-databases`, `with-tables`, and `with-fields`
+  query parameters — they all default to `false`. The response is streamed for efficiency
+  with large schemas.
+
+  Requires `View data` → `Can view` and `Create queries` → `Query builder only` (or
+  `Query builder and native`) permissions on each database and table."
+  [_route-params
+   query-params :- [:map
+                    [:with-databases {:default false} [:maybe :boolean]]
+                    [:with-tables    {:default false} [:maybe :boolean]]
+                    [:with-fields    {:default false} [:maybe :boolean]]]]
+  (let [opts (assoc query-params :user-info {:user-id       api/*current-user-id*
+                                             :is-superuser? api/*is-superuser?*})]
+    (sr/streaming-response {:content-type "application/json; charset=utf-8"} [os _]
+      (export/export-metadata! os opts))))
 
 (def ^{:arglists '([request respond raise])} routes
   "`/api/ee/serialization` routes."

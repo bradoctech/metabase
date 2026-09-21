@@ -189,8 +189,9 @@ should_restore_path() {
       ;;
   esac
 
-  # Other fork-diverged paths: restore SP (legacy 61 behavior) unless manual.
-  is_listed "$path" "$LIST_FILE" && return 0
+  # Do NOT restore every BASE…SP drifted path. That reverts legitimate upstream
+  # upgrades (61.x: honey_sql_2/typed? private broke honeysql_guard boot).
+  # Only curated restore-ours + safe asset/docs patterns above.
   return 1
 }
 

@@ -287,7 +287,7 @@ export const DatabasePane = ({
       className={CS.fullHeight}
     >
       <SidebarContent
-        title={databaseData?.name ?? t`Untitled database`}
+        title={databaseData?.name ?? "Untitled Database"}
         icon={"database"}
         onBack={onBack}
         onClose={onClose}

@@ -1,17 +1,20 @@
 (ns metabase.metabot.agent.core-test
   (:require
+   [clojure.string :as str]
    [clojure.test :refer :all]
-   [metabase.analytics.prometheus :as prometheus]
+   [metabase.analytics-interface.core :as analytics]
    [metabase.analytics.snowplow-test :as snowplow-test]
    [metabase.lib.core :as lib]
    [metabase.lib.test-metadata :as meta]
    [metabase.metabot.agent.core :as agent]
    [metabase.metabot.agent.memory :as memory]
-   [metabase.metabot.api :as api]
+   [metabase.metabot.persistence :as metabot.persistence]
    [metabase.metabot.self :as self]
    [metabase.metabot.self.openrouter :as openrouter]
    [metabase.metabot.test-util :as mut]
    [metabase.metabot.tools.search :as metabot-search]
+   [metabase.permissions.core :as perms]
+   [metabase.permissions.models.permissions-group :as perms-group]
    [metabase.test :as mt]))
 
 (set! *warn-on-reflection* true)
@@ -19,9 +22,11 @@
 (def ^:private test-provider "openrouter/anthropic/claude-haiku-4-5")
 
 (defn- run-agent-loop!
-  "run-agent-loop for side effects, discarding results"
+  "run-agent-loop for side effects, discarding results.
+  Runs as admin so the base metabot permission check passes."
   [opts]
-  (reduce (fn [_ _]) nil (agent/run-agent-loop opts)))
+  (mt/as-admin
+    (reduce (fn [_ _]) nil (agent/run-agent-loop opts))))
 
 (deftest has-tool-calls-test
   (testing "detects tool calls in parts"
@@ -35,88 +40,224 @@
     (testing "continues when iteration < max and has tool calls"
       (is (#'agent/should-continue? 0 max-iter [{:type :tool-input}]))
       (is (#'agent/should-continue? 1 max-iter [{:type :tool-input}])))
-
     (testing "continues when text AND tool calls present (LLM thinking aloud)"
       (is (#'agent/should-continue? 0 max-iter [{:type :tool-input}
                                                 {:type :text}]))
       (is (#'agent/should-continue? 0 max-iter [{:type :text}
                                                 {:type :tool-input}])))
-
     (testing "stops at max iterations (1-based: iteration >= max means done)"
       (is (not (#'agent/should-continue? 3 max-iter [{:type :tool-input}])))
       (is (not (#'agent/should-continue? 4 max-iter [{:type :tool-input}]))))
-
     (testing "stops when no tool calls (text-only is final answer)"
       (is (not (#'agent/should-continue? 0 max-iter [{:type :text}])))
       (is (not (#'agent/should-continue? 0 max-iter [{:type :usage}])))
       (is (not (#'agent/should-continue? 0 max-iter []))))))
 
+(defn- tools-registered-for-request!
+  ([capabilities] (tools-registered-for-request! :internal capabilities))
+  ([profile-id capabilities]
+   (let [captured (atom nil)]
+     (mt/with-temporary-setting-values [llm-metabot-provider test-provider]
+       (mt/with-dynamic-fn-redefs [self/call-llm (fn [_model _system _parts tools _tracking-opts _llm-opts]
+                                                   (reset! captured (set (keys tools)))
+                                                   (mut/mock-llm-response [{:type :text :text "Hello"}]))]
+         (into [] (agent/run-agent-loop
+                   {:messages   [{:role :user :content "Open the SQL editor"}]
+                    :state      {}
+                    :profile-id profile-id
+                    :context    {:capabilities capabilities}}))))
+     @captured)))
+
+(deftest client-claimed-sql-capability-is-clamped-to-actual-permissions-test
+  (mt/with-no-data-perms-for-all-users!
+    (perms/set-database-permission! (perms-group/all-users) (mt/id) :perms/view-data :unrestricted)
+    (testing "a query-builder-only user gets no SQL tools even when the request claims the capability"
+      (perms/set-database-permission! (perms-group/all-users) (mt/id) :perms/create-queries :query-builder)
+      (mt/with-current-user (mt/user->id :rasta)
+        (let [tools (tools-registered-for-request! ["permission:write_sql_queries"])]
+          (is (contains? tools "construct_notebook_query"))
+          (is (not (contains? tools "create_sql_query")))
+          (is (not (contains? tools "edit_sql_query")))
+          (is (not (contains? tools "replace_sql_query"))))))
+    (testing "a user with native permission gets the SQL tools for the same request"
+      (perms/set-database-permission! (perms-group/all-users) (mt/id) :perms/create-queries :query-builder-and-native)
+      (mt/with-current-user (mt/user->id :rasta)
+        (let [tools (tools-registered-for-request! ["permission:write_sql_queries"])]
+          (is (contains? tools "create_sql_query"))
+          (is (contains? tools "edit_sql_query"))
+          (is (contains? tools "replace_sql_query")))))))
+
+(deftest document-sql-chart-tool-requires-native-permission-test
+  (mt/with-no-data-perms-for-all-users!
+    (perms/set-database-permission! (perms-group/all-users) (mt/id) :perms/view-data :unrestricted)
+    (testing "a query-builder-only user is offered neither half of the document SQL path"
+      (perms/set-database-permission! (perms-group/all-users) (mt/id) :perms/create-queries :query-builder)
+      (mt/with-current-user (mt/user->id :rasta)
+        (let [tools (tools-registered-for-request! :document-generate-content ["permission:write_sql_queries"])]
+          (is (contains? tools "document_construct_model_chart"))
+          (is (not (contains? tools "document_construct_sql_chart")))
+          ;; leaving this one registered strands the model: its output tells it to call
+          ;; document_construct_sql_chart, which is not in its tool set, under :required-tool-call?
+          (is (not (contains? tools "document_schema_collect"))))))
+    (testing "a user with native permission is offered both document chart tools"
+      (perms/set-database-permission! (perms-group/all-users) (mt/id) :perms/create-queries :query-builder-and-native)
+      (mt/with-current-user (mt/user->id :rasta)
+        (let [tools (tools-registered-for-request! :document-generate-content ["permission:write_sql_queries"])]
+          (is (contains? tools "document_construct_model_chart"))
+          (is (contains? tools "document_construct_sql_chart"))
+          (is (contains? tools "document_schema_collect")))))))
+
+(deftest terminal-error-message-test
+  (let [denial [{:type :tool-input :id "a" :function "create_sql_query"}
+                {:type :tool-output :id "a" :result {:output "No native permission."
+                                                     :terminal-error? true}}]]
+    (testing "reads the message off a tool result marked terminal"
+      (is (= "No native permission." (#'agent/terminal-error-message denial))))
+    (testing "an ordinary tool failure is not terminal"
+      (is (nil? (#'agent/terminal-error-message
+                 [{:type :tool-output :id "b" :result {:output "syntax error"}}]))))
+    (testing "a terminal marker with no message yields nil so no empty text part is emitted"
+      (is (nil? (#'agent/terminal-error-message
+                 [{:type :tool-output :id "c" :result {:output "" :terminal-error? true}}]))))
+    (testing "the first denial wins when an iteration produces several"
+      (is (= "first" (#'agent/terminal-error-message
+                      [{:type :tool-output :id "a" :result {:output "first" :terminal-error? true}}
+                       {:type :tool-output :id "b" :result {:output "second" :terminal-error? true}}]))))
+    (testing "should-continue? is unaffected — the gate lives in loop-step, per profile"
+      (is (#'agent/should-continue? 0 20 denial)))))
+
+(defn- run-sql-denial-turn!
+  "Run one turn whose first LLM response calls `create_sql_query` against `database-id`."
+  [profile-id database-id]
+  (let [call-count (atom 0)]
+    (mt/with-temporary-setting-values [llm-metabot-provider test-provider]
+      ;; the tool executor lives inside `call-llm`, so redef the transport to let the tool run
+      (mt/with-dynamic-fn-redefs [openrouter/openrouter (fn [_]
+                                                          (if (= 1 (swap! call-count inc))
+                                                            (mut/mock-llm-response
+                                                             [{:type      :tool-input
+                                                               :id        "t1"
+                                                               :function  "create_sql_query"
+                                                               :arguments {:database_id database-id
+                                                                           :sql_query   "SELECT 1"}}])
+                                                            (mut/mock-llm-response [{:type :text :text "Sorry."}])))]
+        (let [parts (into [] (agent/run-agent-loop
+                              {:messages   [{:role :user :content "Query that database"}]
+                               :state      {}
+                               :profile-id profile-id
+                               :context    {:capabilities    ["permission:write_sql_queries"]
+                                            :user_is_viewing [{:type    "code_editor"
+                                                               :buffers [{:id "buf-1"}]}]}}))]
+          {:llm-calls @call-count :parts parts})))))
+
+(deftest permission-denial-ends-a-forced-tool-call-turn-test
+  (mt/with-temp [:model/Database {native-db :id}     {:engine :h2}
+                 :model/Database {builder-db :id}    {:engine :h2}
+                 :model/Database {unreadable-db :id} {:engine :h2}]
+    (mt/with-no-data-perms-for-all-users!
+      (doseq [db-id [native-db builder-db unreadable-db]]
+        (perms/set-database-permission! (perms-group/all-users) db-id :perms/view-data :unrestricted))
+      ;; native on one database keeps the capability, so the denial can only happen per call
+      (perms/set-database-permission! (perms-group/all-users) native-db :perms/create-queries :query-builder-and-native)
+      (perms/set-database-permission! (perms-group/all-users) builder-db :perms/create-queries :query-builder)
+      (perms/set-database-permission! (perms-group/all-users) unreadable-db :perms/create-queries :no)
+      (mt/with-current-user (mt/user->id :rasta)
+        (testing ":sql forbids the model from answering in text, so the loop stops on the denial"
+          (let [{:keys [llm-calls parts]} (run-sql-denial-turn! :sql builder-db)]
+            (is (= 1 llm-calls)
+                "one call, not the profile's 20 iterations")
+            (is (some #(and (= :text (:type %))
+                            (str/includes? (:text %) "do not have permission"))
+                      parts)
+                "the refusal is emitted as assistant text — a tool result is not rendered to the user")
+            (is (some #(= :data (:type %)) parts)
+                "state data part still closes the turn")))
+        (testing ":internal lets the model explain the denial itself, so the loop continues"
+          (let [{:keys [llm-calls parts]} (run-sql-denial-turn! :internal builder-db)]
+            (is (= 2 llm-calls))
+            (is (not-any? #(and (= :text (:type %))
+                                (str/includes? (str (:text %)) "do not have permission"))
+                          parts)
+                "no canned text — the model's own wording is used")))
+        (testing "a database the user cannot read at all stops the turn the same way"
+          (let [{:keys [llm-calls parts]} (run-sql-denial-turn! :sql unreadable-db)]
+            (is (= 1 llm-calls)
+                "the read-check denial is terminal too -- otherwise the stricter permission loops")
+            (is (some #(and (= :text (:type %))
+                            (str/includes? (:text %) "do not have access to this database"))
+                      parts))))
+        (testing "a database the user can query natively is not denied"
+          (let [{:keys [llm-calls parts]} (run-sql-denial-turn! :sql native-db)]
+            (is (= 2 llm-calls)
+                "the tool succeeds, so the loop continues to the model's next response")
+            (is (not-any? #(and (= :text (:type %))
+                                (str/includes? (str (:text %)) "do not have"))
+                          parts))))))))
+
 (deftest run-agent-loop-with-mock-test
-  (mt/with-temporary-setting-values [llm-metabot-provider test-provider]
-    (testing "runs agent loop with mocked LLM returning text"
-      (with-redefs [openrouter/openrouter (fn [_]
-                                            (mut/mock-llm-response
-                                             [{:type :text :text "Hello"}]))]
-        (let [result (into [] (agent/run-agent-loop
-                               {:messages   [{:role :user :content "Hi"}]
-                                :state      {}
-                                :profile-id :embedding_next
-                                :context    {}}))]
-        ;; Should get parts + state data
-        ;; Note: :finish is not emitted as a part; it's handled by aisdk-line-xf completion
-          (is (pos? (count result)))
-        ;; Should have state data (final part)
-          (is (some #(= :data (:type %)) result)))))
-
-    (testing "sql profile requests required tool choice"
-      (let [captured (atom nil)]
-        (with-redefs [self/call-llm (fn [_model _system _parts _tools _tracking-opts llm-opts]
-                                      (reset! captured llm-opts)
-                                      (mut/mock-llm-response
-                                       [{:type :text :text "Hello"}]))]
-          (into [] (agent/run-agent-loop
-                    {:messages   [{:role :user :content "Hi"}]
-                     :state      {}
-                     :profile-id :sql
-                     :context    {}}))
-          (is (= {:tool-choice "required"} @captured)))))
-
-    (testing "runs agent loop with tool execution"
-      (let [call-count (atom 0)]
+  (mt/as-admin
+    (mt/with-temporary-setting-values [llm-metabot-provider test-provider]
+      (testing "runs agent loop with mocked LLM returning text"
         (with-redefs [openrouter/openrouter (fn [_]
-                                            ;; First call returns tool-input, second returns text
-                                              (let [n (swap! call-count inc)]
-                                                (if (= 1 n)
-                                                  (mut/mock-llm-response
-                                                   [{:type      :tool-input
-                                                     :id        "t1"
-                                                     :function  "search"
-                                                     :arguments {:query "test"}}])
-                                                  (mut/mock-llm-response
-                                                   [{:type :text :text "Found results"}]))))]
+                                              (mut/mock-llm-response
+                                               [{:type :text :text "Hello"}]))]
           (let [result (into [] (agent/run-agent-loop
-                                 {:messages   [{:role :user :content "Search for test"}]
-                                  :state      {}
-                                  :profile-id :embedding_next
-                                  :context    {}}))]
-          ;; Should complete successfully
-            (is (pos? (count result)))
-          ;; Should have state data (final part)
-            (is (some #(= :data (:type %)) result))
-          ;; Should have tool-related parts
-            (is (some #(= :tool-input (:type %)) result))))))
-
-    (testing "handles errors gracefully"
-      (with-redefs [openrouter/openrouter (fn [_]
-                                            (throw (ex-info "Mock error" {})))]
-        (let [result (mt/with-log-level [metabase.metabot.agent.core :fatal]
-                       (into [] (agent/run-agent-loop
                                  {:messages   [{:role :user :content "Hi"}]
                                   :state      {}
                                   :profile-id :embedding_next
-                                  :context    {}})))]
-        ;; Should get error message
-          (is (some #(= :error (:type %)) result)))))))
+                                  :context    {}}))]
+            ;; Should get parts + state data
+            ;; Note: :finish is not emitted as a part; it's handled by aisdk-line-xf completion
+            (is (pos? (count result)))
+            ;; Should have state data (final part)
+            (is (some #(= :data (:type %)) result)))))
+      (testing "sql profile requests required tool choice"
+        (let [captured (atom nil)]
+          (with-redefs [self/call-llm (fn [_model _system _parts _tools _tracking-opts llm-opts]
+                                        (reset! captured llm-opts)
+                                        (mut/mock-llm-response
+                                         [{:type :text :text "Hello"}]))]
+            (into [] (agent/run-agent-loop
+                      {:messages   [{:role :user :content "Hi"}]
+                       :state      {}
+                       :profile-id :sql
+                       :context    {}}))
+            (is (= {:tool-choice "required"} @captured)))))
+      (testing "runs agent loop with tool execution"
+        (let [call-count (atom 0)]
+          (with-redefs [openrouter/openrouter (fn [_]
+                                                ;; First call returns tool-input, second returns text
+                                                (let [n (swap! call-count inc)]
+                                                  (if (= 1 n)
+                                                    (mut/mock-llm-response
+                                                     [{:type      :tool-input
+                                                       :id        "t1"
+                                                       :function  "search"
+                                                       :arguments {:query "test"}}])
+                                                    (mut/mock-llm-response
+                                                     [{:type :text :text "Found results"}]))))]
+            (let [result (into [] (agent/run-agent-loop
+                                   {:messages   [{:role :user :content "Search for test"}]
+                                    :state      {}
+                                    :profile-id :embedding_next
+                                    :context    {}}))]
+              ;; Should complete successfully
+              (is (pos? (count result)))
+              ;; Should have state data (final part)
+              (is (some #(= :data (:type %)) result))
+              ;; Should have tool-related parts
+              (is (some #(= :tool-input (:type %)) result))))))
+      (testing "handles errors gracefully"
+        (with-redefs [openrouter/openrouter (fn [_]
+                                              (throw (ex-info "Mock error" {})))]
+          (let [result (mt/with-log-level [metabase.metabot.agent.core :fatal]
+                         (into [] (agent/run-agent-loop
+                                   {:messages   [{:role :user :content "Hi"}]
+                                    :state      {}
+                                    :profile-id :embedding_next
+                                    :context    {}})))]
+            ;; Should get error message
+            (is (some #(= :error (:type %)) result))))))))
 
 ;; Note: build-messages-for-llm is now internal to call-llm
 ;; Message building is tested via messages_test.clj
@@ -128,14 +269,12 @@
                                       :query {:database 1 :type :query :query {:source-table 1}}}]}
           seeded (#'agent/seed-state {} context)]
       (is (contains? (get seeded :queries) "query-123"))))
-
   (testing "does not seed native SQL string queries"
     (let [context {:user_is_viewing [{:type "native"
                                       :id "query-456"
                                       :query "SELECT * FROM users"}]}
           seeded (#'agent/seed-state {} context)]
       (is (empty? (get seeded :queries)))))
-
   (testing "ignores viewing items without ids or queries"
     (let [context {:user_is_viewing [{:type "native" :query {:database 1}}
                                      {:type "adhoc" :id "no-query"}]}
@@ -147,24 +286,25 @@
 ;; Here we test the full agent loop behavior.
 
 (deftest integration-run-agent-loop-test
-  (mt/with-temporary-setting-values [llm-metabot-provider test-provider]
-    (testing "runs full agent loop without external calls"
-      (with-redefs [openrouter/openrouter (fn [_]
-                                            (mut/mock-llm-response
-                                             [{:type :text :text "Test response"}]))]
-        (let [result (into [] (agent/run-agent-loop
-                               {:messages   [{:role :user :content "Hello"}]
-                                :state      {}
-                                :profile-id :embedding_next
-                                :context    {}}))]
-        ;; Verify basic structure
-          (is (pos? (count result)))
-        ;; Should have text part
-          (is (some #(= :text (:type %)) result))
-        ;; Should have state data part (finish is handled by aisdk-line-xf, not emitted as part)
-          (is (some #(and (= :data (:type %))
-                          (map? (:data %)))
-                    result)))))))
+  (mt/as-admin
+    (mt/with-temporary-setting-values [llm-metabot-provider test-provider]
+      (testing "runs full agent loop without external calls"
+        (with-redefs [openrouter/openrouter (fn [_]
+                                              (mut/mock-llm-response
+                                               [{:type :text :text "Test response"}]))]
+          (let [result (into [] (agent/run-agent-loop
+                                 {:messages   [{:role :user :content "Hello"}]
+                                  :state      {}
+                                  :profile-id :embedding_next
+                                  :context    {}}))]
+            ;; Verify basic structure
+            (is (pos? (count result)))
+            ;; Should have text part
+            (is (some #(= :text (:type %)) result))
+            ;; Should have state data part (finish is handled by aisdk-line-xf, not emitted as part)
+            (is (some #(and (= :data (:type %))
+                            (map? (:data %)))
+                      result))))))))
 
 ;;; Query and Chart extraction tests
 
@@ -180,7 +320,6 @@
           memory {:state {:queries {} :charts {}}}
           updated (#'agent/extract-queries memory parts)]
       (is (= query (get-in (memory/get-state updated) [:queries "q-123"])))))
-
   (testing "ignores parts without structured-output"
     (let [parts [{:type :tool-output
                   :id "t1"
@@ -189,7 +328,6 @@
           memory {:state {:queries {} :charts {}}}
           updated (#'agent/extract-queries memory parts)]
       (is (empty? (:queries (memory/get-state updated))))))
-
   (testing "ignores non-tool-output parts"
     (let [parts [{:type :text :text "hello"}
                  {:type :tool-input :id "t1" :function "search"}]
@@ -248,197 +386,196 @@
           (mut/mock-llm-response [{:type :text :text ""}]))))))
 
 (deftest integration-search-query-chart-flow-test
-  (mt/with-temporary-setting-values [llm-metabot-provider test-provider]
-    (testing "Scenario 1: Search → Query → Chart (multi-turn happy path)"
-    ;; User asks: "Show me the first 10 orders"
-    ;; - Iteration 1: LLM calls search tool to find orders table
-    ;; - Iteration 2: LLM calls construct_notebook_query to create a raw query
-    ;; - Iteration 3: LLM returns text with chart link
-    ;;
-    ;; We use real tools with only the search backend and LLM mocked.
-    ;; The construct_notebook_query tool runs real query construction against test DB.
-    ;; We use a simple "raw" query type that doesn't require field IDs.
-      (mt/with-current-user (mt/user->id :crowberto)
-        (let [orders-table-id (mt/id :orders)
-            ;; Track LLM calls
-              llm-call-count  (atom 0)
-            ;; Scripted LLM responses - uses real table ID from test DB
-              llm-responses
-              [;; Iteration 1: Search for orders table
-               [{:type :start :id "msg-1"}
-                {:type      :tool-input
-                 :id        "call-search-1"
-                 :function  "search"
-                 :arguments {:semantic_queries ["orders table"]
-                             :keyword_queries  ["orders"]
-                             :entity_types     ["table"]}}
-                {:type :usage :usage {:promptTokens 100 :completionTokens 20} :model "test" :id "msg-1"}]
-             ;; Iteration 2: Construct a simple raw query (no fields/aggregations = select all)
-               [{:type :start :id "msg-2"}
-                {:type      :tool-input
-                 :id        "call-construct-1"
-                 :function  "construct_notebook_query"
-                 :arguments {:reasoning     "User wants to see orders"
-                             :query         {:query_type "raw"
-                                             :source     {:table_id orders-table-id}
-                                             :filters    []
-                                             :fields     []
-                                             :order_by   []
-                                             :limit      10}
-                             :visualization {:chart_type "table"}}}
-                {:type :usage :usage {:promptTokens 200 :completionTokens 30} :model "test" :id "msg-2"}]
-             ;; Iteration 3: Final text response
-               [{:type :start :id "msg-3"}
-                {:type :text
-                 :text "Here are the first 10 orders from the orders table."}
-                {:type :usage :usage {:promptTokens 300 :completionTokens 10} :model "test" :id "msg-3"}]]]
-        ;; Mock only openrouter/openrouter (LLM) and metabot-search/search (search backend)
-        ;; Everything else runs real code
-          (with-redefs [openrouter/openrouter           (fn [_opts]
-                                                          (let [n (swap! llm-call-count inc)]
-                                                            (mut/mock-llm-response (get llm-responses (dec n) []))))
-                        metabot-search/search (fn [_args]
-                                                [{:id           orders-table-id
-                                                  :type         "table"
-                                                  :name         "orders"
-                                                  :display_name "Orders"
-                                                  :description  "This is a confirmed order for a product from a user."
-                                                  :database_id  (mt/id)}])]
-            (testing "Should successfully go through 3 iterations"
-              (is (=? [{:type :start}
-                       {:type :tool-input :function "search"}
-                     ;; Cumulative usage after iteration 1: 100 prompt, 20 completion
-                       {:type :usage :usage {:promptTokens 100 :completionTokens 20}}
-                       {:type     :tool-output
-                        :function "search"
-                        :result   {:structured-output {:total_count 1}}}
-                       {:type :start}
-                       {:type :tool-input :function "construct_notebook_query"}
-                     ;; Cumulative usage after iteration 2: 100+200=300 prompt, 20+30=50 completion
-                       {:type :usage :usage {:promptTokens 300 :completionTokens 50}}
-                     ;; references real db id
-                       {:type     :tool-output
-                        :function "construct_notebook_query"
-                        :result   {:structured-output {:query {:database (mt/id)}}}}
-                       {:type :data :data-type "navigate_to"}
-                       {:type :start}
-                     ;; has final text part
-                       {:type :text}
-                     ;; Cumulative usage after iteration 3: 300+300=600 prompt, 50+10=60 completion
-                       {:type :usage :usage {:promptTokens 600 :completionTokens 60}}
-                       {:type      :data
-                        :data-type "state"
-                        :data      {:queries map?
-                                    :charts  map?}}]
-                      (mt/with-log-level [metabase.metabot.agent.core :warn]
-                        (into [] (#'api/combine-text-parts-xf)
-                              (agent/run-agent-loop
-                               {:messages   [{:role    :user
-                                              :content "Show me the first 10 orders"}]
-                                :state      {}
-                                :profile-id :internal
-                                :context    {}}))))))
-            (testing "should complete 3 LLM iterations"
-              (is (= 3 @llm-call-count)
-                  "Should have exactly 3 LLM calls (search, construct, final text)"))))))))
+  (mt/as-admin
+    (mt/with-temporary-setting-values [llm-metabot-provider test-provider]
+      (testing "Scenario 1: Search → Query → Chart (multi-turn happy path)"
+        ;; User asks: "Show me the first 10 orders"
+        ;; - Iteration 1: LLM calls search tool to find orders table
+        ;; - Iteration 2: LLM calls construct_notebook_query to create a raw query
+        ;; - Iteration 3: LLM returns text with chart link
+        ;;
+        ;; We use real tools with only the search backend and LLM mocked.
+        ;; The construct_notebook_query tool runs real query construction against test DB.
+        ;; We use a simple "raw" query type that doesn't require field IDs.
+        (mt/with-current-user (mt/user->id :crowberto)
+          (let [orders-table-id (mt/id :orders)
+                ;; Track LLM calls
+                llm-call-count  (atom 0)
+                ;; Scripted LLM responses - uses real table ID from test DB
+                llm-responses
+                [;; Iteration 1: Search for orders table
+                 [{:type :start :id "msg-1"}
+                  {:type      :tool-input
+                   :id        "call-search-1"
+                   :function  "search"
+                   :arguments {:semantic_queries ["orders table"]
+                               :keyword_queries  ["orders"]
+                               :entity_types     ["table"]}}
+                  {:type :usage :usage {:promptTokens 100 :completionTokens 20} :model "test" :id "msg-1"}]
+                 ;; Iteration 2: Construct a simple query via agent-lib program
+                 [{:type :start :id "msg-2"}
+                  {:type      :tool-input
+                   :id        "call-construct-1"
+                   :function  "construct_notebook_query"
+                   :arguments {:reasoning     "User wants to see orders"
+                               :source_entity {:type "table" :id orders-table-id}
+                               :program       {:source     {:type "table" :id orders-table-id}
+                                               :operations [["limit" 10]]}
+                               :visualization {:chart_type "table"}}}
+                  {:type :usage :usage {:promptTokens 200 :completionTokens 30} :model "test" :id "msg-2"}]
+                 ;; Iteration 3: Final text response
+                 [{:type :start :id "msg-3"}
+                  {:type :text
+                   :text "Here are the first 10 orders from the orders table."}
+                  {:type :usage :usage {:promptTokens 300 :completionTokens 10} :model "test" :id "msg-3"}]]]
+            ;; Mock only openrouter/openrouter (LLM) and metabot-search/search (search backend)
+            ;; Everything else runs real code
+            (with-redefs [openrouter/openrouter           (fn [_opts]
+                                                            (let [n (swap! llm-call-count inc)]
+                                                              (mut/mock-llm-response (get llm-responses (dec n) []))))
+                          metabot-search/search (fn [_args]
+                                                  [{:id           orders-table-id
+                                                    :type         "table"
+                                                    :name         "orders"
+                                                    :display_name "Orders"
+                                                    :description  "This is a confirmed order for a product from a user."
+                                                    :database_id  (mt/id)}])]
+              (testing "Should successfully go through 3 iterations"
+                (is (=? [{:type :start}
+                         {:type :tool-input :function "search"}
+                         ;; Cumulative usage after iteration 1: 100 prompt, 20 completion
+                         {:type :usage :usage {:promptTokens 100 :completionTokens 20}}
+                         {:type     :tool-output
+                          :function "search"
+                          :result   {:structured-output {:total_count 1}}}
+                         {:type :start}
+                         {:type :tool-input :function "construct_notebook_query"}
+                         ;; Cumulative usage after iteration 2: 100+200=300 prompt, 20+30=50 completion
+                         {:type :usage :usage {:promptTokens 300 :completionTokens 50}}
+                         ;; references real db id
+                         {:type     :tool-output
+                          :function "construct_notebook_query"
+                          :result   {:structured-output {:query {:database (mt/id)}}}}
+                         {:type :data :data-type "navigate_to"}
+                         {:type :start}
+                         ;; has final text part
+                         {:type :text}
+                         ;; Cumulative usage after iteration 3: 300+300=600 prompt, 50+10=60 completion
+                         {:type :usage :usage {:promptTokens 600 :completionTokens 60}}
+                         {:type      :data
+                          :data-type "state"
+                          :data      {:queries map?
+                                      :charts  map?}}]
+                        (mt/with-log-level [metabase.metabot.agent.core :warn]
+                          (into [] (metabot.persistence/combine-text-parts-xf)
+                                (agent/run-agent-loop
+                                 {:messages   [{:role    :user
+                                                :content "Show me the first 10 orders"}]
+                                  :state      {}
+                                  :profile-id :internal
+                                  :context    {}}))))))
+              (testing "should complete 3 LLM iterations"
+                (is (= 3 @llm-call-count)
+                    "Should have exactly 3 LLM calls (search, construct, final text)")))))))))
 
 (deftest cumulative-usage-test
-  (mt/with-temporary-setting-values [llm-metabot-provider test-provider]
-    (testing "usage parts are cumulative across agent loop iterations"
-      (let [call-count (atom 0)]
-        (with-redefs [openrouter/openrouter
-                      (fn [_]
-                        (let [n (swap! call-count inc)]
-                          (case (int n)
-                            ;; Iteration 1: tool call with usage
-                            1 (mut/mock-llm-response
-                               [{:type :start :id "msg-1"}
-                                {:type      :tool-input
-                                 :id        "t1"
-                                 :function  "search"
-                                 :arguments {:query "test"}}
-                                {:type :usage :usage {:promptTokens 100 :completionTokens 20}
-                                 :model "gpt-4" :id "msg-1"}])
-                            ;; Iteration 2: text response with usage
-                            (mut/mock-llm-response
-                             [{:type :start :id "msg-2"}
-                              {:type :text :text "Done"}
-                              {:type :usage :usage {:promptTokens 150 :completionTokens 30}
-                               :model "gpt-4" :id "msg-2"}]))))]
-          (let [result (mt/with-log-level [metabase.metabot.agent.core :warn]
-                         (into [] (agent/run-agent-loop
-                                   {:messages   [{:role :user :content "test"}]
-                                    :state      {}
-                                    :profile-id :embedding_next
-                                    :context    {}})))
-                usages (filterv #(= :usage (:type %)) result)]
-            (testing "should have two usage parts (one per iteration)"
-              (is (= 2 (count usages))))
-            (testing "first usage is from iteration 1 only"
-              (is (= {:promptTokens 100 :completionTokens 20}
-                     (:usage (first usages)))))
-            (testing "second usage is cumulative (iteration 1 + 2)"
-              (is (= {:promptTokens 250 :completionTokens 50}
-                     (:usage (second usages)))))))))
-
-    (testing "cumulative usage works across multiple models"
-      (let [call-count (atom 0)]
-        (with-redefs [openrouter/openrouter
-                      (fn [_]
-                        (let [n (swap! call-count inc)]
-                          (case (int n)
-                            1 (mut/mock-llm-response
-                               [{:type :start :id "msg-1"}
-                                {:type      :tool-input
-                                 :id        "t1"
-                                 :function  "search"
-                                 :arguments {:query "test"}}
-                                {:type :usage :usage {:promptTokens 100 :completionTokens 20}
-                                 :model "model-a" :id "msg-1"}])
-                            (mut/mock-llm-response
-                             [{:type :start :id "msg-2"}
-                              {:type :text :text "Done"}
-                              {:type :usage :usage {:promptTokens 200 :completionTokens 40}
-                               :model "model-b" :id "msg-2"}]))))]
-          (let [result (mt/with-log-level [metabase.metabot.agent.core :warn]
-                         (into [] (agent/run-agent-loop
-                                   {:messages   [{:role :user :content "test"}]
-                                    :state      {}
-                                    :profile-id :embedding_next
-                                    :context    {}})))
-                usages (filterv #(= :usage (:type %)) result)]
-            (testing "model is always the canonical provider-and-model from the profile"
-              (is (= test-provider (:model (first usages))))
-              (is (= test-provider (:model (second usages)))))
-            (testing "usage accumulates under the single provider key"
-              (is (= {:promptTokens 100 :completionTokens 20}
-                     (:usage (first usages))))
-              (is (= {:promptTokens 300 :completionTokens 60}
-                     (:usage (second usages)))))))))))
+  (mt/as-admin
+    (mt/with-temporary-setting-values [llm-metabot-provider test-provider]
+      (testing "usage parts are cumulative across agent loop iterations"
+        (let [call-count (atom 0)]
+          (with-redefs [openrouter/openrouter
+                        (fn [_]
+                          (let [n (swap! call-count inc)]
+                            (case (int n)
+                              ;; Iteration 1: tool call with usage
+                              1 (mut/mock-llm-response
+                                 [{:type :start :id "msg-1"}
+                                  {:type      :tool-input
+                                   :id        "t1"
+                                   :function  "search"
+                                   :arguments {:query "test"}}
+                                  {:type :usage :usage {:promptTokens 100 :completionTokens 20}
+                                   :model "gpt-4" :id "msg-1"}])
+                              ;; Iteration 2: text response with usage
+                              (mut/mock-llm-response
+                               [{:type :start :id "msg-2"}
+                                {:type :text :text "Done"}
+                                {:type :usage :usage {:promptTokens 150 :completionTokens 30}
+                                 :model "gpt-4" :id "msg-2"}]))))]
+            (let [result (mt/with-log-level [metabase.metabot.agent.core :warn]
+                           (into [] (agent/run-agent-loop
+                                     {:messages   [{:role :user :content "test"}]
+                                      :state      {}
+                                      :profile-id :embedding_next
+                                      :context    {}})))
+                  usages (filterv #(= :usage (:type %)) result)]
+              (testing "should have two usage parts (one per iteration)"
+                (is (= 2 (count usages))))
+              (testing "first usage is from iteration 1 only"
+                (is (= {:promptTokens 100 :completionTokens 20}
+                       (:usage (first usages)))))
+              (testing "second usage is cumulative (iteration 1 + 2)"
+                (is (= {:promptTokens 250 :completionTokens 50}
+                       (:usage (second usages)))))))))
+      (testing "cumulative usage works across multiple models"
+        (let [call-count (atom 0)]
+          (with-redefs [openrouter/openrouter
+                        (fn [_]
+                          (let [n (swap! call-count inc)]
+                            (case (int n)
+                              1 (mut/mock-llm-response
+                                 [{:type :start :id "msg-1"}
+                                  {:type      :tool-input
+                                   :id        "t1"
+                                   :function  "search"
+                                   :arguments {:query "test"}}
+                                  {:type :usage :usage {:promptTokens 100 :completionTokens 20}
+                                   :model "model-a" :id "msg-1"}])
+                              (mut/mock-llm-response
+                               [{:type :start :id "msg-2"}
+                                {:type :text :text "Done"}
+                                {:type :usage :usage {:promptTokens 200 :completionTokens 40}
+                                 :model "model-b" :id "msg-2"}]))))]
+            (let [result (mt/with-log-level [metabase.metabot.agent.core :warn]
+                           (into [] (agent/run-agent-loop
+                                     {:messages   [{:role :user :content "test"}]
+                                      :state      {}
+                                      :profile-id :embedding_next
+                                      :context    {}})))
+                  usages (filterv #(= :usage (:type %)) result)]
+              (testing "model is always the canonical provider-and-model from the profile"
+                (is (= test-provider (:model (first usages))))
+                (is (= test-provider (:model (second usages)))))
+              (testing "usage accumulates under the single provider key"
+                (is (= {:promptTokens 100 :completionTokens 20}
+                       (:usage (first usages))))
+                (is (= {:promptTokens 300 :completionTokens 60}
+                       (:usage (second usages))))))))))))
 
 (deftest run-agent-loop-retries-on-rate-limit-test
-  (mt/with-temporary-setting-values [llm-metabot-provider test-provider]
-    (testing "agent loop retries when LLM returns 429 and then succeeds"
-      (let [call-count (atom 0)]
-        (with-redefs [self/retry-delay-ms   (constantly 0)
-                      openrouter/openrouter (fn [_]
-                                              (if (< (swap! call-count inc) 2)
-                                                (throw (ex-info "Anthropic API has rate limited us"
-                                                                {:status 429 :api-error true}))
-                                                (mut/mock-llm-response
-                                                 [{:type :text :text "Hello after retry"}])))]
-          (is (=? [{:type :text :text "Hello after retry"}
-                   {:type :data :data-type "state"}]
-                  (mt/with-log-level [metabase.metabot.self :fatal]
-                    (into [] (#'api/combine-text-parts-xf)
-                          (agent/run-agent-loop
-                           {:messages   [{:role :user :content "Hi"}]
-                            :state      {}
-                            :profile-id :embedding_next
-                            :context    {}}))))
-              "Should get the response from the successful retry")
-          (is (= 2 @call-count)
-              "Should have called LLM twice (1 failure + 1 success"))))))
+  (mt/as-admin
+    (mt/with-temporary-setting-values [llm-metabot-provider test-provider]
+      (testing "agent loop retries when LLM returns 429 and then succeeds"
+        (let [call-count (atom 0)]
+          (with-redefs [self/retry-delay-ms   (constantly 0)
+                        openrouter/openrouter (fn [_]
+                                                (if (< (swap! call-count inc) 2)
+                                                  (throw (ex-info "Anthropic API has rate limited us"
+                                                                  {:status 429 :api-error true}))
+                                                  (mut/mock-llm-response
+                                                   [{:type :text :text "Hello after retry"}])))]
+            (is (=? [{:type :text :text "Hello after retry"}
+                     {:type :data :data-type "state"}]
+                    (mt/with-log-level [metabase.metabot.self :fatal]
+                      (into [] (metabot.persistence/combine-text-parts-xf)
+                            (agent/run-agent-loop
+                             {:messages   [{:role :user :content "Hi"}]
+                              :state      {}
+                              :profile-id :embedding_next
+                              :context    {}}))))
+                "Should get the response from the successful retry")
+            (is (= 2 @call-count)
+                "Should have called LLM twice (1 failure + 1 success")))))))
 
 ;;; ===================== Prometheus Metrics Tests =====================
 
@@ -476,14 +613,12 @@
                                            {:profile-id "internal"}))))
         (is (pos? (:sum (mt/metric-value system :metabase-metabot/agent-duration-ms
                                          {:profile-id "internal"})))))
-
-    ;; clear! is much faster than a new mt/with-prometheus-system!
-      (prometheus/clear! :metabase-metabot/agent-requests)
-      (prometheus/clear! :metabase-metabot/agent-iterations)
-      (prometheus/clear! :metabase-metabot/agent-errors)
-      (prometheus/clear! :metabase-metabot/agent-duration-ms)
-      (prometheus/clear! :metabase-metabot/llm-requests)
-
+      ;; clear! is much faster than a new mt/with-prometheus-system!
+      (analytics/clear! :metabase-metabot/agent-requests)
+      (analytics/clear! :metabase-metabot/agent-iterations)
+      (analytics/clear! :metabase-metabot/agent-errors)
+      (analytics/clear! :metabase-metabot/agent-duration-ms)
+      (analytics/clear! :metabase-metabot/llm-requests)
       (testing "records agent-errors on failure"
         (with-redefs [openrouter/openrouter (fn [_] (throw (ex-info "boom" {})))]
           (mt/with-log-level [metabase.metabot.agent.core :fatal]
@@ -541,7 +676,7 @@
                                   :context         {}
                                   :profile-id      :internal
                                   :tracking-opts   {:session-id "00000000-0000-0000-0000-000000000001"}})
-              ;; The collector also contains token_usage events; filter for just ai_service_events.
+                ;; The collector also contains token_usage events; filter for just ai_service_events.
                 (let [events (snowplow-test/pop-event-data-and-user-id!)
                       tool-events (filter #(= "agent_used_tool" (get-in % [:data "event"])) events)]
                   (is (=? [{:user-id (str rasta-id)
@@ -554,7 +689,6 @@
                                       "event_details" {"tool_name" "search"
                                                        "step"      1}}}]
                           tool-events)))))))))
-
     (testing "fires 'agent_used_tool' with result=error when tool fails"
       (let [call-count (atom 0)
             rasta-id   (mt/user->id :rasta)]
@@ -621,7 +755,7 @@
                                   :context         {}
                                   :profile-id      :internal
                                   :tracking-opts   {:session-id "00000000-0000-0000-0000-000000000001"}})
-              ;; Filter for just token_usage events (other events may also be present)
+                ;; Filter for just token_usage events (other events may also be present)
                 (let [events       (snowplow-test/pop-event-data-and-user-id!)
                       token-events (filter #(contains? (:data %) "total_tokens") events)]
                   (is (=? [{:user-id (str rasta-id)
@@ -676,3 +810,41 @@
       (is (every? string? (keys chart-configs)))
       (is (=? {chart-configs-key chart-config}
               chart-configs)))))
+
+;;; ──────────────────────────────────────────────────────────────────
+;;; Profile permission checks
+;;; ──────────────────────────────────────────────────────────────────
+
+(deftest check-metabot-access-test
+  (let [check! #'agent/check-metabot-access!]
+    (testing "base metabot permission"
+      (testing "metabot :no blocks any profile"
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"permission"
+                              (check! :internal {:permission/metabot :no})))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"permission"
+                              (check! :sql {:permission/metabot :no})))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"permission"
+                              (check! :slackbot {:permission/metabot :no})))
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"permission"
+                              (check! :embedding_next {:permission/metabot :no}))))
+      (testing "metabot :yes allows non-gated profiles"
+        (is (nil? (check! :internal {:permission/metabot :yes})))
+        (is (nil? (check! :slackbot {:permission/metabot :yes})))
+        (is (nil? (check! :embedding_next {:permission/metabot :yes})))))
+    (testing "profile-specific permissions (with metabot :yes)"
+      (testing "sql profile"
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"permission"
+                              (check! :sql {:permission/metabot :yes :permission/metabot-sql-generation :no})))
+        (is (check! :sql {:permission/metabot :yes :permission/metabot-sql-generation :yes})))
+      (testing "nlq profile"
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"permission"
+                              (check! :nlq {:permission/metabot :yes :permission/metabot-nlq :no})))
+        (is (check! :nlq {:permission/metabot :yes :permission/metabot-nlq :yes})))
+      (testing "transforms_codegen profile"
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"permission"
+                              (check! :transforms_codegen {:permission/metabot :yes :permission/metabot-sql-generation :no})))
+        (is (check! :transforms_codegen {:permission/metabot :yes :permission/metabot-sql-generation :yes})))
+      (testing "document-generate-content profile"
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"permission"
+                              (check! :document-generate-content {:permission/metabot :yes :permission/metabot-other-tools :no})))
+        (is (check! :document-generate-content {:permission/metabot :yes :permission/metabot-other-tools :yes}))))))

@@ -3,9 +3,9 @@ import { useCallback } from "react";
 import { t } from "ttag";
 
 import { useIsSmallScreen } from "metabase/common/hooks/use-is-small-screen";
-import { METAKEY } from "metabase/lib/browser";
 import S from "metabase/nav/components/search/SearchButton/SearchButton.module.css";
 import { Button, type ButtonProps, Flex, Icon } from "metabase/ui";
+import { METAKEY } from "metabase/utils/browser";
 
 export const SearchButton = (props: ButtonProps) => {
   const kbar = useKBar();
@@ -25,7 +25,7 @@ export const SearchButton = (props: ButtonProps) => {
         variant="subtle"
         onClick={handleClick}
         color="text-secondary"
-        aria-label={t`Search`}
+        aria-label="Search"
       />
     );
   }
@@ -48,7 +48,7 @@ export const SearchButton = (props: ButtonProps) => {
         },
       }}
       className={S.searchTextButton}
-      aria-label={t`Search`}
+      aria-label="Search"
       {...props}
     >
       <span>{t`Search...`}</span>

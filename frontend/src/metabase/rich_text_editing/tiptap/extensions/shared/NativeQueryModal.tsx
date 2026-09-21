@@ -10,14 +10,14 @@ import {
   generateDraftCardId,
   loadMetadataForDocumentCard,
 } from "metabase/documents/documents.slice";
-import { isMac } from "metabase/lib/browser";
-import { useDispatch, useSelector } from "metabase/lib/redux";
 import { NativeQueryEditor } from "metabase/query_builder/components/NativeQueryEditor";
 import { createRawSeries } from "metabase/query_builder/utils";
 import { DataReference } from "metabase/querying/components/DataReference/DataReference";
 import type { DataReferenceItem } from "metabase/querying/components/DataReference/types";
+import { useDispatch, useSelector } from "metabase/redux";
 import { getMetadata } from "metabase/selectors/metadata";
 import { Box, Button, Flex, Loader, Modal, Stack, Text } from "metabase/ui";
+import { isMac } from "metabase/utils/browser";
 import Visualization from "metabase/visualizations/components/Visualization";
 import NoResultsView from "metabase/visualizations/components/Visualization/NoResultsView/NoResultsView";
 import * as Lib from "metabase-lib";
@@ -88,7 +88,7 @@ const QueryExecutionEmptyState = ({
     <Flex w="100%" h="100%" align="center" justify="center">
       <Stack maw="25rem" gap={0} ta="center" align="center">
         <Box maw="3rem" mb="0.75rem">
-          <img src={EmptyCodeResult} alt={t`Code prompt icon`} />
+          <img src={EmptyCodeResult} alt="Code prompt icon" />
         </Box>
         <Text c="text-secondary">
           {c("{0} refers to the keyboard shortcut")

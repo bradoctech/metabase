@@ -96,7 +96,7 @@ export const createBrandingElement = (size: BrandingSize) => {
     const brandingCopy = document.createElement("span");
     brandingCopy.textContent = t`Made with`;
     brandingCopy.style.cssText = `
-      font-family: "Rawline", sans-serif;
+      font-family: "Lato", sans-serif;
       font-size: ${fz}px;
       color: var(--mb-color-text-secondary);
       display: inline-block;

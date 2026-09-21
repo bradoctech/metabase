@@ -1,9 +1,8 @@
 (ns metabase.warehouses.models.database
   (:require
-   [clojure.core.match :refer [match]]
    [clojure.data :as data]
    [medley.core :as m]
-   [metabase.analytics.core :as analytics]
+   [metabase.analytics-interface.core :as analytics]
    [metabase.api.common :as api]
    [metabase.app-db.core :as mdb]
    [metabase.audit-app.core :as audit]
@@ -45,20 +44,19 @@
   [query-type model]
   (comp
    (next-method query-type model)
-    ;; This is for safety - if a secret ever gets stored in details we don't want it to leak.
-    ;; This will also help to secure properties that we set to secret in the future.
+   ;; This is for safety - if a secret ever gets stored in details we don't want it to leak.
+   ;; This will also help to secure properties that we set to secret in the future.
    (map secret/clean-secret-properties-from-database)))
 
 (t2/deftransforms :model/Database
-  {:details                        mi/transform-encrypted-json
-   :write_data_details             mi/transform-encrypted-json
+  {:details                        (mi/transform-encrypted-json "metabase_database.details")
+   :write_data_details             (mi/transform-encrypted-json "metabase_database.write_data_details")
    :engine                         mi/transform-keyword
    :metadata_sync_schedule         mi/transform-cron-string
    :cache_field_values_schedule    mi/transform-cron-string
    :start_of_week                  mi/transform-keyword
-   :settings                       mi/transform-encrypted-json
-   :dbms_version                   mi/transform-json
-   :workspace_permissions_status   mi/transform-json})
+   :settings                       (mi/transform-encrypted-json "metabase_database.settings")
+   :dbms_version                   mi/transform-json})
 
 (methodical/defmethod t2/model-for-automagic-hydration [:default :database] [_model _k] :model/Database)
 (methodical/defmethod t2/model-for-automagic-hydration [:default :db]       [_model _k] :model/Database)
@@ -154,6 +152,16 @@
   [_db-id]
   (mi/superuser?))
 
+(defenterprise mark-transforms-stale-on-database-delete!
+  "Hook called from the `:model/Database` before-delete. Transforms whose `source_database_id`
+   is about to be SET NULL by the FK action survive the delete (so the analyst can read the
+   SQL/Python and rebuild against a new DB), but their dependency-analysis findings need to
+   be re-run so they surface on `/data-studio/dependency-diagnostics/broken`. OSS is a no-op
+   (no dependencies module)."
+  metabase-enterprise.dependencies.events
+  [_db-id]
+  nil)
+
 (defn- can-write?
   [db-id]
   (or (some-> db-id db-id->router-db-id can-write?)
@@ -178,26 +186,27 @@
 (defn- infer-db-schedules
   "Infer database schedule settings based on its options."
   [{:keys [details is_full_sync is_on_demand cache_field_values_schedule metadata_sync_schedule] :as database}]
-  (match [(boolean (:let-user-control-scheduling details)) is_full_sync is_on_demand]
-    [false _ _]
-    (merge
-     database
-     (sync.schedules/schedule-map->cron-strings
-      (sync.schedules/default-randomized-schedule)))
+  (let [user-control-scheduling (boolean (:let-user-control-scheduling details))]
+    (cond (not user-control-scheduling)
+          (merge
+           database
+           (sync.schedules/schedule-map->cron-strings
+            (sync.schedules/default-randomized-schedule)))
 
-    ;; "Regularly on a schedule"
-    ;; -> sync both steps, schedule should be provided
-    [true true false]
-    (do
-      (assert (every? some? [cache_field_values_schedule metadata_sync_schedule]))
-      database)
+          (and user-control-scheduling is_full_sync (not is_on_demand))
+          ;; "Regularly on a schedule"
+          ;; -> sync both steps, schedule should be provided
+          (do
+            (assert (every? some? [cache_field_values_schedule metadata_sync_schedule]))
+            database)
 
-    ;; "Only when adding a new filter" or "Never, I'll do it myself"
-    ;; -> Sync metadata only
-    [true false _]
-    ;; schedules should only contains metadata_sync, but FE might sending both
-    ;; so we just manually nullify it here
-    (assoc database :cache_field_values_schedule nil)))
+          (and user-control-scheduling (not is_full_sync))
+          ;; schedules should only contains metadata_sync, but FE might sending both
+          ;; so we just manually nullify it here
+          (assoc database :cache_field_values_schedule nil)
+
+          :else (throw (ex-info "Illegal options combination."
+                                (select-keys database [:let-user-control-scheduling :is_full_sync :is_on_demand]))))))
 
 (defn is-destination?
   "Is this database a destination database for some router database?"
@@ -299,11 +308,35 @@
                                   (driver.conn/effective-details database)))]
              (check-connection! database driver engine-str (assoc write-details :engine engine-str) "write-data"))))))))
 
+(defn- health-check-candidates
+  "The databases to health check at startup: one representative per unique engine — the lowest-id regular database of
+  each engine — rather than every database. The health signal feeds the per-driver `:metabase-database/status`
+  metrics, so checking hundreds of same-engine databases at startup mostly re-measures the same driver stack while
+  hammering the warehouses with connection attempts. Audit/sample databases are excluded here (rather than relying on
+  the guard in [[health-check-database!]]) so they can never claim an engine's representative slot and starve a real
+  database of its check; router destinations are excluded because they can be very numerous and are only reachable
+  through their router.
+
+  The representative ids are aggregated in the database first, and only those rows are fetched as model instances:
+  instances with 3k+ databases exist in the wild, and realizing every Database row (including details decryption)
+  just to pick one per engine would defeat the point."
+  []
+  (let [ids (map :id (t2/query {:select   [[:%min.id :id]]
+                                :from     [(t2/table-name :model/Database)]
+                                :where    [:and
+                                           [:= :is_audit false]
+                                           [:= :is_sample false]
+                                           [:= :router_database_id nil]]
+                                :group-by [:engine]}))]
+    (when (seq ids)
+      (t2/select :model/Database :id [:in ids]))))
+
 (defn check-health!
-  "Health checks databases connected to metabase asynchronously using a thread pool."
+  "Health checks databases connected to metabase asynchronously using a thread pool. Only one database per unique
+  engine is checked -- see [[health-check-candidates]]."
   []
   (analytics/clear! :metabase-database/status)
-  (doseq [database (t2/select :model/Database)]
+  (doseq [database (health-check-candidates)]
     (health-check-database! database)))
 
 ;; TODO - something like NSNotificationCenter in Objective-C would be really really useful here so things that want to
@@ -369,29 +402,39 @@
   {:pre [(pos-int? database-id)]}
   ;; Field has `define-before-delete` deleting children, but we'll delete them all at once because they refer same
   ;; database - iteratively, deleting those that no one depends on first
-  (loop []
-    (let [deleted (t2/query-one
-                   {:delete-from (t2/table-name :model/Field)
-                    :where
-                    [:and
-                     [:in :table_id {:from   [(t2/table-name :model/Table)]
-                                     :select [:id]
-                                     :where  [:= :db_id database-id]}]
-                     ;; Double-wrapped subquery to work around MySQL limitation
-                     [:not-in :id {:select [:parent_id]
-                                   :from   [[{:select [:parent_id]
-                                              :from   [(t2/table-name :model/Field)]
-                                              :where  [:and
-                                                       [:not= :parent_id nil]
-                                                       [:in :table_id {:from   [(t2/table-name :model/Table)]
-                                                                       :select [:id]
-                                                                       :where  [:= :db_id database-id]}]]}
-                                             :parent_fields]]}]]})]
-      (when (pos? deleted)
-        (recur)))))
+  (let [table-ids-query ^:allow-subquery {:from   [(t2/table-name :model/Table)]
+                                          :select [:id]
+                                          :where  [:= :db_id database-id]}]
+    ;; Avoid issuing the DELETE when no Fields exist. Keep this check non-locking: locking an empty range on MySQL
+    ;; recreates the contention this guard avoids. A concurrent sync can race this check, but the foreign keys preserve
+    ;; integrity by rejecting the Database deletion if it introduces nested Fields after the transaction snapshot.
+    (when (t2/exists? :model/Field :table_id [:in table-ids-query])
+      (loop []
+        (let [deleted (t2/query-one
+                       {:delete-from (t2/table-name :model/Field)
+                        :where
+                        [:and
+                         [:in :table_id table-ids-query]
+                         ;; Double-wrapped subquery to work around MySQL limitation
+                         [:not-in :id ^:allow-subquery
+                          {:select [:parent_id]
+                           :from   [[^:allow-subquery
+                                     {:select [:parent_id]
+                                      :from   [(t2/table-name :model/Field)]
+                                      :where  [:and
+                                               [:not= :parent_id nil]
+                                               [:in :table_id table-ids-query]]}
+                                     :parent_fields]]}]]})]
+          (when (pos? deleted)
+            (recur)))))))
 
 (t2/define-before-delete :model/Database
   [{id :id, driver :engine, :as database}]
+  ;; Mark transforms with this DB as source as stale so dependency-diagnostics re-analyzes
+  ;; them after the row's gone. Must run BEFORE the FK SET NULL fires (which happens when
+  ;; the database row is deleted below) so we can still resolve the affected transforms by
+  ;; source_database_id.
+  (mark-transforms-stale-on-database-delete! id)
   (unschedule-tasks! database)
   (secret/delete-orphaned-secrets! database)
   (delete-database-fields! id)
@@ -425,8 +468,57 @@
     (t2/update! :model/Database :uploads_enabled true {:uploads_enabled false :uploads_table_prefix nil :uploads_schema_name nil}))
   db)
 
+(def ^:private details-keys
+  "Every place a Database stores a set of connection details."
+  [:details :write_data_details :admin_details])
+
+(defn- exempt-audit-db?
+  "Whether `database` is the Audit DB as the analytics installer writes it: a clone of the *application* database
+  rather than a warehouse anybody pointed somewhere, carrying no details of its own and reached over the app-db
+  connection. There is no user-supplied host in it to police, and checking it anyway refuses the instance's own app
+  db -- empty details read as `localhost`, since every `:sql-jdbc` client substitutes that. The refusal lands during
+  init, so the instance fails to boot rather than failing a request.
+
+  Narrowed to a database with no details at all, which is the only shape the installer produces
+  ([[metabase-enterprise.audit-app.audit/install-database!]] writes none and nothing else adds any). `:is_audit`
+  alone would be too much to hang this on: it is not writable through the API, but it is in the Database serdes
+  `:copy` set, and serialization import is one of the routes this check exists to cover."
+  [database]
+  (and (:is_audit database)
+       (every? #(empty? (get database %)) details-keys)))
+
+(defn- validate-connection-hosts!
+  "Refuse to store details pointing at a private/internal network address. Enforcing this on the model, and not just on
+  the endpoints that test a connection, covers the routes that write a Database without ever testing it: serialization
+  import, config-file provisioning, and destination databases.
+
+  `keys-to-check` names which of [[details-keys]] to look at. An overlay is checked the way
+  [[metabase.driver.connection/effective-details]] resolves it -- merged onto `:details` -- since that, and not the
+  overlay by itself, is what a connection is opened with: one holding nothing but credentials repoints nothing.
+
+  The Audit DB is exempt -- see [[exempt-audit-db?]]."
+  [engine database keys-to-check]
+  (when-not (exempt-audit-db? database)
+    (when-let [engine (some-> engine keyword)]
+      (doseq [k     keys-to-check
+              :let  [details (get database k)]
+              :when (map? details)]
+        (driver.u/validate-connection-hosts! engine (cond->> details
+                                                      (not= k :details) (merge (:details database))))))))
+
 (t2/define-before-update :model/Database
   [database]
+  (let [changes  (t2/changes database)
+        original (t2/original database)]
+    ;; An engine change can make existing detail keys acquire new meaning, so validate every details map under the new
+    ;; driver. Otherwise validate only the ones being written, so an unrelated update to a grandfathered database does
+    ;; not start failing. Either way the candidate is the merge, since an overlay is resolved against the `:details`
+    ;; it accompanies rather than on its own.
+    (validate-connection-hosts! (or (:engine changes) (:engine original))
+                                (merge original changes)
+                                (if (contains? changes :engine)
+                                  details-keys
+                                  (filterv #(contains? changes %) details-keys))))
   (let [changes                       (t2/changes database)
         {new-engine        :engine
          new-settings      :settings} changes
@@ -487,7 +579,8 @@
   (check-and-schedule-tasks-for-db! (t2.realize/realize database)))
 
 (t2/define-before-insert :model/Database
-  [{:keys [details initial_sync_status], :as database}]
+  [{:keys [details initial_sync_status engine], :as database}]
+  (validate-connection-hosts! engine database details-keys)
   (-> (merge {:is_full_sync true
               :is_on_demand false}
              database)
@@ -582,88 +675,60 @@
                           (setting/can-read-setting? setting-name
                                                      (setting/current-user-readable-visibilities))
                           (catch Throwable e
-                         ;; there is an known issue with exception is ignored when render API response (#32822)
-                         ;; If you see this error, you probably need to define a setting for `setting-name`.
-                         ;; But ideally, we should resolve the above issue, and remove this try/catch
+                            ;; there is an known issue with exception is ignored when render API response (#32822)
+                            ;; If you see this error, you probably need to define a setting for `setting-name`.
+                            ;; But ideally, we should resolve the above issue, and remove this try/catch
                             (log/errorf e "Error checking the readability of %s setting. The setting will be hidden in API response."
                                         setting-name)
-                         ;; let's be conservative and hide it by defaults, if you want to see it,
-                         ;; you need to define it :)
+                            ;; let's be conservative and hide it by defaults, if you want to see it,
+                            ;; you need to define it :)
                             false)))
                       settings)
                      (when (not= <> settings)
                        (log/debug "Redacting non-user-readable database settings during json encoding.")))))))
      json-generator)))
 
-;;; ------------------------------------------ Workspace Permissions Cache --------------------------------------------
-
-(defn check-workspace-permissions
-  "Check isolation permissions for a database. Returns the permission check result:
-   {:status \"ok\", :checked_at ...} or {:status \"failed\", :error \"...\", :checked_at ...}
-   Does NOT update the database - use [[check-and-cache-workspace-permissions!]] if you need to persist."
-  [database]
-  (let [checked-at (java.time.Instant/now)]
-    (try
-      (let [db-driver (driver.u/database->driver database)]
-        (if-let [error (driver/check-isolation-permissions db-driver database nil)]
-          {:status "failed", :error error, :checked_at (str checked-at)}
-          {:status "ok", :checked_at (str checked-at)}))
-      (catch Exception e
-        {:status "failed", :error (ex-message e), :checked_at (str checked-at)}))))
-
-(defn check-and-cache-workspace-permissions!
-  "Check isolation permissions for a database and cache the result in workspace_permissions_status column.
-   Returns the permission check result: {:status \"ok\", :checked_at ...}
-   or {:status \"failed\", :error \"...\", :checked_at ...}"
-  [database]
-  (let [result (check-workspace-permissions database)]
-    (t2/update! :model/Database (:id database) {:workspace_permissions_status result})
-    result))
-
 ;;; ------------------------------------------------ Serialization ----------------------------------------------------
 (defmethod serdes/make-spec "Database"
-  [_model-name {:keys [include-database-secrets]}]
-  {:copy      [:auto_run_queries :cache_field_values_schedule :caveats :dbms_version
-               :description :engine :is_audit :is_attached_dwh :is_full_sync :is_on_demand :is_sample
-               :metadata_sync_schedule :name :points_of_interest :provider_name :refingerprint :settings :timezone :uploads_enabled
-               :uploads_schema_name :uploads_table_prefix]
-   :skip      [;; deprecated field
-               :cache_ttl
-               ;; workspace_permissions_status is instance-specific and should not be serialized
-               :workspace_permissions_status]
-   :transform {:created_at          (serdes/date)
-               ;; details should be imported if available regardless of options
-               :details             {:export-with-context
-                                     (fn [current _ details]
-                                       (if (and include-database-secrets
-                                                (not (:is_attached_dwh current)))
-                                         details
-                                         ::serdes/skip))
-                                     :import identity}
-               :write_data_details {:export-with-context
-                                    (fn [current _ details]
-                                      (if (and include-database-secrets
-                                               (not (:is_attached_dwh current)))
-                                        details
-                                        ::serdes/skip))
-                                    :import identity}
-               :creator_id          (serdes/fk :model/User)
-               :router_database_id (serdes/fk :model/Database)
-               :initial_sync_status {:export identity :import (constantly "complete")}}
-   :defaults {:auto_run_queries true
-              :is_attached_dwh  false
-              :is_audit         false
-              :is_full_sync     true
-              :is_on_demand     false
-              :is_sample        false
-              :uploads_enabled  false}})
+  [_model-name _opts]
+  ;; Connection `details` are never exported: they hold warehouse credentials in plaintext, and serialized
+  ;; archives are not a safe place for secrets. Import is unconditional so existing archives still load.
+  (let [details-transform {:export-with-context (fn [_current _ _details] ::serdes/skip)
+                           :import              identity}]
+    {:copy      [:auto_run_queries :cache_field_values_schedule :caveats :dbms_version
+                 :description :engine :is_audit :is_attached_dwh :is_full_sync :is_on_demand :is_sample
+                 :metadata_sync_schedule :name :points_of_interest :provider_name :refingerprint :settings :timezone :uploads_enabled
+                 :uploads_schema_name :uploads_table_prefix]
+     :skip      [;; deprecated field
+                 :cache_ttl]
+     :transform {:created_at          (serdes/date)
+                 :details             details-transform
+                 :write_data_details  details-transform
+                 :creator_id          (serdes/fk :model/User)
+                 :router_database_id  (serdes/fk :model/Database)
+                 :initial_sync_status {:export identity :import (constantly "complete")}}
+     :defaults  {:auto_run_queries true
+                 :is_attached_dwh  false
+                 :is_audit         false
+                 :is_full_sync     true
+                 :is_on_demand     false
+                 :is_sample        false
+                 :uploads_enabled  false}}))
+
+(def ^:dynamic *include-h2-in-extract?*
+  "When false (the default), [[serdes/extract-query]] skips H2 databases because they are rejected at import time
+  by [[assert-not-h2!]]. Round-trip tests that exercise H2 throughout — and rebind `assert-not-h2!` accordingly —
+  may rebind this to `true` to keep the H2 databases in the extract."
+  false)
 
 (defmethod serdes/extract-query "Database"
   [model-name {:keys [where]}]
   (t2/reducible-select (keyword "model" model-name)
-                       {:where [:and
-                                (or where true)
-                                [:= :router_database_id nil]]}))
+                       {:where (cond-> [:and
+                                        (or where true)
+                                        [:= :router_database_id nil]]
+                                 (not *include-h2-in-extract?*)
+                                 (conj [:not= :engine "h2"]))}))
 
 (defmethod serdes/entity-id "Database"
   [_ {:keys [name]}]
@@ -696,6 +761,25 @@
                               (:write_data_details ingested) (update :write_data_details driver/sanitize-db-details))
                             maybe-local))
 
+(def ^:private metadata-export-perms
+  {:perms/view-data      :unrestricted
+   :perms/create-queries :query-builder})
+
+(defmethod serdes/metadata-query :model/Database
+  [model opts]
+  (t2/reducible-query {:select [:id :name :engine]
+                       :from   [[(t2/table-name model) :db]]
+                       :where  (serdes/metadata-query-filter model :db opts)}))
+
+(defmethod serdes/metadata-query-filter :model/Database
+  [_model alias {:keys [user-info database-ids]}]
+  (cond-> [:and
+           [:= (u/qualified-key alias :is_audit) false]
+           [:= (u/qualified-key alias :router_database_id) nil]
+           [:in (u/qualified-key alias :id)
+            (perms/visible-database-filter-select user-info metadata-export-perms)]]
+    (seq database-ids) (conj [:in (u/qualified-key alias :id) database-ids])))
+
 (def ^{:arglists '([table-id])} table-id->database-id
   "Retrieve the `Database` ID for the given table-id."
   (mdb/memoize-for-application-db
@@ -721,7 +805,7 @@
 
 (defenterprise hydrate-router-user-attribute
   "OSS implementation. Hydrates router user attribute on the databases."
-  metabase-enterprise.database-routing.model
+  metabase-enterprise.database-routing.models
   [_k databases]
   (for [database databases]
     (assoc database :router_user_attribute nil)))

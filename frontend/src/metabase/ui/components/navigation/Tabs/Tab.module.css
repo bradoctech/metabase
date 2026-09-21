@@ -17,7 +17,7 @@
 }
 
 .tab {
-  color: var(--mb-color-sp-gray);
+  color: var(--mb-color-text-primary);
   max-width: 100%;
   justify-content: start;
 
@@ -36,18 +36,14 @@
   }
 
   &[data-active="true"] {
-    color: var(--mb-color-text-primary);
+    color: var(--mb-color-text-brand);
     border-color: var(--mb-color-brand);
-
-    .tabLabel {
-      font-weight: 700;
-    }
   }
 }
 
 .tabLabel {
   font-size: var(--mantine-font-size-md);
-  font-weight: 500;
+  font-weight: bold;
   line-height: 1.15; /* consistent w/ mantine v6 spacing */
   white-space: nowrap;
   text-overflow: ellipsis;

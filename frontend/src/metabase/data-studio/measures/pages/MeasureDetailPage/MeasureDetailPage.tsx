@@ -7,11 +7,11 @@ import { useUpdateMeasureMutation } from "metabase/api";
 import { LeaveRouteConfirmModal } from "metabase/common/components/LeaveConfirmModal";
 import { PageContainer } from "metabase/data-studio/common/components/PageContainer";
 import { getUserCanWriteMeasures } from "metabase/data-studio/selectors";
-import { useSelector } from "metabase/lib/redux";
-import * as Urls from "metabase/lib/urls";
 import { useMetadataToasts } from "metabase/metadata/hooks";
+import { useSelector } from "metabase/redux";
 import { getMetadata } from "metabase/selectors/metadata";
 import { Button, Group } from "metabase/ui";
+import * as Urls from "metabase/urls";
 import * as Lib from "metabase-lib";
 import type { Measure } from "metabase-types/api";
 

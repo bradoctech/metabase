@@ -4,9 +4,8 @@ import { t } from "ttag";
 import _ from "underscore";
 
 import { ColorRangeSelector } from "metabase/common/components/ColorRangeSelector";
-import MetabaseSettings from "metabase/lib/settings";
-import { SP_PALETTE_COLORS } from "metabase/ui/colors/constants/accent-colors";
-import { getPreferredColor } from "metabase/ui/colors/groups";
+import { getAccentColors, getPreferredColor } from "metabase/ui/colors/groups";
+import MetabaseSettings from "metabase/utils/settings";
 import { ChartSettingsError } from "metabase/visualizations/lib/errors";
 import { columnSettings } from "metabase/visualizations/lib/settings/column";
 import {
@@ -241,9 +240,9 @@ export class Map extends Component {
       },
       widget: ColorRangeSelector,
       getProps: () => ({
-        colors: SP_PALETTE_COLORS,
+        colors: getAccentColors(),
         colorMapping: Object.fromEntries(
-          SP_PALETTE_COLORS.map((color) => [
+          getAccentColors().map((color) => [
             color,
             getColorplethColorScale(color),
           ]),
@@ -252,7 +251,7 @@ export class Map extends Component {
       }),
       getDefault: (series, vizSettings) =>
         getColorplethColorScale(
-          getPreferredColor(vizSettings["map.metric"]) ?? SP_PALETTE_COLORS[0],
+          getPreferredColor(vizSettings["map.metric"]) ?? getAccentColors()[0],
         ),
       getHidden: (series, vizSettings) => vizSettings["map.type"] !== "region",
       readDependencies: ["map.metric"],

@@ -7,9 +7,8 @@ import type {
 } from "echarts/types/src/util/types";
 import _ from "underscore";
 
-import { getObjectValues } from "metabase/lib/objects";
-import { isNotNull } from "metabase/lib/types";
 import { getTextColorForBackground } from "metabase/ui/colors/palette";
+import { isNotNull } from "metabase/utils/types";
 import {
   INDEX_KEY,
   NEGATIVE_STACK_TOTAL_DATA_KEY,
@@ -287,8 +286,7 @@ export const buildEChartsLabelOptions = (
   chartDataDensity?: ChartDataDensity,
   position?: LabelOption["position"],
 ): SeriesLabelOption => {
-  // const { fontSize } = renderingContext.theme.cartesian.label;
-  const { fontSize } = "11px";
+  const { fontSize } = renderingContext.theme.cartesian.label;
 
   return {
     show: !!formatter,
@@ -299,8 +297,6 @@ export const buildEChartsLabelOptions = (
     fontWeight: CHART_STYLE.seriesLabels.weight,
     fontSize,
     color: renderingContext.getColor("text-primary"),
-    // Este é dos eixos, precisa ser #000000 e não #808080;
-    // color: renderingContext.getColor("text-secondary"),
     textBorderColor: renderingContext.getColor("background-primary"),
     textBorderWidth: 3,
     formatter:
@@ -389,10 +385,8 @@ export const buildEChartsStackLabelOptions = (
     opacity: 1,
     show: true,
     fontFamily: renderingContext.fontFamily,
-    // fontWeight: CHART_STYLE.seriesLabels.weight,
-    fontWeight: 600,
-    // fontSize: CHART_STYLE.seriesLabels.size,
-    fontSize: "11px",
+    fontWeight: CHART_STYLE.seriesLabels.weight,
+    fontSize: CHART_STYLE.seriesLabels.size,
     color: getTextColorForBackground(
       seriesModel.color,
       renderingContext.getColor,
@@ -441,13 +435,9 @@ function getDataLabelSeriesOption(
       position,
       formatter,
       fontFamily: renderingContext.fontFamily,
-      // fontWeight: CHART_STYLE.seriesLabels.weight,
-      fontWeight: 600,
-      // fontSize: CHART_STYLE.seriesLabels.size,
-      fontSize: "11px",
+      fontWeight: CHART_STYLE.seriesLabels.weight,
+      fontSize: CHART_STYLE.seriesLabels.size,
       color: renderingContext.getColor("text-primary"),
-      // Este é dos eixos, precisa ser #000000 e não #808080;
-      // color: renderingContext.getColor("text-secondary"),
       textBorderColor: renderingContext.getColor("background-primary"),
       textBorderWidth: 3,
     },
@@ -857,7 +847,7 @@ export const getStackTotalsSeries = (
     "stack",
   );
 
-  return getObjectValues(seriesByStackName).flatMap((seriesOptions) => {
+  return Object.values(seriesByStackName).flatMap((seriesOptions) => {
     const stackDataKeys = seriesOptions // we set string dataKeys as series IDs
       .map((s) => s.id)
       .filter(isNotNull) as string[];

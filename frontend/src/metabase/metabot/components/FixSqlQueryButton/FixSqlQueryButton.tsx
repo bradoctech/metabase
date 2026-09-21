@@ -2,29 +2,41 @@ import { isFulfilled } from "@reduxjs/toolkit";
 import { t } from "ttag";
 
 import { useToast } from "metabase/common/hooks";
-import { useDispatch } from "metabase/lib/redux";
 import { getMetabotManagedProviderLimitToastProps } from "metabase/metabot/components/MetabotManagedProviderLimit";
 import { METABOT_ERR_MSG } from "metabase/metabot/constants";
 import {
   useMetabotAgent,
-  useMetabotEnabledEmbeddingAware,
+  useMetabotName,
+  useUserMetabotPermissions,
 } from "metabase/metabot/hooks";
 import { setIsNativeEditorOpen } from "metabase/query_builder/actions";
+import { useDispatch } from "metabase/redux";
 import { Button } from "metabase/ui";
 
 import { trackQueryFixClicked } from "../../analytics";
+import { getMetabotNotConfiguredToastProps } from "../AIProviderConfigurationNotice";
 
 export function FixSqlQueryButton() {
   const dispatch = useDispatch();
-  const isMetabotEnabled = useMetabotEnabledEmbeddingAware();
+  const { hasSqlGenerationAccess, canUseSqlGeneration } =
+    useUserMetabotPermissions();
+  const metabotName = useMetabotName();
   const [sendToast] = useToast();
   const { submitInput, isDoingScience } = useMetabotAgent("sql");
 
-  if (!isMetabotEnabled) {
+  if (!hasSqlGenerationAccess) {
     return null;
   }
 
   const handleClick = async () => {
+    if (!canUseSqlGeneration) {
+      sendToast(
+        getMetabotNotConfiguredToastProps({
+          featureName: metabotName,
+        }),
+      );
+      return;
+    }
     trackQueryFixClicked();
     await dispatch(setIsNativeEditorOpen(true));
     // SQL and error message are included in the context.
@@ -36,7 +48,7 @@ export function FixSqlQueryButton() {
       return;
     }
 
-    if (action.payload.errorMessage?.type === "locked") {
+    if (action.payload.error?.type === "locked") {
       sendToast(getMetabotManagedProviderLimitToastProps());
       return;
     }
@@ -44,7 +56,7 @@ export function FixSqlQueryButton() {
     sendToast({
       icon: "warning",
       toastColor: "error",
-      message: action.payload.errorMessage?.message ?? METABOT_ERR_MSG.default,
+      message: action.payload.error?.message ?? METABOT_ERR_MSG.default,
     });
   };
 
@@ -52,6 +64,6 @@ export function FixSqlQueryButton() {
     <Button
       loading={isDoingScience}
       onClick={handleClick}
-    >{t`Have Metabot fix it`}</Button>
+    >{t`Have ${metabotName} fix it`}</Button>
   );
 }

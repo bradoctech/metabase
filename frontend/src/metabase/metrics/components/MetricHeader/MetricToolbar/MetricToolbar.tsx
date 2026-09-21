@@ -12,8 +12,6 @@ import { ForwardRefLink } from "metabase/common/components/Link";
 import { ToolbarButton } from "metabase/common/components/ToolbarButton";
 import { canAccessDataStudio as canAccessDataStudioSelector } from "metabase/data-studio/selectors";
 import { getLibraryCollectionType } from "metabase/data-studio/utils";
-import { useDispatch, useSelector } from "metabase/lib/redux";
-import * as Urls from "metabase/lib/urls";
 import { isNumericMetric } from "metabase/metrics/utils/validation";
 import { QuestionAlertListModal } from "metabase/notifications/modals/QuestionAlertListModal";
 import { PLUGIN_AUDIT, PLUGIN_MODERATION } from "metabase/plugins";
@@ -21,10 +19,12 @@ import { AddToDashSelectDashModal } from "metabase/query_builder/components/AddT
 import { ArchiveCardModal } from "metabase/questions/components/ArchiveCardModal";
 import { CardCopyModal } from "metabase/questions/components/CardCopyModal";
 import { MoveCardModal } from "metabase/questions/components/MoveCardModal";
+import { useDispatch, useSelector } from "metabase/redux";
 import { openUrl } from "metabase/redux/app";
 import { getMetadata } from "metabase/selectors/metadata";
 import { canManageSubscriptions as canManageSubscriptionsSelector } from "metabase/selectors/user";
 import { Button, Group, Icon, Menu } from "metabase/ui";
+import * as Urls from "metabase/urls";
 import * as Lib from "metabase-lib";
 import Question from "metabase-lib/v1/Question";
 import type { Card } from "metabase-types/api";
@@ -114,7 +114,6 @@ function MetricToolbarButtons({
         <Button
           component={ForwardRefLink}
           to={Urls.exploreMetric(card.id)}
-          target="_blank"
           leftSection={<Icon name="external" />}
           data-testid="explore-link"
         >

@@ -9,11 +9,11 @@ import { LoadingSpinner } from "metabase/common/components/LoadingSpinner";
 import { Warnings } from "metabase/common/components/Warnings";
 import CS from "metabase/css/core/index.css";
 import QueryBuilderS from "metabase/css/query_builder.module.css";
-import { isMac } from "metabase/lib/browser";
-import { SERVER_ERROR_TYPES } from "metabase/lib/errors";
-import { useSelector } from "metabase/lib/redux";
+import { useSelector } from "metabase/redux";
 import { getWhiteLabeledLoadingMessageFactory } from "metabase/selectors/whitelabel";
 import { Box, Flex, Stack, Text, Title } from "metabase/ui";
+import { isMac } from "metabase/utils/browser";
+import { SERVER_ERROR_TYPES } from "metabase/utils/errors";
 import * as Lib from "metabase-lib";
 import { HARD_ROW_LIMIT } from "metabase-lib/v1/queries/utils";
 
@@ -113,7 +113,7 @@ const VisualizationEmptyState = ({ children }) => {
     <Flex w="100%" h="100%" align="center" justify="center">
       <Stack maw="25rem" gap={0} ta="center" align="center">
         <Box maw="3rem" mb="0.75rem">
-          <img src={EmptyCodeResult} alt={t`Code prompt icon`} />
+          <img src={EmptyCodeResult} alt="Code prompt icon" />
         </Box>
         <Text c="text-secondary">
           {c("{0} refers to the keyboard shortcut")

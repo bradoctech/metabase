@@ -16,9 +16,8 @@
  [metabase.premium-features.defenterprise
   defenterprise
   defenterprise-schema]
-
  [metabase.premium-features.token-check
-   ;; TODO: move airgap code to a dedicated namespace?
+  ;; TODO: move airgap code to a dedicated namespace?
   assert-valid-airgap-user-count!
   assert-airgap-allows-user-creation!
   assert-has-feature
@@ -38,7 +37,6 @@
   token-check-url
   transform-metered-as
   transform-stats]
-
  (metabase.premium-features.settings
   active-users-count
   airgap-enabled
@@ -46,6 +44,7 @@
   define-premium-feature
   development-mode?
   enable-tenants?
+  enable-ai-controls?
   enable-advanced-permissions?
   enable-any-sso?
   enable-audit-app?
@@ -54,6 +53,7 @@
   enable-config-text-file?
   enable-content-translation?
   enable-content-verification?
+  enable-data-complexity-score?
   enable-dashboard-subscription-filters?
   enable-database-auth-providers?
   enable-database-routing?
@@ -85,12 +85,13 @@
   enable-python-transforms?
   enable-upload-management?
   enable-whitelabeling?
-  enable-workspaces?
   enable-writable-connection?
   has-attached-dwh?
   hide-embed-branding?
   is-hosted?
+  locked-meters
   premium-embedding-token
+  security-center-disabled
   security-center-enabled?
   site-uuid-for-premium-features-token-checks
   table-data-editing?

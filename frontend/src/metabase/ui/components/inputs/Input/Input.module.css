@@ -13,7 +13,7 @@
   background-color: var(--mb-color-background-primary);
 
   &::placeholder {
-    color: var(--mb-color-sp-primary-40);
+    color: var(--mb-color-text-tertiary);
   }
 
   &:disabled {
@@ -32,15 +32,14 @@
   }
 
   &[data-variant="default"] {
-    border-color: var(--mb-color-sp-color-border);
+    border-color: var(--mb-color-border);
 
     &:focus {
-      border: 2px solid var(--mb-color-text-primary);
+      border-color: var(--mb-color-brand);
     }
 
     &[data-error] {
-      border: 2px solid var(--mb-color-error);
-      color: var(--mb-color-text-primary);
+      border-color: var(--mb-color-error);
     }
   }
 
@@ -49,7 +48,7 @@
     border-color: var(--mb-color-error);
 
     &::placeholder {
-      color: var(--mb-color-sp-primary-40);
+      color: var(--mb-color-error);
     }
   }
 }
@@ -61,7 +60,7 @@
 .label {
   color: var(--mb-color-text-primary);
   font-size: var(--mantine-font-size-md);
-  font-weight: 600;
+  font-weight: bold;
   line-height: var(--mantine-line-height-md);
   margin-bottom: var(--mantine-spacing-xs);
 }
@@ -75,7 +74,6 @@
 
 .error {
   color: var(--mb-color-error);
-  font-weight: 600;
   font-size: var(--mantine-font-size-sm);
   line-height: var(--mantine-line-height-sm);
   margin-top: var(--mantine-spacing-sm);

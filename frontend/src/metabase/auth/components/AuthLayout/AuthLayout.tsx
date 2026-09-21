@@ -1,53 +1,38 @@
 import type { ReactNode } from "react";
-import { t } from "ttag";
 
+import { LighthouseIllustration } from "metabase/common/components/LighthouseIllustration";
 import { LogoIcon } from "metabase/common/components/LogoIcon";
-import { getSubpathSafeUrl } from "metabase/lib/urls";
+import { useSelector } from "metabase/redux";
+import { getLoginPageIllustration } from "metabase/selectors/whitelabel";
 
 import {
+  LayoutBody,
   LayoutCard,
-  LayoutFrameBottom,
-  LayoutFrameTop,
-  LayoutLeftImage,
-  LayoutLeftPanel,
-  LayoutLeftSubtitle,
-  LayoutLeftTitle,
-  LayoutRightPanel,
+  LayoutIllustration,
   LayoutRoot,
 } from "./AuthLayout.styled";
-
 interface AuthLayoutProps {
   children?: ReactNode;
 }
 
 export const AuthLayout = ({ children }: AuthLayoutProps): JSX.Element => {
+  const loginPageIllustration = useSelector(getLoginPageIllustration);
+
   return (
     <LayoutRoot data-testid="login-page">
-      <LayoutLeftPanel
-        bgImage={getSubpathSafeUrl("app/img/login_leftbg_only.png")}
-      >
-        <LayoutFrameTop
-          src={getSubpathSafeUrl("app/img/login_frametop.png")}
-          alt=""
-        />
-        <LayoutFrameBottom
-          src={getSubpathSafeUrl("app/img/login_framebottom.png")}
-          alt=""
-        />
-        <LayoutLeftImage
-          src={getSubpathSafeUrl("app/img/login_dashboard.png")}
-          alt={t`Dashboard preview`}
-        />
-        <LayoutLeftTitle>{t`Dashboards SP`}</LayoutLeftTitle>
-        <LayoutLeftSubtitle>
-          {t`Ambiente de análise com indicadores e dados consolidados para apoio à gestão pública.`}
-        </LayoutLeftSubtitle>
-      </LayoutLeftPanel>
-
-      <LayoutRightPanel>
+      {loginPageIllustration &&
+        (loginPageIllustration.isDefault ? (
+          <LighthouseIllustration />
+        ) : (
+          <LayoutIllustration
+            data-testid="login-page-illustration"
+            backgroundImageSrc={loginPageIllustration.src}
+          />
+        ))}
+      <LayoutBody>
         <LogoIcon height={65} />
         <LayoutCard>{children}</LayoutCard>
-      </LayoutRightPanel>
+      </LayoutBody>
     </LayoutRoot>
   );
 };

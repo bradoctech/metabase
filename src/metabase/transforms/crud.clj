@@ -1,6 +1,6 @@
 (ns metabase.transforms.crud
   "CRUD operations for transforms. Extracted from `metabase.transforms-rest.api.transform`
-   so that non-REST modules (e.g. metabot-v3, workspaces) can use them without depending
+   so that non-REST modules (e.g. metabot-v3) can use them without depending
    on the `-rest` module."
   (:require
    [clojure.string :as str]
@@ -9,10 +9,10 @@
    [metabase.driver.util :as driver.u]
    [metabase.events.core :as events]
    [metabase.models.interface :as mi]
-   [metabase.models.transforms.transform :as transform.model]
    [metabase.transforms-base.interface :as transforms-base.i]
    [metabase.transforms-base.ordering :as transforms-base.ordering]
    [metabase.transforms-base.util :as transforms-base.u]
+   [metabase.transforms.models.transform :as transform.model]
    [metabase.transforms.util :as transforms.u]
    [metabase.util :as u]
    [metabase.util.i18n :refer [deferred-tru]]
@@ -86,7 +86,7 @@
                                                                   (when database-id
                                                                     [[:= :source_database_id database-id]]))
                                                   :order-by [[:id :asc]]})]
-      (->> (t2/hydrate transforms :last_run :transform_tag_ids :creator :owner)
+      (->> (t2/hydrate transforms :last_run :transform_tag_ids :creator :owner :can_read :can_write :can_execute)
            (into []
                  (comp (transforms-base.u/->date-field-filter-xf [:last_run :start_time] last-run-start-time)
                        (transforms-base.u/->status-filter-xf [:last_run :status] last-run-statuses)
@@ -100,14 +100,14 @@
   (let [{:keys [target] :as transform} (api/read-check :model/Transform id)
         target-table (transforms-base.u/target-table (transforms-base.i/target-db-id transform) target :active true)]
     (-> transform
-        (t2/hydrate :last_run :transform_tag_ids :creator :owner)
+        (t2/hydrate :last_run :transform_tag_ids :creator :owner :can_read :can_write :can_execute)
         (u/update-some :last_run transforms-base.u/localize-run-timestamps)
         (assoc :table target-table)
         transforms.u/add-source-readable)))
 
 (defn create-transform!
   "Create new transform in the appdb.
-   Optionally accepts a creator-id to use instead of the current user (for workspace merges)."
+   Optionally accepts a creator-id to use instead of the current user."
   ([body]
    (create-transform! body nil))
   ([body creator-id]
@@ -130,7 +130,7 @@
                         (when (seq tag-ids)
                           (transform.model/update-transform-tags! (:id transform) tag-ids))
                         ;; Return with hydrated tag_ids
-                        (t2/hydrate transform :transform_tag_ids :creator :owner)))]
+                        (t2/hydrate transform :transform_tag_ids :creator :owner :can_read :can_write :can_execute)))]
      (events/publish-event! :event/transform-create {:object transform :user-id creator-id})
      transform)))
 
@@ -144,13 +144,13 @@
                           new (merge old body)
                           target-fields #(-> % :target (select-keys [:schema :name]))]
                       (api/check-403 (and (mi/can-write? old) (mi/can-write? new)))
-
                       ;; we must validate on a full transform object
                       (check-feature-enabled! new)
                       (check-database-feature new)
                       (when (contains? body :target)
                         (validate-target-schema! new))
-                      (validate-incremental-column-type! new)
+                      (when (contains? body :source)
+                        (validate-incremental-column-type! new))
                       (when (transforms-base.u/query-transform? old)
                         (validate-transform-query! new)
                         (when-let [{:keys [cycle-str]} (transforms-base.ordering/get-transform-cycle new)]
@@ -164,7 +164,7 @@
                     ;; Update tag associations if provided
                     (when (contains? body :tag_ids)
                       (transform.model/update-transform-tags! id (:tag_ids body)))
-                    (t2/hydrate (t2/select-one :model/Transform id) :transform_tag_ids :creator :owner))]
+                    (t2/hydrate (t2/select-one :model/Transform id) :transform_tag_ids :creator :owner :can_read :can_write :can_execute))]
     (events/publish-event! :event/transform-update {:object transform :user-id api/*current-user-id*})
     (-> transform
         transforms.u/add-source-readable)))

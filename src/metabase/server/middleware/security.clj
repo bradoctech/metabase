@@ -11,7 +11,6 @@
    [metabase.mcp.core :as mcp]
    [metabase.request.core :as request]
    [metabase.server.settings :as server.settings]
-
    [metabase.settings.core :as setting]
    [metabase.util :as u]
    [metabase.util.log :as log]
@@ -60,20 +59,26 @@
   the original request was HTTPS; if sent in response to an HTTP request, this is simply ignored)"
   {"Strict-Transport-Security" "max-age=31536000"})
 
-(defn parse-url
-  "Returns an object with protocol, domain and port for the given url"
+(defn try-parse-url
+  "Like `parse-url` but returns nil silently on unparsable input. Use this when the caller is parsing
+   client-controlled data (e.g. `Origin`/`Host` headers) where bad input is expected and shouldn't
+   fill the error logs."
   [url]
   (if (= url "*")
     {:protocol nil :domain "*" :port "*"}
     ;; Pattern supports both regular hostnames/IPv4 and bracketed IPv6 addresses like [::1]
     (let [pattern #"^(?:(https?|app|capacitor)://)?(\[[^\]]+\]|[^:/]+)(?::(\d+|\*))?$"
-          matches (re-matches pattern url)]
-      (if-not matches
-        (do (log/errorf "Invalid URL: %s" url) nil)
-        (let [[_ protocol domain port] matches]
-          {:protocol protocol
-           :domain domain
-           :port port})))))
+          [_ protocol domain port] (re-matches pattern url)]
+      (when domain
+        {:protocol protocol :domain domain :port port}))))
+
+(defn parse-url
+  "Returns an object with protocol, domain and port for the given url. Logs an error when the input
+   doesn't parse — appropriate for server-side config (where bad input indicates a misconfiguration).
+   For client-controlled input prefer [[try-parse-url]]."
+  [url]
+  (or (try-parse-url url)
+      (do (log/errorf "Invalid URL: %s" url) nil)))
 
 (defn- add-wildcard-entries
   "Adds a wildcard prefix `.*` to the domain part of the given `domain-or-url` string.
@@ -133,6 +138,8 @@
     (for [[k vs] {:default-src  ["'none'"]
                   :script-src   (concat
                                  ["'self'"
+                                  (when (and nonce (not config/is-dev?))
+                                    (format "'nonce-%s'" nonce))
                                   "https://maps.google.com"
                                   "https://accounts.google.com"
                                   (when (analytics/anon-tracking-enabled)
@@ -236,7 +243,7 @@
   "Returns true if the origin is a loopback address (localhost, 127.0.0.1, or ::1) on any port"
   [raw-origin]
   (when raw-origin
-    (let [origin (parse-url raw-origin)]
+    (let [origin (try-parse-url raw-origin)]
       (and origin
            (contains? loopback-hosts (u/lower-case-en (:domain origin)))))))
 
@@ -252,7 +259,7 @@
     ;; Check against approved origins list
     (when (and (seq raw-origin) (seq approved-origins-raw))
       (let [approved-list (parse-approved-origins approved-origins-raw)
-            origin        (parse-url raw-origin)]
+            origin        (try-parse-url raw-origin)]
         (when origin
           (some (fn [approved-origin]
                   (and
@@ -275,7 +282,7 @@
           "Vary"                        "Origin"})
        {"Access-Control-Allow-Headers"  "*"
         "Access-Control-Allow-Methods"  "*"
-        "Access-Control-Expose-Headers" "Content-Disposition, X-Metabase-Anti-CSRF-Token, X-Metabase-Version"
+        "Access-Control-Expose-Headers" "Content-Disposition, X-Metabase-Anti-CSRF-Token, X-Metabase-Version, Mcp-Session-Id"
         ;; Needed for Embedding SDK. Should cache preflight requests for the specified number of seconds.
         "Access-Control-Max-Age"  "60"}))))
 

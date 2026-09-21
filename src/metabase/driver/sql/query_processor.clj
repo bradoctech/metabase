@@ -2,7 +2,6 @@
   "The Query Processor is responsible for translating the Metabase Query Language into HoneySQL SQL forms."
   (:refer-clojure :exclude [some mapv every? select-keys empty? not-empty])
   (:require
-   [clojure.core.match :refer [match]]
    [clojure.string :as str]
    [honey.sql :as sql]
    [honey.sql.helpers :as sql.helpers]
@@ -21,6 +20,7 @@
    [metabase.util.i18n :refer [tru]]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
+   [metabase.util.match :as match]
    [metabase.util.performance :as perf :refer [empty? every? mapv not-empty select-keys some]]
    [toucan2.pipeline :as t2.pipeline])
   (:import
@@ -44,10 +44,13 @@
   "See [[make-nestable-sql]] but does not wrap in result in parens."
   [sql]
   (-> sql
-      (str/replace #";([\s;]*(--.*\n?)*)*$" "")
+      ;; Strip the trailing run of semicolons / whitespace / line comments. Possessive quantifiers (`*+`) make
+      ;; this match in a single forward pass: without them the nested unbounded quantifiers over overlapping
+      ;; character classes backtrack super-linearly (O(n^2) on many trailing comment lines), which can wedge the JVM.
+      (str/replace #";[\s;]*+(?:--.*+[\s;]*+)*+$" "")
       str/trimr
       (as-> trimmed
-        ;; Query could potentially end with a comment.
+            ;; Query could potentially end with a comment.
             (if (re-find #"--.*$" trimmed)
               (str trimmed "\n")
               trimmed))))
@@ -439,6 +442,20 @@
   driver/dispatch-on-initialized-driver
   :hierarchy #'driver/hierarchy)
 
+(defn check-interval-unit
+  "Throw unless `unit` is one of the closed set of temporal-interval units, then return it.
+
+  Several drivers turn the unit into SQL by interpolating `(name unit)` into a `[:raw …]` form, so the unit must be
+  constrained to the closed set here. The MBQL schema constrains the unit, but
+  that check does not run on stages spliced in from a source card, and the save-time schema is a `mu/defn` return schema
+  that is compiled out of a production build -- so this must be a plain runtime guard, not a `:pre` or a `mu` schema."
+  [unit]
+  (when-not (contains? driver-api/datetime-interval-units unit)
+    (throw (ex-info (tru "Invalid temporal unit: {0}" (pr-str unit))
+                    {:type driver-api/qp.error-type.invalid-query
+                     :unit unit})))
+  unit)
+
 (mu/defn adjust-start-of-week
   "Truncate to the day the week starts on.
 
@@ -480,13 +497,13 @@
      (inline? offset) (recur driver day-of-week-honeysql-expr (second offset) mod-fn)
      (zero? offset)   day-of-week-honeysql-expr
      (neg? offset)    (recur driver day-of-week-honeysql-expr (+ offset 7) mod-fn)
-     :else            (-> [:coalesce
-                           [:nullif
-                            (mod-fn (h2x/+ day-of-week-honeysql-expr offset) (inline-num 7))
-                            [:inline 0]]
-                           [:inline 7]]
-                          (h2x/with-database-type-info (or (h2x/database-type day-of-week-honeysql-expr)
-                                                           "integer"))))))
+     ;; `((dow + offset - 1) % 7) + 1` shifts the day-of-week into the range [1, 7] and propagates NULL.
+     :else            (let [shifted (if (= offset 1)
+                                      day-of-week-honeysql-expr
+                                      (h2x/+ day-of-week-honeysql-expr (dec offset)))]
+                        (-> (h2x/+ (mod-fn shifted (inline-num 7)) (inline-num 1))
+                            (h2x/with-database-type-info (or (h2x/database-type day-of-week-honeysql-expr)
+                                                             "integer")))))))
 
 (defmulti quote-style
   "Return the dialect that should be used by Honey SQL 2 when building a SQL statement. Defaults to `:ansi`, but other
@@ -683,21 +700,45 @@
   [_driver this]
   this)
 
+;; this is mostly a safeguard against unintentional SQL injection with a value like
+;;
+;;    {:raw "1) UNION SELECT 1 -- "}
+;;
+;; which Honey SQL will normally happily compile.
+(defmethod ->honeysql [:sql clojure.lang.IPersistentMap]
+  [driver _this]
+  (throw (ex-info "Unexpected ->honeysql call on a map"
+                  {:driver driver, :type driver-api/qp.error-type.invalid-query})))
+
 (defmethod ->honeysql [:sql Number]
   [_driver n]
   (inline-num n))
 
+(defn check-value-literal
+  "Throw unless `value` -- the value slot of a `:value` clause -- is a plain literal.
+
+  The slot is schema-typed `any?`, so drivers that build SQL from it directly instead of recursing
+  through [[->honeysql]] should check it themselves."
+  [driver value]
+  (when (coll? value)
+    (throw (ex-info "Unexpected collection in a :value clause"
+                    {:driver driver, :type driver-api/qp.error-type.invalid-query}))))
+
 (defmethod ->honeysql [:sql :value]
   [driver [_ value {base-type :base_type effective-type :effective_type}]]
   (when (some? value)
+    (check-value-literal driver value)
     (condp #(isa? %2 %1) (or effective-type base-type)
       ;; When we are dealing with a uuid type we should try to convert to a real UUID
       ;; If that fails,, we will add a fallback cast to "text"
-      :type/UUID (when (not= "" value) ; support is-empty/non-empty checks
-                   (try
-                     (UUID/fromString value)
-                     (catch IllegalArgumentException _
-                       (h2x/with-type-info value {:database-type "varchar"}))))
+      :type/UUID (cond
+                   (instance? UUID value) value
+                   (= "" value)           nil ; support is-empty/non-empty checks
+                   (string? value)        (try
+                                            (UUID/fromString value)
+                                            (catch IllegalArgumentException _
+                                              (h2x/with-type-info value {:database-type "varchar"})))
+                   :else                  value)
       (->honeysql driver value))))
 
 (defn- literal-text-value?
@@ -771,28 +812,28 @@
        "metabase.driver.sql.query-processor/cast-field-id-needed with a legacy (snake_cased) :model/Field"
        "0.48.0")
       (recur driver (perf/update-keys field u/->kebab-case-en) honeysql-form))
-    (u/prog1 (match [base-type coercion-strategy]
-               [(:isa? :type/Number) (:isa? :Coercion/UNIXTime->Temporal)]
+    (u/prog1 (cond
+               (and (isa? base-type :type/Number) (isa? coercion-strategy :Coercion/UNIXTime->Temporal))
                (unix-timestamp->honeysql driver
                                          (semantic-type->unix-timestamp-unit coercion-strategy)
                                          honeysql-form)
 
-               [:type/Text (:isa? :Coercion/String->Temporal)]
+               (and (= base-type :type/Text) (isa? coercion-strategy :Coercion/String->Temporal))
                (cast-temporal-string driver coercion-strategy honeysql-form)
 
-               [(:isa? :type/*) (:isa? :Coercion/Bytes->Temporal)]
+               (and (isa? base-type :type/*) (isa? coercion-strategy :Coercion/Bytes->Temporal))
                (cast-temporal-byte driver coercion-strategy honeysql-form)
 
-               [(:isa? :type/DateTime) (:isa? :Coercion/DateTime->Date)]
+               (and (isa? base-type :type/DateTime) (isa? coercion-strategy :Coercion/DateTime->Date))
                (->date driver honeysql-form)
 
-               [:type/Text (:isa? :Coercion/String->Float)]
+               (and (= base-type :type/Text) (isa? coercion-strategy :Coercion/String->Float))
                (->float driver honeysql-form)
 
-               [:type/Text (:isa? :Coercion/String->Integer)]
+               (and (= base-type :type/Text) (isa? coercion-strategy :Coercion/String->Integer))
                (->integer driver honeysql-form)
 
-               [:type/Float (:isa? :Coercion/Float->Integer)]
+               (and (= base-type :type/Float) (isa? coercion-strategy :Coercion/Float->Integer))
                (->integer driver honeysql-form)
 
                :else honeysql-form)
@@ -894,6 +935,18 @@
   [_driver [_ _nfc-path]]
   nil)
 
+(defn- parent-id->ancestor-names
+  "Walk the parent chain for a field with `:parent-id` set and return the ancestor field names, \"oldest\" first.
+  For example, if field `c` has parent `b`, returns `[\"b\"]`.
+  If `c` has parent `b` which has parent `a`, returns `[\"a\" \"b\"]`."
+  [parent-id]
+  (loop [id   parent-id
+         path ()]
+    (if-not id
+      (vec path)
+      (let [parent (driver-api/field (driver-api/metadata-provider) id)]
+        (recur (:parent-id parent) (cons (:name parent) path))))))
+
 (defmethod ->honeysql [:sql :field]
   [driver [_ id-or-name options :as field-clause]]
   (try
@@ -904,43 +957,60 @@
           ;; which means nested native queries will cause bugs like #42817
           ;; but this should all be fixed with field refs overhaul!
           ;; https://linear.app/metabase-inc/issue/ENG-8766/[epic]-field-refs-overhaul
-          field-metadata       (when (integer? id-or-name)
-                                 (driver-api/field (driver-api/metadata-provider) id-or-name))
-          allow-casting?       (and (or (:qp/native-sandbox-column.force-coercion-strategy options)
-                                        (and field-metadata
-                                             (or (pos-int? (driver-api/qp.add.source-table options))
-                                                 (:qp/allow-coercion-for-columns-without-integer-qp.add.source-table options))))
-                                    (not (:qp/ignore-coercion options)))
+          field-metadata         (when (integer? id-or-name)
+                                   (driver-api/field (driver-api/metadata-provider) id-or-name))
+          ;; For fields with parent-id (struct-type nested fields), include parent field names
+          ;; in the identifier so e.g. `result.tag_name` is rendered instead of just `tag_name`.
+          parent-names           (when-let [parent-id (:parent-id field-metadata)]
+                                   (parent-id->ancestor-names parent-id))
+          allow-casting?         (and (or (:qp/native-sandbox-column.force-coercion-strategy options)
+                                          (and field-metadata
+                                               (or (pos-int? (driver-api/qp.add.source-table options))
+                                                   (:qp/allow-coercion-for-columns-without-integer-qp.add.source-table
+                                                    options))))
+                                      (not (:qp/ignore-coercion options)))
           ;; preserve metadata attached to the original field clause, for example BigQuery temporal type information.
-          identifier           (-> (apply h2x/identifier :field
-                                          (concat source-table-aliases (->honeysql driver [::nfc-path source-nfc-path]) [source-alias]))
-                                   (with-meta (meta field-clause)))
-          identifier           (->honeysql driver identifier)
+          identifier             (-> (apply h2x/identifier :field
+                                            (concat source-table-aliases
+                                                    (->honeysql driver [::nfc-path source-nfc-path])
+                                                    parent-names
+                                                    [source-alias]))
+                                     (with-meta (meta field-clause)))
+          identifier             (->honeysql driver identifier)
           ;; If no field-metadata is available, but a coercion strategy must be applied, synthesize enough
           ;; `field-metadata` to be able to cast it correctly.
-          field-metadata       (or field-metadata
-                                   (when allow-casting?
-                                     (-> options
-                                         (select-keys [:base-type :effetive-type])
-                                         (assoc :coercion-strategy
-                                                (:qp/native-sandbox-column.force-coercion-strategy options)))))
-          casted-field         (cast-field-if-needed driver field-metadata identifier)
-          database-type        (or (h2x/database-type casted-field)
-                                   (:database-type field-metadata))
-          effective-type       (when-not database-type
-                                 (let [et (or (:effective-type options) (:base-type options))]
-                                   (when (isa? et :type/Temporal)
-                                     et)))
-          maybe-add-type-info  (fn [expr]
-                                 (if (h2x/type-info->db-type (h2x/type-info expr))
-                                   expr
-                                   (if database-type
-                                     (h2x/with-database-type-info expr database-type)
-                                     (h2x/with-type-info expr {:effective-type effective-type}))))]
+          field-metadata         (or field-metadata
+                                     (when allow-casting?
+                                       (-> options
+                                           (select-keys [:base-type :effective-type])
+                                           (assoc :coercion-strategy
+                                                  (:qp/native-sandbox-column.force-coercion-strategy options)))))
+          casted-field            (cast-field-if-needed driver field-metadata identifier)
+          database-type           (or (h2x/database-type casted-field)
+                                      (:database-type field-metadata))
+          ;; In principle, setting the type based on the effective (or base) type is OK
+          ;; in all cases, but currently it's needed for correctness for temporal types
+          ;; and always setting them would result in failed tests that assert that the type
+          ;; info is missing.
+          ;; Another way of fixing #71551 could be tracking the database type through cards
+          ;; where the fields are converted to columns and lose the database type info.
+          ;; This way should be much easier once the column lineage can be tracked using
+          ;; column keys.
+          effective-temporal-type (when-not database-type
+                                    (let [et (or (:effective-type options) (:base-type options))]
+                                      (when (isa? et :type/Temporal)
+                                        et)))
+          ;; only called if database-type or effective-temporal-type is set
+          maybe-add-type-info     (fn [expr]
+                                    (if (h2x/type-info->db-type (h2x/type-info expr))
+                                      expr
+                                      (if database-type
+                                        (h2x/with-database-type-info expr database-type)
+                                        (h2x/with-type-info expr {:effective-type effective-temporal-type}))))]
       (u/prog1
         (cond->> (if allow-casting? casted-field identifier)
           ;; only add type info if it wasn't added by [[cast-field-if-needed]]
-          (or database-type effective-type) maybe-add-type-info
+          (or database-type effective-temporal-type) maybe-add-type-info
           (:temporal-unit options) (apply-temporal-bucketing driver options)
           (:binning options)       (apply-binning options))
         (log/trace (binding [*print-meta* true]
@@ -1174,7 +1244,7 @@
   (if (some interval? args)
     (if-let [[field intervals] (u/pick-first (complement interval?) args)]
       (reduce (fn [hsql-form [_ amount unit]]
-                (add-interval-honeysql-form driver hsql-form amount unit))
+                (add-interval-honeysql-form driver hsql-form amount (check-interval-unit unit)))
               (->honeysql driver field)
               intervals)
       (throw (ex-info "Summing intervals is not supported" {:args args})))
@@ -1196,7 +1266,7 @@
   (if (interval? (first other-args))
     (reduce (fn [hsql-form [_ amount unit]]
               ;; We are adding negative amount. Inspired by `->honeysql [:sql :datetime-subtract]`.
-              (add-interval-honeysql-form driver hsql-form (- amount) unit))
+              (add-interval-honeysql-form driver hsql-form (- amount) (check-interval-unit unit)))
             (->honeysql driver first-arg)
             other-args)
     (into [:-]
@@ -1325,7 +1395,7 @@
 ;;  aggregation REFERENCE e.g. the ["aggregation" 0] fields we allow in order-by
 (defmethod ->honeysql [:sql :aggregation]
   [driver [_ index]]
-  (driver-api/match-lite (nth (:aggregation *inner-query*) index)
+  (match/match-one (nth (:aggregation *inner-query*) index)
     [:aggregation-options ag {driver-api/qp.add.desired-alias desired-alias}]
     (->honeysql driver (h2x/identifier :field-alias desired-alias))
 
@@ -1335,7 +1405,7 @@
     [:aggregation-options ag {:name name}]
     (->honeysql driver (h2x/identifier :field-alias name))
 
-    [:aggregation-options ag options]
+    [:aggregation-options ag _]
     (&recur ag)
 
     ;; For some arcane reason we name the results of a distinct aggregation "count", everything else is named the
@@ -1388,11 +1458,11 @@
 
 (defmethod ->honeysql [:sql :datetime-add]
   [driver [_ arg amount unit]]
-  (add-interval-honeysql-form driver (->honeysql driver arg) amount unit))
+  (add-interval-honeysql-form driver (->honeysql driver arg) amount (check-interval-unit unit)))
 
 (defmethod ->honeysql [:sql :datetime-subtract]
   [driver [_ arg amount unit]]
-  (add-interval-honeysql-form driver (->honeysql driver arg) (- amount) unit))
+  (add-interval-honeysql-form driver (->honeysql driver arg) (- amount) (check-interval-unit unit)))
 
 (defn datetime-diff-check-args
   "This util function is used by SQL implementations of ->honeysql for the `:datetime-diff` clause.
@@ -1512,7 +1582,7 @@
   ([form]
    (rewrite-fields-to-force-using-column-aliases form {:is-breakout false}))
   ([form {is-breakout :is-breakout}]
-   (driver-api/replace-lite
+   (match/replace
      form
      [:field id-or-name opts]
      [:field id-or-name (cond-> opts
@@ -1665,12 +1735,12 @@
   "For := and :!=. Comparing UUID fields against non-uuid values requires casting."
   [driver field arg]
   (if (and (uuid-field? field)
-             ;; If the arg is a uuid we are happy especially for joins (#46558)
+           ;; If the arg is a uuid we are happy especially for joins (#46558)
            (not (uuid-field? arg))
-             ;; If we could not convert the arg to a UUID then we have to cast the Field.
-             ;; This will not hit indexes, but then we're passing an arg that can only be compared textually.
+           ;; If we could not convert the arg to a UUID then we have to cast the Field.
+           ;; This will not hit indexes, but then we're passing an arg that can only be compared textually.
            (not (uuid? (->honeysql driver arg)))
-             ;; Check for inlined values
+           ;; Check for inlined values
            (not (= (:database-type (h2x/type-info (->honeysql driver arg))) "uuid")))
     [::cast-to-text field]
     field))
@@ -1740,39 +1810,36 @@
                  [:effective-type])))
 
 (def ^:dynamic *parent-honeysql-col-type-info*
-  "To be bound in `->honeysql <driver> <op>` where op is on of {:>, :>=, :<, :<=, :=, :between}`. Its value should be
-  `{:base-type keyword? :database-type string?}`. The value is used in `->honeysql <driver> :relative-datetime`,
-  the :snowflake implementation at the time of writing, and later in the [[metabase.query-processor.util.relative-datetime/maybe-cacheable-relative-datetime-honeysql]]
-  to determine (1) format of server-side generated sql temporal string and (2) the database type it should be cast to."
+  "To be bound in `->honeysql <driver> <op>` where op is on of {:>, :>=, :<, :<=, :=, :between}`. It carries the
+  compiled LHS's full HoneySQL type-info (see [[metabase.util.honey-sql-2/type-info]]) merged with `:base-type` and
+  `:effective-type` from the MBQL field clause. Driver-specific keys (e.g. Postgres's `::target-timezone` on a
+  `convertTimezone` output) round-trip through this map."
   nil)
+
+(defn- parent-honeysql-col-type-info
+  [field field-honeysql]
+  (merge (h2x/type-info field-honeysql)
+         (parent-honeysql-col-effective-type-map field)
+         (parent-honeysql-col-base-type-map field)))
 
 (defmethod ->honeysql [:sql :between]
   [driver [_ field min-val max-val]]
   (let [field-honeysql (->honeysql driver field)]
-    (binding [*parent-honeysql-col-type-info* (merge (when-let [database-type (h2x/database-type field-honeysql)]
-                                                       {:database-type database-type})
-                                                     (parent-honeysql-col-effective-type-map field)
-                                                     (parent-honeysql-col-base-type-map field))]
+    (binding [*parent-honeysql-col-type-info* (parent-honeysql-col-type-info field field-honeysql)]
       [:between field-honeysql (->honeysql driver min-val) (->honeysql driver max-val)])))
 
 (doseq [operator [:> :>= :< :<=]]
   (defmethod ->honeysql [:sql operator] ; [:> :>= :< :<=] -- For grep.
     [driver [_ field value]]
     (let [field-honeysql (->honeysql driver field)]
-      (binding [*parent-honeysql-col-type-info* (merge (when-let [database-type (h2x/database-type field-honeysql)]
-                                                         {:database-type database-type})
-                                                       (parent-honeysql-col-effective-type-map field)
-                                                       (parent-honeysql-col-base-type-map field))]
+      (binding [*parent-honeysql-col-type-info* (parent-honeysql-col-type-info field field-honeysql)]
         [operator field-honeysql (->honeysql driver value)]))))
 
 (defmethod ->honeysql [:sql :=]
   [driver [_ field value]]
   (assert (some? field))
   (let [field-honeysql (->honeysql driver (maybe-cast-uuid-for-equality driver field value))]
-    (binding [*parent-honeysql-col-type-info* (merge (when-let [database-type (h2x/database-type field-honeysql)]
-                                                       {:database-type database-type})
-                                                     (parent-honeysql-col-effective-type-map field)
-                                                     (parent-honeysql-col-base-type-map field))]
+    (binding [*parent-honeysql-col-type-info* (parent-honeysql-col-type-info field field-honeysql)]
       [:= field-honeysql (->honeysql driver value)])))
 
 (defn- correct-null-behaviour
@@ -1780,7 +1847,7 @@
   ;; We must not transform the head again else we'll have an infinite loop
   ;; (and we can't do it at the call-site as then it will be harder to fish out field references)
   (let [honeysql-clause (into [op] (map (partial ->honeysql driver)) args)]
-    (if-let [field-arg (driver-api/match-lite args
+    (if-let [field-arg (match/match-one args
                          [#{:field :expression} & _] &match)]
       [:or
        honeysql-clause
@@ -2040,6 +2107,10 @@
 (declare apply-clauses)
 
 (defn- resolve-persisted-source-sql
+  "If `source-query` came from a card with a valid persisted cache, independently look up the cache from the metadata
+  provider and return the native SQL. Returns nil if no cache exists, or if persisted cache use has been disabled for
+  this query (e.g. due to sandboxing or connection impersonation — see
+  [[metabase.query-processor.middleware.persistence/substitute-persisted-query]])."
   [source-query]
   (when-not (:qp/skip-persisted-cache source-query)
     (when-let [card-id (:qp/stage-is-from-source-card source-query)]
@@ -2080,8 +2151,8 @@
     (merge
      honeysql-form
      (if needs-columns?
-        ;; HoneySQL cannot expand [::h2x/identifier :table "__mb_source"] in the with alias.
-        ;; This is ok since we control the alias.
+       ;; HoneySQL cannot expand [::h2x/identifier :table "__mb_source"] in the with alias.
+       ;; This is ok since we control the alias.
        {:with [[[source-query-alias {:columns (mapv #(h2x/identifier :field %) desired-aliases)}]
                 source-clause]]
         :from [[table-alias]]}
@@ -2131,7 +2202,6 @@
         (u/prog1 (apply-clauses driver {} inner-query)
           (log/debugf "\nHoneySQL Form: %s\n%s" (u/emoji "🍯") (u/pprint-to-str 'cyan <>))
           (driver-api/debug> (list '🍯 <>)))))
-
     (let [metadata-provider (driver-api/metadata-provider)
           database-id       (if (:type query)
                               (:database query)

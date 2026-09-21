@@ -3,6 +3,7 @@ import { t } from "ttag";
 import _ from "underscore";
 import * as Yup from "yup";
 
+import { ColorSchemeSelect } from "metabase/common/components/ColorScheme";
 import { CommunityLocalizationNotice } from "metabase/common/components/CommunityLocalizationNotice";
 import {
   Form,
@@ -12,8 +13,8 @@ import {
   FormSubmitButton,
   FormTextInput,
 } from "metabase/forms";
-import * as Errors from "metabase/lib/errors";
-import { Box } from "metabase/ui";
+import { Box, Text } from "metabase/ui";
+import * as Errors from "metabase/utils/errors";
 import type { LocaleData, User } from "metabase-types/api";
 
 import type { UserProfileData } from "../../types";
@@ -67,6 +68,7 @@ const UserProfileForm = ({
 
   return (
     <Box>
+      <ColorSchemeSwitcher />
       <FormProvider
         initialValues={initialValues}
         validationSchema={schema}
@@ -131,6 +133,18 @@ const getLocaleOptions = (locales: LocaleData[] | null) => {
     .value();
 
   return [{ label: t`Use site default`, value: "" }, ...options];
+};
+
+const ColorSchemeSwitcher = () => {
+  return (
+    <Box mb="md">
+      <Text mt="xs" fw="bold">
+        {t`Theme`}
+      </Text>
+
+      <ColorSchemeSelect />
+    </Box>
+  );
 };
 
 // eslint-disable-next-line import/no-default-export -- deprecated usage

@@ -1,6 +1,7 @@
 import { useDisclosure } from "@mantine/hooks";
 import { t } from "ttag";
 
+import { UpsellCloud } from "metabase/admin/upsells/UpsellCloud";
 import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { Box, Button, Icon, Modal, Text } from "metabase/ui";
 
@@ -18,6 +19,10 @@ export const MigrationStart = ({
 
   return (
     <>
+      <Box mb="xl">
+        <UpsellCloud onOpenModal={openModal} source="settings-cloud" />
+      </Box>
+
       <Modal
         opened={isModalOpen}
         onClose={closeModal}

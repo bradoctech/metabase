@@ -110,9 +110,9 @@
          clojure.lang.ExceptionInfo
          #"Invalid pivot-cols: specified breakout at index 3, but we only have 3 breakouts"
          (#'qp.pivot/breakout-combinations 3 [] [0 1 2 3] true true)))))
-  ;; TODO -- we should require these columns to be distinct as well (I think?)
-  ;; TODO -- require all numbers to be positive
-  ;; TODO -- can you specify something in both pivot-rows and pivot-cols?
+;; TODO -- we should require these columns to be distinct as well (I think?)
+;; TODO -- require all numbers to be positive
+;; TODO -- can you specify something in both pivot-rows and pivot-cols?
 
 (defn- test-query []
   (mt/dataset test-data
@@ -634,7 +634,7 @@
 
 (deftest ^:parallel mbql-5-query-test
   (testing "Should be able to run a pivot query for an MBQL 5 query (#39024)"
-    ;; this is literally the same query as [[pivot-with-order-by-aggregation-test]], just in MLv2, so it should return
+    ;; this is literally the same query as [[pivot-with-order-by-aggregation-test]], just in Lib, so it should return
     ;; the same exact results.
     (let [metadata-provider  (mt/metadata-provider)
           reviews            (lib.metadata/table metadata-provider (mt/id :reviews))

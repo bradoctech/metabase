@@ -2,13 +2,14 @@ import { match } from "ts-pattern";
 import { jt, t } from "ttag";
 
 import { ExternalLink } from "metabase/common/components/ExternalLink";
+import { UpsellMetabaseBanner } from "metabase/common/components/upsells/UpsellMetabaseBanner";
 import { useDocsUrl } from "metabase/common/hooks";
-import { useSelector } from "metabase/lib/redux";
 import type {
   DisplayTheme,
   EmbedResourceType,
   EmbeddingDisplayOptions,
 } from "metabase/public/lib/types";
+import { useSelector } from "metabase/redux";
 import { getSetting, getUpgradeUrl } from "metabase/selectors/settings";
 import { getCanWhitelabel } from "metabase/selectors/whitelabel";
 import {
@@ -201,6 +202,14 @@ export const LookAndFeelSettings = ({
         </Stack>
       </StaticEmbedSetupPaneSettingsContentSection>
 
+      {!canWhitelabel && (
+        <>
+          <Divider my="2rem" />
+          <div aria-label={t`Removing the banner`}>
+            <UpsellMetabaseBanner />
+          </div>
+        </>
+      )}
     </>
   );
 };

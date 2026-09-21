@@ -57,7 +57,6 @@ export {
   PLUGIN_DB_ROUTING,
   PLUGIN_DATABASE_REPLICATION,
   PLUGIN_TABLE_EDITING,
-  PLUGIN_WORKSPACES,
 } from "./oss/database";
 export { PLUGIN_EMBEDDING, type SimpleDataPickerProps } from "./oss/embedding";
 export { PLUGIN_EMBEDDING_IFRAME_SDK } from "./oss/embedding-iframe-sdk";
@@ -74,7 +73,10 @@ export {
   type PublishTablesModalProps,
   type UnpublishTablesModalProps,
 } from "./oss/library";
-export { PLUGIN_METABOT } from "./oss/metabot";
+export {
+  PLUGIN_METABOT,
+  type MetabaseAIProviderSetupProps,
+} from "./oss/metabot";
 export { PLUGIN_MODEL_PERSISTENCE } from "./oss/model-persistence";
 export {
   PLUGIN_MODERATION,
@@ -147,6 +149,7 @@ export {
   type WritableConnectionInfoSectionProps,
 } from "./oss/writable-connection";
 export { PLUGIN_SECURITY_CENTER } from "./oss/security-center";
+export { PLUGIN_AI_CONTROLS, type AiControlsPlugin } from "./oss/ai-controls";
 export { PLUGIN_SUPPORT } from "./oss/support";
 export { PLUGIN_TENANTS } from "./oss/tenants";
 
@@ -161,6 +164,7 @@ export type {
 // Export a single reinitialize function that calls all individual reinitialize functions
 import { reinitialize as reinitializeNotificationsSdk } from "../../embedding-sdk-bundle/components/public/notifications";
 
+import { reinitialize as reinitializeAiControls } from "./oss/ai-controls";
 import { reinitialize as reinitializeApi } from "./oss/api";
 import { reinitialize as reinitializeAudit } from "./oss/audit";
 import { reinitialize as reinitializeAuth } from "./oss/auth";
@@ -203,6 +207,7 @@ import { reinitialize as reinitializeWritableConnection } from "./oss/writable-c
 export function reinitialize() {
   reinitializeNotificationsSdk();
 
+  reinitializeAiControls();
   reinitializeApi();
   reinitializeAudit();
   reinitializeAuth();

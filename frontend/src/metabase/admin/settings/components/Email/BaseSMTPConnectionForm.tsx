@@ -17,8 +17,8 @@ import {
   FormSubmitButton,
   FormTextInput,
 } from "metabase/forms";
-import * as Errors from "metabase/lib/errors";
 import { Box, Button, Chip, Flex, Modal, Stack } from "metabase/ui";
+import * as Errors from "metabase/utils/errors";
 import type { SettingDefinitionMap, SettingKey } from "metabase-types/api";
 
 import { SetByEnvVarWrapper } from "../widgets/AdminSettingInput";
@@ -46,7 +46,7 @@ const getFormValueSchema = (
 ) => {
   const portSchema = secureMode
     ? Yup.string()
-        .oneOf(["465", "587", "2525"], t`Must be either 465, 587 or 2525`)
+        .oneOf(["465", "587", "2525"], "Must be either 465, 587 or 2525")
         .nullable()
         .default("465")
     : Yup.number()
@@ -59,7 +59,7 @@ const getFormValueSchema = (
     ? Yup.string()
         .oneOf(
           ["ssl", "tls", "starttls"],
-          t`Must be either SSL, TLS or STARTTLS`,
+          "Must be either SSL, TLS or STARTTLS",
         )
         .nullable()
         .default("ssl")
@@ -183,7 +183,7 @@ export const BaseSMTPConnectionForm = ({
     ];
 
     if (!secureMode) {
-      options.unshift({ value: "none", label: t`None` });
+      options.unshift({ value: "none", label: "None" });
     }
 
     return options;
@@ -290,7 +290,7 @@ export const BaseSMTPConnectionForm = ({
                     name={getFullFormKey("password")}
                     type="password"
                     label={t`SMTP Password`}
-                    placeholder={t`Shhh...`}
+                    placeholder={"Shhh..."}
                   />
                 </SetByEnvVarWrapper>
 

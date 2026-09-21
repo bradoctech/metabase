@@ -4,6 +4,7 @@
    [medley.core :as m]
    [metabase.metabot.agent.links :as links]
    [metabase.metabot.agent.streaming :as streaming]
+   [metabase.metabot.scope :as scope]
    [metabase.metabot.tools.charts.create :as create-chart-tools]
    [metabase.metabot.tools.charts.edit :as edit-chart-tools]
    [metabase.metabot.tools.shared :as shared]
@@ -32,7 +33,8 @@
    [:viz_settings [:map {:closed true}
                    [:chart_type chart-type-enum]]]])
 
-(mu/defn ^{:tool-name "create_chart"}
+(mu/defn ^{:tool-name "create_chart"
+           :scope     scope/agent-viz-create}
   create-chart-tool
   "Create a chart from a query.
 
@@ -60,7 +62,8 @@
    [:new_viz_settings [:map {:closed true}
                        [:chart_type chart-type-enum]]]])
 
-(mu/defn ^{:tool-name "edit_chart"}
+(mu/defn ^{:tool-name "edit_chart"
+           :scope     scope/agent-viz-edit}
   edit-chart-tool
   "Edit an existing chart's visualization type.
 
@@ -79,12 +82,10 @@
             :charts-state (shared/current-charts-state)})
 
           structured (assoc result :result-type :chart)]
-
       ;; Add the new chart to memory so it can be referenced in the conversation going forward.
       (when (and (:chart_id new-chart-data) shared/*memory-atom*)
         (swap! shared/*memory-atom* assoc-in [:state :charts (:chart_id new-chart-data)]
                new-chart-data))
-
       {:output (format-chart-output structured)
        :structured-output structured
        :data-parts [(streaming/navigate-to-part
@@ -92,7 +93,6 @@
                       {:dataset_query query
                        :display new-viz
                        :displayIsLocked true}))]})
-
     (catch Exception e
       (log/error e "Error editing chart")
       (if (:agent-error? (ex-data e))
