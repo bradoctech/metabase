@@ -1,9 +1,9 @@
 import { t } from "ttag";
 import _ from "underscore";
 
-import { hasFeature } from "metabase/admin/databases/utils";
 import type { OmniPickerCollectionItem } from "metabase/common/components/Pickers/EntityPicker/types";
-import { parseTimestamp } from "metabase/lib/time-dayjs";
+import { hasFeature } from "metabase/common/utils/database";
+import { parseTimestamp } from "metabase/utils/time-dayjs";
 import * as Lib from "metabase-lib";
 import type Metadata from "metabase-lib/v1/metadata/Metadata";
 import type {
@@ -273,3 +273,7 @@ export const getRootCollectionItem = ({
   }
   return null;
 };
+
+export function isMissingSourceDatabase(transform: Transform) {
+  return transform.source_database_id == null;
+}

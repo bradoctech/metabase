@@ -15,8 +15,8 @@ import {
   waitForLoaderToBeRemoved,
   within,
 } from "__support__/ui";
-import { serializeCardForUrl } from "metabase/lib/card";
-import registerVisualizations from "metabase/visualizations/register";
+import { serializeCardForUrl } from "metabase/common/utils/card";
+import { registerVisualizations } from "metabase/visualizations/register";
 import {
   createMockCardQueryMetadata,
   createMockDataset,

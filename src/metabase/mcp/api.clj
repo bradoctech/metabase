@@ -1,27 +1,31 @@
 (ns metabase.mcp.api
   "MCP (Model Context Protocol) Streamable HTTP transport handler.
-   Exposes Metabase's agent tools via JSON-RPC 2.0 over a single `/api/mcp` endpoint."
+   Exposes Metabase's agent tools via JSON-RPC 2.0 over each of the MCP endpoints."
   (:require
    [clojure.core.async :as a]
    [clojure.string :as str]
+   [clojure.walk :as walk]
    [compojure.response :as compojure.response]
    [java-time.api :as t]
    [metabase.api.common :as api]
    [metabase.api.macros.scope :as scope]
    [metabase.api.open-api :as open-api]
+   [metabase.mcp.core :as mcp]
+   [metabase.mcp.resources :as mcp.resources]
    [metabase.mcp.tools :as mcp.tools]
    [metabase.mcp.validation :as mcp.validation]
    [metabase.oauth-server.core :as oauth-server]
    [metabase.request.core :as request]
+   [metabase.server.middleware.security :as mw.security]
    [metabase.server.streaming-response :as streaming-response]
    [metabase.system.core :as system]
+   [metabase.util :as u]
    [metabase.util.json :as json]
    [metabase.util.log :as log]
    [oidc-provider.store :as oidc.store]
    [throttle.core :as throttle])
   (:import
    (java.io BufferedWriter OutputStreamWriter)
-   (java.net URI)
    (java.nio.charset StandardCharsets)
    (java.util UUID)))
 
@@ -74,7 +78,7 @@
   (jsonrpc-response
    id
    {:protocolVersion protocol-version
-    :capabilities    {:tools {}}
+    :capabilities    {:tools {:listChanged true} :resources {}}
     :serverInfo      server-info}))
 
 (defn- handle-tools-list [id _params token-scopes]
@@ -84,6 +88,20 @@
   (let [tool-name (:name params)
         arguments (or (:arguments params) {})]
     (jsonrpc-response id (mcp.tools/call-tool token-scopes tool-name arguments))))
+
+(defn- handle-resources-list [id _params token-scopes]
+  (jsonrpc-response id (mcp.resources/list-resources token-scopes)))
+
+(defn- handle-resources-read [id params token-scopes]
+  (let [uri (:uri params)]
+    (if (or (not (string? uri)) (str/blank? uri))
+      (jsonrpc-error id -32602 "Missing required parameter: uri")
+      (let [{:keys [status contents]} (mcp.resources/read-resource uri token-scopes {})]
+        ;; :not-found and :scope-denied collapse to the same generic error so we
+        ;; don't leak resource existence to callers without scope.
+        (case status
+          (:not-found :scope-denied) (jsonrpc-error id -32602 "Resource not found")
+          :ok                        (jsonrpc-response id {:contents contents}))))))
 
 (defn- handle-ping [id _params]
   (jsonrpc-response id {}))
@@ -99,6 +117,8 @@
         "notifications/initialized" nil
         "tools/list"                (handle-tools-list id params token-scopes)
         "tools/call"                (handle-tools-call id params token-scopes)
+        "resources/list"            (handle-resources-list id params token-scopes)
+        "resources/read"            (handle-resources-read id params token-scopes)
         "ping"                      (handle-ping id params)
         (if id
           (jsonrpc-error id -32601 (str "Method not found: " method))
@@ -143,18 +163,40 @@
 
 ;;; ------------------------------------------------- Validation --------------------------------------------------
 
+(defn- normalize-domain
+  "Extract and lowercase the domain from a URL or Host-style header value.
+   Bracketed IPv6 forms (`[::1]:3000`) and ports are handled correctly. Returns nil for unparsable input.
+   Uses `try-parse-url` (the silent variant) — `Origin`/`Host` are client-controlled, so malformed inputs
+   are expected and shouldn't spam the error logs."
+  [url]
+  (some-> url str mw.security/try-parse-url :domain u/lower-case-en))
+
+(defn- same-origin-host? [origin host]
+  (let [origin-domain (normalize-domain origin)]
+    (and (some? origin-domain) (= origin-domain (normalize-domain host)))))
+
+(defn- approved-mcp-origin? [origin]
+  ;; Pre-lowercase both inputs so DNS hostname matching is case-insensitive (per RFC) and so mixed-case
+  ;; schemes still match `try-parse-url`'s lowercase-only `https?|app|capacitor` regex.
+  (boolean
+   (or (mcp/sandbox-origin? origin)
+       (when-let [approved-origins (not-empty (mcp/cors-origins))]
+         (when-let [origin-url (mw.security/try-parse-url (u/lower-case-en origin))]
+           (some (fn [approved-origin]
+                   (and (mw.security/approved-domain? (:domain origin-url) (:domain approved-origin))
+                        (mw.security/approved-protocol? (:protocol origin-url) (:protocol approved-origin))
+                        (mw.security/approved-port? (:port origin-url) (:port approved-origin))))
+                 (mw.security/parse-approved-origins (u/lower-case-en approved-origins))))))))
+
 (defn- validate-origin
   "Validate the Origin header to prevent DNS rebinding attacks (MCP spec requirement).
-   Returns a 403 response if Origin is present and doesn't match the request's Host header.
-   Non-browser clients that omit the Origin header are allowed through."
+   Returns a 403 response if Origin is present and is neither same-host nor an explicitly configured
+   MCP app origin. Non-browser clients that omit the Origin header are allowed through."
   [request]
   (when-let [origin (get-in request [:headers "origin"])]
     (let [host (get-in request [:headers "host"])]
-      (when-not (try
-                  (let [origin-host (.getHost (URI. origin))
-                        request-host (first (str/split (str host) #":"))]
-                    (= origin-host request-host))
-                  (catch Exception _ false))
+      (when-not (or (same-origin-host? origin host)
+                    (approved-mcp-origin? origin))
         (json-response 403 (jsonrpc-error nil -32600 "Origin not allowed"))))))
 
 (defn- session-error-response
@@ -169,7 +211,7 @@
 (defn- handle-post
   "Handle a POST request containing one or more JSON-RPC messages."
   [user-id request]
-  (let [body        (:body request)
+  (let [body        (walk/keywordize-keys (:body request))
         session-id  (get-in request [:headers "mcp-session-id"])
         batch?      (sequential? body)
         session-err (delay (session-error-response session-id))]
@@ -216,10 +258,18 @@
           :else
           (json-response 200 responses))))))
 
+(def ^:private tools-list-changed-notification
+  {:jsonrpc "2.0" :method "notifications/tools/list_changed"})
+
 (defn- handle-get
-  "Handle a GET request for SSE stream (keepalive for server-initiated notifications)."
+  "Handle a GET request for SSE stream (keepalive for server-initiated notifications).
+   Polls the tool manifest hash on each keepalive tick — if the visible tool set has
+   changed since the previous tick, emits an MCP `notifications/tools/list_changed`
+   message so the client knows to refetch `tools/list`. Stateless: each connection
+   tracks its own last-seen hash; no shared registry."
   [_user-id request respond raise]
   (let [session-id (get-in request [:headers "mcp-session-id"])
+        token-scopes (:token-scopes request)
         session-err (session-error-response session-id)]
     (cond
       (some? session-err)
@@ -232,12 +282,16 @@
                    :status       200}
                   [os canceled-chan]
                    (let [writer (BufferedWriter. (OutputStreamWriter. os StandardCharsets/UTF_8))]
-                     (loop []
+                     (loop [last-hash (mcp.tools/tools-hash token-scopes)]
                        (when-not (a/poll! canceled-chan)
                          (.write writer ": keepalive\n\n")
                          (.flush writer)
                          (Thread/sleep 30000)
-                         (recur)))))]
+                         (let [current-hash (mcp.tools/tools-hash token-scopes)]
+                           (when (not= current-hash last-hash)
+                             (.write writer ^String (sse-body [tools-list-changed-notification]))
+                             (.flush writer))
+                           (recur current-hash))))))]
         (compojure.response/send* resp request respond raise)))))
 
 (defn- handle-delete
@@ -274,8 +328,27 @@
 
 ;;; ---------------------------------------------------- Handler ---------------------------------------------------
 
-(defn- www-authenticate-discovery []
-  (str "Bearer realm=\"mcp\" resource_metadata=\"" (system/site-url) "/.well-known/oauth-protected-resource/api/mcp\""))
+;; Source of truth for the route aliases — keep in sync with the route-map in
+;; [[metabase.api-routes.routes]] and resource-metadata endpoints in [[metabase.oauth-server.api.metadata]].
+(def ^:private endpoint-paths
+  "URL paths that serve the MCP endpoint, relative to site-url.
+   `/api/metabase-mcp` is canonical (the advertised URL); `/api/mcp` is a legacy alias kept for
+   back-compat with existing clients."
+  #{"/api/metabase-mcp" "/api/mcp"})
+
+(defn- www-authenticate-discovery
+  "Build the `WWW-Authenticate` header advertising OAuth discovery for the path the client hit.
+   A client connecting via an alias is pointed at that same alias as the protected resource."
+  [request]
+  ;; Routing matches on the first path segment, so a trailing slash (e.g. `/api/metabase-mcp/`) still
+  ;; reaches the handler — strip it so the alias is recognized rather than falling back to canonical.
+  (let [uri  (str/replace (:uri request) #"/+$" "")
+        path (if (contains? endpoint-paths uri) uri "/api/metabase-mcp")]
+    (str "Bearer realm=\"mcp\" resource_metadata=\"" (system/site-url) "/.well-known/oauth-protected-resource" path "\"")))
+
+(def +mcp-enabled
+  "Wrap routes so they may only be accessed when the MCP server is enabled."
+  mcp.validation/+mcp-enabled)
 
 (def +mcp-enabled
   "Wrap routes so they may only be accessed when the MCP server is enabled."
@@ -320,5 +393,5 @@
            ;; No auth at all — return 401 with discovery
            :else
            (respond (json-response 401 (jsonrpc-error nil -32603 "Authentication required")
-                                   {"WWW-Authenticate" (www-authenticate-discovery)}))))))
+                                   {"WWW-Authenticate" (www-authenticate-discovery request)}))))))
    (constantly nil)))

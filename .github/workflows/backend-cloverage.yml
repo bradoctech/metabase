@@ -17,7 +17,8 @@ on:
 
 jobs:
   setup-oss:
-    runs-on: ${{ vars.DEFAULT_RUNNER_KEY }}
+    runs-on: ${{ vars.SLIM_RUNNER_KEY }}
+    timeout-minutes: 5
     outputs:
       modules: ${{ steps.get-modules.outputs.modules }}
     steps:
@@ -57,14 +58,15 @@ jobs:
 
       - name: Upload coverage to codecov.io
         if: always()
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./target/coverage/codecov.json
           flags: back-end
 
   setup-ee:
-    runs-on: ${{ vars.DEFAULT_RUNNER_KEY }}
+    runs-on: ${{ vars.SLIM_RUNNER_KEY }}
+    timeout-minutes: 5
     outputs:
       modules: ${{ steps.get-modules.outputs.modules }}
     steps:
@@ -104,7 +106,7 @@ jobs:
 
       - name: Upload coverage to codecov.io
         if: always()
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@1af58845a975a7985b0beb0cbe6fbbb71a41dbad # v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./target/coverage/codecov.json

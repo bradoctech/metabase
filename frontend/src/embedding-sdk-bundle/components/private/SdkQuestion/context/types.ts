@@ -11,6 +11,10 @@ import type {
   SqlParameterValues,
 } from "embedding-sdk-bundle/types/question";
 import type {
+  EmbeddingDataPicker,
+  EmbeddingEntityType,
+} from "metabase/redux/store/embedding-data-picker";
+import type {
   ClickActionModeGetter,
   ClickActionsMode,
   QueryClickActionsMode,
@@ -18,10 +22,6 @@ import type {
 import type Question from "metabase-lib/v1/Question";
 import type { CardDisplayType, DashboardId } from "metabase-types/api";
 import type { EntityToken } from "metabase-types/api/entity";
-import type {
-  EmbeddingDataPicker,
-  EmbeddingEntityType,
-} from "metabase-types/store/embedding-data-picker";
 
 type SdkQuestionConfig = {
   /**
@@ -63,6 +63,11 @@ type SdkQuestionConfig = {
    * The collection to save the question to. This will hide the collection picker from the save modal. Only applicable to interactive questions.
    */
   targetCollection?: SdkCollectionId;
+
+  /**
+   * The collection to preselect in the save modal's collection picker. Unlike `targetCollection`, the picker remains visible and the user can choose a different collection. Ignored when `targetCollection` is set.
+   */
+  initialCollection?: SdkCollectionId;
 
   /**
    * Additional mapper function to override or add drill-down menu
@@ -154,6 +159,7 @@ export type SdkQuestionContextType = Omit<
     | "onNavigateBack"
     | "isSaveEnabled"
     | "targetCollection"
+    | "initialCollection"
     | "withDownloads"
     | "withAlerts"
     | "backToDashboard"
@@ -164,6 +170,8 @@ export type SdkQuestionContextType = Omit<
     mode: QueryClickActionsMode | ClickActionsMode | null | undefined;
     originalId: SdkQuestionId | null;
     token: EntityToken | null | undefined;
+    lastVisibleStageIndex: number;
+    updateAndNormalizeQuestion: LoadQuestionHookResult["updateQuestion"];
     resetQuestion: () => void;
     onReset: () => void;
     onCreate: (question: Question) => Promise<Question>;

@@ -1,3 +1,4 @@
+export * from "./ai-controls";
 export * from "./api";
 export * from "./audit-info";
 export * from "./billing-info";
@@ -18,4 +19,3 @@ export * from "./table";
 export * from "./tags";
 export * from "./tenants";
 export * from "./upload-management";
-export * from "./workspace";

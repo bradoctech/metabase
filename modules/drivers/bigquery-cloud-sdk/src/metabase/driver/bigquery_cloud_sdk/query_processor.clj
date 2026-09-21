@@ -571,8 +571,8 @@
     (sql.u/validate-convert-timezone-args timestamptz? target-timezone source-timezone)
     (-> (if timestamptz?
           hsql-form
-          [:timestamp hsql-form (or source-timezone (driver-api/results-timezone-id))])
-        (datetime target-timezone)
+          [:timestamp hsql-form (sql.qp/->honeysql driver (or source-timezone (driver-api/results-timezone-id)))])
+        (datetime (sql.qp/->honeysql driver target-timezone))
         (with-temporal-type :datetime))))
 
 (defmethod sql.qp/float-dbtype :bigquery-cloud-sdk
@@ -676,10 +676,6 @@
       (should-qualify-identifier? identifier) update-identifier-prefix-components
       true                                    (vary-meta assoc ::do-not-qualify? true))))
 
-(defmethod sql.qp/->honeysql [:bigquery-cloud-sdk ::sql.qp/nfc-path]
-  [_driver [_ nfc-path]]
-  nfc-path)
-
 (defn- with-base-temporal-type
   [[_ _id-or-name {:keys [base-type]} :as clause]]
   (if (not (instance? clojure.lang.IObj clause))
@@ -709,7 +705,7 @@
         (if (and (driver-api/json-field? stored-field)
                  (or (::sql.qp/forced-alias opts)
                      (= source-table driver-api/qp.add.source)))
-          (keyword source-alias)
+          (h2x/identifier :field-alias source-alias)
           result)))))
 
 (defmethod sql.qp/->honeysql [:bigquery-cloud-sdk :relative-datetime]
@@ -788,8 +784,8 @@
   ;; numbers, and underscores, start with a letter or underscore, and be at most 128 characters long.
   (let [s (-> (str/trim s)
               u/remove-diacritical-marks
-              (str/replace #"[^\w\d_]" "_")
-              (str/replace #"(^\d)" "_$1"))]
+              (str/replace #"[^\p{L}\p{N}\p{M}\p{Pc}]" "_")
+              (str/replace #"(^[^\p{L}_])" "_$1"))]
     ((get-method driver/escape-alias :sql) driver s)))
 
 ;; See:
@@ -926,8 +922,15 @@
 ;;; |                                Other Driver / SQLDriver Method Implementations                                 |
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
+(def ^:private bigquery-interval-units
+  "Allow-list of the temporal-interval units BigQuery's `INTERVAL` accepts. The unit is interpolated into `[:raw …]`,
+  which does no escaping, so it must be checked against this closed set before `(name unit)` is emitted."
+  #{:microsecond :millisecond :second :minute :hour :day :week :month :quarter :year})
+
 (defn- interval [amount unit]
   ;; todo: can bigquery have an expression here or just a numeric literal?
+  (when-not (contains? bigquery-interval-units unit)
+    (throw (ex-info (str "Invalid temporal unit: " (pr-str unit)) {:unit unit})))
   [:raw (format "INTERVAL %d %s" (int amount) (name unit))])
 
 ;; We can coerce the HoneySQL form this wraps to whatever we want and generate the appropriate SQL.
@@ -1039,9 +1042,22 @@
   [driver [_ field]]
   [:log (sql.qp/->honeysql driver field) [:inline 10]])
 
+;; GoogleSQL quoted identifiers support the same escape sequences as string literals: a backslash escapes the next
+;; character, and a literal backtick is written `\``. There is no doubling escape -- two adjacent backticks close one
+;; identifier and open the next -- so a backslash must be doubled before the wrapping backticks go on, otherwise it
+;; escapes the closing one and the rest of the identifier is parsed as raw SQL.
+(sql/register-dialect!
+ ::bigquery
+ (assoc (sql/get-dialect :mysql)
+        :quote (fn [s]
+                 (str \` (-> s
+                             (str/replace "\\" "\\\\")
+                             (str/replace "`" "\\`"))
+                      \`))))
+
 (defmethod sql.qp/quote-style :bigquery-cloud-sdk
   [_driver]
-  :mysql)
+  ::bigquery)
 
 (mu/defmethod sql.params.substitution/->replacement-snippet-info [:bigquery-cloud-sdk FieldFilter]
   [driver                            :- :keyword

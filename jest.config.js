@@ -29,13 +29,20 @@ const baseConfig = {
      * We want to exclude the SDK from the main app's bundle to reduce the bundle size.
      */
     "sdk-iframe-embedding-ee-plugins":
-      "<rootDir>/frontend/src/metabase/lib/noop.ts",
-    "ee-plugins": "<rootDir>/frontend/src/metabase/lib/noop.ts",
+      "<rootDir>/frontend/src/metabase/utils/noop.ts",
+    "ee-plugins": "<rootDir>/frontend/src/metabase/utils/noop.ts",
+    "ee-overrides": "<rootDir>/frontend/src/metabase/utils/noop.ts",
     /**
      * Imports which are only applicable to the embedding sdk.
      * As we use SDK components in new iframe embedding, we need to import them here.
      **/
-    "sdk-specific-imports": "<rootDir>/frontend/src/metabase/lib/noop.ts",
+    "sdk-specific-imports": "<rootDir>/frontend/src/metabase/utils/noop.ts",
+    /**
+     * Docs snippets are loaded as raw text (asset/source) in rspack.
+     * In Jest, mock them as plain strings.
+     */
+    "^docs/embedding/sdk/snippets/(.*)$":
+      "<rootDir>/frontend/test/__mocks__/fileMock.js",
     "docs/(.*)$": "<rootDir>/docs/$1",
   },
   transformIgnorePatterns: [
@@ -94,7 +101,12 @@ const baseConfig = {
 
 /** @type {import('jest').Config} */
 const config = {
-  reporters: ["default", "jest-junit"],
+  // `addFileAttribute` makes jest-junit emit the source path as a `file`
+  // attribute on each <testcase>. Additive — it leaves classname/name untouched,
+  // so Trunk's existing test identity is preserved — and it lets both Trunk
+  // (codeowners/file attribution) and the ci-conductor reporter resolve a real
+  // source file. Output dir/name come from the JEST_JUNIT_OUTPUT_* env vars.
+  reporters: ["default", ["jest-junit", { addFileAttribute: "true" }]],
   coverageReporters: ["html", "lcov"],
   watchPlugins: [
     "jest-watch-typeahead/filename",
@@ -114,13 +126,13 @@ const config = {
 
       setupFiles: [
         ...baseConfig.setupFiles,
-        "<rootDir>/frontend/src/embedding-sdk-shared/jest/setup-env.js",
+        "<rootDir>/frontend/src/embedding-sdk-shared/jest/setup-env.ts",
       ],
 
       setupFilesAfterEnv: [
         ...baseConfig.setupFilesAfterEnv,
-        "<rootDir>/frontend/src/embedding-sdk-shared/jest/setup-after-env.js",
-        "<rootDir>/frontend/src/embedding-sdk-shared/jest/console-restrictions.js",
+        "<rootDir>/frontend/src/embedding-sdk-shared/jest/setup-after-env.ts",
+        "<rootDir>/frontend/src/embedding-sdk-shared/jest/console-restrictions.ts",
       ],
     },
     {

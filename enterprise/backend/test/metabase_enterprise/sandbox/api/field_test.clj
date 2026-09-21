@@ -4,6 +4,7 @@
    [clojure.test :refer :all]
    [metabase-enterprise.sandbox.test-util :as mt.tu]
    [metabase-enterprise.test :as met]
+   [metabase.auth-identity.core :as auth-identity]
    [metabase.test :as mt]
    [metabase.warehouse-schema.models.field-values :as field-values]
    [toucan2.core :as t2]))
@@ -55,7 +56,6 @@
                                           ["La Tortilla"]]
                         :has_more_values false}
                        (fetch-values :rasta :name)))
-
                 (testing (str "Now in this case recall that the `restricted-column-query` GTAP we're using does *not* include "
                               "`venues.price` in the results. (Toucan isn't allowed to know the number of dollar signs!) So "
                               "make sure if we try to fetch the field values instead of seeing `[[1] [2] [3] [4]]` we get no "
@@ -64,7 +64,6 @@
                           :values          []
                           :has_more_values false}
                          (fetch-values :rasta :price))))
-
                 (testing "Reset field values; if another User fetches them first, do I still see sandboxed values? (metabase/metaboat#128)"
                   (field-values/clear-field-values-for-field! (mt/id :venues :name))
                   ;; fetch Field values with an admin
@@ -84,7 +83,8 @@
                            (fetch-values :rasta :name))))
                   (testing "A User with a *different* sandbox should see their own values"
                     (let [password (mt/random-name)]
-                      (mt/with-temp [:model/User another-user {:password password}]
+                      (mt/with-temp [:model/User another-user]
+                        (auth-identity/set-password! (:id another-user) password)
                         (met/with-gtaps-for-user! another-user {:gtaps      {:venues
                                                                              {:remappings
                                                                               {:cat
@@ -154,10 +154,10 @@
           (is (= 1 (t2/count :model/FieldValues
                              :field_id (:id field)
                              :type :advanced)))))
-
       (testing "Do different users has different sandbox FieldValues"
         (let [password (mt/random-name)]
-          (mt/with-temp [:model/User another-user {:password password}]
+          (mt/with-temp [:model/User another-user]
+            (auth-identity/set-password! (:id another-user) password)
             (met/with-gtaps-for-user! another-user {:gtaps      {:venues
                                                                  {:remappings {:cat [:variable [:field (mt/id :venues :category_id) nil]]}
                                                                   :query      (mt.tu/restricted-column-query (mt/id))}}
@@ -167,7 +167,6 @@
               (is (= 2 (t2/count :model/FieldValues
                                  :field_id (:id field)
                                  :type :advanced)))))))
-
       (testing "Do we invalidate the cache when full FieldValues change"
         (try
           (let [;; Updating FieldValues which should invalidate the cache
@@ -184,7 +183,6 @@
           (finally
             ;; Put everything back as it was
             (field-values/get-or-create-full-field-values! field))))
-
       (testing "When a sandbox fieldvalues expired, do we delete it then create a new one?"
         (#'field-values/clear-advanced-field-values-for-field! field)
         ;; make sure we have a cache

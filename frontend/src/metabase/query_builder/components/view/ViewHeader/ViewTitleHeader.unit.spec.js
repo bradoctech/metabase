@@ -7,8 +7,9 @@ import { setupTableEndpoints } from "__support__/server-mocks";
 import { setupGetUserKeyValueEndpoint } from "__support__/server-mocks/user-key-value";
 import { createMockEntitiesState } from "__support__/store";
 import { fireEvent, renderWithProviders, screen } from "__support__/ui";
-import MetabaseSettings from "metabase/lib/settings";
+import { createMockState } from "metabase/redux/store/mocks";
 import { getMetadata } from "metabase/selectors/metadata";
+import MetabaseSettings from "metabase/utils/settings";
 import * as Lib from "metabase-lib";
 import Question from "metabase-lib/v1/Question";
 import { COMMON_DATABASE_FEATURES } from "metabase-types/api/mocks";
@@ -18,11 +19,11 @@ import {
   PRODUCTS,
   PRODUCTS_ID,
   SAMPLE_DB_ID,
+  createAdHocNativeCard,
   createOrdersTable,
   createProductsTable,
   createSampleDatabase,
 } from "metabase-types/api/mocks/presets";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { ViewTitleHeader } from "./ViewTitleHeader";
 
@@ -102,6 +103,26 @@ function getSavedNativeQuestionCard(overrides) {
   };
 }
 
+function getNativeQuestionCardWithUnmappedTag(type) {
+  return createAdHocNativeCard({
+    dataset_query: {
+      type: "native",
+      database: SAMPLE_DB_ID,
+      native: {
+        query: "select * from products where {{my_filter}}",
+        "template-tags": {
+          my_filter: {
+            id: "24d574c5-40e7-4e9d-9d0e-3fbc7b1f7bd0",
+            name: "my_filter",
+            "display-name": "My Filter",
+            type,
+          },
+        },
+      },
+    },
+  });
+}
+
 function mockSettings({ enableNestedQueries = true } = {}) {
   MetabaseSettings.get = jest.fn().mockImplementation((key) => {
     if (key === "enable-nested-queries") {
@@ -139,7 +160,7 @@ function setup({
     onOpenModal: jest.fn(),
     onAddFilter: jest.fn(),
     onCloseFilter: jest.fn(),
-    onEditSummary: jest.fn(),
+    editSummary: jest.fn(),
     onOpenQuestionInfo: jest.fn(),
     onCloseSummary: jest.fn(),
     onSave: jest.fn(),
@@ -320,12 +341,12 @@ describe("ViewTitleHeader", () => {
         });
 
         it("offers to summarize query results", () => {
-          const { onEditSummary } = setup({
+          const { editSummary } = setup({
             card,
             queryBuilderMode: "view",
           });
           fireEvent.click(screen.getByText("Summarize"));
-          expect(onEditSummary).toHaveBeenCalled();
+          expect(editSummary).toHaveBeenCalled();
         });
 
         it("allows to open notebook editor", () => {
@@ -567,6 +588,32 @@ describe("View Header | Not saved native question", () => {
     setupNative();
     expect(screen.queryByText("Explore results")).not.toBeInTheDocument();
   });
+
+  describe.each(["dimension", "temporal-unit"])(
+    "%s template tag without a field",
+    (type) => {
+      const UNMAPPED_TAG_ERROR =
+        'The variable "my_filter" needs to be mapped to a field.';
+
+      it("does not let the question be saved and explains why", async () => {
+        const { onOpenModal } = setup({
+          card: getNativeQuestionCardWithUnmappedTag(type),
+          isDirty: true,
+        });
+
+        const saveButton = screen.getByTestId("qb-save-button");
+        expect(saveButton).toHaveAttribute("aria-disabled", "true");
+
+        await userEvent.hover(saveButton);
+        expect(await screen.findByRole("tooltip")).toHaveTextContent(
+          UNMAPPED_TAG_ERROR,
+        );
+
+        await userEvent.click(saveButton);
+        expect(onOpenModal).not.toHaveBeenCalled();
+      });
+    },
+  );
 });
 
 describe("View Header | Saved native question", () => {

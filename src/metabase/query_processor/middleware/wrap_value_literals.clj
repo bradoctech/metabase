@@ -3,14 +3,12 @@
   information; parses datetime string literals when appropriate."
   (:refer-clojure :exclude [select-keys])
   (:require
-   [clojure.string :as str]
    [java-time.api :as t]
    [metabase.lib.core :as lib]
    [metabase.lib.metadata :as lib.metadata]
    [metabase.lib.schema :as lib.schema]
    [metabase.lib.schema.expression :as lib.schema.expression]
    [metabase.lib.types.isa :as lib.types.isa]
-   [metabase.lib.util.match :as lib.util.match]
    [metabase.lib.walk :as lib.walk]
    [metabase.query-processor.error-type :as qp.error-type]
    ^{:clj-kondo/ignore [:deprecated-namespace]} [metabase.query-processor.store :as qp.store]
@@ -18,9 +16,12 @@
    [metabase.util.date-2 :as u.date]
    [metabase.util.i18n :as i18n]
    [metabase.util.malli :as mu]
+   [metabase.util.match :as match]
    [metabase.util.performance :refer [select-keys]])
   (:import
    (java.time LocalDate LocalDateTime LocalTime OffsetDateTime OffsetTime ZonedDateTime)))
+
+(set! *warn-on-reflection* true)
 
 (mu/defn- value :- :mbql.clause/value
   [info :- :map v]
@@ -185,31 +186,25 @@
   (let [t (parse-temporal-string-literal-to-class s OffsetTime)]
     (lib/time t target-unit)))
 
-(defmethod parse-temporal-string-literal :type/DateTime
-  [_effective-type s target-unit]
-  (let [t (parse-temporal-string-literal-to-class s LocalDateTime)]
-    (lib/absolute-datetime t target-unit)))
-
-(defn- date-literal-string? [s]
-  (not (str/includes? s "T")))
-
-(defmethod parse-temporal-string-literal :type/DateTimeWithTZ
-  [_effective-type s target-unit]
-  (let [t (parse-temporal-string-literal-to-class s OffsetDateTime)
+(defn- parse-datetime-string-literal [s target-unit klass]
+  (let [t (parse-temporal-string-literal-to-class s klass)
         target-unit (if (and (= target-unit :default)
-                             (date-literal-string? s))
+                             (try (LocalDate/parse s) true (catch Exception _ false)))
                       :day
                       target-unit)]
     (lib/absolute-datetime t target-unit)))
 
+(defmethod parse-temporal-string-literal :type/DateTime
+  [_effective-type s target-unit]
+  (parse-datetime-string-literal s target-unit LocalDateTime))
+
+(defmethod parse-temporal-string-literal :type/DateTimeWithTZ
+  [_effective-type s target-unit]
+  (parse-datetime-string-literal s target-unit OffsetDateTime))
+
 (defmethod parse-temporal-string-literal :type/DateTimeWithZoneID
   [_effective-type s target-unit]
-  (let [target-unit (if (and (= target-unit :default)
-                             (date-literal-string? s))
-                      :day
-                      target-unit)
-        t           (parse-temporal-string-literal-to-class s ZonedDateTime)]
-    (lib/absolute-datetime t target-unit)))
+  (parse-datetime-string-literal s target-unit ZonedDateTime))
 
 (defmethod add-type-info String
   [s {:keys [unit], :as info} & {:keys [parse-datetime-strings?]
@@ -227,7 +222,7 @@
 
 (defn- wrap-value-literals-in-clause
   [query path clause]
-  (lib.util.match/match-lite clause
+  (match/match-one clause
     ;; two literals
     [(tag :guard #{:= :!= :< :> :<= :>=}) opts (x :guard raw-value?) (y :guard raw-value?)]
     (let [x-type (lib.schema.expression/type-of-resolved x)
@@ -282,7 +277,7 @@
 (defn unwrap-value-literal
   "Extract value literal from `:value` form or returns form as is if not a `:value` form."
   [maybe-value-form]
-  (lib.util.match/match-lite maybe-value-form
+  (match/match-one maybe-value-form
     [:value x & _] x
     _              maybe-value-form))
 
@@ -321,7 +316,7 @@
   {:deprecated "0.57.0"}
   [mbql :- [:cat :keyword [:* :any]]]
   (-> mbql
-      lib/->pMBQL
+      lib/->mbql5
       (as-> $mbql (binding [*type-info* (fn [_query _path clause]
                                           #_{:clj-kondo/ignore [:deprecated-var]}
                                           (type-info-no-query clause))]

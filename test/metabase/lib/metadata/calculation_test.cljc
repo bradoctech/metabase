@@ -40,7 +40,6 @@
                      (map (comp :long-display-name #(lib/display-info query 0 %))))]
     (is (= ["ID" "Name" "Category ID" "Latitude" "Longitude" "Price" "Category → ID" "Category → Name"]
            results)))
-
   (let [query (lib/query meta/metadata-provider (meta/table-metadata :orders))
         results (->> query
                      lib/visible-columns
@@ -289,14 +288,12 @@
           (is (= []
                  (->> (lib/visible-columns query)
                       (remove (comp #{:source/card} :lib/source)))))))
-
       (testing "metadata for the FK target field is not sufficient"
         (let [query (query-with-user-id-tweaks {:fk-target-field-id (meta/id :people :id)})]
           (is (= 9 (count (lib/visible-columns query))))
           (is (= []
                  (->> (lib/visible-columns query)
                       (remove (comp #{:source/card} :lib/source)))))))
-
       (testing "an ID for the FK field itself is not sufficient"
         (let [query (query-with-user-id-tweaks {:id            (meta/id :orders :user-id)
                                                 :semantic-type nil})]
@@ -959,7 +956,6 @@
   (testing "temporal unit should not be incorrectly propagated in returned-columns past the stage where the bucketing was done"
     (let [query (lib/query
                  meta/metadata-provider
-
                  (lib.tu.macros/mbql-query people
                    {:source-query {:source-table $$people
                                    :breakout     [!month.created-at]
@@ -1221,3 +1217,38 @@
                  (lib.metadata.calculation/primary-source card-query)))))
       (testing "returns nil for a query based on a table"
         (is (nil? (lib.metadata.calculation/primary-source-card table-query)))))))
+#?(:clj
+   (defmethod lib.metadata.calculation/display-name-method ::throws
+     [_query _stage-number x _style]
+     (throw (:throwable x))))
+
+#?(:clj
+   (deftest ^:synchronized suggested-name-vm-error-test
+     (testing "a VM Error thrown while describing the query propagates out of suggested-name"
+       (with-redefs [lib.metadata.calculation/describe-query (fn [_query] (throw (Error. "boom")))]
+         (is (thrown? Error
+                      (lib.metadata.calculation/suggested-name (lib.tu/venues-query))))))
+     (testing "an Exception thrown while describing the query yields nil"
+       (with-redefs [lib.metadata.calculation/describe-query (fn [_query] (throw (ex-info "boom" {})))]
+         (is (nil? (lib.metadata.calculation/suggested-name (lib.tu/venues-query))))))))
+
+#?(:clj
+   (deftest ^:parallel display-name-vm-error-test
+     (testing "a VM Error thrown while computing a display name propagates unwrapped"
+       (let [e (Error. "boom")]
+         (is (identical? e
+                         (try
+                           (lib.metadata.calculation/display-name (lib.tu/venues-query)
+                                                                  {:lib/type ::throws, :throwable e})
+                           nil
+                           (catch Error actual actual))))))
+     (testing "an Exception thrown while computing a display name is wrapped with context"
+       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Error calculating display name"
+                             (lib.metadata.calculation/display-name (lib.tu/venues-query)
+                                                                    {:lib/type ::throws
+                                                                     :throwable (ex-info "boom" {})}))))
+     (testing "an AssertionError thrown while computing a display name is contained (wrapped), not propagated"
+       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Error calculating display name"
+                             (lib.metadata.calculation/display-name (lib.tu/venues-query)
+                                                                    {:lib/type ::throws
+                                                                     :throwable (AssertionError. "boom")}))))))

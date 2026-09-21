@@ -16,7 +16,6 @@
    [metabase.driver.util :as driver.u]
    [metabase.lib.core :as lib]
    [metabase.lib.metadata :as lib.metadata]
-   [metabase.lib.util.match :as lib.util.match]
    [metabase.query-processor.compile :as qp.compile]
    [metabase.query-processor.test :as qp]
    [metabase.query-processor.test-util :as qp.test-util]
@@ -26,6 +25,7 @@
    [metabase.test.data.mongo :as tdm]
    [metabase.util.json :as json]
    [metabase.util.log :as log]
+   [metabase.util.match :as match]
    [metabase.xrays.automagic-dashboards.core :as magic]
    [taoensso.nippy :as nippy]
    [toucan2.core :as t2])
@@ -277,6 +277,16 @@
                            :visibility-type :details-only}}}
                (driver/describe-table :mongo (mt/db) (t2/select-one :model/Table :id (mt/id :nested-bindata)))))))))
 
+(deftest describe-table-respects-sync-max-fields-per-table-test
+  (mt/test-driver :mongo
+    (testing "describe-table caps the total number of fields at sync-max-fields-per-table"
+      ;; `venues` has 6 fields; with a tiny limit only that many are returned (capped during the tree build so a huge
+      ;; or deeply-nested collection can't OOM sync).
+      (mt/with-temporary-setting-values [sync-max-fields-per-table 2]
+        (is (= 2 (count (:fields (driver/describe-table
+                                  :mongo (mt/db)
+                                  (t2/select-one :model/Table :id (mt/id :venues)))))))))))
+
 ;; Index sync is turned off across the application as it is not used ATM.
 #_(deftest sync-indexes-info-test
     (mt/test-driver :mongo
@@ -292,26 +302,22 @@
                                          ["multi-key-index"
                                           [{:field-name "url" :indexed? false :base-type :type/Text}]
                                           [[{:small "http://example.com/small.jpg" :large "http://example.com/large.jpg"}]]])
-
         (try
           (testing "singly index"
             (is (true? (t2/select-one-fn :database_indexed :model/Field (mt/id :singly-index :indexed))))
             (is (false? (t2/select-one-fn :database_indexed :model/Field (mt/id :singly-index :not-indexed)))))
-
           (testing "compound index"
             (mongo.connection/with-mongo-database [db (mt/db)]
               (mongo.util/create-index (mongo.util/collection db "compound-index") (array-map "first" 1 "second" 1)))
             (sync/sync-database! (mt/db))
             (is (true? (t2/select-one-fn :database_indexed :model/Field (mt/id :compound-index :first))))
             (is (false? (t2/select-one-fn :database_indexed :model/Field (mt/id :compound-index :second)))))
-
           (testing "multi key index"
             (mongo.connection/with-mongo-database [db (mt/db)]
               (mongo.util/create-index (mongo.util/collection db "multi-key-index") (array-map "url.small" 1)))
             (sync/sync-database! (mt/db))
             (is (false? (t2/select-one-fn :database_indexed :model/Field :name "url")))
             (is (true? (t2/select-one-fn :database_indexed :model/Field :name "small"))))
-
           (finally
             (t2/delete! :model/Database (mt/id)))))))
 
@@ -380,7 +386,6 @@
                                            {:field-name "text-field" :indexed? false :base-type :type/Text}
                                            {:field-name "geospatial-field" :indexed? false :base-type :type/Text}]
                                           [["Ngoc" "Khuat" [10 20]]]])
-
         (sync/sync-database! (mt/db))
         (try
           (let [describe-indexes (fn [table-name]
@@ -391,31 +396,27 @@
                 (is (= #{{:type :normal-column-index :value "_id"}
                          {:type :normal-column-index :value "a"}}
                        (describe-indexes :singly-index))))
-
               (testing "compound index column index"
-             ;; first index column is :a
+                ;; first index column is :a
                 (mongo.util/create-index (mongo.util/collection db "compound-index") (array-map :a 1 :b 1 :c 1))
-             ;; first index column is :e
+                ;; first index column is :e
                 (mongo.util/create-index (mongo.util/collection db "compound-index") (array-map :e 1 :d 1 :f 1))
                 (is (= #{{:type :normal-column-index :value "_id"}
                          {:type :normal-column-index :value "a"}
                          {:type :normal-column-index :value "e"}}
                        (describe-indexes :compound-index))))
-
               (testing "compound index that has many keys can still determine the first key"
-              ;; first index column is :j
+                ;; first index column is :j
                 (mongo.util/create-index (mongo.util/collection db "compound-index-big")
                                          (array-map "j" 1 "b" 1 "c" 1 "d" 1 "e" 1 "f" 1 "g" 1 "h" 1 "a" 1))
                 (is (= #{{:type :normal-column-index :value "_id"}
                          {:type :normal-column-index :value "j"}}
                        (describe-indexes :compound-index-big))))
-
               (testing "multi key indexes"
                 (mongo.util/create-index (mongo.util/collection db "multi-key-index") (array-map "a.b" 1))
                 (is (= #{{:type :nested-column-index :value ["a" "b"]}
                          {:type :normal-column-index :value "_id"}}
                        (describe-indexes :multi-key-index))))
-
               (testing "advanced-index: hashed index, text index, geospatial index"
                 (mongo.util/create-index (mongo.util/collection db "advanced-index") (array-map "hashed-field" "hashed"))
                 (mongo.util/create-index (mongo.util/collection db "advanced-index") (array-map "text-field" "text"))
@@ -425,7 +426,6 @@
                          {:type :normal-column-index :value "_id"}
                          {:type :normal-column-index :value "text-field"}}
                        (describe-indexes :advanced-index))))))
-
           (finally
             (t2/delete! :model/Database (mt/id)))))))
 
@@ -438,7 +438,6 @@
                 (mt/run-mbql-query tips
                   {:aggregation [[:count]]
                    :filter      [:= $tips.source.username "tupac"]})))))
-
       (testing "Can we breakout against nested columns?"
         (is (= [[nil 297]
                 ["amy" 20]
@@ -577,19 +576,16 @@
                  (mt/rows (mt/run-mbql-query birds
                             {:filter [:= $bird_id "abcdefabcdefabcdefabcdef"]
                              :fields [$id $name $bird_id]})))))
-
         (testing "handle null ObjectId queries properly (#11134)"
           (is (= [[3 "Unlucky Raven" nil]]
                  (mt/rows (mt/run-mbql-query birds
                             {:filter [:is-null $bird_id]
                              :fields [$id $name $bird_id]})))))
-
         (testing "treat null ObjectId as empty (#15801)"
           (is (= [[3 "Unlucky Raven" nil]]
                  (mt/rows (mt/run-mbql-query birds
                             {:filter [:is-empty $bird_id]
                              :fields [$id $name $bird_id]}))))))
-
       (testing "treat non-null ObjectId as not-empty (#15801)"
         (is (= [[1 "Rasta Toucan" (ObjectId. "012345678901234567890123")]
                 [2 "Lucky Pigeon" (ObjectId. "abcdefabcdefabcdefabcdef")]]
@@ -615,19 +611,16 @@
                  (mt/rows (mt/run-mbql-query birds
                             {:filter [:= $bird_uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]
                              :fields [$id $name $bird_uuid]})))))
-
         (testing "handle null UUID queries properly"
           (is (= [[3 "Unlucky Raven" nil]]
                  (mt/rows (mt/run-mbql-query birds
                             {:filter [:is-null $bird_uuid]
                              :fields [$id $name $bird_uuid]})))))
-
         (testing "treat null UUID as empty"
           (is (= [[3 "Unlucky Raven" nil]]
                  (mt/rows (mt/run-mbql-query birds
                             {:filter [:is-empty $bird_uuid]
                              :fields [$id $name $bird_uuid]}))))))
-
       (testing "treat non-null UUID as not-empty"
         (is (= [[1 "Rasta Toucan" #uuid "11111111-1111-1111-1111-111111111111"]
                 [2 "Lucky Pigeon" #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]]
@@ -672,11 +665,11 @@
   (mt/test-driver :mongo
     (testing "make sure x-rays don't use features that the driver doesn't support"
       (is (nil?
-           (lib.util.match/match-lite
+           (match/match-one
              (->> (magic/automagic-analysis (t2/select-one :model/Field :id (mt/id :venues :price)) {})
                   :dashcards
                   (mapcat (comp :breakout :query :dataset_query :card)))
-             [:field _ (_ :guard :binning)] true))))))
+             [:field _ {:binning &truthy}] true))))))
 
 (deftest no-values-test
   (mt/test-driver :mongo
@@ -830,7 +823,6 @@
         (is (= {:version "4.0.28-23"
                 :semantic-version [4 0 29]}
                (driver/dbms-version :mongo (mt/db))))))
-
     (testing "Any values after rubbish in versionArray are ignored"
       (with-redefs [mongo.util/run-command (constantly {"version" "4.0.28-23"
                                                         "versionArray" [4 0 "NaN" 29]})]
@@ -1304,3 +1296,52 @@
                (->> (qp.compile/compile-with-inline-parameters query)
                     :query
                     (driver/prettify-native-form :mongo))))))))
+
+(deftest ^:parallel connection-hosts-test
+  (testing "hosts are read out of the connection string Mongo will actually use, `conn-uri` included"
+    (are [details expected] (= expected (driver/connection-hosts :mongo details))
+      {:host "db.example.com" :port 27017}
+      ["db.example.com"]
+
+      ;; a replica-set list in the plain host field
+      {:host "a.example.com,b.example.com"}
+      ["a.example.com" "b.example.com"]
+
+      ;; `conn-uri` can smuggle in a host the `:host` field never mentions
+      {:host "db.example.com" :use-conn-uri true
+       :conn-uri "mongodb://user:pw@10.0.0.5:27017,internal.corp:27018/db"}
+      ["10.0.0.5" "internal.corp"]
+
+      {:use-conn-uri true :conn-uri "mongodb+srv://user:pw@cluster.example.com/db"}
+      ["cluster.example.com"]))
+  (testing "a details map naming no host of its own contributes no hosts, as it does for every other driver"
+    ;; `write_data_details` and `admin_details` are overlays merged on top of `:details`, so they reach us as partial
+    ;; maps; one that only carries credentials repoints nothing, and the map it overlays is validated on its own
+    (are [details] (= [] (driver/connection-hosts :mongo details))
+      {}
+      {:user "admin" :pass "x"}
+      {:host "" :user "admin"}))
+  (testing "a connection string we cannot parse throws rather than reporting a host the driver may never use"
+    (are [details] (thrown? Throwable (driver/connection-hosts :mongo details))
+      {:use-conn-uri true :conn-uri "not a connection string"}
+      ;; the dangerous shape: a benign `:host` left over from before `use-conn-uri` was turned on
+      {:host "db.example.com" :use-conn-uri true :conn-uri "not a connection string"}
+      {:use-conn-uri true :conn-uri nil})))
+
+(deftest connection-hosts-are-validated-test
+  (testing "a `conn-uri` pointing at a private address is refused"
+    (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "external-only"]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"private or internal network address"
+                            (driver.u/validate-connection-hosts!
+                             :mongo
+                             {:host "db.example.com" :use-conn-uri true
+                              :conn-uri "mongodb://10.224.7.141:27017/db"})))))
+  (testing "a `conn-uri` we cannot parse is refused, not validated as the `:host` field instead"
+    (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "external-only"]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"could not apply security policy"
+                            (driver.u/validate-connection-hosts!
+                             :mongo
+                             {:host "db.example.com" :use-conn-uri true
+                              :conn-uri "not a connection string"}))))))

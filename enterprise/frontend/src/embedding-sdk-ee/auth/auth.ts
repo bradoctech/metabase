@@ -35,12 +35,12 @@ import {
 } from "metabase/embedding-sdk/config";
 import { samlTokenStorage } from "metabase/embedding-sdk/lib/saml-token-storage";
 import type { MetabaseEmbeddingSessionToken } from "metabase/embedding-sdk/types/refresh-token";
-import api from "metabase/lib/api";
-import { createAsyncThunk } from "metabase/lib/redux";
-import MetabaseSettings from "metabase/lib/settings";
 import { PLUGIN_EMBEDDING_SDK } from "metabase/plugins";
 import { loadSettings, refreshSiteSettings } from "metabase/redux/settings";
 import { refreshCurrentUser } from "metabase/redux/user";
+import { createAsyncThunk } from "metabase/redux/utils";
+import api from "metabase/utils/api";
+import MetabaseSettings from "metabase/utils/settings";
 import type { Settings } from "metabase-types/api";
 
 const GET_OR_REFRESH_SESSION = "sdk/token/GET_OR_REFRESH_SESSION";
@@ -249,12 +249,23 @@ const getRefreshToken = async ({
         headers: getSdkRequestHeaders(),
       });
 
-  const { method, url: responseUrl, hash } = urlResponseJson || {};
-  if (method === "saml") {
-    const token = await openSamlLoginPopup(responseUrl);
-    samlTokenStorage.set(token);
+  const {
+    method,
+    url: responseUrl,
+    hash,
+    "saml-popup-url": samlPopupUrl,
+  } = urlResponseJson || {};
 
-    return token;
+  if (method === "saml") {
+    const sessionToken = await openSamlLoginPopup(
+      responseUrl,
+      metabaseInstanceUrl,
+      samlPopupUrl,
+    );
+
+    samlTokenStorage.set(sessionToken);
+
+    return sessionToken;
   }
   if (method === "jwt" && responseUrl) {
     return jwtDefaultRefreshTokenFunction(

@@ -181,16 +181,32 @@
   "Insert new products into the transforms_products table."
   [products]
   (let [[schema source-table-name] (t2/select-one-fn (juxt :schema :name) :model/Table (mt/id :transforms_products))
-        spec (sql-jdbc.conn/db->pooled-connection-spec (mt/id))
-        values-list (str/join ", "
-                              (map (fn [{:keys [name category price created-at]}]
-                                     (format "('%s', '%s', %s, '%s')" name category price created-at))
-                                   products))
-        insert-sql (format "INSERT INTO %s (%s) VALUES %s"
-                           (sql.u/quote-name driver/*driver* :table schema source-table-name)
-                           (str/join "," (map #(sql.u/quote-name driver/*driver* :field %) ["name" "category" "price" "created_at"]))
-                           values-list)]
-    (driver/execute-raw-queries! driver/*driver* spec [[insert-sql]])))
+        spec      (sql-jdbc.conn/db->pooled-connection-spec (mt/id))
+        table-sql (sql.u/quote-name driver/*driver* :table schema source-table-name)
+        field-sql #(sql.u/quote-name driver/*driver* :field %)]
+    (if (#{:clickhouse :snowflake} driver/*driver*)
+      ;; ClickHouse has no auto-increment: a plain INSERT leaves `id` at the column default (0), which
+      ;; falls below any existing integer checkpoint. Snowflake has AUTOINCREMENT, but the sequence does
+      ;; not advance when rows are inserted with explicit ids (as the dataset loader does), so a plain
+      ;; INSERT gets `id` 1, again below the checkpoint. Assign explicit ids continuing from the current max.
+      (driver/execute-raw-queries!
+       driver/*driver* spec
+       (vec (for [{:keys [name category price created-at]} products]
+              [(format "INSERT INTO %s (%s) SELECT max(%s) + 1, '%s', '%s', %s, '%s' FROM %s"
+                       table-sql
+                       (str/join "," (map field-sql ["id" "name" "category" "price" "created_at"]))
+                       (field-sql "id")
+                       name category price created-at
+                       table-sql)])))
+      (let [values-list (str/join ", "
+                                  (map (fn [{:keys [name category price created-at]}]
+                                         (format "('%s', '%s', %s, '%s')" name category price created-at))
+                                       products))
+            insert-sql (format "INSERT INTO %s (%s) VALUES %s"
+                               table-sql
+                               (str/join "," (map field-sql ["name" "category" "price" "created_at"]))
+                               values-list)]
+        (driver/execute-raw-queries! driver/*driver* spec [[insert-sql]])))))
 
 (defn- delete-test-products!
   [products]
@@ -241,15 +257,12 @@
                       (is (= "table-incremental" (-> transform :target :type)))
                       (is (= "checkpoint" (-> transform :source :source-incremental-strategy :type)))
                       (is (= expected-field-id (-> transform :source :source-incremental-strategy :checkpoint-filter-field-id)))
-
                       (testing "No checkpoint exists initially"
                         (is (nil? (get-checkpoint-value (:id transform)))))
-
                       (testing "Can retrieve transform via API"
                         (let [retrieved (mt/user-http-request :crowberto :get 200 (format "transform/%d" (:id transform)))]
                           (is (= (:id transform) (:id retrieved)))
                           (is (= "Test Incremental Transform" (:name retrieved)))))
-
                       (testing "Transform appears in list endpoint"
                         (let [transforms (mt/user-http-request :crowberto :get 200 "transform")
                               our-transform (first (filter #(= (:id transform) (:id %)) transforms))]
@@ -277,12 +290,10 @@
                             distinct-timestamps (get-distinct-timestamp-count target-table)]
                         (is (= 16 row-count) "First run should process all 16 products")
                         (is (= 1 distinct-timestamps) "All rows should have the same timestamp from first run")
-
                         (testing "Checkpoint is created after first run"
                           (let [checkpoint (get-checkpoint-value (:id transform))]
                             (is (compare-checkpoint-values checkpoint-type expected-initial-checkpoint checkpoint)
                                 (format "Checkpoint should be MAX(%s) from all 16 rows" (:field-name checkpoint-config)))))))
-
                     (testing "Second run with no new data adds nothing"
                       (let [transform (t2/select-one :model/Transform (:id transform))]
                         (execute-transform-with-ordering! transform transform-type (:field-name checkpoint-config) {:run-method :manual})
@@ -290,10 +301,7 @@
                               distinct-timestamps (get-distinct-timestamp-count target-table)]
                           (is (= 16 row-count) "Should still have 16 rows, no new data")
                           (is (= 1 distinct-timestamps) "Should still have 1 distinct timestamp"))))
-
-                    (when (and (isa? driver/hierarchy driver/*driver* :sql-jdbc)
-                               (not= driver/*driver* :clickhouse)
-                               (not= driver/*driver* :snowflake))
+                    (when (isa? driver/hierarchy driver/*driver* :sql-jdbc)
                       (testing "After inserting new data, incremental run appends only new rows"
                         (with-insert-test-products!
                           [{:name "Incremental Twice Product"
@@ -338,14 +346,12 @@
                           (is (= 16 row-count) "Initial run should process all 16 products")
                           (is (= 1 distinct-timestamps) "All rows should have the same timestamp from first run")
                           (is (compare-checkpoint-values checkpoint-type expected-initial-checkpoint checkpoint) "Checkpoint should be created")))
-
                       (testing "Second incremental run with no new data"
                         (execute-transform-with-ordering! (get-transform) transform-type (:field-name checkpoint-config) {:run-method :manual})
                         (let [row-count           (get-table-row-count target-table)
                               distinct-timestamps (get-distinct-timestamp-count target-table)]
                           (is (= 16 row-count) "Should still have 16 rows, no new data")
                           (is (= 1 distinct-timestamps) "Should still have 1 distinct timestamp")))
-
                       (testing "Switch to non-incremental via PUT API"
                         (let [non-incremental-payload (-> initial-payload
                                                           (update :source dissoc :source-incremental-strategy)
@@ -355,7 +361,6 @@
                                                                             non-incremental-payload)]
                           (is (= "table" (-> updated :target :type)))
                           (is (nil? (-> updated :source :source-incremental-strategy)))))
-
                       (testing "Non-incremental run overwrites all data"
                         (let [transform (t2/select-one :model/Transform (:id transform))]
                           (execute-transform-with-ordering! transform transform-type (:field-name checkpoint-config) {:run-method :manual})
@@ -363,7 +368,6 @@
                                 distinct-timestamps (get-distinct-timestamp-count target-table)]
                             (is (= 16 row-count) "Should overwrite to 16 rows")
                             (is (= 1 distinct-timestamps) "All rows should have same timestamp after non-incremental overwrite"))
-
                           (testing "Running again still overwrites"
                             (execute-transform-with-ordering! transform transform-type (:field-name checkpoint-config) {:run-method :manual})
                             (let [row-count           (get-table-row-count target-table)
@@ -399,13 +403,11 @@
                         (testing "No checkpoint exists"
                           (let [checkpoint (get-checkpoint-value (:id transform))]
                             (is (nil? checkpoint) "No checkpoint for non-incremental transform")))))
-
                     (testing "Switch to incremental via PUT API"
                       (let [updated (mt/user-http-request :crowberto :put 200 (format "transform/%d" (:id transform))
                                                           incremental-payload)]
                         (is (= "table-incremental" (-> updated :target :type)))
                         (is (= "checkpoint" (-> updated :source :source-incremental-strategy :type)))))
-
                     (testing "First incremental run after switch recreates table with checkpoint"
                       (let [transform (t2/select-one :model/Transform (:id transform))]
                         (execute-transform-with-ordering! transform transform-type (:field-name checkpoint-config) {:run-method :manual})
@@ -415,7 +417,6 @@
                           (is (= 16 row-count) "Should have all 16 rows")
                           (is (= 1 distinct-timestamps) "Should have 1 distinct timestamp")
                           (is (compare-checkpoint-values checkpoint-type expected-initial-checkpoint checkpoint) "Checkpoint should be computed from existing data"))))
-
                     (testing "Second incremental run with no new data"
                       (let [transform (t2/select-one :model/Transform (:id transform))]
                         (execute-transform-with-ordering! transform transform-type (:field-name checkpoint-config) {:run-method :manual})
@@ -423,11 +424,7 @@
                               distinct-timestamps (get-distinct-timestamp-count target-table)]
                           (is (= 16 row-count) "Should still have 16 rows, no new data")
                           (is (= 1 distinct-timestamps) "Should still have 1 distinct timestamp"))))
-
-                    (when (and (isa? driver/hierarchy driver/*driver* :sql-jdbc) ; insert/delete test products only works for jdbc drivers at the moment
-                               (not= driver/*driver* :clickhouse)
-                               ;; this *should* work see #68965 for context, will plan follow-up task
-                               (not= driver/*driver* :snowflake))
+                    (when (isa? driver/hierarchy driver/*driver* :sql-jdbc) ; insert/delete test products only works for jdbc drivers at the moment
                       (testing "Add new data and run incrementally"
                         (with-insert-test-products!
                           [{:name "After Switch Product"
@@ -668,23 +665,18 @@
                         (is (= 1 distinct-timestamps) "All rows should have the same timestamp from first run")
                         (is (compare-checkpoint-values checkpoint-type expected-initial-checkpoint checkpoint)
                             (format "Checkpoint should be MAX(%s) from all 16 rows" field-name))))
-
                     (testing "Second run without new data adds nothing"
                       (let [transform (t2/select-one :model/Transform (:id transform))]
                         (transforms.execute/execute! transform {:run-method :manual})
                         (let [row-count (get-table-row-count target-table)]
                           (is (= 16 row-count) "Should still have 16 rows, no new data"))))
-
-                    (when (and (isa? driver/hierarchy driver/*driver* :sql-jdbc)
-                               (not= driver/*driver* :clickhouse)
-                               (not= driver/*driver* :snowflake))
+                    (when (isa? driver/hierarchy driver/*driver* :sql-jdbc)
                       (testing "After inserting new data, incremental run appends only new rows"
                         (with-insert-test-products!
                           [{:name "New Table Tag Product"
                             :category "Electronics"
                             :price 299.99
                             :created-at "2024-01-21T10:00:00"}]
-
                           (let [transform (t2/select-one :model/Transform (:id transform))]
                             (transforms.execute/execute! transform {:run-method :manual})
                             (let [row-count  (get-table-row-count target-table)

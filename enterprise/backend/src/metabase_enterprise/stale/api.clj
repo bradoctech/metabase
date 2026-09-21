@@ -70,7 +70,8 @@
                                :dataset_query
                                :card_schema
                                :last_used_at
-                               [{:select   [:status]
+                               [^:allow-subquery
+                                {:select   [:status]
                                  :from     [:moderation_review]
                                  :where    [:and
                                             [:= :moderated_item_type "card"]
@@ -114,7 +115,6 @@
                                [nil :dashboard_id]
                                [nil :location]
                                [nil :database_id]]
-
                               :id [:in (set (map :id dashboards))])
                    :can_write :can_delete :can_restore [:collection :effective_location])
        annotate-dashboard-with-collection-info

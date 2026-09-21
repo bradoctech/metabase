@@ -8,6 +8,7 @@
    [metabase-enterprise.serialization.v2.backfill-ids :as serdes.backfill]
    [metabase-enterprise.serialization.v2.models :as serdes.models]
    [metabase.collections.models.collection :as collection]
+   [metabase.config.core :as config]
    [metabase.models.serialization :as serdes]
    [metabase.util :as u]
    [metabase.util.log :as log]
@@ -35,7 +36,10 @@
     (conj "Setting")
 
     (not (:no-transforms opts))
-    (conj "Transform" "TransformTag" "TransformJob" "PythonLibrary")))
+    (conj "Transform" "TransformTag" "TransformJob" "PythonLibrary")
+
+    (not (:no-embedding-themes opts))
+    (conj "EmbeddingTheme")))
 
 (defn make-targets-of-type
   "Returns a targets seq with model type and given ids"
@@ -71,15 +75,29 @@
   (let [entity (t2/select-one [model :collection_id :name] :id id)]
     (format "%s %d (%s from collection %s)" (name model) id (:name entity) (collection-label (:collection_id entity)))))
 
-(defn- parse-target [[model-name id :as target]]
+(defn- missing-target-error
+  "Bad-input error for a target that matches no row. `id-kind` names the flavour of id for the message."
+  [model-name id-kind id]
+  (ex-info (format "Could not find %s with %s: %s" model-name id-kind id)
+           {:status-code 400
+            :model       model-name
+            :id          id}))
+
+(defn- parse-target
+  "Normalizes a `[model-name id]` target to a database-local id, checking that it actually exists.
+
+  Nothing downstream treats a missing target as an error: `serdes/descendants` finds no children for an
+  id with no row behind it, and a `nil` id quietly exports root-level content. Both are reported as bad
+  input here instead."
+  [[model-name id :as target]]
   (if (string? id)
     (if-let [resolved-id (serdes/eid->id model-name id)]
       [model-name resolved-id]
-      (throw (ex-info (format "Could not find %s with entity ID: %s" model-name id)
-                      {:status-code 400
-                       :model       model-name
-                       :entity-id   id})))
-    target))
+      (throw (missing-target-error model-name "entity ID" id)))
+    (let [model (keyword "model" model-name)]
+      (when-not (t2/exists? model (first (t2/primary-keys model)) id)
+        (throw (missing-target-error model-name "ID" id)))
+      target)))
 
 (defn- analytics-collection-ids
   "Returns a set of collection IDs that are in the 'analytics' namespace (internal analytics collections).
@@ -204,11 +222,22 @@
                    ;; extract all non-content entities like data model and settings if necessary
                    (eduction (map #(serdes/extract-all % opts)) cat (remove (set serdes.models/content) models))])))))
 
+(defn- needs-version?
+  "True for extracted entities that should carry a `:metabase_version` stamp."
+  [entity]
+  (and (not (instance? Exception entity))
+       (not= "Setting" (-> entity :serdes/meta last :model))))
+
+(defn- stamp-version [entity]
+  (if (needs-version? entity)
+    (assoc entity :metabase_version config/mb-version-string)
+    entity))
+
 (defn extract
   "Returns a reducible stream of entities to serialize"
   [opts]
   (serdes.backfill/backfill-ids!)
-  (extract-subtrees opts))
+  (eduction (map stamp-version) (extract-subtrees opts)))
 
 (comment
   (def nodes (let [colls (mapv vector (repeat "Collection") (collection-set-for-user nil))]

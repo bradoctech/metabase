@@ -4,35 +4,28 @@ import { type PropsWithChildren, useEffect, useMemo, useState } from "react";
 import { useDebounce } from "react-use";
 import { jt, t } from "ttag";
 
-import { getAdminPaths } from "metabase/admin/app/selectors";
-import { getPerformanceAdminPaths } from "metabase/admin/performance/constants/complex";
 import { useListRecentsQuery, useSearchQuery } from "metabase/api";
 import { useSetting } from "metabase/common/hooks";
+import { getIcon } from "metabase/common/utils/icon";
 import { ROOT_COLLECTION } from "metabase/entities/collections/constants";
 import { Search } from "metabase/entities/search";
-import { SEARCH_DEBOUNCE_DURATION } from "metabase/lib/constants";
-import { getIcon } from "metabase/lib/icon";
-import { getName } from "metabase/lib/name";
-import { useDispatch, useSelector } from "metabase/lib/redux";
-import * as Urls from "metabase/lib/urls";
-import { modelToUrl } from "metabase/lib/urls";
-import { PLUGIN_CACHING } from "metabase/plugins";
+import { useDispatch, useSelector } from "metabase/redux";
 import { trackSearchClick } from "metabase/search/analytics";
-import {
-  getDocsSearchUrl,
-  getDocsUrl,
-  getSettings,
-} from "metabase/selectors/settings";
+import { getDocsUrl, getSettings } from "metabase/selectors/settings";
 import { canAccessSettings, getUserIsAdmin } from "metabase/selectors/user";
 import { getShowMetabaseLinks } from "metabase/selectors/whitelabel";
 import { Icon, Text } from "metabase/ui";
+import * as Urls from "metabase/urls";
+import { modelToUrl } from "metabase/urls";
+import { SEARCH_DEBOUNCE_DURATION } from "metabase/utils/constants";
+import { getName } from "metabase/utils/name";
 import {
   type RecentItem,
   isRecentCollectionItem,
   isRecentTableItem,
 } from "metabase-types/api";
 
-import { getAdminSettingsSections } from "../constants";
+import { METABASE_DOCS_LABELS, getAdminSettingsSections } from "../constants";
 import type { PaletteAction } from "../types";
 import { filterRecentItems } from "../utils";
 
@@ -44,7 +37,6 @@ export const useCommandPalette = ({
   locationQuery: Query;
 }) => {
   const dispatch = useDispatch();
-  const docsUrl = useSelector((state) => getDocsUrl(state, {}));
   const showMetabaseLinks = useSelector(getShowMetabaseLinks);
   const { isVisible } = useKBar((s) => ({
     isVisible: s.visualState !== VisualState.hidden,
@@ -74,6 +66,19 @@ export const useCommandPalette = ({
 
   const hasQuery = searchQuery.length > 0;
 
+  const docsUrl = useSelector((state) => getDocsUrl(state, {}));
+  const docsSearchUrl = useSelector((state) =>
+    debouncedSearchText
+      ? getDocsUrl(state, {
+          searchQuery: debouncedSearchText,
+          utm: {
+            utm_medium: "command-palette",
+            utm_campaign: "docs-search",
+          },
+        })
+      : null,
+  );
+
   const {
     currentData: searchResults,
     isFetching: isSearchLoading,
@@ -102,19 +107,16 @@ export const useCommandPalette = ({
     }
   }, [isVisible, refetchRecents, disabled]);
 
-  const adminPaths = useSelector(getAdminPaths);
   const settingValues = useSelector(getSettings);
 
   const docsAction = useMemo<PaletteAction[]>(() => {
-    const link = debouncedSearchText
-      ? getDocsSearchUrl({ query: debouncedSearchText })
-      : docsUrl;
+    const link = debouncedSearchText ? docsSearchUrl : docsUrl;
     const ret: PaletteAction[] = [
       {
         id: "search_docs",
         name: debouncedSearchText
-          ? t`Search documentation for "${debouncedSearchText}"`
-          : t`View documentation`,
+          ? METABASE_DOCS_LABELS.searchLabel(debouncedSearchText)
+          : METABASE_DOCS_LABELS.viewLabel,
         section: "docs",
         keywords: debouncedSearchText, // Always match the debouncedSearchText string
         icon: "document",
@@ -124,7 +126,7 @@ export const useCommandPalette = ({
       },
     ];
     return ret;
-  }, [debouncedSearchText, docsUrl]);
+  }, [debouncedSearchText, docsSearchUrl, docsUrl]);
 
   const showDocsAction = showMetabaseLinks && hasQuery && !disabled;
 
@@ -271,30 +273,6 @@ export const useCommandPalette = ({
     hasQuery,
   ]);
 
-  const adminActions = useMemo<PaletteAction[]>(() => {
-    if (disabled) {
-      return [];
-    }
-
-    // Subpaths - i.e. paths to items within the main Admin tabs - are needed
-    // in the command palette but are not part of the main list of admin paths
-    const adminSubpaths = isAdmin
-      ? getPerformanceAdminPaths(PLUGIN_CACHING.getTabMetadata())
-      : [];
-
-    const paths = [...adminPaths, ...adminSubpaths];
-    return paths.map((adminPath) => ({
-      id: `admin-page-${adminPath.key}`,
-      name: `${adminPath.name}`,
-      icon: "gear",
-      perform: () => {},
-      section: "admin",
-      extra: {
-        href: adminPath.path,
-      },
-    }));
-  }, [disabled, isAdmin, adminPaths]);
-
   const settingsActions = useMemo<PaletteAction[]>(() => {
     if (disabled || !canUserAccessSettings) {
       return [];
@@ -324,8 +302,7 @@ export const useCommandPalette = ({
       }));
   }, [disabled, canUserAccessSettings, isAdmin, settingValues]);
 
-  useRegisterActions(hasQuery ? [...adminActions, ...settingsActions] : [], [
-    adminActions,
+  useRegisterActions(hasQuery ? settingsActions : [], [
     settingsActions,
     hasQuery,
   ]);

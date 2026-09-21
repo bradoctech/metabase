@@ -100,6 +100,20 @@
   [ids opts]
   (batch-fetch-query-metadatas* ids opts))
 
+(defenterprise filter-sandboxed-fields
+  "Filter `fields` to those visible to the current user under their column-restricting sandbox on `table-id`.
+  OSS no-op; the real implementation lives in `metabase-enterprise.sandbox.api.column-filter`."
+  metabase-enterprise.sandbox.api.column-filter
+  [_table-id fields]
+  fields)
+
+(defenterprise batch-filter-sandboxed-fields
+  "Filter the `{table-id => fields}` map per the current user's sandbox configuration.
+  OSS no-op; the real implementation lives in `metabase-enterprise.sandbox.api.column-filter`."
+  metabase-enterprise.sandbox.api.column-filter
+  [fields-by-table]
+  fields-by-table)
+
 (defn- card-result-metadata->virtual-fields
   "Return a sequence of 'virtual' fields metadata for the 'virtual' table for a Card in the Saved Questions 'virtual'
    database.
@@ -192,7 +206,8 @@
                                         :c.source_card_id :c.created_at :c.entity_id :c.card_schema
                                         [:r.status :moderated_status]]
                             :from      [[:report_card :c]]
-                            :left-join [[{:select   [:moderated_item_id :status]
+                            :left-join [[^:allow-subquery
+                                         {:select   [:moderated_item_id :status]
                                           :from     [:moderation_review]
                                           :where    [:and
                                                      [:= :moderated_item_type "card"]

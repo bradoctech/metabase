@@ -22,6 +22,7 @@
                  pk-table-schema
                  pk-column-name]}]
   (let [field-id-query (fn [db-id table-schema table-name column-name]
+                         ^:allow-subquery
                          {:select [[[:min :f.id] :id]]
                           ;; Cal 2024-03-04: We use `min` to limit this subquery to one result (limit 1 isn't allowed
                           ;; in subqueries in MySQL) because it's possible for schema, table, or column names to be
@@ -35,7 +36,6 @@
                                    ;; ensure we are not overriding user-set fks
                                    [:= :u.fk_target_field_id nil]
                                    [:= :u.semantic_type nil]
-
                                    [:= :t.db_id db-id]
                                    [:= [:lower :f.name] (u/lower-case-en column-name)]
                                    [:= [:lower :t.name] (u/lower-case-en table-name)]

@@ -236,16 +236,23 @@
      :respond-raise (s/? (s/cat :respond symbol?
                                 :raise   symbol?))))))
 
+(def ^:private default-params-schema
+  "Schema for route params, query params, and the request body when an endpoint binds them without declaring one. A
+  bare `:map` strips every key on decode, so endpoints have to declare the keys they read."
+  [:map])
+
 (mu/defn- parse-params :- ::params
   [params]
-  (letfn [(parse-schema [param]
-            (cond-> param
-              (:schema param) (update :schema :schema)))]
+  (letfn [(parse-schema [k param]
+            (cond
+              (:schema param)                      (update param :schema :schema)
+              (contains? #{:route :query :body} k) (assoc param :schema default-params-schema)
+              :else                                param))]
     (merge
      (reduce
       (fn [params k]
         (cond-> params
-          (k params) (update k parse-schema)))
+          (k params) (update k #(parse-schema k %))))
       (dissoc params :respond-raise)
       [:route :query :body :request])
      (when-let [{:keys [respond raise]} (:respond-raise params)]
@@ -307,7 +314,15 @@
    (mtx/json-transformer)
    (mtx/default-value-transformer)
    {:name :api}
-   {:name :normalize}))
+   {:name :normalize}
+   ;; A param map drops the keys it doesn't declare instead of rejecting them, so a client sending a field the
+   ;; endpoint has no use for is still served -- which in turn means every key an endpoint reads has to be declared,
+   ;; at every level of nesting. `ms/Map` (and any other `{:closed false}` map) opts out, for values we deliberately
+   ;; pass through as they arrived: a query, viz settings, database details, a settings bag.
+   ;;
+   ;; Runs last: `:normalize` renames keys into the ones the schema declares, so stripping any earlier would drop
+   ;; them before they are recognized.
+   (mtx/strip-extra-keys-transformer)))
 
 (def ^:private encode-transformer
   (mtx/transformer
@@ -349,6 +364,10 @@
 
 (defn- invalid-params-specific-errors [explanation]
   (-> explanation
+      ;; `:in` and `:path` come back lazy for some schemas (`:multi`, for one) and spell checking `peek`s them
+      (update :errors (partial mapv #(-> %
+                                         (m/update-existing :in vec)
+                                         (m/update-existing :path vec))))
       me/with-spell-checking
       (me/humanize {:wrap mu/humanize-include-value})))
 
@@ -369,7 +388,12 @@
                                (when (seq path)
                                  (or (malli.util/get-in schema path)
                                      (recur (pop path)))))]
-           (assoc-in m error-path (umd/describe nested-schema))))))
+           ;; A key the schema does not declare has no schema to describe — `:malli.core/extra-key`
+           ;; against a closed map is the case. Describing nil throws, which would turn a 400 into a
+           ;; 500, so name the problem instead.
+           (assoc-in m error-path (if nested-schema
+                                    (umd/describe nested-schema)
+                                    "unexpected key"))))))
    {}
    (:errors explanation)))
 
@@ -382,9 +406,10 @@
         decoded ((decoder schema) params)]
     (when-not (mr/validate schema decoded)
       (throw (ex-info (format "Invalid %s" (case params-type
-                                             :route "route parameters"
-                                             :query "query parameters"
-                                             :body  "body"))
+                                             :route   "route parameters"
+                                             :query   "query parameters"
+                                             :body    "body"
+                                             :request "request"))
                       (let [explanation     (mr/explain schema decoded)
                             specific-errors (invalid-params-specific-errors explanation)
                             errors          (invalid-params-errors explanation)]
@@ -577,10 +602,13 @@
     :query (some-> (:query-params request) (update-keys keyword))))
 
 (mu/defn- request-body
+  "The body params of `request`: the parts of a multipart request, the form params of a form request, or the parsed
+  JSON body. An unparsed body (an `InputStream`) is not a param map."
   [request :- :map]
-  (or (some-> (not-empty (:form-params request)) (update-keys keyword))
+  (or (some-> (not-empty (:multipart-params request)) (update-keys keyword))
+      (some-> (not-empty (:form-params request)) (update-keys keyword))
       (when-let [body (:body request)]
-        (when-not (instance? org.eclipse.jetty.ee9.nested.HttpInput body)
+        (when-not (instance? java.io.InputStream body)
           body))))
 
 (mu/defn- middleware-forms
@@ -595,11 +623,9 @@
   [{:keys [metadata], :as _args} :- ::parsed-args]
   (let [scope            (:scope metadata)
         scope-middleware (cond
-                           (string? scope) [(list 'metabase.api.macros.scope/enforce-scope scope)]
                            (= scope :unchecked) []
-                           :else (do (when (some? scope)
-                                       (log/warnf "Unrecognized :scope value %s — expected a string or :unchecked" (pr-str scope)))
-                                     ['metabase.api.macros.scope/ensure-scopes-checked]))]
+                           (some? scope) [(list 'metabase.api.macros.scope/enforce-scope scope)]
+                           :else ['metabase.api.macros.scope/ensure-scopes-checked])]
     (cond-> (vec scope-middleware)
       (:multipart metadata)
       (conj 'ring.middleware.multipart-params/wrap-multipart-params))))

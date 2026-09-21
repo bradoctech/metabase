@@ -7,14 +7,14 @@ import { useSendBugReportMutation } from "metabase/api/bug-report";
 import { MetabotLogo } from "metabase/common/components/MetabotLogo";
 import { useSetting } from "metabase/common/hooks";
 import { useToggle } from "metabase/common/hooks/use-toggle";
-import { downloadObjectAsJson } from "metabase/lib/download";
-import { useDispatch, useSelector } from "metabase/lib/redux";
+import { useDispatch, useSelector } from "metabase/redux";
 import { closeDiagnostics } from "metabase/redux/app";
 import { addUndo } from "metabase/redux/undo";
 import { getIsErrorDiagnosticModalOpen } from "metabase/selectors/app";
 import { getIsEmbeddingIframe } from "metabase/selectors/embed";
 import { getApplicationName } from "metabase/selectors/whitelabel";
 import { Button, Flex, Icon, Loader, Modal, Stack, Text } from "metabase/ui";
+import { downloadObjectAsJson } from "metabase/utils/download";
 
 import { BugReportModal } from "./BugReportModal";
 import { DownloadDiagnosticModal } from "./DownloadDiagnosticModal";
@@ -88,7 +88,8 @@ export const ErrorDiagnosticModal = ({
 
   const handleSlackSubmit = async (values: Record<string, any>) => {
     setIsSlackSending(true);
-    const { description, ...diagnosticSelections } = values;
+    // attribution is the backend's job; the form only says whether the report should name the reporter
+    const { description, reporter, ...diagnosticSelections } = values;
 
     const selectedKeys = Object.keys(diagnosticSelections).filter(
       (key) => diagnosticSelections[key],
@@ -96,6 +97,7 @@ export const ErrorDiagnosticModal = ({
     const selectedInfo = {
       ..._.pick(errorInfo, ...selectedKeys),
       description,
+      reporter: Boolean(reporter),
     };
 
     try {

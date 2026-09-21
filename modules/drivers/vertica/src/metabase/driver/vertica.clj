@@ -1,7 +1,6 @@
 (ns metabase.driver.vertica
   (:require
    [clojure.java.jdbc :as jdbc]
-   [clojure.set :as set]
    [honey.sql :as sql]
    [java-time.api :as t]
    [metabase.driver :as driver]
@@ -29,6 +28,13 @@
 (driver/register! :vertica, :parent #{:sql-jdbc
                                       ::sql-jdbc.legacy/use-legacy-classes-for-read-and-set
                                       ::sql.qp.empty-string-is-null/empty-string-is-null})
+
+(defmethod driver/host-carrying-parameters :vertica [_driver] ["backupservernode" "oauthdiscoveryurl"])
+
+(defmethod driver/non-host-parameters :vertica
+  [_driver]
+  ["failonmultinodeplans" "hostnameverifier" "kerberoshostname" "maxpooledconnectionspernode" "nodedownwaittime"
+   "preferredaddressfamily"])
 
 (doseq [[feature supported?] {:convert-timezone                 true
                               :database-routing                 false
@@ -301,8 +307,10 @@
 
 (defmethod driver/describe-database* :vertica
   [driver database]
+  ;; the JDBC default returns `:tables` as a reducible; fold it (and the materialized views) into a
+  ;; set rather than `set/union`, which would call `count` on the reducible
   (-> ((get-method driver/describe-database* :sql-jdbc) driver database)
-      (update :tables set/union (materialized-views database))))
+      (update :tables #(into (materialized-views database) %))))
 
 (defmethod driver/db-default-timezone :vertica
   [_driver _database]

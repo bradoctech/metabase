@@ -1,0 +1,62 @@
+name: product_id
+display_name: Product ID
+<<<<<<<< HEAD:test_resources/serialization_baseline/databases/sample_database/schemas/public/tables/orders/fields/product_id.yaml
+created_at: '2024-08-28T14:38:42.774331Z'
+visibility_type: normal
+table_id:
+- Sample Database
+- PUBLIC
+- ORDERS
+========
+description: Foreign key to products table
+created_at: '2026-01-01T00:00:00.000000Z'
+active: true
+visibility_type: normal
+table_id:
+- Test Database
+- public
+- orders
+>>>>>>>> upstream/release-x.61.x:test_resources/yaml_checks/databases/Test Database/schemas/public/tables/orders/fields/product_id.yaml
+database_type: INTEGER
+base_type: type/Integer
+effective_type: null
+semantic_type: type/FK
+fk_target_field_id:
+<<<<<<<< HEAD:test_resources/serialization_baseline/databases/sample_database/schemas/public/tables/orders/fields/product_id.yaml
+- Sample Database
+- PUBLIC
+- PRODUCTS
+- ID
+========
+- Test Database
+- public
+- products
+- id
+>>>>>>>> upstream/release-x.61.x:test_resources/yaml_checks/databases/Test Database/schemas/public/tables/orders/fields/product_id.yaml
+dimensions: []
+position: 2
+custom_position: 0
+database_position: 2
+serdes/meta:
+<<<<<<<< HEAD:test_resources/serialization_baseline/databases/sample_database/schemas/public/tables/orders/fields/product_id.yaml
+- id: Sample Database
+========
+- id: Test Database
+>>>>>>>> upstream/release-x.61.x:test_resources/yaml_checks/databases/Test Database/schemas/public/tables/orders/fields/product_id.yaml
+  model: Database
+- id: public
+  model: Schema
+- id: orders
+  model: Table
+- id: product_id
+  model: Field
+<<<<<<<< HEAD:test_resources/serialization_baseline/databases/sample_database/schemas/public/tables/orders/fields/product_id.yaml
+database_indexed: true
+========
+database_default: null
+database_indexed: null
+database_is_generated: false
+database_is_nullable: true
+database_is_pk: false
+database_partitioned: null
+>>>>>>>> upstream/release-x.61.x:test_resources/yaml_checks/databases/Test Database/schemas/public/tables/orders/fields/product_id.yaml

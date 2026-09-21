@@ -2,7 +2,6 @@
   "Functions for working with native queries."
   (:refer-clojure :exclude [some select-keys mapv every? empty? not-empty])
   (:require
-   [clojure.core.match :refer [match]]
    [clojure.set :as set]
    [clojure.string :as str]
    [medley.core :as m]
@@ -19,11 +18,13 @@
    [metabase.lib.schema.template-tag :as lib.schema.template-tag]
    [metabase.lib.template-tags :as lib.template-tags]
    [metabase.lib.util :as lib.util]
+   [metabase.lib.walk :as lib.walk]
    [metabase.lib.walk.util :as lib.walk.util]
    [metabase.util.humanization :as u.humanization]
    [metabase.util.i18n :as i18n]
    [metabase.util.malli :as mu]
    [metabase.util.malli.registry :as mr]
+   [metabase.util.match :as match]
    [metabase.util.performance :refer [every? mapv select-keys some empty? not-empty]]))
 
 (defn- finish-tag [{tag-name :name :as tag}]
@@ -49,20 +50,23 @@
   (let [parsed (lib.parse/parse {} query-text)]
     (loop [found            {}
            [current & more] parsed]
-      (match [current]
-        [nil]              found
-        [_ :guard string?] (recur found more)
+      (let [[found more] (match/match-one current
+                           (_ :guard string?) [found more]
 
-        [{:type ::lib.parse/param, :name tag-name}]
-        (let [normalized-name (lib.params.parse/match-and-normalize-tag-name tag-name)]
-          (recur (cond-> found
-                   (and normalized-name (not (found normalized-name)))
-                   (assoc normalized-name (fresh-tag normalized-name)))
-                 more))
+                           {:type ::lib.parse/param, :name tag-name}
+                           (let [normalized-name (lib.params.parse/match-and-normalize-tag-name tag-name)]
+                             [(cond-> found
+                                (and normalized-name (not (found normalized-name)))
+                                (assoc normalized-name (fresh-tag normalized-name)))
+                              more])
 
-        [{:type     ::lib.parse/optional
-          :contents contents}]
-        (recur found (into more contents))))))
+                           {:type ::lib.parse/optional, :contents contents}
+                           [found (into more contents)]
+
+                           _ [found nil])]
+        (if more
+          (recur found more)
+          found)))))
 
 (defn- rename-template-tag
   [existing-tags old-name new-name]
@@ -190,7 +194,7 @@
 (mu/defn native-query :- ::lib.schema/query
   "Create a new native query.
 
-  Native in this sense means a pMBQL query with a first stage that is a native query."
+  Native in this sense means a MBQL 5 query with a first stage that is a native query."
   ([metadata-providerable     :- ::lib.schema.metadata/metadata-providerable
     sql-or-other-native-query :- ::common/non-blank-string]
    (native-query metadata-providerable sql-or-other-native-query nil nil))
@@ -289,6 +293,53 @@
    (fn [card-id]
      (lib.metadata/card query card-id))
    (native-query-card-ids query)))
+
+(defn- regex-escape
+  [s]
+  (str/replace s #"[.*+?^${}()|\[\]\\]" (fn [c] (str "\\" c))))
+
+(defn- replace-tag-in-text
+  [text old-name new-name]
+  (str/replace text
+               (re-pattern (str "\\{\\{\\s*" (regex-escape old-name) "\\s*\\}\\}"))
+               ;; function replacement so a `$` in the new name can't be misread as a match reference
+               (constantly (str "{{" new-name "}}"))))
+
+(defn- rename-tag
+  "Rename a template tag, replacing its `:display-name` only if it was the humanized default for the
+  old name (same rule as [[rename-template-tag]])."
+  [{tag-name :name, :keys [display-name], :as tag} new-name]
+  (cond-> (assoc tag :name new-name)
+    (= display-name (u.humanization/name->human-readable-name :simple tag-name))
+    (assoc :display-name (u.humanization/name->human-readable-name :simple new-name))))
+
+(mu/defn replace-template-tag-names :- ::lib.schema/query
+  "Apply `renames`, a map of old tag name => new tag name, across the query's native stages: each
+  affected tag is renamed (a default display name follows the rename, a customized one is kept) and
+  its `{{...}}` references in the raw query text are rewritten to match. Tags whose names collide
+  after renaming are collapsed into one; the first occurrence wins."
+  [query   :- ::lib.schema/query
+   renames :- [:map-of :string :string]]
+  (if (empty? renames)
+    query
+    (lib.walk/walk-stages
+     query
+     (fn [_query _path {stage-tags :template-tags, sql :native, :as stage}]
+       (when (and (= (:lib/type stage) :mbql.stage/native)
+                  (string? sql))
+         (let [stage-renames (select-keys renames (keys stage-tags))]
+           (when (seq stage-renames)
+             (-> stage
+                 (update :template-tags
+                         (fn [tags]
+                           (reduce-kv (fn [acc tag-name tag]
+                                        (let [new-name (get stage-renames tag-name tag-name)]
+                                          (cond-> acc
+                                            (not (contains? acc new-name))
+                                            (assoc new-name (rename-tag tag new-name)))))
+                                      {}
+                                      tags)))
+                 (update :native #(reduce-kv replace-tag-in-text % stage-renames))))))))))
 
 (mu/defn native-query-snippet-ids :- [:maybe [:set {:min 1} ::lib.schema.id/native-query-snippet]]
   "Returns the card IDs from the template tags of the native query of `query`."
@@ -402,7 +453,6 @@
                              (keep (fn [[tag-name {:keys [id] :as tag}]]
                                      (or (params-by-id id)
                                          (get-parameter-value query tag-name tag))))
-
                              ttags)]
     (cond-> query
       (seq new-parameters) (assoc :parameters new-parameters))))

@@ -590,7 +590,6 @@
               (testing "The headers also show the Row Totals header"
                 (is (= "Row totals"
                        (last (first result))))))))
-
         (testing "The Columns Properly indicate the pivot row names."
           (let [col1               (map first result)
                 col2               (map second result)
@@ -808,7 +807,6 @@
                   ["May, 2016" "144.12" "81.58" "75.09" "90.21" "391"]
                   ["June, 2016" "82.92" "75.53" "83.26" "" "241.71"]]
                  (take 3 pivot))))
-
         (testing "but only when `qp.settings/enable-pivoted-exports` is true"
           (mt/with-temporary-setting-values [qp.settings/enable-pivoted-exports false]
             (let [result      (mt/user-http-request :crowberto :post 200
@@ -817,7 +815,7 @@
                                                     :pivot_results true)
                   sheet      (read-xlsx result)]
               (is (= [["Category" "Created At: Month" "Sum of Price" "Average of Rating"]
-                      ["Doohickey" "May 1, 2016, 12:00 AM" "144.12" "2.97"]
+                      ["Doohickey" "May 1, 2016, 12:00 AM" "144.12" "2.966666667"]
                       ["Doohickey" "June 1, 2016, 12:00 AM" "82.92" "3.6"]]
                      (take 3 sheet))))))))))
 
@@ -1201,8 +1199,8 @@
                  "January 1, 2018, 12:00 AM"
                  "January 1, 2019, 12:00 AM"
                  "Row totals"]
-                ["Doohickey" "632.14" "854.19" "496.43" "203.13" "2,185.89"]
-                ["Gadget" "679.83" "1,059.11" "844.51" "435.75" "3,019.2"]]
+                ["Doohickey" "632.14" "854.19" "496.43" "203.13" "2185.89"]
+                ["Gadget" "679.83" "1059.11" "844.51" "435.75" "3019.2"]]
                (take 3 (card-download card {:export-format :xlsx :format-rows false :pivot true}))))))))
 
 (deftest unformatted-downloads-and-exports-keep-numbers-as-numbers
@@ -1619,7 +1617,6 @@
                 val-unscaled (Double/parseDouble (first (second result-unscaled)))]
             (is (= val-scaled
                    (* val-unscaled 2.13)))))
-
         (testing "for json"
           (let [result-scaled (card-download card-scaled {:export-format :json :format-rows true})
                 result-unscaled (card-download card-unscaled {:export-format :json :format-rows true})
@@ -1737,7 +1734,6 @@
                   ["3"            ""      ""      "35.39" "35.39"]
                   ["Grand totals" ""      "53.98" ""      "55.7464"]]
                  (rest result))))))
-
     (mt/dataset test-data
       (mt/with-temp [:model/Card source-model
                      {:dataset_query
@@ -1795,7 +1791,6 @@
                                                    :breakout    [$product_id->products.category
                                                                  $product_id->products.vendor]
                                                    :limit       3})}]
-
           (testing "download"
             (let [res     (card-download pivot-card {:export-format :csv :pivot true :format-rows false})
                   headers (second res)]

@@ -433,11 +433,12 @@
     {:email
      (fn [_ [email]]
        (testing "Markdown cards are included in email subscriptions"
-         (is (= (rasta-dashsub-message {:message [{"Aviary KPIs"                 true
-                                                   "header, quote isn't escaped" true}
+         ;; The apostrophe arrives as `&apos;` now that heading text is escaped on its way into the body.
+         (is (= (rasta-dashsub-message {:message [{"Aviary KPIs"                      true
+                                                   "header, quote isn&apos;t escaped" true}
                                                   pulse.test-util/png-attachment]})
                 (mt/summarize-multipart-single-email email #"Aviary KPIs"
-                                                     #"header, quote isn't escaped")))))
+                                                     #"header, quote isn&apos;t escaped")))))
 
      :slack
      (fn [{:keys [card-id dashboard-id]} [pulse-results]]
@@ -506,6 +507,36 @@
                                {:type "section" :text {:type "plain_text" :text "1,000"}}]}
                     message)))))}})))
 
+(deftest dashboard-filter-html-escaping-test
+  (let [name-html  "<b>Bold</b>"
+        value-html "R&D <i>x</i>"]
+    (tests!
+     {:pulse     {:skip_if_empty false}
+      :dashboard (update pulse.test-util/test-dashboard :parameters
+                         (fn [params]
+                           (for [param params]
+                             (cond-> param
+                               (= "State" (:name param)) (assoc :name    name-html
+                                                                :default [value-html])))))}
+     "Dashboard subscription whose filter name and value contain HTML delivers them escaped"
+     {:card (pulse.test-util/checkins-query-card {})
+
+      :fixture
+      (fn [_ thunk]
+        (thunk))
+
+      :assert
+      {:email
+       (fn [_ [email]]
+         (let [html-body (-> email :message first :content)]
+           (testing "the filter name and value arrive as text, not as markup"
+             (is (not (str/includes? html-body name-html))
+                 "filter name was not escaped")
+             (is (not (str/includes? html-body value-html))
+                 "filter value was not escaped")
+             (is (str/includes? html-body "&lt;b&gt;Bold&lt;/b&gt;"))
+             (is (str/includes? html-body "R&amp;D &lt;i&gt;x&lt;/i&gt;")))))}})))
+
 (deftest dashboard-with-header-filters-test
   (tests!
    {:pulse     {:skip_if_empty false}
@@ -557,6 +588,32 @@
                               :text {:type "mrkdwn", :text "*## Dashboard Header*"},
                               :fields [{:type "mrkdwn", :text "*State*\nCA, NY, and NJ"}]}]}
                   message)))))}}))
+
+(deftest dashboard-heading-html-escaping-test
+  (let [heading-html "<b>Heading</b>"]
+    (tests!
+     {:pulse     {:skip_if_empty false}
+      :dashboard pulse.test-util/test-dashboard}
+     "Dashboard subscription whose heading card contains HTML delivers it escaped"
+     {:card (pulse.test-util/checkins-query-card {})
+
+      :fixture
+      (fn [{dashboard-id :dashboard-id} thunk]
+        (mt/with-temp [:model/DashboardCard _ {:dashboard_id            dashboard-id
+                                               :row                    0
+                                               :col                    0
+                                               :visualization_settings {:virtual_card {:display "heading"}
+                                                                        :text         heading-html}}]
+          (thunk)))
+
+      :assert
+      {:email
+       (fn [_ [email]]
+         (let [html-body (-> email :message first :content)]
+           (testing "the heading text arrives as text, not as markup"
+             (is (not (str/includes? html-body heading-html))
+                 "heading text was not escaped")
+             (is (str/includes? html-body "&lt;b&gt;Heading&lt;/b&gt;")))))}})))
 
 (deftest dashboard-with-dashcard-filters-test
   (tests!
@@ -624,23 +681,18 @@
                                                      #"https://testmb\.com/collection/\d+"
                                                      #"Linked collection name"
                                                      #"Linked collection desc"
-
                                                      #"https://testmb\.com/browse/\d+"
                                                      #"Linked database name"
                                                      #"Linked database desc"
-
                                                      #"https://testmb\.com/question\?db=\d+table=\d+"
                                                      #"Linked table dname"
                                                      #"Linked table desc"
-
                                                      #"https://testmb\.com/question/\d+"
                                                      #"Linked card name"
                                                      #"Linked card desc"
-
                                                      #"https://testmb\.com/question/\d+"
                                                      #"Linked model name"
                                                      #"Linked model desc"
-
                                                      #"https://testmb\.com/dashboard/\d+"
                                                      #"Linked Dashboard name"
                                                      #"Linked Dashboard desc")
@@ -835,7 +887,6 @@
       (is (=? [{:text "Markdown"}
                {:text "### [https://metabase.com](https://metabase.com)"}]
               (execute-dashboard (:id dashboard) (mt/user->id :rasta) nil)))))
-
   (testing "Link cards are returned and info should be newly fetched"
     (mt/with-temp [:model/Dashboard dashboard {:name "Test Dashboard"}]
       (with-link-card-fixture-for-dashboard dashboard [{:keys [collection-owner-id
@@ -845,28 +896,32 @@
                                                                card-id
                                                                model-id
                                                                dashboard-id]}]
-        (let [site-url (system/site-url)]
-          (testing "should returns all link cards and name are newly fetched"
-            (doseq [[model id] [[:model/Card card-id]
-                                [:model/Table table-id]
-                                [:model/Database database-id]
-                                [:model/Dashboard dashboard-id]
-                                [:model/Collection collection-id]
-                                [:model/Card model-id]]]
-              (t2/update! model id {:name (format "New %s name" (name model))}))
-            (is (=? [{:text (format "### [New Collection name](%s/collection/%d)\nLinked collection desc" site-url collection-id)}
-                     {:text (format "### [New Database name](%s/browse/%d)\nLinked database desc" site-url database-id)}
-                     {:text (format "### [Linked table dname](%s/question?db=%d&table=%d)\nLinked table desc" site-url database-id table-id)}
-                     {:text (format "### [New Dashboard name](%s/dashboard/%d)\nLinked Dashboard desc" site-url dashboard-id)}
-                     {:text (format "### [New Card name](%s/question/%d)\nLinked card desc" site-url card-id)}
-                     {:text (format "### [New Card name](%s/question/%d)\nLinked model desc" site-url model-id)}
-                     {:text (format "### [https://metabase.com](https://metabase.com)")}]
-                    (execute-dashboard (:id dashboard) collection-owner-id nil))))
-          (testing "it should filter out models that current users does not have permission to read"
-            (is (=? [{:text (format "### [New Database name](%s/browse/%d)\nLinked database desc" site-url database-id)}
-                     {:text (format "### [Linked table dname](%s/question?db=%d&table=%d)\nLinked table desc" site-url database-id table-id)}
-                     {:text (format "### [https://metabase.com](https://metabase.com)")}]
-                    (execute-dashboard (:id dashboard) (mt/user->id :lucky) nil)))))))))
+        ;; Seed `site-url` explicitly: test app DBs have none stored, and header-derivation only fires on
+        ;; pre-setup instances. Link-card URLs render against it, and the expectations below are
+        ;; built from it, so it must be non-nil and consistent.
+        (mt/with-temporary-setting-values [site-url "https://testmb.com"]
+          (let [site-url (system/site-url)]
+            (testing "should returns all link cards and name are newly fetched"
+              (doseq [[model id] [[:model/Card card-id]
+                                  [:model/Table table-id]
+                                  [:model/Database database-id]
+                                  [:model/Dashboard dashboard-id]
+                                  [:model/Collection collection-id]
+                                  [:model/Card model-id]]]
+                (t2/update! model id {:name (format "New %s name" (name model))}))
+              (is (=? [{:text (format "### [New Collection name](%s/collection/%d)\nLinked collection desc" site-url collection-id)}
+                       {:text (format "### [New Database name](%s/browse/%d)\nLinked database desc" site-url database-id)}
+                       {:text (format "### [Linked table dname](%s/question?db=%d&table=%d)\nLinked table desc" site-url database-id table-id)}
+                       {:text (format "### [New Dashboard name](%s/dashboard/%d)\nLinked Dashboard desc" site-url dashboard-id)}
+                       {:text (format "### [New Card name](%s/question/%d)\nLinked card desc" site-url card-id)}
+                       {:text (format "### [New Card name](%s/question/%d)\nLinked model desc" site-url model-id)}
+                       {:text "### [https://metabase.com](https://metabase.com)"}]
+                      (execute-dashboard (:id dashboard) collection-owner-id nil))))
+            (testing "it should filter out models that current users does not have permission to read"
+              (is (=? [{:text (format "### [New Database name](%s/browse/%d)\nLinked database desc" site-url database-id)}
+                       {:text (format "### [Linked table dname](%s/question?db=%d&table=%d)\nLinked table desc" site-url database-id table-id)}
+                       {:text "### [https://metabase.com](https://metabase.com)"}]
+                      (execute-dashboard (:id dashboard) (mt/user->id :lucky) nil))))))))))
 
 (deftest iframe-cards-are-skipped-test
   (testing "iframe cards should be filtered out"
@@ -886,7 +941,6 @@
       (is (=? [{:text "Markdown"}
                {:text "### [https://metabase.com](https://metabase.com)"}]
               (execute-dashboard (:id dashboard) (mt/user->id :rasta) nil)))))
-
   (testing "Link cards are returned and info should be newly fetched"
     (mt/with-temp [:model/Dashboard dashboard {:name "Test Dashboard"}]
       (with-link-card-fixture-for-dashboard dashboard [{:keys [collection-owner-id
@@ -896,29 +950,32 @@
                                                                card-id
                                                                model-id
                                                                dashboard-id]}]
-        (let [site-url (system/site-url)]
-          (testing "should returns all link cards and name are newly fetched"
-            (doseq [[model id] [[:model/Card card-id]
-                                [:model/Table table-id]
-                                [:model/Database database-id]
-                                [:model/Dashboard dashboard-id]
-                                [:model/Collection collection-id]
-                                [:model/Card model-id]]]
-              (t2/update! model id {:name (format "New %s name" (name model))}))
-            (is (=? [{:text (format "### [New Collection name](%s/collection/%d)\nLinked collection desc" site-url collection-id)}
-                     {:text (format "### [New Database name](%s/browse/%d)\nLinked database desc" site-url database-id)}
-                     {:text (format "### [Linked table dname](%s/question?db=%d&table=%d)\nLinked table desc" site-url database-id table-id)}
-                     {:text (format "### [New Dashboard name](%s/dashboard/%d)\nLinked Dashboard desc" site-url dashboard-id)}
-                     {:text (format "### [New Card name](%s/question/%d)\nLinked card desc" site-url card-id)}
-                     {:text (format "### [New Card name](%s/question/%d)\nLinked model desc" site-url model-id)}
-                     {:text (format "### [https://metabase.com](https://metabase.com)")}]
-                    (execute-dashboard (:id dashboard) collection-owner-id nil))))
-
-          (testing "it should filter out models that current users does not have permission to read"
-            (is (=? [{:text (format "### [New Database name](%s/browse/%d)\nLinked database desc" site-url database-id)}
-                     {:text (format "### [Linked table dname](%s/question?db=%d&table=%d)\nLinked table desc" site-url database-id table-id)}
-                     {:text (format "### [https://metabase.com](https://metabase.com)")}]
-                    (execute-dashboard (:id dashboard) (mt/user->id :lucky) nil)))))))))
+        ;; Seed `site-url` explicitly: test app DBs have none stored, and header-derivation only fires on
+        ;; pre-setup instances. Link-card URLs render against it, and the expectations below are
+        ;; built from it, so it must be non-nil and consistent.
+        (mt/with-temporary-setting-values [site-url "https://testmb.com"]
+          (let [site-url (system/site-url)]
+            (testing "should returns all link cards and name are newly fetched"
+              (doseq [[model id] [[:model/Card card-id]
+                                  [:model/Table table-id]
+                                  [:model/Database database-id]
+                                  [:model/Dashboard dashboard-id]
+                                  [:model/Collection collection-id]
+                                  [:model/Card model-id]]]
+                (t2/update! model id {:name (format "New %s name" (name model))}))
+              (is (=? [{:text (format "### [New Collection name](%s/collection/%d)\nLinked collection desc" site-url collection-id)}
+                       {:text (format "### [New Database name](%s/browse/%d)\nLinked database desc" site-url database-id)}
+                       {:text (format "### [Linked table dname](%s/question?db=%d&table=%d)\nLinked table desc" site-url database-id table-id)}
+                       {:text (format "### [New Dashboard name](%s/dashboard/%d)\nLinked Dashboard desc" site-url dashboard-id)}
+                       {:text (format "### [New Card name](%s/question/%d)\nLinked card desc" site-url card-id)}
+                       {:text (format "### [New Card name](%s/question/%d)\nLinked model desc" site-url model-id)}
+                       {:text "### [https://metabase.com](https://metabase.com)"}]
+                      (execute-dashboard (:id dashboard) collection-owner-id nil))))
+            (testing "it should filter out models that current users does not have permission to read"
+              (is (=? [{:text (format "### [New Database name](%s/browse/%d)\nLinked database desc" site-url database-id)}
+                       {:text (format "### [Linked table dname](%s/question?db=%d&table=%d)\nLinked table desc" site-url database-id table-id)}
+                       {:text "### [https://metabase.com](https://metabase.com)"}]
+                      (execute-dashboard (:id dashboard) (mt/user->id :lucky) nil))))))))))
 
 (deftest execute-dashboard-with-tabs-test
   (mt/with-temp
@@ -1213,7 +1270,6 @@
                                                 pulse.test-util/png-attachment
                                                 pulse.test-util/csv-attachment]})
               (mt/summarize-multipart-single-email email #"Aviary KPIs"))))}}
-
    "xlsx"
    {:pulse-card {:include_xls true}
     :assert
@@ -1223,7 +1279,6 @@
                                                 pulse.test-util/png-attachment
                                                 pulse.test-util/xls-attachment]})
               (mt/summarize-multipart-single-email email #"Aviary KPIs"))))}}
-
    "no result should not include csv"
    {:card {:dataset_query (mt/mbql-query venues {:filter [:= $id -1]})}
     :pulse-card {:include_csv true}
@@ -1365,7 +1420,6 @@
                        (mt/summarize-multipart-single-email
                         (first (:channel/email pulse-results))
                         #"Aviary KPIs")))
-
                 (is (=? {:channel "#general",
                          :blocks (default-slack-blocks dashboard-id [card-id])}
                         (pulse.test-util/thunk->boolean (first (:channel/slack pulse-results)))))))))))))
@@ -1398,3 +1452,83 @@
               (first (:channel/email pulse-results))
               #"Aviary KPIs"
               #"Dashboard content available in attached files"))))))
+(defn- do-with-executed-card-ids
+  "Run `f` while recording the :card_id of every dashcard that actually executes, returning the atom of ids."
+  [f]
+  (let [executed (atom [])
+        orig     (mt/original-fn #'notification.payload.execute/execute-dashboard-subscription-card)]
+    (mt/with-dynamic-fn-redefs [notification.payload.execute/execute-dashboard-subscription-card
+                                (fn [dashcard parameters opts]
+                                  (swap! executed conj (:card_id dashcard))
+                                  (orig dashcard parameters opts))]
+      (f))
+    executed))
+
+(deftest dashboard-sub-attachment-only-skips-unattached-cards-test
+  (mt/with-temp [:model/Card          {attached-id :id} {:name          "Attached Card"
+                                                         :dataset_query (mt/mbql-query orders {:limit 1})}
+                 :model/Card          {other-id :id}    {:name          "Other Card"
+                                                         :dataset_query (mt/mbql-query venues {:limit 1})}
+                 :model/Dashboard     {dashboard-id :id} {:name "Aviary KPIs"}
+                 :model/DashboardCard _ {:dashboard_id dashboard-id :card_id attached-id}
+                 :model/DashboardCard _ {:dashboard_id dashboard-id :card_id other-id}
+                 :model/Pulse         {pulse-id :id} {:name         "Pulse Name"
+                                                      :dashboard_id dashboard-id}
+                 :model/PulseCard     _ {:pulse_id    pulse-id
+                                         :card_id     attached-id
+                                         :position    0
+                                         :include_csv true}
+                 :model/PulseCard     _ {:pulse_id pulse-id
+                                         :card_id  other-id
+                                         :position 1}]
+    (testing "attachment-only subscriptions only execute the cards selected for attachment (GDGT-2772)"
+      (mt/with-temp [:model/PulseChannel  {pc-id :id} {:pulse_id     pulse-id
+                                                       :channel_type "email"
+                                                       :details      {:attachment_only true}}
+                     :model/PulseChannelRecipient _ {:user_id          (pulse.test-util/rasta-id)
+                                                     :pulse_channel_id pc-id}]
+        (let [executed      (do-with-executed-card-ids
+                             #(pulse.test-util/with-captured-channel-send-messages!
+                                (pulse.send/send-pulse! (t2/select-one :model/Pulse pulse-id))))]
+          (is (= [attached-id] @executed)))))
+    (testing "a slack channel executes every card"
+      (mt/with-temp [:model/PulseChannel _ {:pulse_id     pulse-id
+                                            :channel_type "slack"
+                                            :details      {:channel "#general"}}]
+        (let [executed (do-with-executed-card-ids
+                        #(pulse.test-util/with-captured-channel-send-messages!
+                           (pulse.send/send-pulse! (t2/select-one :model/Pulse pulse-id))))]
+          (is (= #{attached-id other-id} (set @executed))))))))
+
+(deftest dashboard-sub-body-only-cards-use-display-limit-test
+  (testing "cards not selected for attachment get the interactive display limit; attached cards keep the attachment limit (GDGT-2773)"
+    (mt/with-temp [:model/Card          {attached-id :id}  {:name          "Attached Card"
+                                                            :dataset_query (mt/mbql-query orders)}
+                   :model/Card          {body-only-id :id} {:name          "Body Only Card"
+                                                            :dataset_query (mt/mbql-query orders)}
+                   :model/Dashboard     {dashboard-id :id} {:name "Aviary KPIs"}
+                   :model/DashboardCard _ {:dashboard_id dashboard-id :card_id attached-id}
+                   :model/DashboardCard _ {:dashboard_id dashboard-id :card_id body-only-id}
+                   :model/Pulse         {pulse-id :id} {:name         "Pulse Name"
+                                                        :dashboard_id dashboard-id}
+                   :model/PulseCard     _ {:pulse_id    pulse-id
+                                           :card_id     attached-id
+                                           :position    0
+                                           :include_csv true}
+                   :model/PulseCard     _ {:pulse_id pulse-id
+                                           :card_id  body-only-id
+                                           :position 1}
+                   :model/PulseChannel  {pc-id :id} {:pulse_id     pulse-id
+                                                     :channel_type "email"}
+                   :model/PulseChannelRecipient _ {:user_id          (pulse.test-util/rasta-id)
+                                                   :pulse_channel_id pc-id}]
+      (let [row-counts (atom {})
+            orig       (mt/original-fn #'notification.payload.execute/execute-dashboard-subscription-card)]
+        (mt/with-dynamic-fn-redefs [notification.payload.execute/execute-dashboard-subscription-card
+                                    (fn [dashcard parameters opts]
+                                      (u/prog1 (orig dashcard parameters opts)
+                                        (swap! row-counts assoc (:card_id dashcard) (-> <> :result :row_count))))]
+          (pulse.test-util/with-captured-channel-send-messages!
+            (pulse.send/send-pulse! (t2/select-one :model/Pulse pulse-id))))
+        (is (< 2000 (get @row-counts attached-id)) "attached card runs to the attachment limit")
+        (is (= 2000 (get @row-counts body-only-id)) "body-only card gets the interactive display limit")))))

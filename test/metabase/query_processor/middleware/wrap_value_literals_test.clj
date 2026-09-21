@@ -12,7 +12,10 @@
    [metabase.query-processor.preprocess :as qp.preprocess]
    ^{:clj-kondo/ignore [:deprecated-namespace]} [metabase.query-processor.store :as qp.store]
    [metabase.query-processor.timezone :as qp.timezone]
-   [metabase.test :as mt]))
+   [metabase.test :as mt]
+   [metabase.test.fixtures :as fixtures]))
+
+(use-fixtures :once (fixtures/initialize :db))
 
 (driver/register! ::tz-driver, :abstract? true)
 
@@ -223,7 +226,7 @@
               {:expressions {"foo" $date}
                :filter      [:>
                              [:expression "foo" {:base-type :type/DateTime}]
-                             [:absolute-datetime #t "2014-01-01T00:00" :default]]})
+                             [:absolute-datetime #t "2014-01-01T00:00" :day]]})
             (wrap-value-literals
              (lib.tu.macros/mbql-query checkins
                {:expressions {"foo" $date}

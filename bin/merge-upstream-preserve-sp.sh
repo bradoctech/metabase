@@ -239,7 +239,8 @@ cmd_restore() {
     fi
   done < <(git diff --name-only --diff-filter=U 2>/dev/null || true)
 
-  git add -A 2>/dev/null || true
+  # Do not `git add -A` — that can stage unresolved dual/behavior files that
+  # still contain conflict markers. Only paths restored above were staged.
   echo "    Restored ~$restored paths; skipped $skipped_manual manual paths"
   echo "    Unmerged remaining: $(git diff --name-only --diff-filter=U 2>/dev/null | wc -l)"
 }

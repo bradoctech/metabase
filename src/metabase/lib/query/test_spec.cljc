@@ -1,5 +1,5 @@
 (ns metabase.lib.query.test-spec
-  (:refer-clojure :exclude [mapv name empty?])
+  (:refer-clojure :exclude [mapv name])
   (:require
    [malli.core :as mc]
    [malli.transform :as mtx]
@@ -328,6 +328,7 @@
               (mtx/transformer
                mtx/json-transformer
                (mtx/key-transformer {:decode #(-> % u/->kebab-case-en keyword)})
+               {:name :normalize}
                mtx/strip-extra-keys-transformer
                mtx/default-value-transformer)))
 

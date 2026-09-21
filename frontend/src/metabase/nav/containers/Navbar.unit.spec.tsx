@@ -16,25 +16,25 @@ import {
   waitForLoaderToBeRemoved,
 } from "__support__/ui";
 import { ROOT_COLLECTION } from "metabase/entities/collections";
-import * as dom from "metabase/lib/dom";
 import {
   CLOSE_NAVBAR,
   OPEN_NAVBAR,
   isNavbarOpenForPathname,
 } from "metabase/redux/app";
+import type { State } from "metabase/redux/store";
+import {
+  createMockAppState,
+  createMockEmbedOptions,
+  createMockEmbedState,
+  createMockState,
+} from "metabase/redux/store/mocks";
+import * as iframeUtils from "metabase/utils/iframe";
 import type { User } from "metabase-types/api";
 import {
   createMockCollection,
   createMockDatabase,
   createMockUser,
 } from "metabase-types/api/mocks";
-import type { State } from "metabase-types/store";
-import {
-  createMockAppState,
-  createMockEmbedOptions,
-  createMockEmbedState,
-  createMockState,
-} from "metabase-types/store/mocks";
 
 import Navbar from "./Navbar";
 
@@ -187,7 +187,7 @@ describe("nav > containers > Navbar > Core App", () => {
     let isWithinIframeSpy: jest.SpyInstance;
 
     beforeAll(() => {
-      isWithinIframeSpy = jest.spyOn(dom, "isWithinIframe");
+      isWithinIframeSpy = jest.spyOn(iframeUtils, "isWithinIframe");
       isWithinIframeSpy.mockReturnValue(true);
     });
 

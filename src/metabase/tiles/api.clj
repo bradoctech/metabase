@@ -20,7 +20,8 @@
    [metabase.util.json :as json]
    [metabase.util.malli :as mu]
    [metabase.util.malli.registry :as mr]
-   [metabase.util.malli.schema :as ms])
+   [metabase.util.malli.schema :as ms]
+   [toucan2.core :as t2])
   (:import
    (java.awt Color)
    (java.awt.image BufferedImage)
@@ -143,7 +144,7 @@
   [:schema
    {:decode/api (fn [field]
                   (when (string? field)
-                    (let [deserialized (json/decode+kw field)]
+                    (let [deserialized (json/decode field)]
                       (when (sequential? deserialized)
                         (mbql.normalize/normalize deserialized)))))}
    [:ref ::mbql.s/field]])
@@ -151,7 +152,10 @@
 (mu/defn- resolve-field :- ::lib.schema.metadata/column
   [query      :- ::lib.schema/query
    legacy-ref :- ::legacy-ref]
-  (lib/metadata query (lib/->pMBQL legacy-ref)))
+  (let [field (lib/metadata query (lib/->mbql5 legacy-ref))]
+    (api/check-400 (not (:fk-field-id field))
+                   (tru "Fields referenced via implicit joins are not supported."))
+    field))
 
 (mu/defn- tiles-query :- ::lib.schema/query
   "Transform a card's query into a query finding coordinates in a particular region.
@@ -208,7 +212,7 @@
      :headers {"Content-Type" "image/png"}
      :body    (tile->byte-array (create-tile zoom points))}
     (throw (ex-info (tru "Query failed")
-                      ;; `result` might be a `core.async` channel or something we're not expecting
+                    ;; `result` might be a `core.async` channel or something we're not expecting
                     (assoc (when (map? result) result) :status-code 400)))))
 
 (mr/def ::query
@@ -216,7 +220,7 @@
   [:schema
    {:decode/api (fn [s]
                   (when (string? s)
-                    (let [deserialized (json/decode+kw s)]
+                    (let [deserialized (json/decode s)]
                       (when (map? deserialized)
                         (lib-be/normalize-query deserialized)))))}
    [:ref ::lib.schema/query]])
@@ -244,19 +248,21 @@
                              [:lonField ::legacy-ref]]]
   (let [updated-query (tiles-query query zoom x y lat-field lon-field)
         result        (qp/process-query
-                       (qp/userland-query updated-query {:executed-by api/*current-user-id*
-                                                         :context     :map-tiles}))
+                       (qp/userland-query
+                        (assoc updated-query :info {:executed-by api/*current-user-id*
+                                                    :context     :map-tiles})))
         points        (result->points result lat-field lon-field)]
     (tiles-response result zoom points)))
 
 (defn process-tiles-query-for-card
-  "Generates a single tile image for a dashcard and returns a Ring response that contains the data as a PNG"
-  [card-id parameters zoom x y lat-field-ref lon-field-ref]
+  "Generates a single tile image for a pre-loaded Card and returns a Ring response that contains the data as a PNG.
+  Callers are responsible for selecting the `card` entity exactly once per request and threading it here."
+  [card parameters zoom x y lat-field-ref lon-field-ref]
   (let [lat-field-ref (mbql.normalize/normalize lat-field-ref)
         lon-field-ref (mbql.normalize/normalize lon-field-ref)
         result
         (qp.card/process-query-for-card
-         card-id
+         card
          :api
          {:parameters parameters
           :context    :map-tiles
@@ -271,15 +277,15 @@
     (tiles-response result zoom points)))
 
 (defn process-tiles-query-for-dashcard
-  "Generates a single tile image for a dashcard and returns a Ring response that contains the data as a PNG"
-  [dashboard-id dashcard-id card-id parameters zoom x y lat-field-ref lon-field-ref]
+  "Generates a single tile image for a dashcard and returns a Ring response that contains the data as a PNG."
+  [dashboard dashcard card parameters zoom x y lat-field-ref lon-field-ref]
   (let [lat-field-ref (mbql.normalize/normalize lat-field-ref)
         lon-field-ref (mbql.normalize/normalize lon-field-ref)
         result
         (qp.dashboard/process-query-for-dashcard
-         :dashboard-id  dashboard-id
-         :dashcard-id   dashcard-id
-         :card-id       card-id
+         :dashboard     dashboard
+         :dashcard      dashcard
+         :card          card
          :export-format :api
          :parameters    parameters
          :context       :map-tiles
@@ -292,14 +298,6 @@
                                qp/process-query))))
         points (result->points result lat-field-ref lon-field-ref)]
     (tiles-response result zoom points)))
-
-(mr/def ::parameters
-  "Form-encoded JSON-encoded array of parameter maps."
-  [:schema
-   {:decode/api (fn [s]
-                  (when (string? s)
-                    (json/decode+kw s)))}
-   ::parameters.schema/parameters])
 
 ;; TODO (Cam 2025-11-25) please add a response schema to this API endpoint, it makes it easier for our customers to
 ;; use our API + we will need it when we make auto-TypeScript-signature generation happen
@@ -315,10 +313,11 @@
        [:y ms/Int]]
    {:keys [parameters], lat-field :latField lon-field :lonField}
    :- [:map
-       [:parameters {:optional true} ::parameters]
+       [:parameters {:optional true} ::parameters.schema/api.parameter-values]
        [:latField ::legacy-ref]
        [:lonField ::legacy-ref]]]
-  (process-tiles-query-for-card card-id parameters zoom x y lat-field lon-field))
+  (process-tiles-query-for-card (api/check-404 (t2/select-one :model/Card card-id))
+                                parameters zoom x y lat-field lon-field))
 
 ;; TODO (Cam 2025-11-25) please add a response schema to this API endpoint, it makes it easier for our customers to
 ;; use our API + we will need it when we make auto-TypeScript-signature generation happen
@@ -336,7 +335,10 @@
        [:y ms/Int]]
    {:keys [parameters] lat-field :latField, lon-field :lonField, :as _query-params}
    :- [:map
-       [:parameters {:optional true} ::parameters]
+       [:parameters {:optional true} ::parameters.schema/api.parameter-values]
        [:latField ::legacy-ref]
        [:lonField ::legacy-ref]]]
-  (process-tiles-query-for-dashcard dashboard-id dashcard-id card-id parameters zoom x y lat-field lon-field))
+  (process-tiles-query-for-dashcard (api/check-404 (t2/select-one :model/Dashboard dashboard-id))
+                                    (api/check-404 (t2/select-one :model/DashboardCard dashcard-id))
+                                    (api/check-404 (t2/select-one :model/Card card-id))
+                                    parameters zoom x y lat-field lon-field))

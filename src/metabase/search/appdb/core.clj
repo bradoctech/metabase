@@ -15,7 +15,6 @@
    [metabase.search.filter :as search.filter]
    [metabase.search.ingestion :as search.ingestion]
    [metabase.search.permissions :as search.permissions]
-   [metabase.search.settings :as search.settings]
    [metabase.search.spec :as search.spec]
    [metabase.search.util :as search.util]
    [metabase.settings.core :as setting]
@@ -44,13 +43,7 @@
   #{:postgres :h2})
 
 (defmethod search.engine/supported-engine? :search.engine/appdb [_]
-  (and (or config/is-dev?
-           ;; TODO (Chris 2025-11-07) This backwards dependency is unfortunate, we should find a better solution.
-           ;;                         Perhaps just an explicit setting for enabling it.
-           ;;                         This also opens us up to swapping out the fallback, e.g. to elastic search.
-           ;; if the default engine is semantic we want appdb to be available, as we want to mix results
-           (#{"appdb" "semantic"} (some-> (search.settings/search-engine) name)))
-       (supported-db? (mdb/db-type))))
+  (supported-db? (mdb/db-type)))
 
 (defmethod search.engine/disjunction :search.engine/appdb [_ terms]
   (when (seq terms)
@@ -89,9 +82,9 @@
       true       (sql.helpers/where
                   [:or
                    [:= :search_index.model nil]
-                   [:!= :search_index.model [:inline "table"]]
+                   [:!= :search_index.model "table"]
                    [:and
-                    [:= :search_index.model [:inline "table"]]
+                    [:= :search_index.model "table"]
                     clause]]))))
 
 (defn add-collection-join-and-where-clauses
@@ -149,7 +142,6 @@
                              :timeout-ms  2000
                              :interval-ms 100})
             (log/warn "Returning search results even though they may be stale. Queue size:" (pending-updates)))))
-
       (let [weights (search.config/weights search-ctx)
             scorers (search.scoring/scorers search-ctx)
             query   (->> (search.index/search-query search-string search-ctx [:legacy_input])
@@ -198,7 +190,6 @@
       (do
         (log/info "Forcing early reindex because existing index is old")
         (search.engine/reindex! :search.engine/appdb {}))
-
       (let [created? (search.index/ensure-ready! opts)]
         (when (or created? re-populate?)
           (log/info "Populating index")

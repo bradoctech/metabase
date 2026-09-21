@@ -8,6 +8,7 @@
    [metabase.lib.core :as lib]
    [metabase.lib.schema.id :as lib.schema.id]
    [metabase.lib.schema.metadata :as lib.schema.metadata]
+   [metabase.models.interface :as mi]
    [metabase.query-processor.metadata :as qp.metadata]
    [metabase.query-processor.preprocess :as qp.preprocess]
    [metabase.query-processor.schema :as qp.schema]
@@ -80,7 +81,7 @@ saved later when it is ready."
 
 (defn normalize-dataset-query
   "Normalize the query `dataset-query` received via an HTTP call.
-  Handles both (legacy) MBQL and pMBQL queries."
+  Handles both (legacy) MBQL and MBQL 5 queries."
   {:deprecated "0.57.0"}
   [dataset-query]
   (lib-be/normalize-query dataset-query))
@@ -223,6 +224,9 @@ saved later when it is ready."
          (do
            (log/debug "Not inferring result metadata for Card: query was not updated")
            card)
+
+         (and mi/*deserializing?* (= (:type card) :model) query (seq metadata) (not-any? :id metadata))
+         (assoc card :result_metadata (or (infer-metadata-with-model-overrides query card) metadata))
 
          ;; passing in metadata => use that metadata, but replace any placeholder idents in it.
          (or (and (not-empty changes) (contains? changes :result_metadata))

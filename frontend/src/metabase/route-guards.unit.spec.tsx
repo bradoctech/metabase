@@ -1,12 +1,20 @@
 import { type Context, createContext } from "react";
+import { Route } from "react-router";
 import { routerActions } from "react-router-redux";
 import { connectedReduxRedirect } from "redux-auth-wrapper/history3/redirect";
 
-import { renderWithProviders, screen } from "__support__/ui";
-import { createMockState } from "metabase-types/store/mocks";
+import { renderWithProviders, screen, waitFor } from "__support__/ui";
+import { metabaseReduxContext } from "metabase/redux/context";
+import type { AdminPath } from "metabase/redux/store";
+import {
+  createMockAdminAppState,
+  createMockAdminState,
+  createMockSettingsState,
+  createMockState,
+} from "metabase/redux/store/mocks";
+import { createMockUser } from "metabase-types/api/mocks";
 
-import { MetabaseReduxContext } from "./lib/redux";
-import { isBackendOnlyPath } from "./route-guards";
+import { CanAccessSettings, isBackendOnlyPath } from "./route-guards";
 
 describe("route-guards", () => {
   describe("patched redux-auth-wrapper", () => {
@@ -20,7 +28,7 @@ describe("route-guards", () => {
       let selectorState: any;
       const RouteGuard = setupRouteGuard({
         // leverage the same context used by the main application
-        context: MetabaseReduxContext,
+        context: metabaseReduxContext,
         authenticatedSelector: (state) => {
           selectorState = state;
           return !!state.auth.VAL_ONLY_IN_THIS_CTX;
@@ -65,11 +73,64 @@ describe("route-guards", () => {
     });
   });
 
+  describe("CanAccessSettings", () => {
+    const DATABASES_PATH: AdminPath = {
+      name: "Databases",
+      path: "/admin/databases",
+      key: "databases",
+    };
+
+    const Protected = () => <div>protected</div>;
+    const Unauthorized = () => <div>unauthorized</div>;
+
+    const setup = (paths: AdminPath[]) =>
+      renderWithProviders(
+        <>
+          <Route component={CanAccessSettings}>
+            <Route path="/admin/databases" component={Protected} />
+          </Route>
+          <Route path="/unauthorized" component={Unauthorized} />
+        </>,
+        {
+          storeInitialState: createMockState({
+            currentUser: createMockUser({ is_superuser: false }),
+            settings: createMockSettingsState({ "has-user-setup": true }),
+            admin: createMockAdminState({
+              app: createMockAdminAppState({ paths }),
+            }),
+          }),
+          withRouter: true,
+          initialRoute: "/admin/databases",
+        },
+      );
+
+    it("lets a non-admin through when a permission grant left them an admin path", async () => {
+      const { history } = setup([DATABASES_PATH]);
+
+      expect(await screen.findByText("protected")).toBeInTheDocument();
+      expect(history?.getCurrentLocation().pathname).toBe("/admin/databases");
+    });
+
+    it("redirects a non-admin with no admin paths to /unauthorized", async () => {
+      const { history } = setup([]);
+
+      await waitFor(() => {
+        expect(history?.getCurrentLocation().pathname).toBe("/unauthorized");
+      });
+    });
+  });
+
   describe("isBackendOnlyPath", () => {
     it("should return true for /oauth/ paths", () => {
       expect(isBackendOnlyPath("/oauth/authorize")).toBe(true);
       expect(isBackendOnlyPath("/oauth/authorize/decision")).toBe(true);
       expect(isBackendOnlyPath("/oauth/token")).toBe(true);
+    });
+
+    it("should return true for /auth/sso/ paths", () => {
+      expect(isBackendOnlyPath("/auth/sso/slack-connect")).toBe(true);
+      expect(isBackendOnlyPath("/auth/sso/slack-connect/callback")).toBe(true);
+      expect(isBackendOnlyPath("/auth/sso/my-provider")).toBe(true);
     });
 
     it("should return false for frontend paths", () => {

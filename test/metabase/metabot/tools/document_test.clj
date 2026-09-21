@@ -23,13 +23,11 @@
         (is (= {:database_id 1
                 :sql_engine  "h2"}
                (:structured-output result))))))
-
   (testing "returns missing-database message when no database references are present"
     (with-redefs [shared/current-context (fn [] {:references {}})]
       (let [result (document-tools/document-schema-collect-tool {})]
         (is (= "You must `@` mention a database to use when not querying an existing model"
                (:output result))))))
-
   (testing "returns multiple-database message when more than one database is referenced"
     (with-redefs [shared/current-context (fn [] {:references {"database:1" "Test DB 1"
                                                               "database:2" "Test DB 2"}})]
@@ -70,7 +68,6 @@
                 :native {:query "SELECT * FROM test"
                          :template-tags {}}}
                (:dataset_query structured))))))
-
   (testing "returns instructions when SQL validation fails"
     (with-redefs [create-sql-query-tools/create-sql-query
                   (fn [_]
@@ -89,7 +86,6 @@
         (is (nil? (:structured-output result)))
         (is (re-find #"SQL chart draft generation failed" (:output result)))
         (is (re-find #"syntax error near FROM" (:output result))))))
-
   (testing "returns instructions when query processor rejects generated SQL"
     (with-redefs [create-sql-query-tools/create-sql-query
                   (fn [_]
@@ -125,7 +121,8 @@
       (let [result (document-tools/document-construct-model-chart-tool
                     {:name "Test Name"
                      :description "Test Desc"
-                     :query {:source {:model_id 4}}
+                     :source_entity {:type "model" :id 4}
+                     :program {:source {:type "context" :ref "source"} :operations []}
                      :viz_settings {:chart_type "bar"}})
             structured (:structured-output result)]
         (is (true? (:final-response? result)))

@@ -1,6 +1,7 @@
 (ns metabase.lib.schema.expression
   (:refer-clojure :exclude [some empty? #?(:clj for)])
   (:require
+   [malli.core :as mc]
    [metabase.lib.dispatch :as lib.dispatch]
    [metabase.lib.hierarchy :as lib.hierarchy]
    [metabase.lib.options :as lib.options]
@@ -102,7 +103,7 @@
     (is-type? expr-type base-type)))
 
 (def ^:dynamic *suppress-expression-type-check?*
-  "Set this `true` to skip any type checks for expressions. This is useful while constructing expressions in MLv2 with
+  "Set this `true` to skip any type checks for expressions. This is useful while constructing expressions in Lib with
   full metadata, but it breaks during legacy conversion in some cases.
 
   In particular, if you override the metadata for a column to eg. treat a `:type/Integer` columns as a `:type/Instant`
@@ -235,8 +236,11 @@
    [:ref ::expression]
    [:cat
     #_tag :any
+    ;; `::mc/default` because this only checks and normalizes the name -- the rest of the options map is validated by
+    ;; `::expression` above, and would otherwise be stripped here before it got there.
     #_opts [:map
-            [:lib/expression-name [:string {:decode/normalize common/normalize-string-key}]]]
+            [:lib/expression-name [:string {:decode/normalize common/normalize-string-key}]]
+            [::mc/default :any]]
     #_args [:* :any]]
    [:fn
     {:error/message "non-aggregation expression"}

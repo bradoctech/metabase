@@ -5,7 +5,6 @@
    [clojure.string :as str]
    [clojure.test :refer :all]
    [metabase.collections-rest.api :as api.collection]
-   [metabase.collections-rest.settings :as collections-rest.settings]
    [metabase.collections.models.collection :as collection]
    [metabase.collections.models.collection-test :as collection-test]
    [metabase.collections.test-utils :refer [without-library]]
@@ -178,7 +177,6 @@
                  (->> (mt/user-http-request :rasta :get 200 "collection")
                       remove-other-collections
                       (map :name)))))
-
         (testing "Check that if we pass `?archived=true` we instead see archived Collections"
           (is (= ["Archived Collection"]
                  (->> (mt/user-http-request :rasta :get 200 "collection" :archived :true)
@@ -197,13 +195,11 @@
           (testing "shouldn't show Collections of a different `:namespace` by default"
             (is (= ["Normal Collection"]
                    (collection-names (mt/user-http-request :rasta :get 200 "collection")))))
-
           (perms/grant-collection-read-permissions! (perms/all-users-group) coins-id)
           (testing "By passing `:namespace` we should be able to see Collections of that `:namespace`"
             (testing "?namespace=currency"
               (is (= ["Coin Collection"]
                      (collection-names (mt/user-http-request :rasta :get 200 "collection?namespace=currency")))))
-
             (testing "?namespace=stamps"
               (is (= []
                      (collection-names (mt/user-http-request :rasta :get 200 "collection?namespace=stamps")))))))))))
@@ -492,13 +488,11 @@
           (testing "shouldn't show Collections of a different `:namespace` by default"
             (is (= [{:name "Normal Collection", :children []}]
                    (collection-tree-view ids (mt/user-http-request :rasta :get 200 "collection/tree")))))
-
           (perms/grant-collection-read-permissions! (perms/all-users-group) coins-id)
           (testing "By passing `:namespace` we should be able to see Collections of that `:namespace`"
             (testing "?namespace=currency"
               (is (= [{:name "Coin Collection", :children []}]
                      (collection-tree-view ids (mt/user-http-request :rasta :get 200 "collection/tree?namespace=currency")))))
-
             (testing "?namespace=stamps"
               (is (= []
                      (collection-tree-view ids (mt/user-http-request :rasta :get 200 "collection/tree?namespace=stamps")))))))))))
@@ -512,26 +506,21 @@
         (let [ids [normal-id coins-id stamps-id]]
           (perms/grant-collection-read-permissions! (perms/all-users-group) coins-id)
           (perms/grant-collection-read-permissions! (perms/all-users-group) stamps-id)
-
           (testing "single namespace via namespaces param"
             (is (= [{:name "Coin Collection", :children []}]
                    (collection-tree-view ids (mt/user-http-request :rasta :get 200 "collection/tree?namespaces=currency")))))
-
           (testing "multiple namespaces via repeated namespaces param"
             (is (= [{:name "Coin Collection", :children []}
                     {:name "Stamp Collection", :children []}]
                    (collection-tree-view ids (mt/user-http-request :rasta :get 200 "collection/tree" :namespaces ["currency" "stamps"])))))
-
           (testing "empty string in namespaces matches nil namespace (default collections)"
             (is (= [{:name "Normal Collection", :children []}]
                    (collection-tree-view ids (mt/user-http-request :rasta :get 200 "collection/tree?namespaces=")))))
-
           (testing "combining nil namespace with other namespaces"
             (is (= [{:name "Coin Collection", :children []}
                     {:name "Normal Collection", :children []}]
                    (collection-tree-view ids (mt/user-http-request :rasta :get 200 "collection/tree" :namespaces ["currency" ""]))
                    (collection-tree-view ids (mt/user-http-request :rasta :get 200 "collection/tree" :namespaces ["currency" nil])))))
-
           (testing "namespace and namespaces params are mutually exclusive"
             (is (= "Invalid Request."
                    (mt/user-http-request :rasta :get 400 "collection/tree?namespace=currency&namespaces=stamps")))))))))
@@ -606,18 +595,15 @@
       (mt/with-temp [:model/Collection collection {:name "Coin Collection"}]
         (is (=? {:name "Coin Collection"}
                 (mt/user-http-request :rasta :get 200 (str "collection/" (u/the-id collection)))))))
-
     (testing "check that we can see collection details using entity ID"
       (mt/with-temp [:model/Collection collection {:name "Coin Collection"}]
         (is (=? {:name "Coin Collection"}
                 (mt/user-http-request :rasta :get 200 (str "collection/" (:entity_id collection)))))))
-
     (testing "check that collections detail properly checks permissions"
       (mt/with-non-admin-groups-no-root-collection-perms
         (mt/with-temp [:model/Collection collection]
           (is (= "You don't have permissions to do that."
                  (mt/user-http-request :rasta :get 403 (str "collection/" (u/the-id collection))))))))
-
     (testing "for personal collections, it should return name and slug in user's locale"
       (with-french-user-and-personal-collection! user collection
         (is (=? {:name "Collection personnelle de Taco Bell"
@@ -924,13 +910,11 @@
       (is (:archived (mt/user-http-request :crowberto :get 200 (str "collection/" (u/the-id collection-a)))))
       ;; we can't unarchive collection B without specifying a location, because it wasn't trashed directly.
       (is (mt/user-http-request :crowberto :put 400 (str "collection/" (u/the-id collection-b)) {:archived false}))
-
       (mt/user-http-request :crowberto :put 200 (str "collection/" (u/the-id collection-b)) {:archived false :parent_id (u/the-id destination)})
       ;; collection A is still here!
       (is (= #{"A"} (set-of-item-names :crowberto (collection/trash-collection-id))))
       ;; collection B got moved correctly
       (is (= #{"B"} (set-of-item-names :crowberto destination)))
-
       (mt/user-http-request :crowberto :put 200 (str "collection/" (u/the-id collection-a)) {:archived false :parent_id (u/the-id destination)})
       (is (= #{"A" "B"} (set-of-item-names :crowberto destination))))))
 
@@ -1135,103 +1119,6 @@
                    {:name "subcollection" :authority_level "official"}}
                  (into #{} (map #(select-keys % [:name :authority_level]))
                        items))))))))
-
-(deftest collection-items-include-can-run-adhoc-query-test
-  (testing "GET /api/collection/:id/items and GET /api/collection/root/items"
-    (testing "include_can_run_adhoc_query parameter controls hydration of can_run_adhoc_query flag"
-      (mt/with-temp [:model/Collection {collection-id :id} {}
-                     :model/Card {card-id :id} {:collection_id collection-id}
-                     :model/Card {root-card-id :id} {:collection_id nil}]
-        (testing "When include_can_run_adhoc_query=false (default), can_run_adhoc_query is not included"
-          (let [collection-items (:data (mt/user-http-request :rasta :get 200
-                                                              (str "collection/" collection-id "/items")))
-                root-items (:data (mt/user-http-request :rasta :get 200 "collection/root/items"))]
-            (is (not (contains? (first collection-items) :can_run_adhoc_query)))
-            (is (not (some #(contains? % :can_run_adhoc_query) root-items)))))
-
-        (testing "When include_can_run_adhoc_query=true, can_run_adhoc_query is included for cards"
-          (let [collection-items (:data (mt/user-http-request :rasta :get 200
-                                                              (str "collection/" collection-id "/items")
-                                                              :include_can_run_adhoc_query true))
-                root-items (:data (mt/user-http-request :rasta :get 200 "collection/root/items"
-                                                        :include_can_run_adhoc_query true))
-                card-item (first (filter #(= (:id %) card-id) collection-items))
-                root-card-item (first (filter #(= (:id %) root-card-id) root-items))]
-            (is (contains? card-item :can_run_adhoc_query))
-            (is (boolean? (:can_run_adhoc_query card-item)))
-            (is (contains? root-card-item :can_run_adhoc_query))
-            (is (boolean? (:can_run_adhoc_query root-card-item)))))
-
-        (testing "can_run_adhoc_query is only added to card-like models (card, dataset, metric)"
-          (mt/with-temp [:model/Dashboard {dashboard-id :id} {:collection_id collection-id}
-                         :model/Collection {subcoll-id :id} {:location (collection/children-location
-                                                                        (t2/select-one :model/Collection :id collection-id))}]
-            (let [items (:data (mt/user-http-request :rasta :get 200
-                                                     (str "collection/" collection-id "/items")
-                                                     :include_can_run_adhoc_query true))
-                  dashboard-item (first (filter #(= (:id %) dashboard-id) items))
-                  collection-item (first (filter #(= (:id %) subcoll-id) items))]
-              (is (not (contains? dashboard-item :can_run_adhoc_query)))
-              (is (not (contains? collection-item :can_run_adhoc_query))))))))))
-
-(deftest can-run-adhoc-query-threshold-exceeded-test
-  (testing "GET /api/collection/:id/items with include_can_run_adhoc_query=true"
-    (testing "When card count exceeds threshold, can_run_adhoc_query returns true (skips permission check)"
-      (let [card-query {:database (mt/id)
-                        :type     :query
-                        :query    {:source-table (mt/id :venues)}}]
-        (mt/with-no-data-perms-for-all-users!
-          (mt/with-temp [:model/Collection {collection-id :id} {}
-                         :model/Card _ {:collection_id collection-id :dataset_query card-query}
-                         :model/Card _ {:collection_id collection-id :dataset_query card-query}
-                         :model/Card _ {:collection_id collection-id :dataset_query card-query}]
-            (mt/with-temporary-setting-values [collections-rest.settings/can-run-adhoc-query-check-threshold 2]
-              (let [items (:data (mt/user-http-request :rasta :get 200
-                                                       (str "collection/" collection-id "/items")
-                                                       :include_can_run_adhoc_query true))]
-                ;; With 3 cards and threshold of 2, all cards should have can_run_adhoc_query=true
-                ;; even though user doesn't have data permissions (computation was skipped)
-                (is (= 3 (count items)))
-                (is (every? #(true? (:can_run_adhoc_query %)) items))))))))))
-
-(deftest can-run-adhoc-query-threshold-not-exceeded-test
-  (testing "GET /api/collection/:id/items with include_can_run_adhoc_query=true"
-    (testing "When card count is at or below threshold, normal hydration occurs (returns false without perms)"
-      (let [card-query {:database (mt/id)
-                        :type     :query
-                        :query    {:source-table (mt/id :venues)}}]
-        (mt/with-no-data-perms-for-all-users!
-          (mt/with-temp [:model/Collection {collection-id :id} {}
-                         :model/Card _ {:collection_id collection-id :dataset_query card-query}
-                         :model/Card _ {:collection_id collection-id :dataset_query card-query}]
-            (mt/with-temporary-setting-values [collections-rest.settings/can-run-adhoc-query-check-threshold 5]
-              (let [items (:data (mt/user-http-request :rasta :get 200
-                                                       (str "collection/" collection-id "/items")
-                                                       :include_can_run_adhoc_query true))]
-                ;; With 2 cards and threshold of 5, actual permission check occurs
-                ;; User doesn't have data permissions, so all should be false
-                (is (= 2 (count items)))
-                (is (every? #(false? (:can_run_adhoc_query %)) items))))))))))
-
-(deftest can-run-adhoc-query-threshold-disabled-test
-  (testing "GET /api/collection/:id/items with include_can_run_adhoc_query=true"
-    (testing "When threshold is 0, always compute permissions regardless of card count"
-      (let [card-query {:database (mt/id)
-                        :type     :query
-                        :query    {:source-table (mt/id :venues)}}]
-        (mt/with-no-data-perms-for-all-users!
-          (mt/with-temp [:model/Collection {collection-id :id} {}
-                         :model/Card _ {:collection_id collection-id :dataset_query card-query}
-                         :model/Card _ {:collection_id collection-id :dataset_query card-query}
-                         :model/Card _ {:collection_id collection-id :dataset_query card-query}]
-            (mt/with-temporary-setting-values [collections-rest.settings/can-run-adhoc-query-check-threshold 0]
-              (let [items (:data (mt/user-http-request :rasta :get 200
-                                                       (str "collection/" collection-id "/items")
-                                                       :include_can_run_adhoc_query true))]
-                ;; With threshold of 0, hydration should always occur
-                ;; User doesn't have data permissions, so all should be false
-                (is (= 3 (count items)))
-                (is (every? #(false? (:can_run_adhoc_query %)) items))))))))))
 
 (deftest collection-items-include-datasets-test
   (testing "GET /api/collection/:id/items"
@@ -1470,11 +1357,9 @@
     (testing "Can we use this endpoint to fetch our own Personal Collection?"
       (is (= (lucky-personal-collection)
              (api-get-lucky-personal-collection :lucky))))
-
     (testing "Can and admin use this endpoint to fetch someone else's Personal Collection?"
       (is (= (lucky-personal-collection)
              (api-get-lucky-personal-collection :crowberto))))
-
     (testing "Other, non-admin Users should not be allowed to fetch others' Personal Collections!"
       (is (= "You don't have permissions to do that."
              (api-get-lucky-personal-collection :rasta, :expected-status-code 403))))))
@@ -1493,7 +1378,6 @@
     (testing "If we have a sub-Collection of our Personal Collection, that should show up"
       (is (partial= lucky-personal-subcollection-item
                     (api-get-lucky-personal-collection-with-subcollection :lucky))))
-
     (testing "sub-Collections of other's Personal Collections should show up for admins as well"
       (is (partial= lucky-personal-subcollection-item
                     (api-get-lucky-personal-collection-with-subcollection :crowberto))))))
@@ -2132,12 +2016,10 @@
           (is (nil? (t2/select-one-fn :dashboard_id :model/Card card1-id)))
           (is (nil? (t2/select-one-fn :dashboard_id :model/Card card2-id)))
           (is (nil? (t2/select-one-fn :dashboard_id :model/Card card3-id))))
-
         (testing "move only card1 and card2"
           (mt/user-http-request :crowberto :post 200
                                 (format "collection/%d/move-dashboard-question-candidates" coll-id)
                                 {:card_ids #{card1-id card2-id}}))
-
         (testing "verify only specified cards were moved"
           (is (= dash1-id (t2/select-one-fn :dashboard_id :model/Card card1-id)))
           (is (= dash1-id (t2/select-one-fn :dashboard_id :model/Card card2-id)))
@@ -2154,7 +2036,6 @@
       ;; Initially no cards should have dashboard_id set
       (is (nil? (t2/select-one-fn :dashboard_id :model/Card card1-id)))
       (is (nil? (t2/select-one-fn :dashboard_id :model/Card card2-id)))
-
       ;; Mock card/update-card! to fail on the second call
       (mt/with-dynamic-fn-redefs [card/update-card!
                                   (let [call-count (atom 0)]
@@ -2165,7 +2046,6 @@
                                       (apply (mt/dynamic-value card/update-card!) args)))]
         (mt/user-http-request :crowberto :post 500
                               (format "collection/%d/move-dashboard-question-candidates" coll-id)))
-
       ;; Verify neither card was moved (operation rolled back)
       (is (nil? (t2/select-one-fn :dashboard_id :model/Card card1-id)))
       (is (nil? (t2/select-one-fn :dashboard_id :model/Card card2-id))))))
@@ -2507,13 +2387,11 @@
         (testing "children"
           (is (partial= (map collection-item ["A"])
                         (remove-non-test-collections (api-get-root-collection-children)))))))
-
     (testing "...and collapsing children should work for the Root Collection as well"
       (with-collection-hierarchy! [b d e f g]
         (testing "children"
           (is (partial= (map collection-item ["B" "D" "F"])
                         (remove-non-test-collections (api-get-root-collection-children)))))))
-
     (testing "does `archived` work on Collections as well?"
       (with-collection-hierarchy! [a b d e f g]
         (mt/user-http-request :crowberto :put 200 (str "collection/" (u/the-id a))
@@ -2523,7 +2401,6 @@
         (mt/user-http-request :crowberto :put 200 (str "collection/" (u/the-id a))
                               {:archived true})
         (is (= [] (remove-non-test-collections (api-get-root-collection-children))))))
-
     (testing "\n?namespace= parameter"
       (mt/with-temp [:model/Collection {normal-id :id} {:name "Normal Collection"}
                      :model/Collection {coins-id :id}  {:name "Coin Collection", :namespace "currency"}]
@@ -2536,7 +2413,6 @@
           (testing "should only show Collections in the 'default' namespace by default"
             (is (= ["Normal Collection"]
                    (collection-names (mt/user-http-request :rasta :get 200 "collection/root/items")))))
-
           (testing "By passing `:namespace` we should be able to see Collections in that `:namespace`"
             (testing "?namespace=currency"
               (is (= ["Coin Collection"]
@@ -2574,20 +2450,16 @@
                           :entity_id (:entity_id snippet-2)
                           :model     "snippet"}]
                         (only-test-items (:data (mt/user-http-request :rasta :get 200 "collection/root/items?namespace=snippets")))))
-
           (testing "\nSnippets should not come back for the default namespace"
             (is (= ["My Dashboard"]
                    (only-test-item-names (:data (mt/user-http-request :rasta :get 200 "collection/root/items"))))))
-
           (testing "\nSnippets shouldn't be paginated, because FE is not ready for it yet and default pagination behavior is bad"
             (is (= ["My Snippet", "My Snippet 2"]
                    (only-test-item-names (:data (mt/user-http-request :rasta :get 200 "collection/root/items?namespace=snippets&limit=1&offset=0"))))))
-
           (testing "\nShould be able to fetch archived Snippets"
             (is (= ["Archived Snippet"]
                    (only-test-item-names (:data (mt/user-http-request :rasta :get 200
                                                                       "collection/root/items?namespace=snippets&archived=true"))))))
-
           (testing "\nShould be able to pass ?model=snippet, even though it makes no difference in this case"
             (is (= ["My Snippet", "My Snippet 2"]
                    (only-test-item-names (:data (mt/user-http-request :rasta :get 200
@@ -2797,7 +2669,6 @@
           (is (= "You don't have permissions to do that."
                  (mt/user-http-request :rasta :put 403 (str "collection/" (u/the-id collection))
                                        {:archived true})))))
-
       (testing "Perms checking should be recursive as well..."
         ;; Create Collections A > B, and grant permissions for A. You should not be allowed to archive A because you
         ;; would also need perms for B
@@ -2843,7 +2714,6 @@
                           (update :location collection-test/location-path-ids->names)
                           (update :id integer?)
                           (update :entity_id string?))))))
-
     (testing "I shouldn't be allowed to move the Collection without proper perms."
       (testing "If I want to move A into B, I should need permissions for both A and B"
         (mt/with-non-admin-groups-no-root-collection-perms
@@ -2853,7 +2723,6 @@
             (is (= "You don't have permissions to do that."
                    (mt/user-http-request :rasta :put 403 (str "collection/" (u/the-id collection-a))
                                          {:parent_id (u/the-id collection-b)}))))))
-
       (testing "Perms checking should be recursive as well..."
         (testing "Create A, B, and C; B is a child of A."
           (testing "Grant perms for A and B. Moving A into C should fail because we need perms for C"
@@ -2868,7 +2737,6 @@
                 (is (= "You don't have permissions to do that."
                        (mt/user-http-request :rasta :put 403 (str "collection/" (u/the-id collection-a))
                                              {:parent_id (u/the-id collection-c)}))))))
-
           (testing "Grant perms for A and C. Moving A into C should fail because we need perms for B."
             ;; A* -> B  ==>  C -> A -> B
             ;; C*
@@ -2881,7 +2749,6 @@
                 (is (= "You don't have permissions to do that."
                        (mt/user-http-request :rasta :put 403 (str "collection/" (u/the-id collection-a))
                                              {:parent_id (u/the-id collection-c)}))))))
-
           (testing "Grant perms for B and C. Moving A into C should fail because we need perms for A"
             ;; A -> B*  ==>  C -> A -> B
             ;; C*
@@ -2944,15 +2811,12 @@
         (testing "Should be able to fetch the permissions graph for the default namespace"
           (is (= {"Default A" "read", "Default A -> B" "read"}
                  (nice-graph (mt/user-http-request :crowberto :get 200 "collection/graph")))))
-
         (testing "Should be able to fetch the permissions graph for a non-default namespace"
           (is (= {"Currency A" "read", "Currency A -> B" "read"}
                  (nice-graph (mt/user-http-request :crowberto :get 200 "collection/graph?namespace=currency")))))
-
         (testing "have to be a superuser"
           (is (= "You don't have permissions to do that."
                  (mt/user-http-request :rasta :get 403 "collection/graph")))))
-
       (testing "PUT /api/collection/graph\n"
         (testing "Should be able to update the graph for the default namespace.\n"
           (testing "Should ignore updates to Collections outside of the namespace"
@@ -2960,7 +2824,6 @@
                                                  (assoc (graph/graph) :groups {group-id {default-ab :write, currency-ab :write}}))]
               (is (= {"Default A" "read", "Default A -> B" "write"}
                      (nice-graph response))))))
-
         (testing "Should be able to update the graph for a non-default namespace.\n"
           (testing "Should ignore updates to Collections outside of the namespace"
             (let [response (mt/user-http-request :crowberto :put 200 "collection/graph"
@@ -2969,14 +2832,12 @@
                                                         :namespace :currency))]
               (is (= {"Currency A" "write", "Currency A -> B" "read"}
                      (nice-graph response))))))
-
         (testing "Should require a `revision` parameter equal to the current graph's revision"
           (is (= (str "Looks like someone else edited the permissions and your data is out of date. "
                       "Please fetch new data and try again.")
                  (mt/user-http-request :crowberto :put 409 "collection/graph"
                                        (-> (graph/graph)
                                            (update :revision dec))))))
-
         (testing "Should be able to override the need for a `revision` parameter by passing `force=true`"
           (let [response (mt/user-http-request :crowberto :put 200 "collection/graph?force=true"
                                                (-> (graph/graph)
@@ -2984,7 +2845,6 @@
                                                    (dissoc :revision)))]
             (is (= {"Default A" "read", "Default A -> B" "read"}
                    (nice-graph response)))))
-
         (testing "have to be a superuser"
           (is (= "You don't have permissions to do that."
                  (mt/user-http-request :rasta :put 403 "collection/graph"
@@ -3022,13 +2882,11 @@
                  :model/Dashboard _ {:collection_id collection-id}
                  :model/Card _ {:collection_id collection-id
                                 :type :model}]
-
     (testing "`can_write` is `true` when appropriate"
       (perms/revoke-collection-permissions! (perms/all-users-group) collection)
       (perms/grant-collection-readwrite-permissions! (perms/all-users-group) collection)
       (is (= #{[true "card"] [true "dataset"] [true "dashboard"]}
              (into #{} (map (juxt :can_write :model) (:data (mt/user-http-request :rasta :get 200 (str "collection/" collection-id "/items"))))))))
-
     (testing "and `false` when appropriate"
       (perms/revoke-collection-permissions! (perms/all-users-group) collection)
       (perms/grant-collection-read-permissions! (perms/all-users-group) collection)
@@ -3257,7 +3115,6 @@
         (mt/with-temp [:model/Collection parent-collection {}
                        :model/Collection child-collection {:location (collection/children-location parent-collection)}
                        :model/Collection grandchild-collection {:location (collection/children-location child-collection)}]
-
           (testing "Should return 403 if user has no permissions for descendants"
             (perms/revoke-collection-permissions! (perms/all-users-group) parent-collection)
             (perms/revoke-collection-permissions! (perms/all-users-group) child-collection)
@@ -3266,7 +3123,6 @@
             ;; No permissions for child or grandchild
             (is (= "You don't have permissions to do that."
                    (mt/user-http-request :rasta :put 403 (str "collection/" (u/the-id parent-collection)) {:archived true}))))
-
           (testing "Should return 403 if user only has read permissions for descendants"
             (perms/revoke-collection-permissions! (perms/all-users-group) parent-collection)
             (perms/revoke-collection-permissions! (perms/all-users-group) child-collection)
@@ -3276,7 +3132,6 @@
             (perms/grant-collection-read-permissions! (perms/all-users-group) grandchild-collection)
             (is (= "You don't have permissions to do that."
                    (mt/user-http-request :rasta :put 403 (str "collection/" (u/the-id parent-collection)) {:archived true}))))
-
           (testing "Should return 200 if user has read-write permissions for all descendants"
             (perms/revoke-collection-permissions! (perms/all-users-group) parent-collection)
             (perms/revoke-collection-permissions! (perms/all-users-group) child-collection)
@@ -3302,7 +3157,6 @@
     ;; archive collection C first, then collection A
     (mt/user-http-request :rasta :put 200 (str "/collection/" coll-c-id) {:archived true})
     (mt/user-http-request :rasta :put 200 (str "/collection/" coll-a-id) {:archived true})
-
     ;; now we have:
     ;; - collection A > B > C
     ;; - but collections A and C appear in the Trash (because they were archived separately)
@@ -3465,3 +3319,19 @@
           (is (= "You don't have permissions to do that."
                  (mt/user-http-request :rasta :put 403 (str "collection/" (u/the-id archived-collection))
                                        {:archived false :parent_id (u/the-id dest-collection)}))))))))
+
+(deftest update-collection-cannot-set-type-test
+  (testing "PUT /api/collection/:id"
+    (testing "cannot change a Collection's :type -- enrolling it in remote sync hands it to the auto-import job"
+      (mt/with-non-admin-groups-no-root-collection-perms
+        (mt/with-temp [:model/Collection {coll-id :id} {}]
+          (perms/grant-collection-readwrite-permissions! (perms/all-users-group) coll-id)
+          (mt/user-http-request :rasta :put 200 (str "collection/" coll-id)
+                                {:type "remote-synced", :name "renamed"})
+          (is (nil? (t2/select-one-fn :type :model/Collection :id coll-id)))
+          (is (false? (t2/select-one-fn :is_remote_synced :model/Collection :id coll-id)))
+          (testing "the rest of the update still applies"
+            (is (= "renamed" (t2/select-one-fn :name :model/Collection :id coll-id))))
+          (testing "and an admin cannot either"
+            (mt/user-http-request :crowberto :put 200 (str "collection/" coll-id) {:type "remote-synced"})
+            (is (nil? (t2/select-one-fn :type :model/Collection :id coll-id)))))))))

@@ -28,15 +28,15 @@
     (canned/canned-test
      :drill-thru/underlying-records
      (fn [test-case context {:keys [click column-kind]}]
-        ;; TODO: The docs claim that underlying-records works on pivot cells, and so it does, but the so-called pivot case
-        ;; never occurs in actual pivot tables!
-        ;; - Clicks on row/column "headers", (that is, breakout values like a month or product category) look like regular
-        ;;   cell clicks (column and value set per the breakout, no :dimensions).
-        ;; - Clicks on cells (that is, aggregation values) have column, column-ref and value all nil, and :dimensions
-        ;;   contains all the breakouts (not exactly 2 as claimed in the spec).
-        ;; That all makes sense to me (Braden) and I think this is a bug in the docs, but it also might be a bug in the FE
-        ;; code that should be setting the aggregation :value for cell clicks?
-        ;; Tech debt issue: #39380
+       ;; TODO: The docs claim that underlying-records works on pivot cells, and so it does, but the so-called pivot case
+       ;; never occurs in actual pivot tables!
+       ;; - Clicks on row/column "headers", (that is, breakout values like a month or product category) look like regular
+       ;;   cell clicks (column and value set per the breakout, no :dimensions).
+       ;; - Clicks on cells (that is, aggregation values) have column, column-ref and value all nil, and :dimensions
+       ;;   contains all the breakouts (not exactly 2 as claimed in the spec).
+       ;; That all makes sense to me (Braden) and I think this is a bug in the docs, but it also might be a bug in the FE
+       ;; code that should be setting the aggregation :value for cell clicks?
+       ;; Tech debt issue: #39380
        (and (#{:cell #_:pivot :legend} click)
             (not (:native? test-case))
             (or (seq (:dimensions context))
@@ -784,3 +784,147 @@
                    :cljs "Total is less than 92")]
                (map #(:long-display-name (lib/display-info query' %))
                     (lib/filters query'))))))))
+
+(deftest ^:parallel double-summarize-then-drill-twice-test
+  (testing "drilling twice on a double-summarize query keeps the correct date filter (#72937)"
+    (let [;; First summarize: max(subtotal) by day(created-at), product-id.
+          stage-1    (-> (lib/query meta/metadata-provider (meta/table-metadata :orders))
+                         (lib/aggregate (lib/max (meta/field-metadata :orders :subtotal)))
+                         (lib/breakout (-> (meta/field-metadata :orders :created-at)
+                                           (lib/with-temporal-bucket :day)))
+                         (lib/breakout (meta/field-metadata :orders :product-id))
+                         lib/append-stage)
+          inner-day  (lib.tu.notebook/find-col-with-spec
+                      stage-1 (lib/returned-columns stage-1) {} {:display-name "Created At: Day"})
+          ;; Second summarize: count by week(created-at) (line-chart "by Week").
+          query      (-> stage-1
+                         (lib/aggregate (lib/count))
+                         (lib/breakout (lib/with-temporal-bucket inner-day :week)))
+          out-cols   (lib/returned-columns query)
+          week-col   (lib.tu.notebook/find-col-with-spec
+                      query out-cols {} {:display-name "Created At: Week"})
+          count-col  (lib.tu.notebook/find-col-with-spec
+                      query out-cols {} {:display-name "Count"})
+          ;; Step 1 – click a chart point on a particular week.
+          first-ctx  {:column     count-col
+                      :column-ref (lib/ref count-col)
+                      :value      99
+                      :row        [{:column week-col
+                                    :column-ref (lib/ref week-col)
+                                    :value      "2023-03-12T00:00:00Z"}
+                                   {:column count-col
+                                    :column-ref (lib/ref count-col)
+                                    :value      99}]
+                      :dimensions [{:column week-col
+                                    :column-ref (lib/ref week-col)
+                                    :value      "2023-03-12T00:00:00Z"}]}
+          first-drill (m/find-first #(= (:type %) :drill-thru/underlying-records)
+                                    (lib/available-drill-thrus query first-ctx))
+          _           (is (some? first-drill))
+          first-result (lib/drill-thru query first-drill)]
+      (testing "first drill applies a week filter on the outer stage (week boundaries depend on `start-of-week`)"
+        (is (=? {:stages [{}
+                          {:filters     [[:between {}
+                                          [:field {:temporal-unit :week} string?]
+                                          string?
+                                          string?]]
+                           :aggregation (symbol "nil #_\"key is not present.\"")
+                           :breakout    (symbol "nil #_\"key is not present.\"")
+                           :fields      (symbol "nil #_\"key is not present.\"")}]}
+                first-result)))
+      ;; Step 2 – click an aggregated cell ("max") on a row whose CREATED_AT is 2023-03-15.
+      (let [row-cols      (lib/returned-columns first-result)
+            row-day       (lib.tu.notebook/find-col-with-spec
+                           first-result row-cols {} {:display-name "Created At: Day"})
+            row-product   (lib.tu.notebook/find-col-with-spec
+                           first-result row-cols {} {:display-name "Product ID"})
+            row-max       (lib.tu.notebook/find-col-with-spec
+                           first-result row-cols {} {:display-name "Max of Subtotal"})
+            second-ctx    {:column     row-max
+                           :column-ref (lib/ref row-max)
+                           :value      150.0
+                           :row        [{:column row-day
+                                         :column-ref (lib/ref row-day)
+                                         :value      "2023-03-15T00:00:00+08:00"}
+                                        {:column row-product
+                                         :column-ref (lib/ref row-product)
+                                         :value      14}
+                                        {:column row-max
+                                         :column-ref (lib/ref row-max)
+                                         :value      150.0}]
+                           :dimensions [{:column row-day
+                                         :column-ref (lib/ref row-day)
+                                         :value      "2023-03-15T00:00:00+08:00"}
+                                        {:column row-product
+                                         :column-ref (lib/ref row-product)
+                                         :value      14}]}
+            second-drill  (m/find-first #(= (:type %) :drill-thru/underlying-records)
+                                        (lib/available-drill-thrus first-result second-ctx))
+            _             (is (some? second-drill))
+            second-result (lib/drill-thru first-result second-drill)]
+        (testing "second drill should filter on 2023-03-15 (not 2023-03-14)"
+          (is (=? {:stages [{:filters     [[:between {}
+                                            [:field {:temporal-unit :day} (meta/id :orders :created-at)]
+                                            "2023-03-15"
+                                            "2023-03-15"]
+                                           [:= {}
+                                            [:field {} (meta/id :orders :product-id)]
+                                            14]]
+                             :aggregation (symbol "nil #_\"key is not present.\"")
+                             :breakout    (symbol "nil #_\"key is not present.\"")
+                             :fields      (symbol "nil #_\"key is not present.\"")}]}
+                  second-result)))))))
+
+(deftest ^:parallel partial-dimensions-fill-from-row-test
+  (testing "underlying-records drill fills in missing breakout-sourced row entries when the
+            FE provides only some of the dimensions (#73803)"
+    ;; Models a card where stage 1 has agg+breakouts (count by created-at:month, state); stage 2
+    ;; adds a filter `state = "AK"`. On the FE the scatter only puts CREATED_AT in graph.dimensions,
+    ;; so the click context's :dimensions has just CREATED_AT — STATE is present in :row but, at
+    ;; the last stage, its column metadata shows :source/previous-stage / :source :fields rather
+    ;; than a breakout. The drill must still apply STATE = clicked-value to the underlying records.
+    (let [base       (-> (lib/query meta/metadata-provider (meta/table-metadata :people))
+                         (lib/aggregate (lib/count))
+                         (lib/breakout (-> (meta/field-metadata :people :created-at)
+                                           (lib/with-temporal-bucket :month)))
+                         (lib/breakout (meta/field-metadata :people :state))
+                         lib/append-stage)
+          base-cols  (lib/returned-columns base)
+          created-at (lib.tu.notebook/find-col-with-spec
+                      base base-cols {} {:display-name "Created At: Month"})
+          state-col  (lib.tu.notebook/find-col-with-spec
+                      base base-cols {} {:display-name "State"})
+          count-col  (lib.tu.notebook/find-col-with-spec
+                      base base-cols {} {:display-name "Count"})
+          query      (lib/filter base (lib/= state-col "AK"))
+          context    {:column     count-col
+                      :column-ref (lib/ref count-col)
+                      :value      4
+                      :row        [{:column     created-at
+                                    :column-ref (lib/ref created-at)
+                                    :value      "2026-07-01T00:00:00Z"}
+                                   {:column     state-col
+                                    :column-ref (lib/ref state-col)
+                                    :value      "AK"}
+                                   {:column     count-col
+                                    :column-ref (lib/ref count-col)
+                                    :value      4}]
+                      :dimensions [{:column     created-at
+                                    :column-ref (lib/ref created-at)
+                                    :value      "2026-07-01T00:00:00Z"}]}
+          drill      (m/find-first #(= (:type %) :drill-thru/underlying-records)
+                                   (lib/available-drill-thrus query context))
+          _          (is (some? drill))
+          result     (lib/drill-thru query drill)]
+      (is (=? {:stages [{:source-table (meta/id :people)
+                         :filters      [[:between {}
+                                         [:field {:temporal-unit :month} (meta/id :people :created-at)]
+                                         string?
+                                         string?]
+                                        [:= {}
+                                         [:field {} (meta/id :people :state)]
+                                         "AK"]]
+                         :aggregation  (symbol "nil #_\"key is not present.\"")
+                         :breakout     (symbol "nil #_\"key is not present.\"")
+                         :fields       (symbol "nil #_\"key is not present.\"")}]}
+              result)))))

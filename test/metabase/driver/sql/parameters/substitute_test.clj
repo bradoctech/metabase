@@ -1,5 +1,6 @@
 (ns ^:mb/driver-tests metabase.driver.sql.parameters.substitute-test
   (:require
+   [clojure.set :as set]
    [clojure.string :as str]
    [clojure.test :refer :all]
    [java-time.api :as t]
@@ -7,15 +8,18 @@
    ^{:clj-kondo/ignore [:deprecated-namespace]} [metabase.driver.common.parameters :as params]
    ^{:clj-kondo/ignore [:deprecated-namespace]} [metabase.driver.common.parameters.parse :as params.parse]
    [metabase.driver.sql.parameters.substitute :as sql.params.substitute]
+   [metabase.driver.sql.query-processor :as sql.qp]
    [metabase.legacy-mbql.normalize :as mbql.normalize]
    [metabase.lib.core :as lib]
    [metabase.lib.test-metadata :as meta]
+   [metabase.lib.test-util :as lib.tu]
    [metabase.query-processor.compile :as qp.compile]
    [metabase.query-processor.middleware.parameters.native :as qp.native]
    [metabase.query-processor.test :as qp]
    [metabase.query-processor.test-util :as qp.test-util]
    [metabase.test :as mt]
    [metabase.test.data.interface :as tx]
+   [metabase.util.honey-sql-2 :as h2x]
    [metabase.util.malli :as mu]))
 
 (defn- optional [& args] (params/->Optional args))
@@ -25,6 +29,14 @@
   (driver/with-driver :h2
     (mt/with-metadata-provider meta/metadata-provider
       (sql.params.substitute/substitute parsed param->value))))
+
+;; as with the MBQL parameters tests Redshift fail for unknown reasons; disable their tests for now
+;; TIMEZONE FIXME
+(defn- sql-parameters-engines []
+  (set (for [driver (mt/normal-drivers-with-feature :native-parameters)
+             :when  (and (isa? driver/hierarchy driver :sql)
+                         (not= driver :redshift))]
+         driver)))
 
 (deftest ^:parallel substitute-test
   (testing "normal substitution"
@@ -111,6 +123,54 @@
         (testing "param is missing — should be omitted entirely"
           (is (= ["select * from orders" nil]
                  (substitute query {"created_at" (assoc (date-field-filter-value) :value params/no-value)}))))))))
+
+(deftest ^:parallel substitute-field-filter-for-nested-field-test
+  (testing "field filter for a nested field (with parent-id) should include parent field name in identifier (#47003)"
+    (mt/test-drivers (set/intersection (sql-parameters-engines)
+                                       (mt/normal-drivers-with-feature :nested-field-columns))
+      (let [;; Use high IDs that won't collide with existing test metadata
+            parent-field-id 999901
+            nested-field-id 999902
+            ;; Create a metadata provider that has a parent struct field and a nested child field
+            metadata-provider
+            (lib.tu/merged-mock-metadata-provider
+             meta/metadata-provider
+             {:fields [{:id            parent-field-id
+                        :table-id      (meta/id :venues)
+                        :name          "result"
+                        :display-name  "Result"
+                        :base-type     :type/Dictionary
+                        :database-type "STRUCT"
+                        :parent-id     nil
+                        :nfc-path      nil}
+                       {:id            nested-field-id
+                        :table-id      (meta/id :venues)
+                        :name          "tag_name"
+                        :display-name  "Tag Name"
+                        :base-type     :type/Text
+                        :database-type "CHARACTER VARYING"
+                        :parent-id     parent-field-id
+                        :nfc-path      nil}]})
+            query          ["select * from venues where " (param "tag")]
+            field-metadata (assoc (meta/field-metadata :venues :name)
+                                  :id            nested-field-id
+                                  :name          "tag_name"
+                                  :display-name  "Tag Name"
+                                  :base-type     :type/Text
+                                  :database-type "CHARACTER VARYING"
+                                  :parent-id     parent-field-id
+                                  :nfc-path      nil)
+            field-filter   (params/map->FieldFilter
+                            {:field field-metadata
+                             :value {:type  :string/=
+                                     :value ["banana"]}})
+            [sql _args] (mt/with-metadata-provider metadata-provider
+                          (sql.params.substitute/substitute query {"tag" field-filter}))]
+        (testing "The SQL identifier should include the parent field 'result' before 'tag_name'"
+          (let [[exp-identifier] (sql.qp/format-honeysql driver/*driver*
+                                                         (h2x/identifier :field "result" "tag_name"))]
+            (is (str/includes? sql exp-identifier)
+                (str "Expected SQL to include parent field in identifier, got: " sql))))))))
 
 (def ^:private substitute-field-filter-test-2-test-cases
   (partition-all
@@ -351,7 +411,6 @@
             :params ["toucan"]}
            (substitute-e2e "SELECT * FROM bird_facts WHERE toucans_are_cool = {{toucans_are_cool}} AND bird_type = {{bird_type}}"
                            {"toucans_are_cool" true, "bird_type" "toucan"}))))
-
   (testing "Should throw an Exception if a required param is missing"
     (is (thrown?
          Exception
@@ -365,115 +424,93 @@
           :params []}
          (substitute-e2e "SELECT * FROM bird_facts [[WHERE toucans_are_cool = {{toucans_are_cool}}]]"
                          {"toucans_are_cool" true})))
-
   (is (= {:query  "SELECT * FROM bird_facts WHERE toucans_are_cool = TRUE"
           :params []}
          (substitute-e2e "SELECT * FROM bird_facts [[WHERE toucans_are_cool = {{ toucans_are_cool }}]]"
                          {"toucans_are_cool" true})))
-
   (is (= {:query  "SELECT * FROM bird_facts WHERE toucans_are_cool = TRUE"
           :params []}
          (substitute-e2e "SELECT * FROM bird_facts [[WHERE toucans_are_cool = {{toucans_are_cool }}]]"
                          {"toucans_are_cool" true})))
-
   (is (= {:query  "SELECT * FROM bird_facts WHERE toucans_are_cool = TRUE"
           :params []}
          (substitute-e2e "SELECT * FROM bird_facts [[WHERE toucans_are_cool = {{ toucans_are_cool}}]]"
                          {"toucans_are_cool" true})))
-
   (is (= {:query  "SELECT * FROM bird_facts WHERE toucans_are_cool = TRUE"
           :params []}
          (substitute-e2e "SELECT * FROM bird_facts [[WHERE toucans_are_cool = {{toucans_are_cool_2}}]]"
                          {"toucans_are_cool_2" true})))
-
   (is (= {:query  "SELECT * FROM bird_facts WHERE toucans_are_cool = TRUE AND bird_type = 'toucan'"
           :params []}
          (substitute-e2e "SELECT * FROM bird_facts [[WHERE toucans_are_cool = {{toucans_are_cool}} AND bird_type = 'toucan']]"
                          {"toucans_are_cool" true})))
-
   (testing "Two parameters in an optional"
     (is (= {:query  "SELECT * FROM bird_facts WHERE toucans_are_cool = TRUE AND bird_type = ?"
             :params ["toucan"]}
            (substitute-e2e "SELECT * FROM bird_facts [[WHERE toucans_are_cool = {{toucans_are_cool}} AND bird_type = {{bird_type}}]]"
                            {"toucans_are_cool" true, "bird_type" "toucan"}))))
-
   (is (= {:query  "SELECT * FROM bird_facts"
           :params []}
          (substitute-e2e "SELECT * FROM bird_facts [[WHERE toucans_are_cool = {{toucans_are_cool}}]]"
                          nil)))
-
   (is (= {:query  "SELECT * FROM toucanneries WHERE TRUE AND num_toucans > 5"
           :params []}
          (substitute-e2e "SELECT * FROM toucanneries WHERE TRUE [[AND num_toucans > {{num_toucans}}]]"
                          {"num_toucans" 5})))
-
   (testing "make sure nil gets substitute-e2ed in as `NULL`"
     (is (= {:query  "SELECT * FROM toucanneries WHERE TRUE AND num_toucans > NULL"
             :params []}
            (substitute-e2e "SELECT * FROM toucanneries WHERE TRUE [[AND num_toucans > {{num_toucans}}]]"
                            {"num_toucans" nil}))))
-
   (is (= {:query  "SELECT * FROM toucanneries WHERE TRUE AND num_toucans > TRUE"
           :params []}
          (substitute-e2e "SELECT * FROM toucanneries WHERE TRUE [[AND num_toucans > {{num_toucans}}]]"
                          {"num_toucans" true})))
-
   (is (= {:query  "SELECT * FROM toucanneries WHERE TRUE AND num_toucans > FALSE"
           :params []}
          (substitute-e2e "SELECT * FROM toucanneries WHERE TRUE [[AND num_toucans > {{num_toucans}}]]"
                          {"num_toucans" false})))
-
   (is (= {:query  "SELECT * FROM toucanneries WHERE TRUE AND num_toucans > ?"
           :params ["abc"]}
          (substitute-e2e "SELECT * FROM toucanneries WHERE TRUE [[AND num_toucans > {{num_toucans}}]]"
                          {"num_toucans" "abc"})))
-
   (is (= {:query  "SELECT * FROM toucanneries WHERE TRUE AND num_toucans > ?"
           :params ["yo' mama"]}
          (substitute-e2e "SELECT * FROM toucanneries WHERE TRUE [[AND num_toucans > {{num_toucans}}]]"
                          {"num_toucans" "yo' mama"})))
-
   (is (= {:query  "SELECT * FROM toucanneries WHERE TRUE"
           :params []}
          (substitute-e2e "SELECT * FROM toucanneries WHERE TRUE [[AND num_toucans > {{num_toucans}}]]"
                          nil)))
-
   (is (= {:query  "SELECT * FROM toucanneries WHERE TRUE AND num_toucans > 2 AND total_birds > 5"
           :params []}
          (substitute-e2e "SELECT * FROM toucanneries WHERE TRUE [[AND num_toucans > {{num_toucans}}]] [[AND total_birds > {{total_birds}}]]"
                          {"num_toucans" 2, "total_birds" 5})))
-
   (is (= {:query  "SELECT * FROM toucanneries WHERE TRUE  AND total_birds > 5"
           :params []}
          (substitute-e2e "SELECT * FROM toucanneries WHERE TRUE [[AND num_toucans > {{num_toucans}}]] [[AND total_birds > {{total_birds}}]]"
                          {"total_birds" 5})))
-
   (is (= {:query  "SELECT * FROM toucanneries WHERE TRUE AND num_toucans > 3"
           :params []}
          (substitute-e2e "SELECT * FROM toucanneries WHERE TRUE [[AND num_toucans > {{num_toucans}}]] [[AND total_birds > {{total_birds}}]]"
                          {"num_toucans" 3})))
-
   (is (= {:query  "SELECT * FROM toucanneries WHERE TRUE"
           :params []}
          (substitute-e2e "SELECT * FROM toucanneries WHERE TRUE [[AND num_toucans > {{num_toucans}}]] [[AND total_birds > {{total_birds}}]]"
                          nil)))
-
   (is (= {:query  "SELECT * FROM toucanneries WHERE bird_type = ? AND num_toucans > 2 AND total_birds > 5"
           :params ["toucan"]}
          (substitute-e2e "SELECT * FROM toucanneries WHERE bird_type = {{bird_type}} [[AND num_toucans > {{num_toucans}}]] [[AND total_birds > {{total_birds}}]]"
                          {"bird_type" "toucan", "num_toucans" 2, "total_birds" 5})))
-
   (testing "should throw an Exception if a required param is missing"
     (is (thrown?
          Exception
          (substitute-e2e "SELECT * FROM toucanneries WHERE bird_type = {{bird_type}} [[AND num_toucans > {{num_toucans}}]] [[AND total_birds > {{total_birds}}]]"
                          {"num_toucans" 2, "total_birds" 5}))))
-
   (is (= {:query  "SELECT * FROM toucanneries WHERE TRUE AND num_toucans > 5 AND num_toucans < 5"
           :params []}
          (substitute-e2e "SELECT * FROM toucanneries WHERE TRUE [[AND num_toucans > {{num_toucans}}]] [[AND num_toucans < {{num_toucans}}]]"
                          {"num_toucans" 5})))
-
   (testing "Make sure that substitutions still work if the substitution contains brackets inside it (#3657)"
     (is (= {:query  "select * from foobars  where foobars.id in (string_to_array(100, ',')::integer[])"
             :params []}
@@ -901,14 +938,6 @@
   [table-name]
   `(let [sql# (:query (qp.compile/compile (mt/mbql-query ~table-name)))]
      (second (re-find #"(?m)FROM\s+([^\s()]+)" sql#))))
-
-;; as with the MBQL parameters tests Redshift fail for unknown reasons; disable their tests for now
-;; TIMEZONE FIXME
-(defn- sql-parameters-engines []
-  (set (for [driver (mt/normal-drivers-with-feature :native-parameters)
-             :when  (and (isa? driver/hierarchy driver :sql)
-                         (not= driver :redshift))]
-         driver)))
 
 (defn- process-native [& {:as query}]
   (qp/process-query

@@ -133,7 +133,7 @@
                  (some->> table-name (driver/escape-entity-name-for-metadata driver))
                  nil)
    (fn [^ResultSet rs]
-      ;; https://docs.oracle.com/javase/7/docs/api/java/sql/DatabaseMetaData.html#getColumns(java.lang.String,%20java.lang.String,%20java.lang.String,%20java.lang.String)
+     ;; https://docs.oracle.com/javase/7/docs/api/java/sql/DatabaseMetaData.html#getColumns(java.lang.String,%20java.lang.String,%20java.lang.String,%20java.lang.String)
      #(let [default            (.getString rs "COLUMN_DEF")
             no-default?        (contains? #{nil "NULL" "null"} default)
             ;; leave room for "", or other strings to be nil (unknown)
@@ -365,8 +365,34 @@
   [_driver _db & _args]
   identity)
 
+(defn limit-fields-per-table-xf
+  "Stateful transducer that caps streamed `describe-fields` rows to at most `limit` per table -- a hard, O(1)-memory
+  per-table field cap (no buffering, no window functions). Rows must arrive contiguous by table, which the
+  `describe-fields` contract guarantees (ordered by `table-schema`, `table-name`); within a table the first `limit`
+  rows are kept and the rest dropped as they stream. [[describe-fields]] passes
+  [[metabase.driver.settings/sync-max-fields-per-table]] as `limit`, and the sync layer treats a table that comes back
+  with exactly that many fields as having hit the cap (see `metabase.sync.sync-metadata.fields/limit-fields-to-sync`)."
+  [limit]
+  (fn [rf]
+    (let [current (volatile! ::none)
+          n       (volatile! 0)]
+      (fn
+        ([] (rf))
+        ([result] (rf result))
+        ([result row]
+         (let [table [(:table-schema row) (:table-name row)]]
+           (when-not (= table @current)
+             (vreset! current table)
+             (vreset! n 0))
+           (vswap! n inc)
+           (if (<= @n limit)
+             (rf result row)
+             result)))))))
+
 (defn describe-fields
-  "Default implementation of [[metabase.driver/describe-fields]] for JDBC drivers. Uses JDBC DatabaseMetaData."
+  "Default implementation of [[metabase.driver/describe-fields]] for JDBC drivers. Uses JDBC DatabaseMetaData. The
+  result is hard-capped to [[metabase.driver.settings/sync-max-fields-per-table]] fields per table (see
+  [[limit-fields-per-table-xf]])."
   [driver db & {:keys [schema-names table-names] :as args}]
   (if (or (and schema-names (empty? schema-names))
           (and table-names (empty? table-names)))
@@ -382,6 +408,7 @@
       (eduction
        (comp
         (m/mapply describe-fields-pre-process-xf driver db args)
+        (limit-fields-per-table-xf (driver.settings/sync-max-fields-per-table))
         (describe-fields-xf driver db))
        (sql-jdbc.execute/reducible-query db sql)))))
 
@@ -530,10 +557,10 @@
             (nil? token)
             (persistent! res)
 
-           ;; we could be more precise here and issue warning about nested fields (the one in `describe-json-fields`),
-           ;; but this limit could be hit by multiple json fields (fetched in `describe-json-fields`) rather than only
-           ;; by this one. So for the sake of issuing only a single warning in logs we'll spill over limit by a single
-           ;; entry (instead of doing `<=`).
+            ;; we could be more precise here and issue warning about nested fields (the one in `describe-json-fields`),
+            ;; but this limit could be hit by multiple json fields (fetched in `describe-json-fields`) rather than only
+            ;; by this one. So for the sake of issuing only a single warning in logs we'll spill over limit by a single
+            ;; entry (instead of doing `<=`).
             (< max-nested-field-columns (count res))
             (persistent! res)
 
@@ -549,7 +576,7 @@
               JsonToken/FIELD_NAME         (recur path (.getText p) res)
               JsonToken/START_OBJECT       (recur (cond-> path field  (conj field)) field res)
               JsonToken/END_OBJECT         (recur (cond-> path (seq path) pop) field res)
-                         ;; We put top-level array row type semantics on JSON roadmap but skip for now
+              ;; We put top-level array row type semantics on JSON roadmap but skip for now
               JsonToken/START_ARRAY        (do (.skipChildren p)
                                                (if field
                                                  (recur path field (assoc! res (conj path field) clojure.lang.PersistentVector))
@@ -763,10 +790,10 @@
                                   nil
                                   (fn [^Connection conn]
                                     (let [unfold-json-fields (table->unfold-json-fields driver conn table)
-                                           ;; Just pass in `nil` here, that's what we do in the normal sync process and it seems to work correctly.
-                                           ;; We don't currently have a driver-agnostic way to get the physical database name. `(:name database)` is
-                                           ;; wrong, because it's a human-friendly name rather than a physical name. `(get-in
-                                           ;; database [:details :db])` works for most drivers but not H2.
+                                          ;; Just pass in `nil` here, that's what we do in the normal sync process and it seems to work correctly.
+                                          ;; We don't currently have a driver-agnostic way to get the physical database name. `(:name database)` is
+                                          ;; wrong, because it's a human-friendly name rather than a physical name. `(get-in
+                                          ;; database [:details :db])` works for most drivers but not H2.
                                           pks                (get-table-pks driver conn nil table)]
                                       [unfold-json-fields pks])))]
     (if (empty? unfold-json-fields)

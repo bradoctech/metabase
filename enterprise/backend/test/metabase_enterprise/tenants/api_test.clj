@@ -273,7 +273,9 @@
             response (mt/user-http-request :crowberto :post 400 "ee/tenant/" tenant-data)]
         (is (contains? (:errors response) :attributes))
         (is (contains? (:specific-errors response) :attributes))
-        (is (contains? (get-in response [:specific-errors :attributes]) (keyword "@system")))))))
+        (is (re-find #"must not start with `@`" (get-in response [:errors :attributes])))
+        (testing "nothing is written"
+          (is (nil? (t2/select-one :model/Tenant :name "Invalid Tenant"))))))))
 
 (deftest can-update-tenant-attributes-via-put-test
   (testing "Can update tenant attributes via PUT"
@@ -324,7 +326,7 @@
                                            {:attributes invalid-attrs})]
         (is (contains? (:errors response) :attributes))
         (is (contains? (:specific-errors response) :attributes))
-        (is (contains? (get-in response [:specific-errors :attributes]) (keyword "@system")))
+        (is (re-find #"must not start with `@`" (get-in response [:errors :attributes])))
         ;; Original attributes should remain unchanged
         (is (= {"valid" "value"} (:attributes (t2/select-one :model/Tenant :id id))))))))
 
@@ -414,7 +416,6 @@
           (testing "attempting to archive tenant root collection returns 400"
             (mt/user-http-request :crowberto :put 400 (str "collection/" tenant-collection-id)
                                   {:archived true}))
-
           (testing "tenant root collection remains unarchived"
             (is (false? (t2/select-one-fn :archived :model/Collection :id tenant-collection-id)))))))))
 
@@ -430,7 +431,6 @@
               (testing "archive child collection returns 200"
                 (mt/user-http-request :crowberto :put 200 (str "collection/" child-id)
                                       {:archived true}))
-
               (testing "child collection is archived"
                 (is (t2/select-one-fn :archived :model/Collection :id child-id))))))))))
 
@@ -441,7 +441,6 @@
         (mt/with-temp [:model/Tenant {tenant-collection-id :tenant_collection_id} {:name "Tenant Test" :slug "test"}]
           (testing "attempting to delete tenant root collection returns 400"
             (mt/user-http-request :crowberto :delete 400 (str "collection/" tenant-collection-id)))
-
           (testing "tenant root collection still exists"
             (is (t2/exists? :model/Collection :id tenant-collection-id))))))))
 
@@ -457,7 +456,6 @@
                                                              :archived true}]
               (testing "deleting the collection is allowed"
                 (mt/user-http-request :crowberto :delete 200 (str "collection/" child-id)))
-
               (testing "child collection still exists"
                 (is (not (t2/exists? :model/Collection :id child-id)))))))))))
 
@@ -472,7 +470,6 @@
           (testing "attempting to move tenant root collection returns 400"
             (mt/user-http-request :crowberto :put 400 (str "collection/" tenant-collection-id)
                                   {:parent_id target-id}))
-
           (testing "tenant root collection location remains at root"
             (is (= "/" (t2/select-one-fn :location :model/Collection :id tenant-collection-id)))))))))
 
@@ -491,7 +488,6 @@
               (testing "can move child B under child A"
                 (mt/user-http-request :crowberto :put 200 (str "collection/" child-b-id)
                                       {:parent_id child-a-id})
-
                 (is (= (str "/" tenant-collection-id "/" child-a-id "/")
                        (t2/select-one-fn :location :model/Collection :id child-b-id)))))))))))
 
@@ -742,3 +738,23 @@
                 (is (false? (t2/select-one-fn :archived :model/Collection :id tenant-collection-id)))
                 (is (false? (t2/select-one-fn :archived :model/Collection :id child-id)))
                 (is (false? (t2/select-one-fn :archived :model/Collection :id grandchild-id)))))))))))
+
+(deftest create-tenant-audit-log-test
+  (testing "Creating a tenant records an audit log entry with correct model and details"
+    (mt/with-premium-features #{:tenants :advanced-permissions :audit-app}
+      (mt/with-model-cleanup [:model/Tenant]
+        (let [response (mt/user-http-request :crowberto :post 200 "ee/tenant/"
+                                             {:name "Audit Tenant"
+                                              :slug "audit-tenant"
+                                              :attributes {"department" "engineering"
+                                                           "region" "us-west"}})
+              audit-entry (t2/select-one :model/AuditLog
+                                         :topic :tenant-create
+                                         :model_id (:id response))]
+          (is (= "Tenant" (:model audit-entry)))
+          (is (= {:name "Audit Tenant"
+                  :slug "audit-tenant"
+                  :is_active true
+                  :attributes {:department "engineering"
+                               :region "us-west"}}
+                 (:details audit-entry))))))))

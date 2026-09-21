@@ -1,7 +1,7 @@
 import Bowser from "bowser";
 
-import { b64url_to_utf8 } from "metabase/lib/encoding";
 import { CardApi, CollectionsApi, DashboardApi } from "metabase/services";
+import { b64url_to_utf8 } from "metabase/utils/encoding";
 
 import type { ReportableEntityName } from "./types";
 
@@ -32,7 +32,7 @@ export const getEntityDetails = ({
       }
       return CardApi.get({ cardId: id }).catch(nullOnCatch);
     case "dashboard":
-      return DashboardApi.get({ id }).catch(nullOnCatch);
+      return DashboardApi.get({ dashId: id }).catch(nullOnCatch);
     case "collection":
       return CollectionsApi.get({ id }).catch(nullOnCatch);
     default:

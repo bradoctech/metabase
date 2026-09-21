@@ -96,7 +96,7 @@
 (deftest ^:parallel search-model-hooks-test-2
   ;; TODO replace real specs with frozen test ones once things have stabilized
   (is (= #:model{:Table      #{{:search-model "segment",
-                                :fields       #{:description :schema :name :db_id}
+                                :fields       #{:description :schema :name :db_id :display_name}
                                 :where        [:= :updated.id :this.table_id]}
                                {:search-model "table",
                                 :fields
@@ -111,7 +111,6 @@
                                 :where        [:= :updated.id :this.id]}}
                  :Collection #{{:search-model "collection"
                                 :fields       #{:authority_level :archived :description :name :type :id
-
                                                 :archived_directly :location :namespace :created_at}
                                 :where        [:= :updated.id :this.id]}
                                {:search-model "table"

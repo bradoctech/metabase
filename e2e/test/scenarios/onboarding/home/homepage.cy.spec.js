@@ -93,9 +93,26 @@ describe("scenarios > home > homepage", () => {
         triggered_from: "suggestion_sidebar",
       });
 
-      cy.intercept("POST", "/api/dashboard/save").as("saveDashboard");
+      // Wait for the final x-ray dashboard to actually be ready before saving.
+      // `@getXrayDashboard` only confirms the automagic metadata GET; the dashboard isn't in
+      // the store yet. Once it is, `useDashboardUrlQuery`
+      // (frontend/src/metabase/dashboard/hooks/use-dashboard-url-query.ts) syncs the
+      // dashboard's parameters into the URL (dispatch(replace(...))), so the query string
+      // becomes populated. That is a reliable "dashboard is ready" signal; clicking
+      // "Save this" before it means the dashboard isn't ready and the save is lost.
+      cy.location("search").should("not.be.empty");
+
       cy.findByTestId("automatic-dashboard-header").button("Save this").click();
-      cy.wait("@saveDashboard");
+
+      // Assert the save succeeded via the resulting UI — the header switches to a "Saved"
+      // button + "See it" link — rather than waiting on the POST /api/dashboard/save
+      // request. The request-alias wait was timing-sensitive and flaked with "No request
+      // ever occurred"; the saved-state UI is the real user-observable outcome and Cypress
+      // retries it until the save completes.
+      cy.findByTestId("automatic-dashboard-header").within(() => {
+        cy.findByText("See it").should("be.visible");
+        cy.findByText("Saved").should("be.visible");
+      });
 
       H.expectUnstructuredSnowplowEvent({
         event: "x-ray_saved",
@@ -337,7 +354,7 @@ describe("scenarios > home > custom homepage", () => {
 
       cy.findByTestId("custom-homepage-setting").within(() => {
         cy.findByText("Disabled").should("be.visible");
-        cy.findByText("Disabled").click();
+        cy.findByLabelText("Disabled").click();
         cy.findByText("Enabled").should("be.visible");
       });
 
@@ -361,7 +378,7 @@ describe("scenarios > home > custom homepage", () => {
 
       cy.findByTestId("custom-homepage-setting").within(() => {
         cy.findByText("Enabled").should("exist");
-        cy.findByText("Enabled").click();
+        cy.findByLabelText("Enabled").click();
         cy.findByText("Disabled").should("exist");
       });
 
@@ -369,7 +386,7 @@ describe("scenarios > home > custom homepage", () => {
 
       cy.findByTestId("custom-homepage-setting").within(() => {
         cy.findByText("Disabled").should("exist");
-        cy.findByText("Disabled").click();
+        cy.findByLabelText("Disabled").click();
         cy.findByText("Enabled").should("exist");
       });
 
@@ -643,7 +660,9 @@ describe("scenarios > setup", () => {
 
   it("should send snowplow events through admin settings", () => {
     cy.visit("/admin/settings/general");
-    cy.findByTestId("custom-homepage-setting").findByText("Disabled").click();
+    cy.findByTestId("custom-homepage-setting")
+      .findByLabelText("Disabled")
+      .click();
 
     cy.findByTestId("custom-homepage-dashboard-setting")
       .findByRole("button")

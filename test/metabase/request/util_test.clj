@@ -5,6 +5,8 @@
    [clojure.test :refer :all]
    [clojure.tools.reader.edn :as edn]
    [java-time.api :as t]
+   [metabase.request.current :as request.current]
+   [metabase.request.user-agent :as request.user-agent]
    [metabase.request.util :as req.util]
    [metabase.test :as mt]
    [metabase.util.json :as json]
@@ -28,22 +30,31 @@
     (is (not (req.util/cacheable? {:request-method :get :uri "/api/dashboard/1"})))
     (is (not (req.util/cacheable? {:request-method :get :uri "/app/dist/main.js"})))))
 
-(deftest ^:parallel https?-test
-  (doseq [[headers expected] {{"x-forwarded-proto" "https"}    true
-                              {"x-forwarded-proto" "http"}     false
-                              {"x-forwarded-protocol" "https"} true
-                              {"x-forwarded-protocol" "http"}  false
-                              {"x-url-scheme" "https"}         true
-                              {"x-url-scheme" "http"}          false
-                              {"x-forwarded-ssl" "on"}         true
-                              {"x-forwarded-ssl" "off"}        false
-                              {"front-end-https" "on"}         true
-                              {"front-end-https" "off"}        false
-                              {"origin" "https://mysite.com"}  true
-                              {"origin" "http://mysite.com"}   false}]
-    (testing (pr-str (list 'https? {:headers headers}))
+(deftest ^:parallel https-state-test
+  (doseq [[headers expected] {{"x-forwarded-proto" "https"}    :https
+                              {"x-forwarded-proto" "http"}     :http
+                              {"x-forwarded-protocol" "https"} :https
+                              {"x-forwarded-protocol" "http"}  :http
+                              {"x-url-scheme" "https"}         :https
+                              {"x-url-scheme" "http"}          :http
+                              {"x-forwarded-ssl" "on"}         :https
+                              {"x-forwarded-ssl" "off"}        :http
+                              {"front-end-https" "on"}         :https
+                              {"front-end-https" "off"}        :http
+                              ;; `Origin` names the page that issued the request, not the transport it arrived on,
+                              ;; and the client picks it, so it can only leave the transport unknown
+                              {"origin" "https://mysite.com"}  :unknown
+                              {"origin" "http://mysite.com"}   :http
+                              ;; a blank proto header must fall through to the boolean HTTPS indicators (BOT-1617)
+                              {"x-forwarded-proto" "" "x-forwarded-ssl" "on"}          :https
+                              {"x-forwarded-proto" "" "front-end-https" "on"}          :https
+                              {"x-forwarded-proto" "  " "origin" "https://mysite.com"} :unknown
+                              ;; the first hop of a comma-separated chain wins
+                              {"x-forwarded-proto" "https, http"} :https
+                              {"x-forwarded-proto" "HTTPS"}       :https}]
+    (testing (pr-str (list 'https-state {:headers headers}))
       (is (= expected
-             (req.util/https? {:headers headers}))))))
+             (req.util/https-state {:headers headers}))))))
 
 (def ^:private mock-request
   (delay (edn/read-string (slurp "test/metabase/server/request/sample-request.edn"))))
@@ -72,7 +83,7 @@
            (req.util/device-info (update @mock-request :headers assoc "x-metabase-client" "embedding-simple"))))))
 
 (deftest ^:parallel describe-user-agent-test
-  (are [user-agent expected] (= expected (req.util/describe-user-agent user-agent))
+  (are [user-agent expected] (= expected (request.user-agent/describe-user-agent user-agent))
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML  like Gecko) Chrome/89.0.4389.86 Safari/537.36"
     "Browser (Chrome/Windows)"
 
@@ -95,31 +106,29 @@
   (let [request (ring.mock/request :get "api/session")]
     (testing "request with no forwarding"
       (is (= "127.0.0.1"
-             (req.util/ip-address request))))
-
+             (request.current/ip-address request))))
     (testing "request with forwarding"
       (let [mock-request (-> (ring.mock/request :get "api/session")
                              (ring.mock/header "X-Forwarded-For" "5.6.7.8"))]
         (is (= "5.6.7.8"
-               (req.util/ip-address mock-request))))
-      (testing "multiple IP addresses"
+               (request.current/ip-address mock-request))))
+      (testing "multiple IP addresses -- takes the last (proxy-appended, trusted) entry, not the first"
         (let [mock-request (-> (ring.mock/request :get "api/session")
                                (ring.mock/header "X-Forwarded-For" "1.2.3.4, 5.6.7.8"))]
-          (is (= "1.2.3.4"
-                 (req.util/ip-address mock-request)))))
+          (is (= "5.6.7.8"
+                 (request.current/ip-address mock-request)))))
       (testing "different header than default X-Forwarded-For"
         (mt/with-temporary-setting-values [source-address-header "X-ProxyUser-Ip"]
           (let [mock-request (-> (ring.mock/request :get "api/session")
                                  (ring.mock/header "x-proxyuser-ip" "1.2.3.4"))]
             (is (= "1.2.3.4"
-                   (req.util/ip-address mock-request)))))))
-
+                   (request.current/ip-address mock-request)))))))
     (testing "forwarding explicitly disabled via MB_NOT_BEHIND_PROXY=true"
       (mt/with-temp-env-var-value! [mb-not-behind-proxy "true"]
         (let [mock-request (-> (ring.mock/request :get "api/session")
                                (ring.mock/header "X-Forwarded-For" "5.6.7.8"))]
           (is (= "127.0.0.1"
-                 (req.util/ip-address mock-request))))))))
+                 (request.current/ip-address mock-request))))))))
 
 (def ^:private mock-geojs-responses
   "Canned GeoJS responses for test IPs. These mock what GeoJS would return."

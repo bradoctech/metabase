@@ -233,7 +233,6 @@
                   (mt/mbql-query tips
                     {:aggregation [[:count]]
                      :filter      [:= $tips.source.username "tupac"]}))))
-
           (is (= {:projections ["source.username" "count"]
                   :query       [{"$group" {"_id"   {"source" {"username" "$source.username"}}
                                            "count" {"$sum" 1}}}
@@ -563,6 +562,29 @@
         {"$expr" {"$eq" ["$price" {"$add" [{"$subtract" ["$price" 5]} 100]}]}}
         [:= $price [:+ [:- $price 5] 100]]))))
 
+(deftest ^:parallel filter-value-compilation-test
+  (testing "literal filter values compile as plain values"
+    (let [email [:field "EMAIL" nil]]
+      (testing "simple comparisons use the direct match form"
+        (is (= {"EMAIL" "$abc"}
+               (mongo.qp/compile-filter [:= email [:value "$abc" {:base_type :type/Text}]])))
+        (is (= {"EMAIL" {"$ne" "$abc"}}
+               (mongo.qp/compile-filter [:!= email [:value "$abc" {:base_type :type/Text}]])))
+        (is (= {"EMAIL" {"$gte" "$$abc"}}
+               (mongo.qp/compile-filter [:>= email [:value "$$abc" {:base_type :type/Text}]])))
+        (is (= {"EMAIL" "$$abc"}
+               (mongo.qp/compile-filter [:= email [:value "$$abc" {:base_type :type/Text}]]))))
+      (testing "literals not wrapped in a :value clause are treated the same way"
+        (is (= {"EMAIL" "$abc"}
+               (mongo.qp/compile-filter [:= email "$abc"]))))
+      (testing "when the comparison needs `$expr`, the value is wrapped with `$literal`"
+        (is (= {"$expr" {"$eq" [{"$concat" ["$EMAIL" "!"]}
+                                {"$literal" "$abc"}]}}
+               (mongo.qp/compile-filter [:= [:concat email "!"] [:value "$abc" {:base_type :type/Text}]]))))
+      (testing "comparisons against fields compile to field paths"
+        (is (= {"$expr" {"$eq" ["$EMAIL" "$EMAIL"]}}
+               (mongo.qp/compile-filter [:= email email])))))))
+
 (deftest ^:parallel unique-alias-index-test
   (mt/test-driver
     :mongo
@@ -589,9 +611,9 @@
             compiled (qp.compile/compile query)
             indices (reduce (fn [acc lookup-stage]
                               (let [let-var-name (-> (get-in lookup-stage ["$lookup" :let]) keys first)
-                                   ;; Following expression ensures index is an integer.
+                                    ;; Following expression ensures index is an integer.
                                     index (parse-long (re-find #"\d+$" let-var-name))]
-                               ;; Following expression tests that index is unique.
+                                ;; Following expression tests that index is unique.
                                 (is (not (contains? acc index)))
                                 (conj acc index)))
                             #{}
@@ -657,6 +679,31 @@
                   [2 "Felipinho Asklepios" "2013-11-19T00:00:00Z"]
                   [2 "Felipinho Asklepios" "2015-03-06T00:00:00Z"]]
                  (mt/rows (qp/process-query query)))))))))
+
+(deftest ^:parallel join-alias-sanitized-in-let-variable-name-test
+  (mt/test-driver :mongo
+    (mt/dataset geographical-tips
+      (mt/with-metadata-provider (mt/id)
+        (testing (str "A join alias used in another join's condition is sanitized in the "
+                      "Mongo `$lookup` let variable name (#76722)")
+          (let [mp          (mt/metadata-provider)
+                tips        (lib.metadata/table mp (mt/id :tips))
+                tips-id     (lib.metadata/field mp (mt/id :tips :id))
+                first-alias "Has: Colon"
+                query       (-> (lib/query mp tips)
+                                (lib/join (-> (lib/join-clause
+                                               tips
+                                               [(lib/= tips-id (lib/with-join-alias tips-id first-alias))])
+                                              (lib/with-join-alias first-alias)))
+                                (lib/join (lib/join-clause
+                                           tips
+                                           [(lib/= (lib/with-join-alias tips-id first-alias)
+                                                   (lib/with-join-alias tips-id "Second"))])))
+                compiled    (mongo.qp/mbql->native query)
+                let-vars    (mapcat #(-> % (get "$lookup") :let keys)
+                                    (filter #(contains? % "$lookup") (:query compiled)))]
+            (is (seq let-vars))
+            (is (every? #(re-matches #"[A-Za-z0-9_]+" %) let-vars))))))))
 
 (deftest ^:parallel mongo-multiple-joins-test
   (testing "should be able to join multiple mongo collections"
@@ -770,3 +817,24 @@
                     :effective_type           :type/Integer}]
                   :rows [[14 37.65 0 1] [nil 37.65 1 1] [14 nil 2 1] [nil nil 3 1]]}}
                 (qp.pivot/run-pivot-query pivot-query)))))))
+
+(deftest ^:parallel escape-regex-literal-test
+  (are [in out] (= out (#'mongo.qp/escape-regex-literal in))
+    "abc"    "abc"
+    "a.b"    "a\\.b"
+    ".*"     "\\.\\*"
+    "a[bc]"  "a\\[bc\\]"
+    "(a|b)"  "\\(a\\|b\\)"
+    "a\\b"   "a\\\\b"))
+
+(deftest ^:parallel value-rvalue-rejects-collections-test
+  (testing "a scalar :value passes through"
+    (is (= "abc" (#'mongo.qp/->rvalue [:value "abc" {:base_type :type/Text}])))
+    (is (= 5 (#'mongo.qp/->rvalue [:value 5 {:base_type :type/Integer}])))
+    (is (nil? (#'mongo.qp/->rvalue [:value nil {:base_type :type/Text}]))))
+  (testing "a collection :value is rejected rather than spliced into a BSON operator position"
+    (are [v] (thrown-with-msg? clojure.lang.ExceptionInfo #"Invalid filter value"
+                               (#'mongo.qp/->rvalue [:value v {:base_type :type/Text}]))
+      {:$function {:body "function(){return true;}" :args [] :lang "js"}}
+      {:$where "sleep(1000)"}
+      [1 2 3])))

@@ -54,7 +54,7 @@
   (mt/with-temporary-setting-values [custom-formatting {}]
     (testing "General number formatting"
       (testing "number-style (non-currency)"
-        (is (= ["#,##0" "#,##0.##"] (format-string {::mb.viz/number-style "decimal"})))
+        (is (= ["#,##0" "#,##0.##########"] (format-string {::mb.viz/number-style "decimal"})))
         (is (= "#,##0.00%"   (format-string {::mb.viz/number-style "percent"})))
         (is (= "#,##0.00E+0" (format-string {::mb.viz/number-style "scientific"})))))))
 
@@ -92,23 +92,23 @@
     (testing "General number formatting"
       (testing "Decimals"
         (testing "Thousands separator can be omitted"
-          (is (= ["###0" "###0.##"]   (format-string {::mb.viz/number-separators "."}))))))))
+          (is (= ["###0" "###0.##########"]   (format-string {::mb.viz/number-separators "."}))))))))
 
 (deftest format-settings->format-string-test-2b4
   (mt/with-temporary-setting-values [custom-formatting {}]
     (testing "General number formatting"
       (testing "Decimals"
         (testing "Custom separators are not supported"
-          (is (= ["#,##0" "#,##0.##"] (format-string {::mb.viz/number-separators ", "})))
-          (is (= ["#,##0" "#,##0.##"] (format-string {::mb.viz/number-separators ".,"})))
-          (is (= ["#,##0" "#,##0.##"] (format-string {::mb.viz/number-separators ".’"}))))))))
+          (is (= ["#,##0" "#,##0.##########"] (format-string {::mb.viz/number-separators ", "})))
+          (is (= ["#,##0" "#,##0.##########"] (format-string {::mb.viz/number-separators ".,"})))
+          (is (= ["#,##0" "#,##0.##########"] (format-string {::mb.viz/number-separators ".’"}))))))))
 
 (deftest format-settings->format-string-test-2c
   (mt/with-temporary-setting-values [custom-formatting {}]
     (testing "General number formatting"
       (testing "Scale"
         ;; Scale should not affect format string since it is applied to the actual data prior to export
-        (is (= ["#,##0" "#,##0.##"]
+        (is (= ["#,##0" "#,##0.##########"]
                (format-string {::mb.viz/scale 2})))
         (is (= "#,##0.00"
                (format-string {::mb.viz/scale 2, ::mb.viz/decimals 2})))))))
@@ -119,13 +119,13 @@
       (testing "Prefix and suffix"
         (testing "Prefix/suffix on general number format"
           (is (= ["\"prefix\"#,##0"
-                  "\"prefix\"#,##0.##"]
+                  "\"prefix\"#,##0.##########"]
                  (format-string {::mb.viz/prefix "prefix"})))
           (is (= ["#,##0\"suffix\""
-                  "#,##0.##\"suffix\""]
+                  "#,##0.##########\"suffix\""]
                  (format-string {::mb.viz/suffix "suffix"})))
           (is (= ["\"prefix\"#,##0\"suffix\""
-                  "\"prefix\"#,##0.##\"suffix\""]
+                  "\"prefix\"#,##0.##########\"suffix\""]
                  (format-string {::mb.viz/prefix "prefix",
                                  ::mb.viz/suffix "suffix"}))))))))
 
@@ -182,6 +182,19 @@
       (let [price-col {:semantic_type :type/Price, :effective_type :type/Float}]
         (testing "Default currency formatting is dollar sign"
           (is (= "[$$]#,##0.00" (format-string {::mb.viz/currency-in-header false} price-col))))))))
+
+(deftest format-settings->format-string-currency-without-number-style-test
+  (mt/with-temporary-setting-values [custom-formatting {}]
+    (testing "Currency settings without an explicit number-style still produce a currency cell format (GDGT-2398)"
+      ;; A column that has currency formatting (currency / currency-style / in-cell) but is NOT currency-semantic and
+      ;; never had number-style "currency" persisted -- e.g. an aggregation, native, or model column that dropped its
+      ;; :type/Currency semantic type. CSV emits "$" here, so XLSX must too.
+      (let [non-currency-col {:base_type :type/Float, :effective_type :type/Float}]
+        (is (= "[$$]#,##0.00"
+               (format-string {::mb.viz/currency-in-header false
+                               ::mb.viz/currency-style     "symbol"
+                               ::mb.viz/currency           "USD"}
+                              non-currency-col)))))))
 
 (deftest format-settings->format-string-test-3b
   (mt/with-temporary-setting-values [custom-formatting {}]
@@ -459,12 +472,11 @@
 (deftest export-format-test
   (mt/with-temporary-setting-values [custom-formatting {}]
     (testing "Different format strings are used for ints and numbers that round to ints (with 2 decimal places)"
-      (is (= [["#,##0"] ["#,##0.##"] ["#,##0"] ["#,##0.##"] ["#,##0"] ["#,##0.##"]]
+      (is (= [["#,##0"] ["#,##0.##########"] ["#,##0"] ["#,##0.##########"] ["#,##0"] ["#,##0.##########"]]
              (rest (xlsx-export [{:field_ref [:field 0] :name "Col" :semantic_type :type/Cost}]
                                 {}
                                 [[1] [1.23] [1.004] [1.005] [10000000000] [10000000000.123]]
                                 :parse-fn parse-format-strings)))))
-
     (testing "Misc format strings are included correctly in exports"
       (is (= ["[$€]#,##0.00"]
              (second (xlsx-export [{:field_ref [:field 0] :name "Col" :semantic_type :type/Cost}]
@@ -489,13 +501,11 @@
            (first (xlsx-export [{:id 0, :name "Col1"} {:id 1, :name "Col2"}] {} []))))
     (is (= ["Col2" "Col1"]
            (first (xlsx-export [{:id 0, :name "Col2"} {:id 1, :name "Col1"}] {} [])))))
-
   (testing "Data in each row is reordered by output-order prior to export"
     (is (= [["b" "a"] ["d" "c"]]
            (rest (xlsx-export [{:id 0, :name "Col1"} {:id 1, :name "Col2"}]
                               {:output-order [1 0]}
                               [["a" "b"] ["c" "d"]])))))
-
   (testing "Rows not included by index in output-order are excluded from export"
     (is (= [["b"] ["d"]]
            (rest (xlsx-export [{:id 0, :name "Col1"} {:id 1, :name "Col2"}]
@@ -515,7 +525,6 @@
            (first (xlsx-export [{:display_name "Display name", :name "Name"}]
                                {::mb.viz/column-settings {{::mb.viz/column-name "Name"} {::mb.viz/column-title "Column title"}}}
                                [])))))
-
   (testing "Currency is included in column title if necessary"
     ;; Dollar symbol is included by default if semantic type of column derives from :type/Currency
     (is (= ["Col ($)"]
@@ -573,7 +582,6 @@
                                                            ::mb.viz/currency-style "code",
                                                            ::mb.viz/currency-in-header false}}}
                                [])))))
-
   (testing "If a col is remapped to a foreign key field, the title is taken from the viz settings for its fk_field_id (#18573)"
     (is (= ["Correct title"]
            (first (xlsx-export [{:id 0, :fk_field_id 1, :remapped_from "FIELD_1" :field_ref [:field 0]}]

@@ -1,6 +1,7 @@
 (ns metabase.parameters.chain-filter-test
   (:require
    [clojure.test :refer :all]
+   [metabase.lib-be.core :as lib-be]
    [metabase.lib.core :as lib]
    [metabase.lib.metadata :as lib.metadata]
    [metabase.parameters.chain-filter :as chain-filter]
@@ -58,6 +59,7 @@
           (are [op] (some? (#'chain-filter/add-filter
                             (lib/query mp (lib.metadata/table mp (mt/id :venues)))
                             (mt/id :venues)
+                            {(mt/id :venues :name) (lib.metadata/field mp (mt/id :venues :name))}
                             {:field-id (mt/id :venues :name)
                              :op op
                              :value value
@@ -289,7 +291,7 @@
     (binding [chain-filter/*enable-reverse-joins* false]
       (mt/$ids nil
         (is (= [{:lhs {:table $$venues, :field %venues.category_id}, :rhs {:table $$categories, :field %categories.id}}]
-               (#'chain-filter/find-all-joins $$venues #{%categories.name %users.id})))))))
+               (#'chain-filter/find-all-joins (mt/metadata-provider) (mt/id) $$venues #{%categories.name %users.id})))))))
 
 (deftest ^:parallel find-all-joins-test-2
   (mt/dataset airports
@@ -300,7 +302,7 @@
                    :rhs {:table $$municipality, :field %municipality.id}}
                   {:lhs {:table $$municipality, :field %municipality.region_id}
                    :rhs {:table $$region, :field %region.id}}]
-                 (#'chain-filter/find-all-joins $$airport #{%region.name %municipality.name %region.id}))))))))
+                 (#'chain-filter/find-all-joins (mt/metadata-provider) (mt/id) $$airport #{%region.name %municipality.name %region.id}))))))))
 
 (deftest ^:parallel multi-hop-test
   (mt/dataset airports
@@ -573,7 +575,6 @@
                                  [14 "Caribbean"]]
                 :has_more_values false}
                (take-n-values 3 (chain-filter-search venues.category_id nil "ar"))))))
-
     (testing "Show me categories containing 'house' that have expensive restaurants"
       (is (= {:values          [[67 "Steakhouse"]]
               :has_more_values false}
@@ -664,13 +665,14 @@
                                     [:field {} (mt/id :checkins :date)]
                                     -32
                                     :week]]}]}
-              (#'chain-filter/add-filter
-               (let [mp (mt/metadata-provider)]
-                 (lib/query mp (lib.metadata/table mp (mt/id :checkins))))
-               $$checkins
-               {:field-id %checkins.date
-                :op       :=
-                :value    "past32weeks"}))))))
+              (let [mp (mt/metadata-provider)]
+                (#'chain-filter/add-filter
+                 (lib/query mp (lib.metadata/table mp (mt/id :checkins)))
+                 $$checkins
+                 {%checkins.date (lib.metadata/field mp %checkins.date)}
+                 {:field-id %checkins.date
+                  :op       :=
+                  :value    "past32weeks"})))))))
 
 (mt/defdataset nil-values-dataset
   [["tbl"
@@ -739,46 +741,39 @@
           (testing "`false` for field has values less than [[field-values/*total-max-length*]] threshold"
             (is (= false
                    (:has_more_values (chain-filter categories.name {})))))
-
           (testing "`true` if the limit option is less than the count of values of fieldvalues"
             (is (true?
                  (:has_more_values (chain-filter categories.name {} :limit 1)))))
           (testing "`false` if the limit option is greater the count of values of fieldvalues"
             (is (= false
                    (:has_more_values (chain-filter categories.name {} :limit Integer/MAX_VALUE))))))
-
         (testing "`true` if the values of a field exceeds our [[field-values/*total-max-length*]] limit"
           (with-clean-field-values-for-field! (mt/id :categories :name)
             (binding [field-values/*total-max-length* 10]
               (is (true?
                    (:has_more_values (chain-filter categories.name {}))))))))
-
       (testing "with contraints"
         (with-clean-field-values-for-field! (mt/id :categories :name)
           (testing "`false` for field has values less than [[field-values/*total-max-length*]] threshold"
             (is (= false
                    (:has_more_values (chain-filter categories.name {venues.price 4})))))
-
           (testing "`true` if the limit option is less than the count of values of fieldvalues"
             (is (true?
                  (:has_more_values (chain-filter categories.name {venues.price 4} :limit 1)))))
           (testing "`false` if the limit option is greater the count of values of fieldvalues"
             (is (= false
                    (:has_more_values (chain-filter categories.name {venues.price 4} :limit Integer/MAX_VALUE))))))
-
         (with-clean-field-values-for-field! (mt/id :categories :name)
           (testing "`true` if the values of a field exceeds our [[field-values/*total-max-length*]] limit"
             (binding [field-values/*total-max-length* 10]
               (is (true?
                    (:has_more_values (chain-filter categories.name {venues.price 4})))))))))
-
     (testing "for non-cached fields"
       (testing "with contraints"
         (with-clean-field-values-for-field! (mt/id :venues :latitude)
           (testing "`false` if we don't specify limit"
             (is (= false
                    (:has_more_values (chain-filter venues.latitude {venues.price 4})))))
-
           (testing "`true` if the limit is less than the number of values the field has"
             (is (true?
                  (:has_more_values (chain-filter venues.latitude {venues.price 4} :limit 1))))))))))
@@ -815,7 +810,6 @@
                      :rhs {:table $$users, :field %users.id}}]
                    (->> (#'chain-filter/find-joins (mt/id) $$messages $$users)
                         (sort-by (comp :field :lhs))))))
-
           (try
             (t2/update! :model/Field {:id %messages.receiver_id} {:active false})
             (testing "check that it switches to sender only once receiver is inactive"
@@ -824,7 +818,6 @@
                      (#'chain-filter/find-joins (mt/id) $$messages $$users))))
             (finally
               (t2/update! :model/Field {:id %messages.receiver_id} {:active true})))
-
           (try
             (t2/update! :model/Field {:id %messages.sender_id} {:active false})
             (testing "check that it switches to receiver only once sender is inactive"
@@ -833,8 +826,97 @@
                      (#'chain-filter/find-joins (mt/id) $$messages $$users))))
             (finally
               (t2/update! :model/Field {:id %messages.sender_id} {:active true})))
-
           ;; mark field
           (t2/update! :model/Field {:id %users.id} {:active false})
           (testing "there are no connections when PK is inactive"
             (is (nil? (#'chain-filter/find-joins (mt/id) $$messages $$users)))))))))
+
+;;; --------------------- chain-filter-mbql-query metadata app-DB call counts (no metadata N+1) ---------------------
+;;;
+;;; `chain-filter-mbql-query` bulk-loads all the Field/Table metadata it needs while building the query (see
+;;; `find-all-joins`, `add-joins`, `add-filters`), so the number of app-DB calls is bounded: it does NOT grow with the
+;;; number of constraints, nor with the number/depth of joins. A second build reuses the request-scoped
+;;; metadata-provider cache and makes no app-DB calls at all. If a metadata fetch regresses to
+;;; one-object-at-a-time, these exact counts change.
+
+(defn- chain-filter-mbql-query-call-counts
+  "Warm the process-global memoized caches (FK graph, `field-id->database-id`) for `field-id`/`constraints`, then
+  return the app-DB call counts of a first build (fresh provider cache) and a second build (warm cache)."
+  [field-id constraints]
+  (#'chain-filter/chain-filter-mbql-query field-id constraints nil)
+  (lib-be/with-metadata-provider-cache
+    {:first  (t2/with-call-count [call-count] (#'chain-filter/chain-filter-mbql-query field-id constraints nil) (call-count))
+     :second (t2/with-call-count [call-count] (#'chain-filter/chain-filter-mbql-query field-id constraints nil) (call-count))}))
+
+(deftest ^:parallel chain-filter-mbql-query-no-constraints-test
+  (mt/dataset test-data
+    (mt/$ids
+      (let [{:keys [first second]} (chain-filter-mbql-query-call-counts %venues.name [])]
+        ;; - fetch the source Field (the one we return values of)
+        ;; - fetch the source Table
+        ;; - fetch the Database
+        (is (= 3 first))
+        (testing "a second build reuses the cached metadata and makes no app-DB calls"
+          (is (= 0 second)))))))
+
+(deftest ^:parallel chain-filter-mbql-query-one-constraint-test
+  (mt/dataset test-data
+    (mt/$ids
+      ;; a constraint on the source Table does not add a join
+      (let [{:keys [first second]} (chain-filter-mbql-query-call-counts %venues.name [(shorthand->constraint %venues.price 3)])]
+        ;; - fetch the source Field
+        ;; - fetch the source Table
+        ;; - fetch the Database
+        ;; - bulk-fetch the constraint Field(s)
+        (is (= 4 first))
+        (testing "a second build reuses the cached metadata and makes no app-DB calls"
+          (is (= 0 second)))))))
+
+(deftest ^:parallel chain-filter-mbql-query-three-constraints-test
+  (mt/dataset test-data
+    (mt/$ids
+      (let [{:keys [first second]} (chain-filter-mbql-query-call-counts
+                                    %venues.name
+                                    [(shorthand->constraint %venues.price 3)
+                                     (shorthand->constraint %venues.id 1)
+                                     (shorthand->constraint %venues.latitude 1)])]
+        ;; same as the one-constraint case -- the constraint Fields are bulk-loaded together, not one at a time:
+        ;; - fetch the source Field
+        ;; - fetch the source Table
+        ;; - fetch the Database
+        ;; - bulk-fetch the (three) constraint Fields
+        (is (= 4 first))
+        (testing "a second build reuses the cached metadata and makes no app-DB calls"
+          (is (= 0 second)))))))
+
+(deftest ^:parallel chain-filter-mbql-query-one-join-test
+  (mt/dataset test-data
+    (mt/$ids
+      ;; a constraint on another Table (categories) forces a venues -> categories join
+      (let [{:keys [first second]} (chain-filter-mbql-query-call-counts %venues.name [(shorthand->constraint %categories.name "BBQ")])]
+        ;; - fetch the source Field
+        ;; - fetch the source Table
+        ;; - fetch the Database
+        ;; - bulk-fetch the constraint Field(s)
+        ;; - bulk-fetch the join Fields
+        ;; - bulk-fetch the join Table(s)
+        (is (= 6 first))
+        (testing "a second build reuses the cached metadata and makes no app-DB calls"
+          (is (= 0 second)))))))
+
+(deftest ^:parallel chain-filter-mbql-query-multi-hop-joins-test
+  (mt/dataset airports
+    (mt/$ids
+      ;; airport -> municipality -> region is two joins
+      (let [{:keys [first second]} (chain-filter-mbql-query-call-counts %airport.name [(shorthand->constraint %region.name "x")])]
+        ;; same count as the single-join case -- the join Fields and Tables are each bulk-loaded in one call,
+        ;; regardless of how many joins there are:
+        ;; - fetch the source Field
+        ;; - fetch the source Table
+        ;; - fetch the Database
+        ;; - bulk-fetch the constraint Field(s)
+        ;; - bulk-fetch the join Fields (across both joins)
+        ;; - bulk-fetch the join Tables (both of them)
+        (is (= 6 first))
+        (testing "a second build reuses the cached metadata and makes no app-DB calls"
+          (is (= 0 second)))))))

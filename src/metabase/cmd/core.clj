@@ -14,7 +14,7 @@
 
   You can see what commands are available by running the command `help`. This command uses the docstrings and arglists
   associated with each command's entrypoint function to generate descriptions for each command."
-  (:refer-clojure :exclude [load import])
+  (:refer-clojure :exclude [import])
   (:require
    [clojure.string :as str]
    [clojure.tools.cli :as cli]
@@ -202,7 +202,6 @@
               ["-S" "--no-settings"              "Do not export settings.yaml"]
               ["-D" "--no-data-model"            "Do not export any data model entities; useful for subsequent exports."]
               ["-f" "--include-field-values"     "Include field values along with field metadata."]
-              ["-s" "--include-database-secrets" "Include database connection details (in plain text; use caution)."]
               ["-e" "--continue-on-error"        "Do not break execution on errors."]
               [""   "--full-stacktrace"          "Output full stacktraces on errors."]]}
   [path & options]
@@ -232,6 +231,23 @@
     (system-exit! 0)
     (catch Throwable e
       (log/error e "ERROR ROTATING KEY.")
+      (system-exit! 1))))
+
+(defn ^:command enable-encryption
+  "Encrypts data in the metabase database with the key in the MB_ENCRYPTION_SECRET_KEY environment variable. Run this
+  once, with Metabase stopped, after adding the key to an existing instance: Metabase refuses to start while the key is
+  set but the database is not encrypted with it."
+  []
+  (classloader/require 'metabase.cmd.enable-encryption)
+  (when-not (encryption/default-encryption-enabled?)
+    (log/error "MB_ENCRYPTION_SECRET_KEY environment variable has not been set")
+    (system-exit! 1))
+  (try
+    ((resolve 'metabase.cmd.enable-encryption/enable-encryption!))
+    (log/info "Encryption enabled OK.")
+    (system-exit! 0)
+    (catch Throwable e
+      (log/errorf "ERROR ENABLING ENCRYPTION: %s" (ex-message e))
       (system-exit! 1))))
 
 (defn ^:command remove-encryption

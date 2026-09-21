@@ -180,6 +180,21 @@
                                                  ::qp.add-remaps/new-field-dimension-id pos-int?}]]}})
               (lib/->legacy-MBQL query))))))
 
+(deftest ^:parallel add-remapped-columns-with-previous-stage-test
+  (let [query        (-> (lib/query category-id-remap-metadata-provider (meta/table-metadata :venues))
+                         (lib/append-stage)
+                         (lib/with-fields [(meta/field-metadata :venues :category-id)]))
+        dimension-id (get-in (lib.metadata/field category-id-remap-metadata-provider (meta/id :venues :category-id))
+                             [:lib/external-remap :id])]
+    ;; The `lib/append-stage` models the sandbox behaviour where an extra stage is added
+    ;; and the `remap-column-infos` become name based instead of id based
+    (is (=? {:stages [{}
+                      {:fields [[:field {::qp.add-remaps/original-field-dimension-id dimension-id}
+                                 (meta/id :venues :category-id)]
+                                [:field {::qp.add-remaps/new-field-dimension-id dimension-id}
+                                 (meta/id :categories :name)]]}]}
+            (qp.add-remaps/add-remapped-columns query)))))
+
 ;;; ---------------------------------------- remap-results (post-processing) -----------------------------------------
 
 (defn- remap-results [query metadata rows]
@@ -233,7 +248,6 @@
                                       {"apple"  "Appletini"
                                        "banana" "Bananasplit"
                                        "kiwi"   "Kiwi-flavored Thing"})
-
       (is (=? {:status    :completed
                :row_count 3
                :data      {:rows [[1 "apple"   4 3 "Appletini"]
@@ -488,7 +502,7 @@
 ;;; `partial=`, which ended up asserting nothing of value. However, other tests for this
 ;;; issue, [[metabase.query-processor.remapping-test/remapped-columns-in-joined-source-queries-test]], and a test
 ;;; in `e2e/test/scenarios/joins/joins.cy.spec.js`, are still passing. So I'm not sure what to do with this test. I
-;;; updated it to use MLv2, but it's commented out for now.
+;;; updated it to use Lib, but it's commented out for now.
 ;;;
 ;;; Note that it mostly passes if you
 ;;; update [[metabase.query-processor.middleware.add-remaps/remap-column-infos]] not to ignore `:field`

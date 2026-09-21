@@ -1,5 +1,4 @@
 import type { LocationDescriptor } from "history";
-import type { MouseEvent } from "react";
 import { t } from "ttag";
 import _ from "underscore";
 
@@ -7,6 +6,7 @@ import type { IconName } from "metabase/ui";
 import type { ColorName } from "metabase/ui/colors/types";
 import type { RecentItem } from "metabase-types/api";
 
+import { METABASE_DOCS_LABELS } from "./constants";
 import { BASIC_ACTION_ORDER } from "./hooks/useCommandPaletteBasicActions";
 import type { PaletteActionImpl } from "./types";
 
@@ -34,7 +34,10 @@ export const processResults = (
   const search = processSection(t`Results`, groupedResults["search"]);
   const recent = processSection(t`Recents`, groupedResults["recent"]);
   const admin = processSection(t`Admin`, groupedResults["admin"]);
-  const docs = processSection(t`Documentation`, groupedResults["docs"]);
+  const docs = processSection(
+    METABASE_DOCS_LABELS.section,
+    groupedResults["docs"],
+  );
 
   if (searchTerm.trim().length === 0) {
     return [...recent];
@@ -141,6 +144,3 @@ export const locationDescriptorToURL = (
     return `${pathname}${queryString}${hashString}`;
   }
 };
-
-export const isNormalClick = (e: MouseEvent): boolean =>
-  !e.ctrlKey && !e.shiftKey && !e.metaKey && !e.altKey && e.button === 0;

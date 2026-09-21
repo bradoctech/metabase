@@ -1,7 +1,6 @@
 (ns metabase-enterprise.semantic-search.settings
   (:require
    [metabase.llm.settings :as llm-settings]
-   [metabase.premium-features.core :as premium-features]
    [metabase.settings.core :as setting :refer [defsetting]]
    [metabase.util.i18n :refer [deferred-tru]]))
 
@@ -11,7 +10,7 @@
 
 (defsetting ee-embedding-provider
   (deferred-tru "The embedding provider to use (`openai`, `ollama`, or `ai-service`)")
-  :encryption :no
+  :encryption :when-encryption-key-set
   :visibility :settings-manager
   :default "ai-service"
   :type :string
@@ -54,14 +53,15 @@
 
 (defsetting ee-embedding-service-base-url
   (deferred-tru "URL of the OpenAI-compatible embedding service (e.g. a LiteLLM proxy).")
-  :encryption :no
+  :encryption :when-encryption-key-set
   :visibility :settings-manager
   :default    nil
   :export?    false
   :doc        false)
 
 (defsetting ee-embedding-service-api-key
-  (deferred-tru "API key for authenticating with the embedding service.")
+  (deferred-tru (str "API key for authenticating with the embedding service. Leave empty for proxying thorugh"
+                     " ai-service. In that case premium-embedding-token is used for authentication."))
   :sensitive? true
   :visibility :settings-manager
   :export?    false
@@ -73,9 +73,6 @@
   :export?    false
   :encryption :no
   :default    true
-  :getter     (fn []
-                (and (setting/get-value-of-type :boolean :semantic-search-enabled)
-                     (premium-features/enable-semantic-search?)))
   :type       :boolean
   :doc        false)
 

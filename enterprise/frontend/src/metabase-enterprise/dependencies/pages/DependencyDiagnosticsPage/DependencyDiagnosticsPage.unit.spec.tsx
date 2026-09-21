@@ -12,7 +12,7 @@ import {
   screen,
   within,
 } from "__support__/ui";
-import type * as Urls from "metabase/lib/urls";
+import type * as Urls from "metabase/urls";
 import type {
   DependencyDiagnosticsUserParams,
   DependencyNode,
@@ -150,7 +150,7 @@ describe("DependencyDiagnosticsPage", () => {
       const { history } = setup({
         mode: "broken",
         nodes: CARD_NODES,
-        urlParams: { groupTypes: ["table", "question"] },
+        urlParams: { groupTypes: ["table", "question", "transform"] },
       });
 
       await waitForListToLoad();

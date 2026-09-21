@@ -1371,7 +1371,7 @@
 (deftest ^:parallel relative-time-interval-test
   (mt/test-drivers
     (mt/normal-drivers-with-feature :date-arithmetics :test/dynamic-dataset-loading)
-   ;; Following verifies #45942 is solved. Changing the offset ensures that intervals do not overlap.
+    ;; Following verifies #45942 is solved. Changing the offset ensures that intervals do not overlap.
     (testing "Syntactic sugar (`:relative-time-interval` clause) (#45942)"
       (mt/dataset checkins:1-per-day:60
         (is (= 7
@@ -1767,7 +1767,7 @@
           (is (= 7 (count (mt/rows processed))))
           (is (= 7 (count (mt/rows mbql-processed))))
           (is (= (get-in (qp/process-query mbql-query) [:data :native_form])
-                 (get-in (qp/process-query (lib.convert/->pMBQL mbql-query)) [:data :native_form])
+                 (get-in (qp/process-query (lib.convert/->mbql5 mbql-query)) [:data :native_form])
                  (get-in (qp/process-query query) [:data :native_form]))))))))
 
 (deftest ^:parallel filter-by-expression-relative-time-interval-test
@@ -1791,7 +1791,7 @@
           (is (= 7 (count (mt/rows processed))))
           (is (= 7 (count (mt/rows mbql-processed))))
           (is (= (get-in (qp/process-query mbql-query) [:data :native_form])
-                 (get-in (qp/process-query (lib.convert/->pMBQL mbql-query)) [:data :native_form])
+                 (get-in (qp/process-query (lib.convert/->mbql5 mbql-query)) [:data :native_form])
                  (get-in (qp/process-query query) [:data :native_form]))))))))
 
 ;; TODO -- is this really date BUCKETING? Does this BELONG HERE?!

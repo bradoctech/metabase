@@ -523,10 +523,6 @@
   [_]
   :type/DateTime)
 
-(defmethod date-type-expected :sqlite
-  [_]
-  :type/Text)
-
 (defmethod date-type-expected :mongo
   [_]
   :type/*)
@@ -828,7 +824,6 @@
                                               :mode nil
                                               :expected #{"2025-05-15T22:20:01Z"
                                                           "2025-05-15 22:20:01"}}
-
                                              ;; iso mode
                                              {:expression (lib/concat "2025-05-15T22:20:01" "")
                                               :mode :iso
@@ -838,7 +833,6 @@
                                               :mode :iso
                                               :expected #{"2025-05-15T22:20:01Z"
                                                           "2025-05-15 22:20:01"}}
-
                                              ;; simple mode
                                              {:expression (lib/concat "20250515222001" "")
                                               :mode :simple

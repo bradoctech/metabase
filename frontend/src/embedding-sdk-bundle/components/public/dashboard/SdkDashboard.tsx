@@ -31,7 +31,11 @@ import {
 } from "embedding-sdk-bundle/hooks/private/use-sdk-dashboard-params";
 import { useSetupContentTranslations } from "embedding-sdk-bundle/hooks/private/use-setup-content-translations";
 import { useSdkDispatch, useSdkSelector } from "embedding-sdk-bundle/store";
-import { getIsGuestEmbed } from "embedding-sdk-bundle/store/selectors";
+import { setInitialGuestToken } from "embedding-sdk-bundle/store/guest-embed";
+import {
+  getIsGuestEmbed,
+  getSessionTokenState,
+} from "embedding-sdk-bundle/store/selectors";
 import type { MetabaseQuestion } from "embedding-sdk-bundle/types";
 import type {
   DashboardEventHandlersProps,
@@ -58,12 +62,12 @@ import { getDashboardComplete, getIsDirty } from "metabase/dashboard/selectors";
 import type { RefreshPeriod } from "metabase/dashboard/types";
 import { EmbeddingEntityContextProvider } from "metabase/embedding/context";
 import type { ParameterValues } from "metabase/embedding-sdk/types/dashboard";
-import { isStaticEmbeddingEntityLoadingError } from "metabase/lib/errors/is-static-embedding-entity-loading-error";
-import { useSelector } from "metabase/lib/redux";
 import EmbedFrameS from "metabase/public/components/EmbedFrame/EmbedFrame.module.css";
+import { useSelector } from "metabase/redux";
 import { resetErrorPage, setErrorPage } from "metabase/redux/app";
 import { dismissAllUndo } from "metabase/redux/undo";
 import { getErrorPage } from "metabase/selectors/app";
+import { isStaticEmbeddingEntityLoadingError } from "metabase/utils/errors/is-static-embedding-entity-loading-error";
 import type { CardDisplayType } from "metabase-types/api";
 
 import type {
@@ -71,12 +75,28 @@ import type {
   SdkQuestionProps,
 } from "../SdkQuestion";
 
-import {
-  SdkDashboardStyledWrapper,
-  SdkDashboardStyledWrapperWithRef,
-} from "./SdkDashboardStyleWrapper";
+import { SdkDashboardStyledWrapper } from "./SdkDashboardStyleWrapper";
 import { SdkDashboardProvider } from "./context";
 import { useCommonDashboardParams } from "./use-common-dashboard-params";
+
+const MaybeStyledWrapper = ({
+  skip,
+  className,
+  style,
+  children,
+}: {
+  skip: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}) =>
+  skip ? (
+    <>{children}</>
+  ) : (
+    <SdkDashboardStyledWrapper className={className} style={style}>
+      {children}
+    </SdkDashboardStyledWrapper>
+  );
 
 /**
  * @interface
@@ -194,6 +214,21 @@ const SdkDashboardInner = ({
   onVisualizationChange,
 }: SdkDashboardInnerProps) => {
   const isGuestEmbed = useSdkSelector(getIsGuestEmbed);
+  const dispatch = useSdkDispatch();
+  const [isFirstRender, setIsFirstRender] = useState(true);
+  const { rawToken: tokenFromStore, error: tokenFetchError } =
+    useSdkSelector(getSessionTokenState);
+
+  // Store token so the refresh handler can check expiry. No need to await — not used here.
+  useEffect(() => {
+    if (rawToken && isGuestEmbed) {
+      dispatch(setInitialGuestToken(rawToken));
+    }
+  }, [rawToken, isGuestEmbed, dispatch]);
+
+  useEffect(() => {
+    setIsFirstRender(false);
+  }, []);
 
   const {
     resourceId: dashboardId,
@@ -202,7 +237,9 @@ const SdkDashboardInner = ({
   } = useExtractResourceIdFromJwtToken({
     isGuestEmbed,
     resourceId: rawDashboardId,
-    token: rawToken ?? undefined,
+    // Skip stale Redux token on first render (e.g. wizard re-issuing a token when toggling parameters); rawToken prop takes precedence.
+    // From the next render onward, tokenFromStore is used and the value is from a refreshed token.
+    token: (!isFirstRender ? tokenFromStore : null) ?? rawToken ?? undefined,
   });
 
   useSetupContentTranslations({ token });
@@ -275,7 +312,6 @@ const SdkDashboardInner = ({
   ]);
 
   const errorPage = useSdkSelector(getErrorPage);
-  const dispatch = useSdkDispatch();
   useEffect(() => {
     if (dashboardId) {
       dispatch(resetErrorPage());
@@ -292,6 +328,11 @@ const SdkDashboardInner = ({
   const isDashboardDirty = useSelector(getIsDirty);
 
   const sdkNavigation = useSdkInternalNavigationOptional();
+  // When this SdkDashboard renders below a nav-stack push, the outer
+  // SdkInternalNavigationProvider already wraps with SdkDashboardStyledWrapper
+  // carrying user style/className. Skip our own wrapper to avoid double
+  // wrapping (which drops user height/sticky/scroll behavior).
+  const skipStyledWrapper = !!sdkNavigation?.hasNavigatedToEntity;
 
   // Initialize navigation stack with dashboard entry when we have the name
   useEffect(() => {
@@ -343,25 +384,41 @@ const SdkDashboardInner = ({
 
   if (isLocaleLoading) {
     return (
-      <SdkDashboardStyledWrapper className={className} style={style}>
+      <MaybeStyledWrapper
+        skip={skipStyledWrapper}
+        className={className}
+        style={style}
+      >
         <SdkLoader />
-      </SdkDashboardStyledWrapper>
+      </MaybeStyledWrapper>
     );
   }
 
   if (tokenError) {
     return (
-      <SdkDashboardStyledWrapper className={className} style={style}>
+      <MaybeStyledWrapper
+        skip={skipStyledWrapper}
+        className={className}
+        style={style}
+      >
         <SdkError message={tokenError} />;
-      </SdkDashboardStyledWrapper>
+      </MaybeStyledWrapper>
     );
+  }
+
+  if (tokenFetchError) {
+    return <SdkError message={tokenFetchError.message} />;
   }
 
   if (isStaticEmbeddingEntityLoadingError(errorPage, { isGuestEmbed })) {
     return (
-      <SdkDashboardStyledWrapper className={className} style={style}>
+      <MaybeStyledWrapper
+        skip={skipStyledWrapper}
+        className={className}
+        style={style}
+      >
         <SdkError message={errorPage.data ?? t`Something's gone wrong`} />
-      </SdkDashboardStyledWrapper>
+      </MaybeStyledWrapper>
     );
   }
 
@@ -372,19 +429,27 @@ const SdkDashboardInner = ({
 
   if (!dashboardId || isDashboardNotFound) {
     return (
-      <SdkDashboardStyledWrapper className={className} style={style}>
+      <MaybeStyledWrapper
+        skip={skipStyledWrapper}
+        className={className}
+        style={style}
+      >
         <DashboardNotFoundError id={dashboardId ?? ""} />
-      </SdkDashboardStyledWrapper>
+      </MaybeStyledWrapper>
     );
   }
 
   if (errorPage) {
     return (
-      <SdkDashboardStyledWrapper className={className} style={style}>
+      <MaybeStyledWrapper
+        skip={skipStyledWrapper}
+        className={className}
+        style={style}
+      >
         <SdkError
           message={errorPage.data?.message ?? t`Something's gone wrong`}
         />
-      </SdkDashboardStyledWrapper>
+      </MaybeStyledWrapper>
     );
   }
 
@@ -458,7 +523,8 @@ const SdkDashboardInner = ({
       >
         {match({ finalRenderMode, isGuestEmbed })
           .with({ finalRenderMode: "question" }, () => (
-            <SdkDashboardStyledWrapperWithRef
+            <MaybeStyledWrapper
+              skip={skipStyledWrapper}
               className={className}
               style={style}
             >
@@ -471,7 +537,7 @@ const SdkDashboardInner = ({
               >
                 {AdHocQuestionView && <AdHocQuestionView />}
               </SdkAdHocQuestion>
-            </SdkDashboardStyledWrapperWithRef>
+            </MaybeStyledWrapper>
           ))
           .with({ finalRenderMode: "dashboard" }, () => (
             <SdkDashboardProvider
@@ -479,23 +545,28 @@ const SdkDashboardInner = ({
               onEditQuestion={onEditQuestion}
             >
               {children ?? (
-                <SdkDashboardStyledWrapperWithRef
+                <MaybeStyledWrapper
+                  skip={skipStyledWrapper}
                   className={className}
                   style={style}
                 >
                   <Dashboard className={EmbedFrameS.EmbedFrame} />
                   <AutoRefreshController refreshPeriod={autoRefreshInterval} />
-                </SdkDashboardStyledWrapperWithRef>
+                </MaybeStyledWrapper>
               )}
             </SdkDashboardProvider>
           ))
           .with({ finalRenderMode: "queryBuilder" }, ({ isGuestEmbed }) =>
             isGuestEmbed ? (
-              <SdkDashboardStyledWrapper className={className} style={style}>
+              <MaybeStyledWrapper
+                skip={skipStyledWrapper}
+                className={className}
+                style={style}
+              >
                 <SdkError
                   message={t`You can't save questions in Guest Embed mode`}
                 />
-              </SdkDashboardStyledWrapper>
+              </MaybeStyledWrapper>
             ) : (
               <DashboardQueryBuilder
                 onCreate={(question) => {

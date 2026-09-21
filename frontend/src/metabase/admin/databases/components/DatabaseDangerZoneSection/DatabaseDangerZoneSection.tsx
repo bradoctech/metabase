@@ -4,8 +4,8 @@ import { t } from "ttag";
 import { DeleteDatabaseModal } from "metabase/admin/databases/components/DeleteDatabaseModel/DeleteDatabaseModal";
 import { useDiscardDatabaseFieldValuesMutation } from "metabase/api";
 import { ConfirmModal } from "metabase/common/components/ConfirmModal";
-import { isSyncCompleted } from "metabase/lib/syncing";
 import { Button, Flex } from "metabase/ui";
+import { isSyncCompleted } from "metabase/utils/syncing";
 import type { Database, DatabaseId } from "metabase-types/api";
 
 import { DatabaseInfoSection } from "../DatabaseInfoSection";
@@ -77,7 +77,7 @@ export const DatabaseDangerZoneSection = ({
             <DeleteDatabaseModal
               opened={isDeleteDbModalOpen}
               title={t`Delete the ${database.name} database?`}
-              defaultDatabaseRemovalMessage={t`This will delete every saved question, model, metric, and segment you’ve made that uses this data, and can’t be undone!`}
+              defaultDatabaseRemovalMessage={t`This will delete every saved question, model, metric, and segment you’ve made that uses this data, and can’t be undone. Transforms that use this database won’t be deleted, but they will stop working.`}
               database={database}
               onClose={deleteDbModal.close}
               onDelete={handleDeleteDatabase}

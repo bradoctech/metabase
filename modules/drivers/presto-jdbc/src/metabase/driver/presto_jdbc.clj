@@ -50,6 +50,14 @@
 (driver/register! :presto-jdbc, :parent #{:sql-jdbc
                                           ::sql-jdbc.legacy/use-legacy-classes-for-read-and-set})
 
+(defmethod driver/host-carrying-parameters :presto-jdbc
+  [_driver]
+  ["httpProxy" "socksProxy"])
+
+(defmethod driver/non-host-parameters :presto-jdbc
+  [_driver]
+  ["KerberosUseCanonicalHostname" "externalAuthenticationRedirectHandlers" "hostnameInCertificate"])
+
 (doseq [[feature supported?] {:basic-aggregations               true
                               :binning                          true
                               :database-routing                 true
@@ -568,7 +576,7 @@
   [driver conn schema table-name]
   (try
     (let [sql (sql-jdbc.describe-database/simple-select-probe-query driver schema table-name)]
-        ;; if the query completes without throwing an Exception, we can SELECT from this table
+      ;; if the query completes without throwing an Exception, we can SELECT from this table
       (jdbc/reducible-query {:connection conn} sql)
       true)
     (catch Throwable _
@@ -826,7 +834,7 @@
             (or (instance? OffsetDateTime t)
                 (instance? ZonedDateTime t))
             (-> (t/offset-date-time t)
-              ;; tests are expecting this to be in the UTC offset, so convert to that
+                ;; tests are expecting this to be in the UTC offset, so convert to that
                 (t/with-offset-same-instant (t/zone-offset 0)))
 
             ;; presto "helpfully" returns local results already adjusted to session time zone offset for us, e.g.

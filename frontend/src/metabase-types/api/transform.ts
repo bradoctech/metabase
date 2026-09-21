@@ -36,6 +36,11 @@ export type Transform = {
   created_at: string;
   updated_at: string;
   source_readable: boolean;
+  can_read?: boolean;
+  can_write?: boolean;
+  can_execute?: boolean;
+
+  source_database_id?: DatabaseId | null;
 
   // true when transform was deleted but still referenced by runs
   deleted?: boolean;
@@ -60,6 +65,20 @@ export type Transform = {
 
 export type SuggestedTransform = Partial<Pick<Transform, "id">> &
   Pick<Transform, "name" | "description" | "source" | "target">;
+
+export type TaggedTransform = Transform & { type: "transform" };
+
+export type UnsavedTransform = {
+  type: "unsaved-transform";
+  id: TransformId;
+  name: string;
+  source: DraftTransformSource;
+  target: {
+    name: string;
+    schema: string | null;
+    type: TransformTargetType;
+  };
+};
 
 export type PythonTransformTableEntry = {
   alias: string;
@@ -186,6 +205,7 @@ export type TransformJob = {
   description: string | null;
   schedule: string;
   ui_display_type: ScheduleDisplayType;
+  active: boolean;
   created_at: string;
   updated_at: string;
 
@@ -232,6 +252,7 @@ export type UpdateTransformJobRequest = {
   description?: string | null;
   schedule?: string;
   ui_display_type?: ScheduleDisplayType;
+  active?: boolean;
   tag_ids?: TransformTagId[];
 };
 

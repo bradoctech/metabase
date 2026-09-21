@@ -26,7 +26,7 @@
      (let [details            {:host "read-host" :port 5432}
            write-data-details {:host "write-host" :port 5432}]
        (testing "effective-details returns write_data_details when :write-data and details exist"
-         (testing "with kebab-case key (MLv2 metadata style)"
+         (testing "with kebab-case key (Lib metadata style)"
            (let [database {:lib/type           :metadata/database
                            :details            details
                            :write-data-details write-data-details}]
@@ -94,7 +94,6 @@
       (driver.w/with-swapped-connection-details 1 {:user "ws-user" :password "ws-pass"}
         (is (=? {:host "read-host" :user "ws-user" :password "ws-pass" :port 5432}
                 (driver.conn/effective-details database))))))
-
   (mt/when-ee-evailable
    (mt/with-premium-features #{:writable-connection}
      (testing "effective-details applies workspace swap AFTER write-data merge"
@@ -106,7 +105,6 @@
            (driver.conn/with-write-connection
              (is (=? {:host "host" :user "ws-user" :password "ws-pass" :port 5432 :write true}
                      (driver.conn/effective-details database)))))))
-
      (testing "without workspace swap, effective-details is unchanged (regression)"
        (let [database {:lib/type           :metadata/database
                        :id                 1

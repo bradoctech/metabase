@@ -3,6 +3,7 @@
    [buddy.core.codecs :as codecs]
    [clojure.java.io :as io]
    [clojure.test :refer :all]
+   [metabase.app-db.core :as mdb]
    [metabase.secrets.models.secret :as secret]
    [metabase.test :as mt]
    [metabase.test.fixtures :as fixtures]
@@ -45,19 +46,21 @@
           (is (mt/secret-value-equals? value (:value loaded))))))))
 
 (deftest secret-retrieval-test
-  (testing "A secret value can be retrieved successfully"
-    (testing " when there is NO encryption key in place"
-      (encryption-test/with-secret-key nil
-        (check-secret)))
-    (testing " when there is an encryption key in place"
-      (encryption-test/with-secret-key (resolve 'encryption-test/secret)
-        (check-secret)))))
+  ;; isolated app DB: runs with an encryption key active, so nothing here may touch the shared test DB
+  (mt/with-temp-empty-app-db [_conn :h2]
+    (mdb/setup-db! :create-sample-content? false)
+    (testing "A secret value can be retrieved successfully"
+      (testing " when there is NO encryption key in place"
+        (encryption-test/with-secret-key nil
+          (check-secret)))
+      (testing " when there is an encryption key in place"
+        (encryption-test/with-secret-key (resolve 'encryption-test/secret)
+          (check-secret))))))
 
 (deftest get-secret-string-test
   (testing "get-secret-string from value only"
     (is (= "titok"
            (secret/value-as-string :secret-test-driver {:keystore-value "titok"} "keystore"))))
-
   (testing "get-secret-string from value only from the database"
     (mt/with-temp [:model/Secret {id :id} {:name       "private-key"
                                            :kind       ::secret/pem-cert
@@ -65,7 +68,6 @@
                                            :creator_id (mt/user->id :crowberto)}]
       (is (= "titok"
              (secret/value-as-string :secret-test-driver {:keystore-id id} "keystore")))))
-
   (testing "get-secret-string from value only from the database ignore protected-password **MetabasePass**"
     (mt/with-temp [:model/Secret {id :id} {:name       "private-key"
                                            :kind       ::secret/pem-cert
@@ -73,7 +75,6 @@
                                            :creator_id (mt/user->id :crowberto)}]
       (is (= "titok"
              (secret/value-as-string :secret-test-driver {:keystore-id id :keystore-value secret/protected-password} "keystore")))))
-
   (testing "get-secret-string from uploaded value"
     (mt/with-temp [:model/Secret {id :id} {:name       "private-key"
                                            :kind       ::secret/pem-cert
@@ -94,13 +95,11 @@
                          "keystore"))
           "psszt!"
           (mt/bytes->base64-data-uri (.getBytes "psszt!" "UTF-8"))))))
-
   (testing "get-secret-string from local file"
     (mt/with-temp-file [file-db "-1-key.pem"
                         file-value "-2-key.pem"]
       (spit file-db "titok")
       (spit file-value "psszt!")
-
       (testing "from value"
         (is (= "titok"
                (secret/value-as-string
@@ -108,7 +107,6 @@
                 {:keystore-path    file-db
                  :keystore-options "local"}
                 "keystore"))))
-
       (testing "from the database"
         (mt/with-temp [:model/Secret {id :id} {:name       "private-key"
                                                :kind       ::secret/pem-cert

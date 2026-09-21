@@ -685,7 +685,7 @@
                                                 [:field (meta/id :venues :price) {}]]]]]
                                  {:display-name "My Cool Aggregation"}]]}
           expand-macros (fn [mbql-query]
-                          (lib.convert/->legacy-MBQL (adjust (lib/query mp (lib.convert/->pMBQL mbql-query)))))]
+                          (lib.convert/->legacy-MBQL (adjust (lib/query mp (lib.convert/->mbql5 mbql-query)))))]
       (comment
         (testing "nested 1 level"
           (is (=? (lib.tu.macros/mbql-query nil
@@ -712,7 +712,6 @@
                  (lib.tu.macros/mbql-query checkins
                    {:joins [{:condition    [:= [:field (meta/id :checkins :id) nil] 2]
                              :source-query before}]})))))
-
       (testing "inside :joins inside :source-query"
         (is (=? (lib.tu.macros/mbql-query nil
                   {:source-query {:source-table (meta/id :checkins)

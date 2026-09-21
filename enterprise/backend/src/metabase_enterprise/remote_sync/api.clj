@@ -96,10 +96,10 @@
   Requires superuser permissions."
   [_route
    _query
-   {:keys [message branch force]}] :- [:map
-                                       [:message {:optional true} ms/NonBlankString]
-                                       [:branch {:optional true} ms/NonBlankString]
-                                       [:force {:optional true} :boolean]]
+   {:keys [message branch force]} :- [:map
+                                      [:message {:optional true} ms/NonBlankString]
+                                      [:branch {:optional true} ms/NonBlankString]
+                                      [:force {:optional true} :boolean]]]
   (api/check-superuser)
   (api/check-400 (settings/remote-sync-enabled) "Remote sync is not configured.")
   (api/check-400 (= (settings/remote-sync-type) :read-write) "Exports are only allowed when remote-sync-type is set to 'read-write'")
@@ -117,12 +117,14 @@
 (api.macros/defendpoint :get "/current-task" :- [:maybe remote-sync.schema/SyncTask]
   "Get the current sync task"
   []
+  (api/check-superuser)
   (when-let [task (remote-sync.task/most-recent-task)]
     (t2/hydrate task :status)))
 
 (api.macros/defendpoint :post "/current-task/cancel" :- remote-sync.schema/SyncTask
   "Cancels the current task if one is running"
   []
+  (api/check-superuser)
   (let [task (remote-sync.task/most-recent-task)]
     (api/check-400 (and (some? task) (remote-sync.task/running? task)) "No active task to cancel")
     (remote-sync.task/cancel-sync-task! (:id task))
@@ -207,13 +209,11 @@
    _query
    {:keys [name]} :- [:map [:name ms/NonBlankString]]]
   (api/check-superuser)
-  (let [base-branch (or (remote-sync.task/last-version) (settings/remote-sync-branch))
-        source (source/source-from-settings)]
-    (api/check-400 source "Source not configured")
+  (let [base-branch (or (remote-sync.task/last-version) (settings/remote-sync-branch))]
+    (api/check-400 (source/source-from-settings) "Source not configured")
     (api/check-400 base-branch "Base commit not found")
     (try
-      (source.p/create-branch source name base-branch)
-      (settings/remote-sync-branch! name)
+      (impl/create-branch! name base-branch)
       (events/publish-event! :event/remote-sync-create-branch
                              {:details {:branch_name name
                                         :base_branch base-branch}
@@ -234,21 +234,19 @@
                                                  [:message ms/NonBlankString]]]
   (api/check-superuser)
   (api/check-400 (= (settings/remote-sync-type) :read-write) "Stash is only allowed when remote-sync-type is set to 'read-write'")
-  (let [source (source/source-from-settings)]
-    (api/check-400 source  "Source not configured")
-    (try
-      (source.p/create-branch source new-branch (settings/remote-sync-branch))
-      (let [{task-id :id :as task} (impl/async-export! new-branch false message)]
-        (events/publish-event! :event/remote-sync-stash
-                               {:object task
-                                :details {:branch new-branch}
-                                :user-id api/*current-user-id*})
-        {:status "success"
-         :message (str "Stashing to " new-branch)
-         :task_id task-id})
-      (catch Exception e
-        (throw (ex-info (format "Failed to stash changes to branch: %s" (ex-message e))
-                        {:status-code 400}))))))
+  (api/check-400 (source/source-from-settings) "Source not configured")
+  (try
+    (let [{task-id :id :as task} (impl/stash! new-branch message)]
+      (events/publish-event! :event/remote-sync-stash
+                             {:object task
+                              :details {:branch new-branch}
+                              :user-id api/*current-user-id*})
+      {:status "success"
+       :message (str "Stashing to " new-branch)
+       :task_id task-id})
+    (catch Exception e
+      (throw (ex-info (format "Failed to stash changes to branch: %s" (ex-message e))
+                      {:status-code 400})))))
 
 (def ^{:arglists '([request respond raise])} routes
   "`/api/ee/remote-sync` routes."

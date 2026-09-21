@@ -24,6 +24,40 @@
                            :source-table (meta/id :venues)}]}
               query)))))
 
+(deftest ^:parallel test-query-string-keys-test
+  (testing "test-query accepts a spec exactly as it arrives from a JSON request body: string keys and values"
+    (let [query (lib.query.test-spec/test-query
+                 meta/metadata-provider
+                 {"stages" [{"source" {"type" "table"
+                                       "id"   (meta/id :venues)}}]})]
+      (is (=? {:lib/type :mbql/query
+               :database (meta/id)
+               :stages   [{:lib/type     :mbql.stage/mbql
+                           :source-table (meta/id :venues)}]}
+              query)))))
+
+(deftest ^:parallel test-query-string-keys-full-spec-test
+  (testing "a full string-keyed camelCase spec with aggregations, breakouts, and order bys decodes"
+    (let [query (lib.query.test-spec/test-query
+                 meta/metadata-provider
+                 {"stages" [{"source"       {"type" "table", "id" (meta/id :orders)}
+                             "aggregations" [{"type" "operator", "operator" "count"}
+                                             {"type" "operator", "operator" "sum"
+                                              "args" [{"type" "column", "name" "SUBTOTAL"}]}]
+                             "breakouts"    [{"type" "column", "name" "CREATED_AT"
+                                              "sourceName" "ORDERS", "unit" "year"}]
+                             "orderBys"     [{"direction" "desc", "type" "column"
+                                              "name" "sum", "displayName" "Sum of Subtotal"}]}]})]
+      (is (=? {:lib/type :mbql/query
+               :database (meta/id)
+               :stages   [{:lib/type     :mbql.stage/mbql
+                           :source-table (meta/id :orders)
+                           :aggregation  [[:count {}]
+                                          [:sum {} [:field {} (meta/id :orders :subtotal)]]]
+                           :breakout     [[:field {:temporal-unit :year} (meta/id :orders :created-at)]]
+                           :order-by     [[:desc {} [:aggregation {} string?]]]}]}
+              query)))))
+
 (deftest ^:parallel test-query-with-card-source-test
   (testing "test-query creates a query from a card source"
     (let [query (lib.query.test-spec/test-query
@@ -45,11 +79,9 @@
                             :fields [{:type :column
                                       :name "ID"
                                       :source-name "ORDERS"}
-
                                      ;; column without source-name can be found if it is unambiguous
                                      {:type :column
                                       :name "TOTAL"}
-
                                      ;; implicitly joined column
                                      {:type :column
                                       :name "NAME"
@@ -460,7 +492,6 @@
       (is (=? [[:desc {}
                 [:field {:temporal-unit :month} (meta/id :checkins :date)]]]
               (lib/order-bys query)))))
-
   (testing "test-query adds order-by with temporal bucketing when selecting the second column"
     (let [query (lib.query.test-spec/test-query
                  meta/metadata-provider
@@ -575,7 +606,6 @@
                                                            :source-name "PRODUCTS"}
                                                     :right {:type :column
                                                             :name "PRODUCT_ID"}}]}]}]})]
-
       (is (=? [{:strategy :left-join
                 :alias "Products"}
                {:strategy :right-join
@@ -615,20 +645,17 @@
                                                            :value 42}
                                                           {:type :column
                                                            :name "PRICE"}]}}]}]})]
-
       (is (=? [[:=
                 {} "Gadget"
                 [:field
                  {:source-field (meta/id :orders :product-id)}
                  (meta/id :products :category)]]]
               (lib/filters query)))
-
       (is (=? [[:sum {}
                 [:field
                  {:source-field (meta/id :orders :product-id)}
                  (meta/id :products :price)]]]
               (lib/aggregations query)))
-
       (is (=? [[:+
                 {:lib/expression-name "Custom"}
                 42
@@ -636,19 +663,16 @@
                  {:source-field (meta/id :orders :product-id)}
                  (meta/id :products :price)]]]
               (lib/expressions query)))
-
       (is (=? [[:field
                 {:source-field (meta/id :orders :product-id)}
                 (meta/id :products :created-at)]]
               (lib/breakouts query)))
-
       (let [query (lib.query.test-spec/test-query
                    meta/metadata-provider
                    {:stages [{:source {:type :table
                                        :id   (meta/id :orders)}
                               :order-bys [{:type :column
                                            :name "PRICE"}]}]})]
-
         (is (=? [[:asc {} [:field
                            {:source-field (meta/id :orders :product-id)}
                            (meta/id :products :price)]]]
@@ -766,7 +790,6 @@
                                          :name        "CREATED_AT"
                                          :source-name "ORDERS"
                                          :direction   :desc}]}
-
                            ;; Stage 1
                            {:expressions [{:name  "doubled-count"
                                            :value {:type     :operator
@@ -786,7 +809,6 @@
                             :order-bys [{:type      :column
                                          :name      "total-revenue"
                                          :direction :asc}]}
-
                            ;; Stage 2
                            {:filters [{:type     :operator
                                        :operator :<
@@ -796,61 +818,46 @@
                                                    :value 500}]}]
 
                             :limit 25}]})]
-
       (is (= 3 (lib/stage-count query)))
-
       ;; Stage 0
       (is (=? [{:strategy :left-join
                 :alias "Products"}
                {:strategy :inner-join
                 :alias "People - User"}]
               (lib/joins query 0)))
-
       (is (=? [[:* {:lib/expression-name "discounted-price"} [:field {} (meta/id :products :price)] 0.9]
                [:/ {:lib/expression-name "double-discount"} [:expression {} "discounted-price"] 2]]
               (lib/expressions query 0)))
-
       (is (empty? (lib/fields query 0)))
-
       (is (=? [[:and {}
                 [:> {} [:field {} (meta/id :orders :total)] 50]
                 [:or {}
                  [:= {} [:field {:join-alias "Products"} (meta/id :products :category)] "Widget"]
                  [:< {} [:expression {} "double-discount"] 10]]]]
               (lib/filters query 0)))
-
       (is (=? [[:count {:display-name "total-count"}]
                [:sum {:display-name "total-revenue"} [:field {} (meta/id :orders :total)]]
                [:avg {} [:field {:join-alias "Products"} (meta/id :products :price)]]]
               (lib/aggregations query 0)))
-
       (is (=? [[:field {:temporal-unit :month} (meta/id :orders :created-at)]
                [:field {:binning {:strategy :num-bins :num-bins 10}} (meta/id :orders :quantity)]]
               (lib/breakouts query 0)))
-
       (is (=? [[:desc {} [:field {:temporal-unit :month} (meta/id :orders :created-at)]]]
               (lib/order-bys query 0)))
-
       ;; Stage 1
       (is (=? [[:* {:lib/expression-name "doubled-count"}
                 [:field {} "total-count"]
                 2]]
               (lib/expressions query 1)))
-
       (is (=? [[:> {} [:field {} "total-revenue"] 1000]]
               (lib/filters query 1)))
-
       (is (=? [[:asc {} [:field {} "total-revenue"]]]
               (lib/order-bys query 1)))
-
       (is (empty? (lib/fields query 1)))
-
       ;; Stage 2
       (is (=? [[:< {} [:field {} "doubled-count"] 500]]
               (lib/filters query 2)))
-
       (is (empty? (lib/fields query 2)))
-
       (is (= 25 (lib/current-limit query 2))))))
 
 #_{:clj-kondo/ignore [:metabase/i-like-making-cams-eyes-bleed-with-horrifically-long-tests]}
@@ -926,7 +933,6 @@
                                       :source-name "PRODUCTS"}
                                      {:type :column
                                       :name "double-discount"}]}
-
                            ;; Stage 1
                            {:expressions [{:name  "half-discount"
                                            :value {:type     :operator
@@ -942,7 +948,6 @@
                                                    :name "half-discount"}
                                                   {:type  :literal
                                                    :value 1000}]}]}
-
                            ;; Stage 2
                            {:filters [{:type     :operator
                                        :operator :<
@@ -952,57 +957,44 @@
                                                    :value 500}]}]
 
                             :limit 25}]})]
-
       (is (= 3 (lib/stage-count query)))
-
       ;; Stage 0
       (is (=? [{:strategy :left-join
                 :alias "Products"}
                {:strategy :inner-join
                 :alias "People - User"}]
               (lib/joins query 0)))
-
       (is (=? [[:* {:lib/expression-name "discounted-price"} [:field {} (meta/id :products :price)] 0.9]
                [:/ {:lib/expression-name "double-discount"} [:expression {} "discounted-price"] 2]]
               (lib/expressions query 0)))
-
       (is (=? [[:field {} (meta/id :orders :total)]
                [:field {:join-alias "Products"} (meta/id :products :category)]
                [:expression {} "double-discount"]
                [:expression {} "discounted-price"]]
               (lib/fields query 0)))
-
       (is (=? [[:and {}
                 [:> {} [:field {} (meta/id :orders :total)] 50]
                 [:or {}
                  [:= {} [:field {:join-alias "Products"} (meta/id :products :category)] "Widget"]
                  [:< {} [:expression {} "double-discount"] 10]]]]
               (lib/filters query 0)))
-
       (is (empty? (lib/aggregations query 0)))
       (is (empty? (lib/breakouts query 0)))
-
       (is (=? [[:desc {} [:field {} (meta/id :orders :created-at)]]]
               (lib/order-bys query 0)))
-
       ;; Stage 1
       (is (=? [[:/ {:lib/expression-name "half-discount"}
                 [:field {} "double-discount"]
                 4]]
               (lib/expressions query 1)))
-
       (is (=? [[:> {} [:expression {} "half-discount"] 1000]]
               (lib/filters query 1)))
-
       (is (empty? (lib/order-bys query 1)))
       (is (empty? (lib/fields query 1)))
-
       ;; Stage 2
       (is (=? [[:< {} [:field {} "half-discount"] 500]]
               (lib/filters query 2)))
-
       (is (empty? (lib/fields query 2)))
-
       (is (= 25 (lib/current-limit query 2))))))
 
 (deftest ^:parallel test-native-query-basic-test
@@ -1026,7 +1018,6 @@
                                                  :display-name "Venue Name"}}})]
       (is (=? (lib/raw-native-query query)
               "SELECT * FROM venues WHERE name = {{venue_name}}"))
-
       (is (=? {"venue_name" {:type         :text
                              :name         "venue_name"
                              :display-name "Venue Name"}}
@@ -1075,7 +1066,6 @@
                                                 :display-name "Is Active"}}})]
       (is (=? (lib/raw-native-query query)
               "SELECT * FROM users WHERE active = {{is_active}}"))
-
       (is (=? {"is_active" {:type         :boolean
                             :name         "is_active"
                             :display-name "Is Active"}}
@@ -1094,7 +1084,6 @@
                                                       :widget-type  :text}}})]
       (is (=? (lib/raw-native-query query)
               "SELECT * FROM venues WHERE {{category_filter}}"))
-
       (is (=? {"category_filter" {:type         :dimension
                                   :name         "category_filter"
                                   :display-name "Category Filter"
@@ -1114,7 +1103,6 @@
                                                 :dimension    (meta/id :orders :created-at)}}})]
       (is (=? (lib/raw-native-query query)
               "SELECT * FROM orders WHERE {{date_unit}}"))
-
       (is (=? {"date_unit" {:type         :temporal-unit
                             :name         "date_unit"
                             :display-name "Date Unit"
@@ -1133,7 +1121,6 @@
                                                           :snippet-name "my-snippet"}}})]
       (is (=? (lib/raw-native-query query)
               "SELECT * FROM {{snippet: my-snippet}}"))
-
       (is (=? {"snippet: my-snippet" {:type         :snippet
                                       :name         "snippet: my-snippet"
                                       :display-name "My Snippet"
@@ -1152,7 +1139,6 @@
                                            :card-id      1}}})]
       (is (=? (lib/raw-native-query query)
               "SELECT * FROM {{#123}}"))
-
       (is (=? {"#123" {:type         :card
                        :name         "#123"
                        :display-name "Card 123"
@@ -1178,7 +1164,6 @@
                                                       :widget-type  :text}}})]
       (is (=? (lib/raw-native-query query)
               "SELECT * FROM venues WHERE name = {{name}} AND price > {{min_price}} AND {{category_filter}}"))
-
       (is (=? {"name"            {:type         :text
                                   :name         "name"
                                   :display-name "Name"}
@@ -1205,7 +1190,6 @@
                                                  :required     true}}})]
       (is (=? (lib/raw-native-query query)
               "SELECT * FROM venues WHERE name = {{venue_name}}"))
-
       (is (=? {"venue_name" {:type         :text
                              :name         "venue_name"
                              :display-name "Custom Name"
@@ -1239,7 +1223,6 @@
                                                  :required     true}}})]
       (is (=? (lib/raw-native-query query)
               "SELECT * FROM venues WHERE name = {{venue_name}}"))
-
       (is (=? {"venue_name" {:type         :text
                              :name         "venue_name"
                              :display-name "Custom Name"
@@ -1262,7 +1245,6 @@
                                                  :required     true}}})]
       (is (=? (lib/raw-native-query query)
               "SELECT * FROM venues [WHERE name = {{venue_name}}]"))
-
       (is (=? {"venue_name" {:type         :text
                              :name         "venue_name"
                              :display-name "Custom Name"

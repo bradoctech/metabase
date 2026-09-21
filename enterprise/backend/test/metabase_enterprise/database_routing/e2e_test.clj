@@ -5,8 +5,11 @@
    [clojure.string :as str]
    [clojure.test :refer [deftest is testing]]
    [clojurewerkz.quartzite.conversion :as qc]
+   [metabase-enterprise.database-routing.common :as common]
    [metabase-enterprise.test :as met]
    [metabase.app-db.core :as mdb]
+   [metabase.config.core :as config]
+   [metabase.database-routing.core :as database-routing]
    [metabase.driver :as driver]
    [metabase.driver.settings :as driver.settings]
    [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
@@ -45,6 +48,47 @@
    (fn [^java.sql.Connection conn]
      (jdbc/execute! {:connection conn} [statement]))))
 
+(defmacro with-routing-setup!
+  "Stands up a router + destination databases for a routing test.
+
+  - `router-binding` → a synced `:model/Database` (real H2, `my_database_name` table). Owns the
+    metadata; queries compile against it.
+  - Each destination → a `[binding name]` pair. `binding` → a `:model/Database` with its own real H2 DB,
+    inserted with `:router_database_id` set, not synced.
+      - inserted, not flipped: `router_database_id` is immutable after insert.
+      - not synced: routing runs the router-compiled SQL against the destination's connection.
+      - `name` must equal the user's routing attribute: destinations resolve by name.
+  - Caller wires the `:model/DatabaseRouter` and attributes. Each destination binding is a usable DB map.
+
+    (with-routing-setup! [router-db [[dest-1 \"destination-db-1\"]
+                                     [dest-2 \"destination-db-2\"]]]
+      ...)"
+  {:style/indent 1}
+  [[router-binding destinations] & body]
+  (letfn [(wrap-destinations [dests body]
+            (if (empty? dests)
+              `(do ~@body)
+              (let [[sym name] (first dests)]
+                ;; Real H2 DB for this destination, via `with-blank-db`. Discard the normal DB row it
+                ;; registers; the destination is a separate row, inserted prod-shaped below.
+                `(one-off-dbs/with-blank-db
+                   (let [details# (:details (data/db))]
+                     (doseq [statement# ["CREATE USER IF NOT EXISTS GUEST PASSWORD 'guest';"
+                                         "SET DB_CLOSE_DELAY -1;"
+                                         "CREATE TABLE \"my_database_name\" (str TEXT NOT NULL);"
+                                         "GRANT ALL ON \"my_database_name\" TO GUEST;"]]
+                       (jdbc/execute! one-off-dbs/*conn* [statement#]))
+                     (mt/with-temp [:model/Database ~sym
+                                    {:engine             :h2
+                                     :name               ~name
+                                     :details            details#
+                                     :router_database_id (u/the-id ~router-binding)}]
+                       ~(wrap-destinations (rest dests) body)))))))]
+    ;; Router: a normal synced DB, exactly as `with-temp-dbs!` builds one.
+    `(with-temp-dbs! [~router-binding]
+       (sync/sync-database! ~router-binding)
+       ~(wrap-destinations destinations body))))
+
 (deftest destination-databases-get-used
   (mt/with-premium-features #{:database-routing}
     (binding [driver.settings/*allow-testing-h2-connections* true]
@@ -79,6 +123,93 @@
                   (is (= [["destination-2"]] (mt/rows response))))
                 (let [response (mt/user-http-request :crowberto :post 202 (str "card/" (u/the-id card) "/query"))]
                   (is (= [["router"]] (mt/rows response))))))))))))
+
+;; The reported exploit, verbatim: POST /api/dataset with a destination's id and a native query.
+;; Before the fix this returned the destination's rows (a cross-tenant leak); it must be rejected,
+;; in production too. Exercises the real HTTP surface, above the QP-level test below.
+(deftest direct-destination-query-via-dataset-endpoint-is-forbidden-test
+  (testing "POST /api/dataset at a destination id is rejected, not leaked"
+    (mt/with-premium-features #{:database-routing}
+      (binding [driver.settings/*allow-testing-h2-connections* true]
+        (with-temp-dbs! [router-db destination-db]
+          (t2/update! :model/Database (u/the-id destination-db)
+                      {:name "destination-db" :router_database_id (u/the-id router-db)})
+          (sync/sync-database! router-db)
+          (mt/with-temp [:model/DatabaseRouter _ {:database_id    (u/the-id router-db)
+                                                  :user_attribute "db_name"}]
+            (execute-statement! destination-db "INSERT INTO \"my_database_name\" (str) VALUES ('tenant-b-secret')")
+            (let [exploit {:database (u/the-id destination-db)
+                           :type     :native
+                           :native   {:query "SELECT str FROM \"my_database_name\""}}]
+              (doseq [prod? [false true]]
+                (testing (str "config/is-prod? = " prod?)
+                  (with-redefs [config/is-prod? prod?]
+                    ;; :crowberto is a superuser -> permissions never block; the routing guard must.
+                    (let [response (mt/user-http-request :crowberto :post 403 "dataset" exploit)]
+                      (is (re-find #"(?i)cannot query a destination database directly" (str response)))
+                      (is (not (str/includes? (str response) "tenant-b-secret"))
+                          "the destination's rows must not appear in the response"))))))))))))
+
+;; Must hold in production too, where the dev-only connection-pool harness is disabled; a query-level
+;; guard, not the harness and not permissions, has to reject a directly-submitted destination id.
+(deftest direct-destination-database-access-is-forbidden-test
+  (testing "a directly-submitted destination id is rejected"
+    (mt/with-premium-features #{:database-routing}
+      (binding [driver.settings/*allow-testing-h2-connections* true]
+        (met/with-user-attributes! :rasta {"db_name" "destination-db"}
+          (with-temp-dbs! [router-db destination-db]
+            ;; wiring an already-created (perm-carrying) DB as a destination mirrors the vulnerable
+            ;; state: the destination retains permissions, so perms alone do not block access.
+            (t2/update! :model/Database (u/the-id destination-db)
+                        {:name "destination-db" :router_database_id (u/the-id router-db)})
+            (sync/sync-database! router-db)
+            (mt/with-temp [:model/DatabaseRouter _ {:database_id    (u/the-id router-db)
+                                                    :user_attribute "db_name"}]
+              (execute-statement! destination-db "INSERT INTO \"my_database_name\" (str) VALUES ('secret')")
+              (let [table-id      (t2/select-one-pk :model/Table :db_id (u/the-id router-db))
+                    ;; native (the reported exploit) and MBQL. MBQL exercises the setup-layer check:
+                    ;; the destination has no synced tables, so without an early reject the query would
+                    ;; die later with a confusing "table not found" instead of a clean 403.
+                    direct-queries {:native {:database (u/the-id destination-db)
+                                             :type     :native
+                                             :native   {:query "SELECT str FROM \"my_database_name\""}}
+                                    :mbql   {:database (u/the-id destination-db)
+                                             :type     :query
+                                             :query    {:source-table table-id}}}]
+                (doseq [prod?           [false true]
+                        [qtype a-query] direct-queries]
+                  (testing (str "config/is-prod? = " prod? ", query type = " qtype)
+                    (with-redefs [config/is-prod? prod?]
+                      ;; :crowberto is a superuser -> resolves to most-permissive perms on every database,
+                      ;; so the permission layer never blocks; the routing invariant must.
+                      (mt/with-test-user :crowberto
+                        (is (thrown-with-msg?
+                             clojure.lang.ExceptionInfo
+                             #"(?i)cannot query a destination database directly"
+                             (qp/process-query a-query)))))))))))))))
+
+;; The connection-pool guard is the backstop for non-query paths (sync, actions, downloads); it must
+;; fire in production too, so exercise it directly rather than through the query pipeline.
+(deftest check-allowed-access-blocks-destinations-in-prod-test
+  (testing "connection-pool backstop rejects direct destination access"
+    (mt/with-premium-features #{:database-routing}
+      (binding [driver.settings/*allow-testing-h2-connections* true]
+        (with-temp-dbs! [router-db destination-db]
+          (t2/update! :model/Database (u/the-id destination-db)
+                      {:name "destination-db" :router_database_id (u/the-id router-db)})
+          (mt/with-temp [:model/DatabaseRouter _ {:database_id    (u/the-id router-db)
+                                                  :user_attribute "db_name"}]
+            (with-redefs [config/is-prod? true]
+              (testing "direct destination access is forbidden"
+                (is (thrown-with-msg?
+                     clojure.lang.ExceptionInfo
+                     #"(?i)cannot query a destination database directly"
+                     (common/check-allowed-access! (u/the-id destination-db)))))
+              (testing "destination access is allowed inside a routing-on context (legit routed query)"
+                (is (nil? (database-routing/with-database-routing-on
+                            (common/check-allowed-access! (u/the-id destination-db))))))
+              (testing "the router database itself is not treated as a forbidden destination"
+                (is (nil? (common/check-allowed-access! (u/the-id router-db))))))))))))
 
 (deftest an-error-is-thrown-if-user-attribute-is-missing-or-no-match
   (mt/with-premium-features #{:database-routing}
@@ -125,7 +256,6 @@
             (execute-statement! destination-db "INSERT INTO \"my_database_name\" (str) VALUES ('destination')")
             (mt/with-temp [:model/DatabaseRouter _ {:database_id (u/the-id router-db)
                                                     :user_attribute "db_name"}]
-
               (mt/with-test-user :crowberto
                 (is (= [["router"]]
                        (-> (qp/process-query {:database (u/the-id router-db)

@@ -127,7 +127,6 @@
             (is (nil? (:email-smtp-username response)))
             (is (nil? (:email-smtp-password response)))
             (is (= 123 (:email-smtp-port response)))
-
             (is (nil? (setting/get-value-of-type :string :email-smtp-username)))
             (is (nil? (setting/get-value-of-type :string :email-smtp-password)))
             (is (= 123 (setting/get-value-of-type :integer :email-smtp-port)))))))))
@@ -155,3 +154,17 @@
                     :email-smtp-username nil
                     :email-smtp-password nil}
                    (email-settings)))))))))
+
+(deftest endpoints-require-authentication-test
+  ;; +auth must reject before the handler's :setting permission check, so anon callers
+  ;; get 401 rather than 403.
+  (testing "/api/email endpoints reject unauthenticated callers"
+    (testing "PUT /api/email"
+      (is (= "Unauthenticated"
+             (mt/client :put 401 "email" default-email-settings))))
+    (testing "DELETE /api/email"
+      (is (= "Unauthenticated"
+             (mt/client :delete 401 "email"))))
+    (testing "POST /api/email/test"
+      (is (= "Unauthenticated"
+             (mt/client :post 401 "email/test"))))))

@@ -6,11 +6,14 @@ import { Databases } from "metabase/entities/databases";
 import { Fields } from "metabase/entities/fields";
 import { Segments } from "metabase/entities/segments";
 import { Tables } from "metabase/entities/tables";
+import { entityCompatibleQuery } from "metabase/entities/utils";
 import { isProduction } from "metabase/env";
-import { entityCompatibleQuery } from "metabase/lib/entities";
-import { createThunkAction, fetchData } from "metabase/lib/redux";
+import { createThunkAction } from "metabase/redux";
 import { RevisionsApi } from "metabase/services";
+import { hasRemappedParameterValues } from "metabase-lib/v1/parameters/utils/parameter-source";
 import { normalizeParameter } from "metabase-lib/v1/parameters/utils/parameter-values";
+
+export * from "metabase/redux/metadata-typed";
 
 // NOTE: All of these actions are deprecated. Use metadata entities directly.
 
@@ -112,34 +115,15 @@ export const updateFieldDimension = (fieldId, dimension) => {
 };
 
 export const FETCH_REVISIONS = "metabase/metadata/FETCH_REVISIONS";
-export const fetchRevisions = createThunkAction(
-  FETCH_REVISIONS,
-  (type, id, reload = false) => {
-    return async (dispatch, getState) => {
-      const requestStatePath = ["revisions", type, id];
-      const existingStatePath = ["revisions"];
-      const getData = async () => {
-        return {
-          type,
-          id,
-          revisions: await RevisionsApi.get({
-            id,
-            entity: type === "metric" ? "legacy-metric" : type,
-          }),
-        };
-      };
-
-      return await fetchData({
-        dispatch,
-        getState,
-        requestStatePath,
-        existingStatePath,
-        getData,
-        reload,
-      });
-    };
-  },
-);
+export const fetchRevisions = createThunkAction(FETCH_REVISIONS, (type, id) => {
+  return async () => {
+    const revisions = await RevisionsApi.get({
+      id,
+      entity: type === "metric" ? "legacy-metric" : type,
+    });
+    return { type, id, revisions };
+  };
+});
 
 export const FETCH_SEGMENT_FIELDS = "metabase/metadata/FETCH_SEGMENT_FIELDS";
 export const fetchSegmentFields = createThunkAction(
@@ -197,18 +181,21 @@ export const fetchRemapping = createThunkAction(
   FETCH_REMAPPING,
   ({ parameter, value, field, cardId, dashboardId, uuid, token }) =>
     async (dispatch, getState) => {
+      if (field != null && field.hasRemappedValue(value)) {
+        return;
+      }
+
       if (
-        field == null ||
-        field.remappedField() == null ||
-        field.hasRemappedValue(value)
+        parameter == null ||
+        !hasRemappedParameterValues(parameter, field ? [field] : [])
       ) {
         return;
       }
 
       const entityIdentifier = uuid ?? token ?? null;
-
-      if (dashboardId != null && parameter != null) {
-        const remapping = await entityCompatibleQuery(
+      let remapping;
+      if (dashboardId != null) {
+        remapping = await entityCompatibleQuery(
           {
             ...(entityIdentifier
               ? { entityIdentifier }
@@ -220,11 +207,8 @@ export const fetchRemapping = createThunkAction(
           dashboardApi.endpoints.getRemappedDashboardParameterValue,
           { forceRefetch: false },
         );
-        if (remapping != null) {
-          dispatch(addRemappings(field.id, [remapping]));
-        }
-      } else if (cardId != null && parameter != null) {
-        const remapping = await entityCompatibleQuery(
+      } else if (cardId != null) {
+        remapping = await entityCompatibleQuery(
           {
             ...(entityIdentifier ? { entityIdentifier } : { card_id: cardId }),
             parameter_id: parameter.id,
@@ -234,11 +218,10 @@ export const fetchRemapping = createThunkAction(
           cardApi.endpoints.getRemappedCardParameterValue,
           { forceRefetch: false },
         );
-        if (remapping != null) {
-          dispatch(addRemappings(field.id, [remapping]));
-        }
-      } else if (parameter != null) {
-        const remapping = await entityCompatibleQuery(
+      } else if (field != null) {
+        // Field-based remapping (e.g. FK display fields). Static-list sources
+        // carry their [value, label] pairs inline and need no network call.
+        remapping = await entityCompatibleQuery(
           {
             parameter: normalizeParameter(parameter),
             field_ids: [field.id],
@@ -248,9 +231,16 @@ export const fetchRemapping = createThunkAction(
           datasetApi.endpoints.getRemappedParameterValue,
           { forceRefetch: false },
         );
-        if (remapping != null) {
-          dispatch(addRemappings(field.id, [remapping]));
-        }
       }
+
+      if (remapping == null) {
+        return;
+      }
+
+      if (field != null) {
+        dispatch(addRemappings(field.id, [remapping]));
+      }
+
+      return remapping;
     },
 );

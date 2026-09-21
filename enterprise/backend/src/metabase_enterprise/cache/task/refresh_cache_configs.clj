@@ -99,7 +99,9 @@
   (let [queries
         (for [{:keys [model model_id config]} cache-configs]
           (let [rerun-cutoff (duration-ago config)]
+            ^:allow-subquery
             {:nest
+             ^:allow-subquery
              {:select   [[:q.query :query]
                          [:qc.query_hash :cache-hash]
                          [:qe.card_id :card-id]
@@ -122,14 +124,14 @@
                          (if parameterized?
                            [:and
                             [:= :qe.parameterized true]
-                             ;; Only rerun a parameterized query if it's had a cache hit within the last caching window
+                            ;; Only rerun a parameterized query if it's had a cache hit within the last caching window
                             [:= :qe.cache_hit true]
-                             ;; Don't factor the last cache refresh into whether we should rerun a parameterized query
+                            ;; Don't factor the last cache refresh into whether we should rerun a parameterized query
                             [:not= :qe.context (name :cache-refresh)]]
                            [:= :qe.parameterized false])]
               :group-by [:q.query_hash :q.query :qc.query_hash :qe.card_id :qe.dashboard_id]}}))]
     {:select [:u.query :u.cache-hash :u.card-id :u.dashboard-id :u.count]
-     :from   [[{:union queries} :u]]}))
+     :from   [[^:allow-subquery {:union queries} :u]]}))
 
 (defn- select-parameterized-queries
   "Given a list of parameterized query definitions from the Query table with additional :count and :card-id keys,

@@ -20,8 +20,10 @@
    [metabase.driver.sql.query-processor :as sql.qp]
    [metabase.driver.sync :as driver.s]
    [metabase.util.honey-sql-2 :as h2x]
+   [metabase.util.i18n :refer [tru]]
    [metabase.util.malli :as mu]
-   [metabase.util.performance :refer [mapv]])
+   [metabase.util.performance :refer [mapv]]
+   [next.jdbc])
   (:import
    (java.sql Connection SQLException SQLTimeoutException)))
 
@@ -51,8 +53,19 @@
 ;;; |                                     Default SQL JDBC metabase.driver impls                                     |
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
+(def ^:private disallowed-additional-opts
+  "JDBC connection properties that are not needed to connect to a warehouse and are rejected for every
+  SQL-JDBC driver. Matched case-insensitively against the raw `additional-options` string."
+  #"(?i)(?:socketFactory|sslfactory|sslhostnameverifier|sslpasswordcallback|xmlFactoryFactory|loggerFile)")
+
+(defmethod driver/validate-db-details! :sql-jdbc
+  [_driver details]
+  (when-let [match (some->> (:additional-options details) (re-find disallowed-additional-opts))]
+    (throw (ex-info "Potentially dangerous keys in additional options" {:disallowed-key match}))))
+
 (defmethod driver/can-connect? :sql-jdbc
   [driver details]
+  (driver/validate-db-details! driver details)
   (sql-jdbc.conn/can-connect? driver details))
 
 (defmethod driver/table-rows-seq :sql-jdbc
@@ -72,6 +85,7 @@
   (boolean (seq (sql-jdbc.execute/set-timezone-sql driver))))
 
 (defmethod driver/database-supports? [:sql-jdbc :jdbc/statements] [_driver _feature _db] true)
+(defmethod driver/database-supports? [:sql-jdbc :jdbc/set-query-timeout] [_driver _feature _db] true)
 
 (defmethod driver/db-default-timezone :sql-jdbc
   [driver database]
@@ -299,11 +313,36 @@
             exclusion-patterns] (driver.s/db-details->schema-filter-patterns database)]
        (into #{} (sql-jdbc.sync/filtered-syncable-schemas driver conn (.getMetaData conn) inclusion-patterns exclusion-patterns))))))
 
+(defmulti set-role-statement
+  "SQL for setting the active role for a Connection, such as USE ROLE or equivalent, for the given driver.
+
+  The currently open `java.sql.Connection` is provided so we can use things like
+
+  ```sql
+  SELECT quote_ident(?)
+  ```
+
+  to quote identifiers as needed.
+
+  This may either return a raw SQL string, or `[sql & args]` to be passed in to a parameterized statement. It is
+  preferable to pass the role separately whenever possible to prevent possible SQL injection issues."
+  {:added "0.61.0" :arglists '([driver ^java.sql.Connection connection ^String role])}
+  driver/dispatch-on-initialized-driver
+  :hierarchy #'driver/hierarchy)
+
+(defmethod set-role-statement :default
+  [driver _connection role]
+  ;; fall back to implementations of the deprecated `:sql` driver method
+  #_{:clj-kondo/ignore [:deprecated-var]}
+  (driver.sql/set-role-statement driver role))
+
 (defmethod driver/set-role! :sql-jdbc
-  [driver conn role]
-  (let [sql (driver.sql/set-role-statement driver role)]
-    (with-open [stmt (.createStatement ^Connection conn)]
-      (.execute stmt sql))))
+  [driver ^Connection conn role]
+  (let [sql-args (set-role-statement driver conn role)
+        sql-args (if (string? sql-args)
+                   [sql-args]
+                   sql-args)]
+    (next.jdbc/execute! conn sql-args)))
 
 (defmethod driver/current-user-table-privileges :sql-jdbc
   [driver database & {:as args}]
@@ -396,22 +435,22 @@
          (let [init-result (try
                              (driver/init-workspace-isolation! driver database test-workspace)
                              (catch Exception e
-                               (throw (ex-info (format "Failed to initialize workspace isolation (CREATE SCHEMA/USER): %s"
-                                                       (ex-message e))
+                               (throw (ex-info (tru "Failed to initialize workspace isolation (CREATE SCHEMA/USER): {0}"
+                                                    (ex-message e))
                                                {:step :init} e))))
                workspace-with-details (merge test-workspace init-result)]
            (when test-table
              (try
                (driver/grant-workspace-read-access! driver database workspace-with-details [test-table])
                (catch Exception e
-                 (throw (ex-info (format "Failed to grant read access to table %s.%s: %s"
-                                         (:schema test-table) (:name test-table) (ex-message e))
+                 (throw (ex-info (tru "Failed to grant read access to table {0}.{1}: {2}"
+                                      (:schema test-table) (:name test-table) (ex-message e))
                                  {:step :grant :table test-table} e)))))
            (try
              (driver/destroy-workspace-isolation! driver database workspace-with-details)
              (catch Exception e
-               (throw (ex-info (format "Failed to destroy workspace isolation (DROP SCHEMA/USER): %s"
-                                       (ex-message e))
+               (throw (ex-info (tru "Failed to destroy workspace isolation (DROP SCHEMA/USER): {0}"
+                                    (ex-message e))
                                {:step :destroy} e)))))
          nil
          (catch Exception e

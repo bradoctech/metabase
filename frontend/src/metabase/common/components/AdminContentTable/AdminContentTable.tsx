@@ -1,3 +1,4 @@
+import cx from "classnames";
 import { type ReactNode, useCallback, useRef } from "react";
 
 import AdminS from "metabase/css/admin.module.css";
@@ -5,9 +6,11 @@ import AdminS from "metabase/css/admin.module.css";
 export const AdminContentTable = ({
   columnTitles,
   children,
+  className,
 }: {
   columnTitles: ReactNode[];
   children: ReactNode;
+  className?: string;
 }) => {
   const activeRowRef = useRef<HTMLTableRowElement | null>(null);
 
@@ -35,7 +38,10 @@ export const AdminContentTable = ({
   );
 
   return (
-    <table data-testid="admin-content-table" className={AdminS.ContentTable}>
+    <table
+      data-testid="admin-content-table"
+      className={cx(AdminS.ContentTable, className)}
+    >
       <thead>
         <tr>
           {columnTitles &&

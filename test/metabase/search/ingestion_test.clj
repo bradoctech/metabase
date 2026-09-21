@@ -3,12 +3,17 @@
    [clojure.core.cache :as cache]
    [clojure.test :refer :all]
    [metabase.lib-be.metadata.jvm :as metadata.jvm]
+   [metabase.lib.convert :as lib.convert]
+   [metabase.lib.core :as lib]
+   [metabase.lib.metadata :as lib.metadata]
    [metabase.lib.metadata.protocols :as lib.metadata.protocols]
    [metabase.search.core :as search]
    [metabase.search.engine :as search.engine]
    [metabase.search.ingestion :as search.ingestion]
    [metabase.search.spec :as search.spec]
-   [metabase.test :as mt]))
+   [metabase.test :as mt]
+   [metabase.util.json :as json]
+   [toucan2.core :as t2]))
 
 (deftest extract-model-and-id
   (is (= ["action" "1895"] (#'search.ingestion/extract-model-and-id ["action" [:= 1895 :this.id]])))
@@ -29,7 +34,6 @@
       (with-redefs [search.spec/spec spec-fn]
         (is (= "Test Name Test Description"
                (#'search.ingestion/searchable-text record))))))
-
   (testing "searchable-text with map format and transforms"
     (let [spec-fn              (constantly {:search-terms {:name        search.spec/explode-camel-case
                                                            :description true}})
@@ -39,7 +43,6 @@
       (with-redefs [search.spec/spec spec-fn]
         (is (= "CamelCaseTest Camel Case Test Simple description"
                (#'search.ingestion/searchable-text record))))))
-
   (testing "searchable-text filters out blank values"
     (let [spec-fn (constantly {:search-terms [:name :description :empty-field]})
           record  {:model       "test"
@@ -60,7 +63,6 @@
       (with-redefs [search.spec/spec spec-fn]
         (is (= "[card]\nname: Sales Dashboard\ndescription: Shows quarterly sales data"
                (#'search.ingestion/embeddable-text record))))))
-
   (testing "embeddable-text with map format"
     (let [spec-fn (constantly {:search-terms {:name        true
                                               :description true}})
@@ -70,7 +72,6 @@
       (with-redefs [search.spec/spec spec-fn]
         (is (= "[dashboard]\nname: Test Dashboard\ndescription: A test dashboard"
                (#'search.ingestion/embeddable-text record))))))
-
   (testing "embeddable-text filters out blank values"
     (let [spec-fn (constantly {:search-terms [:name :description :empty-field]})
           record  {:model       "card"
@@ -80,7 +81,6 @@
       (with-redefs [search.spec/spec spec-fn]
         (is (= "[card]\nname: Test Card"
                (#'search.ingestion/embeddable-text record))))))
-
   (testing "embeddable-text does not apply transform functions"
     (let [spec-fn (constantly {:search-terms {:name search.spec/explode-camel-case}})
           record  {:model "table"
@@ -90,11 +90,58 @@
                (#'search.ingestion/embeddable-text record))
             "Transformation functions should not be applied to embeddable text for semantic search")))))
 
+(deftest execute-all-function-attrs-test
+  (testing "function-attr returning a map merges its keys into the document"
+    (let [spec {:attrs {:temporal-info {:fn       (constantly {:has_temporal_dim true :non_temporal_dim_ids "[1 2]"})
+                                        :provides [:has-temporal-dim :non-temporal-dim-ids]}}}]
+      (is (= {:has_temporal_dim true :non_temporal_dim_ids "[1 2]"}
+             (#'search.ingestion/execute-all-function-attrs spec {})))))
+  (testing "function-attr without :provides falls back to writing snake_case attr-key on non-map results"
+    (let [spec {:attrs {:native-query {:fn (constantly "SELECT 1")}}}]
+      (is (= {:native_query "SELECT 1"}
+             (#'search.ingestion/execute-all-function-attrs spec {})))))
+  (testing "function-attr with :provides skips writing when result is not a map"
+    (let [spec {:attrs {:temporal-info {:fn       (fn [_] (throw (ex-info "boom" {})))
+                                        :provides [:has-temporal-dim :non-temporal-dim-ids]}}}]
+      (is (= {} (#'search.ingestion/execute-all-function-attrs spec {}))))))
+
+(deftest execute-all-function-attrs-metric-reference-cycle-test
+  (testing "a card whose metric references form a cycle yields a document without temporal keys, instead of throwing (#74954)"
+    (letfn [(metric-query [metric-id]
+              {:database (mt/id)
+               :type     :query
+               :query    {:source-table (mt/id :orders)
+                          :aggregation  [["metric" metric-id]]}})]
+      ;; keep the cyclic cards out of the shared ingestion queue, where concurrently-running tests would index them
+      (binding [search.ingestion/*disable-updates* true]
+        (mt/with-temp
+          [:model/Card
+           {a-id :id}
+           {:name "Metric A"
+            :type :metric
+            :dataset_query (let [mp (mt/metadata-provider)]
+                             (-> (lib/query mp (lib.metadata/table mp (mt/id :orders)))
+                                 (lib/aggregate (lib/count))
+                                 lib.convert/->legacy-MBQL))}
+           :model/Card
+           {b-id :id}
+           {:name "Metric B"
+            :type :metric
+            :dataset_query (metric-query a-id)}]
+          ;; close the cycle A -> B -> A; nothing rejects reference cycles at write time
+          (t2/update! :model/Card a-id {:dataset_query (metric-query b-id)})
+          (let [result (#'search.ingestion/execute-all-function-attrs
+                        (search.spec/spec "card")
+                        {:dataset_query (json/encode (metric-query a-id))
+                         :query_type    "query"})]
+            (is (map? result))
+            (is (not (contains? result :has_temporal_dim)))
+            (is (not (contains? result :non_temporal_dim_ids)))))))))
+
 (deftest search-term-columns-test
   (testing "search-term-columns with vector format"
     (is (= #{:name :description}
            (set (#'search.ingestion/search-term-columns [:name :description])))))
-
   (testing "search-term-columns with map format"
     (is (= #{:name :description}
            (set (#'search.ingestion/search-term-columns {:name identity

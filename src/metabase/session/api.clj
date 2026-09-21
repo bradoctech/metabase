@@ -20,6 +20,7 @@
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
    [metabase.util.malli.schema :as ms]
+   [metabase.util.password :as u.password]
    [throttle.core :as throttle]
    [toucan2.core :as t2]))
 
@@ -136,7 +137,8 @@
       (do-login)
       (http-401-on-error
         (throttle/with-throttling [(login-throttlers :ip-address) ip-address
-                                   (login-throttlers :username)   username]
+                                   ;; normalized so case-permuting the username can't dodge the throttle
+                                   (login-throttlers :username)   (u/lower-case-en username)]
           (do-login))))))
 
 ;; TODO (Cam 2025-11-25) please add a response schema to this API endpoint, it makes it easier for our customers to
@@ -149,9 +151,13 @@
   [_route-params _query-params _body {:keys [metabase-session-key], :as _request}]
   (api/check-404 (not-empty metabase-session-key))
   (let [session-key-hashed (session/hash-session-key metabase-session-key)
-        rows-deleted (t2/delete! :model/Session {:where [:or [:= :key_hashed session-key-hashed] [:= :id metabase-session-key]]})]
-    (api/check-404 (> rows-deleted 0))
-    (request/clear-session-cookie api/generic-204-no-content)))
+        rows-deleted (t2/delete! :model/Session :key_hashed session-key-hashed)]
+    ;; clear the cookie even when no row matched (e.g. a session hashed under a previous secret), or the browser
+    ;; would keep resending the dead cookie
+    (request/clear-session-cookie
+     (if (pos? rows-deleted)
+       api/generic-204-no-content
+       {:status 404, :body "Not found."}))))
 
 ;; Reset tokens: We need some way to match a plaintext token with the a user since the token stored in the DB is
 ;; hashed. So we'll make the plaintext token in the format USER-ID_RANDOM-UUID, e.g.
@@ -161,20 +167,35 @@
 ;; There's also no need to salt the token because it's already random <3
 
 (def ^:private forgot-password-throttlers
-  {:email      (throttle/make-throttler :email :attempts-threshold 3 :attempt-ttl-ms 1000)
+  ;; :attempt-ttl-ms was 1000ms (1 second) instead of 1 hour, letting one email get bombed with
+  ;; reset emails indefinitely at ~3/second
+  {:email      (throttle/make-throttler :email :attempts-threshold 3 :attempt-ttl-ms (* 1000 60 60))
    :ip-address (throttle/make-throttler :email :attempts-threshold 50)})
 
-(defn- password-reset-disabled?
+(defn- sso-password-reset-disabled?
   "Disable password reset for users whose SSO provider is still active — they should use SSO.
    When a provider is no longer available (e.g., after license downgrade), allow password reset
-   so users aren't locked out.
+   so users aren't locked out."
+  [sso-source]
+  (and (some? sso-source)
+       (sso/sso-source-enabled? sso-source)))
 
-   Always disable password reset for support-access users."
-  [user-id sso-source]
-  (cond
-    (t2/exists? :model/AuthIdentity :user_id user-id :provider "support-access-grant") true
-    (some? sso-source) (sso/sso-source-enabled? sso-source)
-    :else false))
+(defn- refresh-support-access-token!
+  "Refresh the reset token on an existing support-access-grant AuthIdentity, preserving the grant
+   binding. Returns the new plaintext token, or nil if the grant has expired."
+  [user-id]
+  (when-let [auth-identity (t2/select-one :model/AuthIdentity
+                                          :user_id user-id
+                                          :provider "support-access-grant")]
+    (let [grant-ends-at (get-in auth-identity [:credentials :grant_ends_at])]
+      (when (and grant-ends-at (t/before? (t/instant) (t/instant grant-ends-at)))
+        (let [token (auth-identity/generate-reset-token user-id)]
+          (t2/update! :model/AuthIdentity (:id auth-identity)
+                      {:credentials {:token_hash   (u.password/hash-bcrypt token)
+                                     :expires_at   (t/plus (t/instant) (t/hours 48))
+                                     :grant_ends_at grant-ends-at
+                                     :consumed_at  nil}})
+          token)))))
 
 (defn- forgot-password-impl
   [email]
@@ -185,14 +206,26 @@
                (t2/select-one [:model/User :id :sso_source :is_active]
                               :%lower.email
                               (u/lower-case-en email))]
-      ;; If user uses any *enabled* SSO method to log in, no need to generate a reset token.
-      (if (password-reset-disabled? user-id sso-source)
+      (cond
+        ;; SSO users should use their SSO provider, not password reset.
+        (sso-password-reset-disabled? sso-source)
         (messages/send-password-reset-email! email sso-source nil is-active?)
+
+        ;; Support-access users get a refreshed token bound to the grant.
+        ;; If the grant has expired, refresh-support-access-token! returns nil and we silently
+        ;; do nothing (same as a nonexistent account).
+        (t2/exists? :model/AuthIdentity :user_id user-id :provider "support-access-grant")
+        (when-let [reset-token (refresh-support-access-token! user-id)]
+          (let [password-reset-url (str (system/site-url) "/auth/reset_password/" reset-token)]
+            (messages/send-password-reset-email! email nil password-reset-url is-active?)))
+
+        ;; Normal password reset.
+        :else
         (let [reset-token        (auth-identity/create-password-reset! user-id)
               password-reset-url (str (system/site-url) "/auth/reset_password/" reset-token)]
           (messages/send-password-reset-email! email nil password-reset-url is-active?)))
       (events/publish-event! :event/password-reset-initiated
-                             {:object (assoc user :token (t2/select-one-fn :reset_token :model/User :id user-id))}))))
+                             {:object (assoc user :token (auth-identity/reset-token-hash user-id))}))))
 
 ;; TODO (Cam 10/28/25) -- fix this endpoint route to use kebab-case for consistency with the rest of our REST API
 ;;
@@ -211,7 +244,7 @@
   ;; Don't leak whether the account doesn't exist, just pretend everything is ok
   (let [request-source (request/ip-address request)]
     (throttle-check (forgot-password-throttlers :ip-address) request-source))
-  (throttle-check (forgot-password-throttlers :email) email)
+  (throttle-check (forgot-password-throttlers :email) (u/lower-case-en email))
   (forgot-password-impl email)
   api/generic-204-no-content)
 
@@ -230,16 +263,19 @@
   "Reset password with a reset token."
   [_route-params
    _query-params
-   request-body :- [:map
+   ;; This body has exactly two fields. Request decoding drops every other key before the handler
+   ;; runs, so only these two reach it.
+   request-body :- [:map {:closed true}
                     [:token    ms/NonBlankString]
                     [:password ms/ValidPassword]]
    request]
   (let [request-source (request/ip-address request)]
     (throttle-check reset-password-throttler request-source))
+  ;; Forward only what the reset providers consume -- belt and braces alongside the decoding above.
   (let [auth-result (auth-identity/with-fallback auth-identity/login!
                       [:provider/support-access-grant
                        :provider/emailed-secret-password-reset]
-                      request-body)]
+                      (select-keys request-body [:token :password]))]
     (if (:success? auth-result)
       (request/set-session-cookies request
                                    {:success true :session_id (get-in auth-result [:session :key])}

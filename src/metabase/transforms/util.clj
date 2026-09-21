@@ -9,14 +9,19 @@
    [clojure.string :as str]
    [metabase.api.common :as api]
    [metabase.driver :as driver]
+   [metabase.driver.connection :as driver.conn]
+   [metabase.driver.settings :as driver.settings]
    [metabase.driver.sql-jdbc :as sql-jdbc]
    [metabase.driver.util :as driver.u]
    [metabase.models.interface :as mi]
-   [metabase.models.transforms.transform-run :as transform-run]
+   [metabase.query-processor.middleware.permissions :as qp.perms]
    [metabase.query-processor.pipeline :as qp.pipeline]
+   [metabase.query-processor.preprocess :as qp.preprocess]
+   [metabase.query-processor.setup :as qp.setup]
    [metabase.transforms-base.util :as transforms-base.u]
    [metabase.transforms.canceling :as canceling]
    [metabase.transforms.feature-gating :as transforms.gating]
+   [metabase.transforms.models.transform-run :as transform-run]
    [metabase.transforms.settings :as transforms.settings]
    [metabase.util :as u]
    [toucan2.core :as t2])
@@ -41,30 +46,81 @@
   (when (api/is-data-analyst?)
     (transforms.gating/enabled-source-types)))
 
+(defn- source-query-permissions-ok?
+  "Whether the current user may run a query transform's source `query`, per the query processor's own permission
+  check. The query is preprocessed first so references that only appear after expansion (cards, snippets) are
+  checked too. Throws when no user is bound: every caller must establish one, a scheduled run included."
+  [query]
+  (when-not api/*current-user-id*
+    (throw (ex-info "A transform needs to be run with a bound user"
+                    {})))
+  (try
+    (qp.setup/with-qp-setup [query query]
+      (qp.perms/check-query-permissions* (qp.preprocess/preprocess query))
+      true)
+    (catch clojure.lang.ExceptionInfo e
+      ;; Only a permission refusal makes the source unreadable. A source that fails to preprocess for any
+      ;; other reason (a missing required parameter, a malformed query) cannot run at all, and rejecting it
+      ;; is left to validation and execution, which report the specific problem.
+      (let [data (ex-data e)]
+        (not (or (:permissions-error? data)
+                 (= 403 (:status-code data))))))))
+
 (defn source-tables-readable?
   "Check if the source tables/database in a transform are readable by the current user.
   Returns true if the user can query all source tables (for python transforms) or the
-  source database (for query transforms)."
+  source database (for query transforms). Returns false if the referenced source database
+  no longer exists."
+  ([transform] (source-tables-readable? transform nil))
+  ([transform models-cache]
+   (let [resolve* (fn [model id]
+                    (if models-cache
+                      (get-in models-cache [model id])
+                      (t2/select-one model id)))
+         source   (:source transform)]
+     (case (keyword (:type source))
+       :query
+       (if-let [db-id (get-in source [:query :database])]
+         (if-let [db (resolve* :model/Database db-id)]
+           (and (boolean (mi/can-query? db))
+                (source-query-permissions-ok? (:query source)))
+           false)
+         false)
+
+       :python
+       (let [source-tables (:source-tables source)]
+         (if (empty? source-tables)
+           true
+           (let [table-ids (into [] (keep :table_id) source-tables)]
+             (and (seq table-ids)
+                  (every? (fn [table-id]
+                            (when-let [table (resolve* :model/Table table-id)]
+                              (mi/can-query? table)))
+                          table-ids)))))
+
+       (throw (ex-info (str "Unknown transform source type: " (:type source)) {}))))))
+
+(defn check-source-query-permissions!
+  "Throw a 403 unless the current user may run `transform`'s source query -- see
+  [[source-query-permissions-ok?]]. Requires a bound user; the execution path binds the user the run
+  executes as before calling.
+
+  Transforms compile and run their source query directly rather than through `qp.execute/run`, so the check is
+  made here."
   [transform]
-  (let [source (:source transform)]
-    (case (keyword (:type source))
-      :query
-      (if-let [db-id (get-in source [:query :database])]
-        (boolean (mi/can-query? (t2/select-one :model/Database db-id)))
-        false)
+  (api/check-403 (source-query-permissions-ok? (get-in transform [:source :query])))
+  nil)
 
-      :python
-      (let [source-tables (:source-tables source)]
-        (if (empty? source-tables)
-          true
-          (let [table-ids (into [] (keep :table_id) source-tables)]
-            (and (seq table-ids)
-                 (every? (fn [table-id]
-                           (when-let [table (t2/select-one :model/Table table-id)]
-                             (mi/can-query? table)))
-                         table-ids)))))
-
-      (throw (ex-info (str "Unknown transform source type: " (:type source)) {})))))
+(defn prefetch-source-models
+  "Bulk-load the source databases and tables referenced by `transforms` into a
+  `{:model/Database {id db} :model/Table {id table}}` map"
+  [transforms]
+  (let [db-ids    (into #{} (keep #(get-in % [:source :query :database])) transforms)
+        table-ids (into #{} (mapcat #(keep :table_id (get-in % [:source :source-tables]))) transforms)]
+    {:model/Database (when (seq db-ids)
+                       (u/index-by :id (t2/select :model/Database :id [:in db-ids])))
+     :model/Table    (when (seq table-ids)
+                       (u/index-by :id (t2/select :model/Table :id [:in table-ids])))}))
 
 (defn add-source-readable
   "Add :source_readable field to a transform or collection of transforms.
@@ -114,15 +170,26 @@
   [run-id transform driver {:keys [db-id conn-spec output-schema]} run-transform! & {:keys [ex-message-fn] :or {ex-message-fn ex-message}}]
   ;; local run is responsible for status, using canceling lifecycle
   (try
-    (when-not (driver/schema-exists? driver db-id output-schema)
+    (when-not (or (str/blank? output-schema)
+                  (driver/schema-exists? driver db-id output-schema))
       (driver/create-schema-if-needed! driver conn-spec output-schema))
-    (let [source-range-params (transforms-base.u/get-source-range-params transform)]
+    (let [source-range-params  (transforms-base.u/get-source-range-params transform)
+          transform-timeout    (transforms.settings/transform-timeout)
+          transform-timeout-ms (u/minutes->ms transform-timeout)]
       (transforms-base.u/save-run-checkpoint-range! run-id source-range-params)
-      (canceling/chan-start-timeout-vthread! run-id (transforms.settings/transform-timeout))
+      (canceling/chan-start-timeout-vthread! run-id transform-timeout)
       (let [cancel-chan (a/promise-chan)
-            ret (binding [qp.pipeline/*canceled-chan* cancel-chan]
-                  (canceling/chan-start-run! run-id cancel-chan)
-                  (run-transform! cancel-chan source-range-params))]
+            ret (driver.conn/with-transform-connection
+                  ;; Route through the `:transform` JDBC pool, whose `unreturnedConnectionTimeout` will be set
+                  ;; from the `*query-timeout-ms*` binding below at pool-creation time. This keeps the default
+                  ;; pool's leak-detector at `MB_DB_QUERY_TIMEOUT_MINUTES` for all non-transform traffic.
+                  (binding [qp.pipeline/*canceled-chan*          cancel-chan
+                            driver.settings/*query-timeout-ms*   transform-timeout-ms
+                            ;; Match the query timeout so a single slow socket read (or a driver that waits for
+                            ;; the full server-side query) does not get killed before the transform's own deadline.
+                            driver.settings/*network-timeout-ms* (max driver.settings/*network-timeout-ms* transform-timeout-ms)]
+                    (canceling/chan-start-run! run-id cancel-chan)
+                    (run-transform! cancel-chan source-range-params)))]
         (transforms-base.u/save-watermark! (:id transform) source-range-params)
         (transform-run/succeed-started-run! run-id)
         ret))

@@ -18,8 +18,11 @@
    [metabase.test.http-client :as client]
    [metabase.upload.impl-test :as upload-test]
    [metabase.util :as u]
+   [metabase.util.quick-task :as quick-task]
    [metabase.warehouse-schema-rest.api.table :as api.table]
-   [toucan2.core :as t2]))
+   [toucan2.core :as t2])
+  (:import
+   (java.util.concurrent Executors)))
 
 (set! *warn-on-reflection* true)
 
@@ -53,7 +56,6 @@
     :settings                    {}
     :cache_ttl                   nil
     :provider_name               nil
-    :workspace_permissions_status nil
     :is_audit                    false}))
 
 (defn- table-defaults
@@ -91,7 +93,7 @@
     field
     [:created_at :fingerprint :fingerprint_version :fk_target_field_id :id :last_analyzed :updated_at
      :database_required :database_is_auto_increment :database_is_pk :database_is_generated :database_is_nullable
-     :entity_id])))
+     :entity_id :dimension_interestingness])))
 
 (deftest ^:parallel list-table-test
   (testing "GET /api/table"
@@ -235,7 +237,6 @@
                                    (juxt :schema :name)
                                    :object
                                    second)))))))
-
         (testing "returns 404 for tables that don't exist"
           (mt/user-http-request :rasta :get 404 (format "table/%d/data" 133713371337)))))))
 
@@ -266,7 +267,7 @@
                                        :visibility_type            "normal"
                                        :has_field_values           "none"
                                        :database_required          false
-                                     ;; Index sync is turned off across the application as it is not used ATM.
+                                       ;; Index sync is turned off across the application as it is not used ATM.
                                        #_#_:database_indexed           true
                                        :database_is_auto_increment true
                                        :name_field                 {:base_type "type/Text",
@@ -347,7 +348,7 @@
                                        :base_type        "type/BigInteger"
                                        :effective_type   "type/BigInteger"
                                        :has_field_values "none"
-                                     ;; Index sync is turned off across the application as it is not used ATM.
+                                       ;; Index sync is turned off across the application as it is not used ATM.
                                        #_#_:database_indexed  true
                                        :database_required false
                                        :database_is_auto_increment true
@@ -473,32 +474,26 @@
       (mt/with-temp [:model/Table table {}]
         (testing "Initially data_authority should be unconfigured"
           (is (= :unconfigured (t2/select-one-fn :data_authority :model/Table :id (u/the-id table)))))
-
         (testing "Can save an unrelated change with this field redundantly included"
           (mt/user-http-request :crowberto :put 200 (format "table/%d" (u/the-id table))
                                 {:active false, :data_authority "unconfigured"})
           (is (= :unconfigured (t2/select-one-fn :data_authority :model/Table :id (u/the-id table)))))
-
         (testing "Can set data_authority to authoritative"
           (mt/user-http-request :crowberto :put 200 (format "table/%d" (u/the-id table))
                                 {:data_authority "authoritative"})
           (is (= :authoritative (t2/select-one-fn :data_authority :model/Table :id (u/the-id table)))))
-
         (testing "Can set data_authority between different values"
           (mt/user-http-request :crowberto :put 200 (format "table/%d" (u/the-id table))
                                 {:data_authority "computed"})
           (is (= :computed (t2/select-one-fn :data_authority :model/Table :id (u/the-id table)))))
-
         (testing "Can set data_authority to ingested"
           (mt/user-http-request :crowberto :put 200 (format "table/%d" (u/the-id table))
                                 {:data_authority "ingested"})
           (is (= :ingested (t2/select-one-fn :data_authority :model/Table :id (u/the-id table)))))
-
         (testing "Cannot un-configure again"
           (is (= "Cannot set data_authority back to unconfigured once it has been configured"
                  (mt/user-http-request :crowberto :put 400 (format "table/%d" (u/the-id table))
                                        {:data_authority "unconfigured"}))))
-
         (testing "Cannot set data_authority to unknown via API"
           (is (= [:data_authority]
                  (keys (:errors (mt/user-http-request :crowberto :put 400 (format "table/%d" (u/the-id table))
@@ -511,10 +506,8 @@
       (t2/query-one {:update :metabase_table
                      :set    {:data_authority "federated"}
                      :where  [:= :id (:id table)]})
-
       (testing "Unexpected values are converted to :unknown"
         (is (= :unknown (t2/select-one-fn :data_authority [:model/Table :data_authority] :id (:id table)))))
-
       (testing "API GET endpoint returns :unknown for tables with unknown data_authority"
         (let [api-response (mt/user-http-request :crowberto :get 200 (format "table/%d" (:id table)))]
           (is (= "unknown" (:data_authority api-response))))))))
@@ -552,7 +545,6 @@
                         (mt/user-http-request :crowberto :put 200 (format "table/%d" (:id table))
                                               {:display_name (mt/random-name)
                                                :description  "What a nice table!"})))]
-
               (set-visibility! "hidden")
               (set-visibility! nil)     ; <- should get synced
               (is (= 1
@@ -570,7 +562,6 @@
                 (set-name!)
                 (is (= 2
                        @called)))))))))
-
   (testing "Bulk updating visibility"
     (let [unhidden-ids (atom #{})]
       (mt/with-temp [:model/Table {id-1 :id} {}
@@ -583,7 +574,6 @@
                                             {:ids ids :visibility_type state})))]
             (set-many-vis! [id-1 id-2] nil) ;; unhides only 2
             (is (= @unhidden-ids #{id-2}))
-
             (set-many-vis! [id-1 id-2] "hidden")
             (is (= #{}
                    @unhidden-ids)) ;; no syncing when they are hidden
@@ -669,7 +659,7 @@
                                 :effective_type    "type/BigInteger"
                                 :has_field_values  "none"
                                 :database_required false
-                              ;; Index sync is turned off across the application as it is not used ATM.
+                                ;; Index sync is turned off across the application as it is not used ATM.
                                 #_#_:database_indexed  true
                                 :database_is_auto_increment true
                                 :name_field        {:base_type "type/Text",
@@ -743,7 +733,7 @@
                                        :database_id   (mt/id)
                                        :dataset_query {:database (mt/id)
                                                        :type     :native
-                                                       :native   {:query (format "SELECT NAME, ID, PRICE, LATITUDE FROM VENUES")}}}]
+                                                       :native   {:query "SELECT NAME, ID, PRICE, LATITUDE FROM VENUES"}}}]
         ;; run the Card which will populate its result_metadata column
         (mt/user-http-request :crowberto :post 202 (format "card/%d/query" (u/the-id card)))
         ;; Now fetch the metadata for this "table"
@@ -859,7 +849,7 @@
                                        :database_id   (mt/id)
                                        :dataset_query {:database (mt/id)
                                                        :type     :native
-                                                       :native   {:query (format "SELECT NAME, LAST_LOGIN FROM USERS")}}}]
+                                                       :native   {:query "SELECT NAME, LAST_LOGIN FROM USERS"}}}]
         (let [card-virtual-table-id (str "card__" (u/the-id card))]
           ;; run the Card which will populate its result_metadata column
           (mt/user-http-request :crowberto :post 202 (format "card/%d/query" (u/the-id card)))
@@ -1056,13 +1046,11 @@
                  (mt/user-http-request :rasta :post 403 url)))
           (testing "FieldValues should still exist"
             (is (t2/exists? :model/FieldValues :id (u/the-id field-values)))))
-
         (testing "Admins should be able to successfuly delete them"
           (is (= {:status "success"}
                  (mt/user-http-request :crowberto :post 200 url)))
           (testing "FieldValues should be gone"
             (is (not (t2/exists? :model/FieldValues :id (u/the-id field-values))))))))
-
     (testing "For tables that don't exist, we should return a 404."
       (is (= "Not found."
              (mt/user-http-request :crowberto :post 404 (format "table/%d/discard_values" Integer/MAX_VALUE)))))))
@@ -1201,7 +1189,10 @@
       (mt/with-premium-features #{:audit-app}
         (mt/with-temp [:model/Database {db-id :id} {:engine "h2", :details (:details (mt/db))}
                        :model/Table    table       {:db_id db-id :schema "PUBLIC"}]
-          (with-redefs [sync/sync-table! (deliver-when-tbl sync-called? table)]
+          ;; `with-redefs` would restore `sync-table!` when the request returns, before the async sync runs.
+          ;; `submit-task!` is stubbed so the sync doesn't queue behind other tasks on the 1-thread executor.
+          (mt/with-dynamic-fn-redefs [quick-task/submit-task! future-call
+                                      sync/sync-table!        (deliver-when-tbl sync-called? table)]
             (mt/user-http-request :crowberto :post 200 (format "table/%d/sync_schema" (u/the-id table))))))
       (testing "sync called?"
         (is (true?
@@ -1211,18 +1202,27 @@
   (testing "POST /api/table/:id/sync_schema"
     (testing "User with manage-table-metadata permission can sync table"
       (let [sync-called? (promise)
-            timeout (* 10 1000)]
-        (mt/with-premium-features #{:audit-app}
-          (mt/with-temp [:model/Database {db-id :id} {:engine "h2", :details (:details (mt/db))}
-                         :model/Table    table       {:db_id db-id :schema "PUBLIC"}]
-            (mt/with-no-data-perms-for-all-users!
-              ;; Grant only manage-table-metadata permission for this table
-              (data-perms/set-table-permission! (perms-group/all-users) (:id table) :perms/manage-table-metadata :yes)
-              (with-redefs [sync/sync-table! (deliver-when-tbl sync-called? table)]
-                (mt/user-http-request :rasta :post 200 (format "table/%d/sync_schema" (u/the-id table)))
-                (testing "sync called?"
-                  (is (true?
-                       (deref sync-called? timeout :sync-never-called))))))))))))
+            timeout (* 10 1000)
+            ;; Isolated pool: the shared one is process-wide and holds fire-and-forget tasks left behind by
+            ;; earlier tests, each with the default two-hour timeout. One of those still running ahead of
+            ;; this sync starves it past the deref below, which is what happens on driver CI, where those
+            ;; leftover tasks are real syncs over the network.
+            pool (Executors/newSingleThreadExecutor)]
+        (try
+          (mt/with-premium-features #{:audit-app}
+            (mt/with-temp [:model/Database {db-id :id} {:engine "h2", :details (:details (mt/db))}
+                           :model/Table    table       {:db_id db-id :schema "PUBLIC"}]
+              (mt/with-no-data-perms-for-all-users!
+                ;; Grant only manage-table-metadata permission for this table
+                (data-perms/set-table-permission! (perms-group/all-users) (:id table) :perms/manage-table-metadata :yes)
+                (with-redefs [quick-task/executor (delay pool)]
+                  (mt/with-dynamic-fn-redefs [sync/sync-table! (deliver-when-tbl sync-called? table)]
+                    (mt/user-http-request :rasta :post 200 (format "table/%d/sync_schema" (u/the-id table)))
+                    (testing "sync called?"
+                      (is (true?
+                           (deref sync-called? timeout :sync-never-called)))))))))
+          (finally
+            (.shutdownNow pool)))))))
 
 (deftest sync-schema-mirror-database-test
   (testing "POST /api/table/:id/sync_schema"
@@ -1285,12 +1285,9 @@
                  {:display_name "Products"}
                  {:display_name "Products2"}]
                 (list-tables :term "P")))
-
         (mt/user-http-request :crowberto :put 200 (format "table/%d" products2-id) {:data_layer "final"})
-
         (is (=? [{:display_name "Products2"}]
                 (list-tables :term "P" :data-layer "final")))
-
         (is (=? [{:display_name "People"}
                  {:display_name "Products"}]
                 (list-tables :term "P" :data-layer "internal")))))))
@@ -1303,13 +1300,11 @@
                               {:visibility_type "hidden"})
         (is (= :hidden (t2/select-one-fn :data_layer :model/Table :id (u/the-id table))))
         (is (= :hidden (t2/select-one-fn :visibility_type :model/Table :id (u/the-id table)))))
-
       (testing "updating data_layer syncs to visibility_type"
         (mt/user-http-request :crowberto :put 200 (format "table/%d" (u/the-id table))
                               {:data_layer "internal"})
         (is (= :internal (t2/select-one-fn :data_layer :model/Table :id (u/the-id table))))
         (is (= nil (t2/select-one-fn :visibility_type :model/Table :id (u/the-id table)))))
-
       (testing "cannot update both visibility_type and data_layer at once"
         (is (= "Cannot update both visibility_type and data_layer"
                (mt/user-http-request :crowberto :put 400 (format "table/%d" (u/the-id table))
@@ -1337,14 +1332,12 @@
                       (filter #(= (:db_id %) db-id))
                       (map :id)
                       set))))
-
         (testing "both tables returned with orphan-only=false"
           (is (= #{table-1-id table-2-id}
                  (->> (mt/user-http-request :crowberto :get 200 "table" :orphan-only false)
                       (filter #(= (:db_id %) db-id))
                       (map :id)
                       set))))
-
         (testing "only table-2 is returned with orphan-only=true"
           (is (= #{table-2-id}
                  (->> (mt/user-http-request :crowberto :get 200 "table" :orphan-only true)
@@ -1369,12 +1362,53 @@
           (is (= (mt/id :continent :id)
                  (get-fk-target))))
         (is (= 1 (count (mt/user-http-request :rasta :get 200 (format "table/%d/fks" (mt/id :continent))))))
-
         ;; 2. drop the country table
         (jdbc/execute! db-spec "DROP TABLE country;")
         (sync/sync-database! db {:scan :schema})
-
         (is (= () (mt/user-http-request :rasta :get 200 (format "table/%d/fks" (mt/id :continent)))))))))
+
+(deftest get-fks-only-returns-readable-origin-fields-test
+  (testing "GET /api/table/:id/fks does not leak Fields belonging to Tables the caller cannot read"
+    (mt/with-no-data-perms-for-all-users!
+      ;; readable: the Table in the URL, which the FKs point at. unreadable: checkins, where they come from.
+      (data-perms/set-table-permission! (perms-group/all-users) (mt/id :users) :perms/view-data :unrestricted)
+      (data-perms/set-table-permission! (perms-group/all-users) (mt/id :users) :perms/create-queries :query-builder)
+      (testing "sanity: the caller can read the destination Table but not the origin one"
+        (is (=? {:id (mt/id :users)}
+                (mt/user-http-request :rasta :get 200 (format "table/%d" (mt/id :users)))))
+        (is (= "You don't have permissions to do that."
+               (mt/user-http-request :rasta :get 403 (format "table/%d" (mt/id :checkins))))))
+      (testing "an admin still sees the checkins.user_id -> users.id relationship"
+        (is (contains? (set (map :origin_id (mt/user-http-request :crowberto :get 200 (format "table/%d/fks" (mt/id :users)))))
+                       (mt/id :checkins :user_id))))
+      (testing "the caller gets nothing for it"
+        (is (= [] (mt/user-http-request :rasta :get 200 (format "table/%d/fks" (mt/id :users)))))))))
+
+(deftest update-table-collection-id-is-held-to-the-publish-bar-test
+  (testing "PUT /api/table/:id publishes a Table into a collection, so it takes more than metadata write permission"
+    (mt/with-temp [:model/Collection {plain-collection-id :id} {}
+                   :model/Table      {table-id :id}            {:db_id (mt/id) :schema "PUBLIC"}]
+      (testing "the destination has to be a Library/Data collection"
+        (is (= "Tables can only be published to Library/Data collections."
+               (mt/user-http-request :crowberto :put 400 (format "table/%d" table-id)
+                                     {:collection_id plain-collection-id})))
+        (is (nil? (t2/select-one-fn :collection_id :model/Table :id table-id))))
+      (testing "a destination that does not exist is a 404"
+        (is (= "Not found."
+               (mt/user-http-request :crowberto :put 404 (format "table/%d" table-id)
+                                     {:collection_id Integer/MAX_VALUE}))))
+      (testing "the rest of the body still applies on its own"
+        (is (=? {:display_name "Renamed"}
+                (mt/user-http-request :crowberto :put 200 (format "table/%d" table-id)
+                                      {:display_name "Renamed"}))))))
+  (testing "publishing into a Library/Data collection still works -- the Data Studio Library 'Move' action uses it"
+    (mt/with-temp [:model/Collection {data-collection-id :id} {:type "library-data"}
+                   :model/Table      {table-id :id}           {:db_id (mt/id) :schema "PUBLIC"}]
+      (is (=? {:collection_id data-collection-id}
+              (mt/user-http-request :crowberto :put 200 (format "table/%d" table-id)
+                                    {:collection_id data-collection-id})))
+      (is (= data-collection-id
+             (t2/select-one-fn :collection_id :model/Table :id table-id))))))
 
 ;;; ---------------------------------------- can-query and can-write filter tests ----------------------------------------
 
@@ -1394,7 +1428,6 @@
       (data-perms/set-table-permission! pg table-1-id :perms/create-queries :query-builder)
       ;; Grant only view-data to table-2 (not queryable)
       (data-perms/set-table-permission! pg table-2-id :perms/view-data :unrestricted)
-
       (let [response (->> (mt/user-http-request :rasta :get 200 "table" :can-query true)
                           (filter #(= (:db_id %) db-id)))]
         (is (= 1 (count response)))

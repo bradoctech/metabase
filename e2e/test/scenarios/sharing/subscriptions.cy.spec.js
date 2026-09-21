@@ -514,6 +514,28 @@ describe("scenarios > dashboard > subscriptions", () => {
       H.openDashboardMenu();
       H.popover().findByText("Subscriptions").should("be.visible");
     });
+
+    it("should persist the immutable Slack channel_id alongside the channel name", () => {
+      cy.intercept("POST", "/api/pulse").as("createPulse");
+
+      openSlackCreationForm();
+
+      cy.findByPlaceholderText("Pick a user or channel...").click();
+      H.popover().findByText("#work").click();
+
+      H.sidebar().findByRole("button", { name: "Done" }).click();
+
+      cy.wait("@createPulse").then(({ request: { body } }) => {
+        // The mocked channel `#work` has id `C001` in e2e-slack-helpers.js.
+        // Storing the immutable channel_id at save time is what makes the
+        // subscription survive future channel renames in Slack.
+        const slackChannel = body.channels.find(
+          (c) => c.channel_type === "slack",
+        );
+        expect(slackChannel.details.channel).to.eq("#work");
+        expect(slackChannel.details.channel_id).to.eq("C001");
+      });
+    });
   });
 
   describe("OSS email subscriptions", { tags: ["@OSS", "external"] }, () => {
@@ -667,7 +689,11 @@ describe("scenarios > dashboard > subscriptions", () => {
 
       cy.get(".container").within(() => {
         cy.findByText("Total Orders");
-        cy.findAllByText("18,760").should("have.length", 2);
+        // the scalar counts all orders, but the body-only Orders table is
+        // capped at the 2,000-row display limit so its truncation note no
+        // longer says 18,760 (GDGT-2773)
+        cy.findAllByText("18,760").should("have.length", 1);
+        cy.findByText("2,000");
       });
     });
 

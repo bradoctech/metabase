@@ -42,6 +42,10 @@
 
 (driver/register! :databricks, :parent :hive-like)
 
+(defmethod driver/host-carrying-parameters :databricks
+  [_driver]
+  ["ProxyHost" "OAuth2ConnAuthAuthorizationEndPoint" "OAuth2ConnAuthTokenEndpoint"])
+
 (doseq [[feature supported?] {:basic-aggregations              true
                               :binning                         true
                               :describe-fields                 true
@@ -66,6 +70,12 @@
     ((get-method sql-jdbc.sync/database-type->base-type :hive-like)
      driver database-type)))
 
+(defmethod driver/validate-db-details! :databricks
+  [_driver details]
+  (when-let [opts (not-empty (:additional-options details))]
+    (when (re-find #"(?i)VolumeOperationAllowedLocalPaths" opts)
+      (throw (Exception. "Potentially dangerous keys in connection details")))))
+
 (defn- catalog-present?
   [jdbc-spec catalog]
   (let [sql "select 0 from `system`.`information_schema`.`catalogs` where catalog_name = ?"]
@@ -73,6 +83,7 @@
 
 (defmethod driver/can-connect? :databricks
   [driver details]
+  (driver/validate-db-details! driver details)
   (sql-jdbc.conn/with-connection-spec-for-testing-connection [jdbc-spec [driver details]]
     (and (catalog-present? jdbc-spec (:catalog details))
          (sql-jdbc.conn/can-connect-with-spec? jdbc-spec))))
@@ -127,29 +138,32 @@
 
 (defmethod driver/describe-database* :databricks
   [driver database]
-  (try
-    {:tables
-     (let [[inclusion-patterns
-            exclusion-patterns] (driver.s/db-details->schema-filter-patterns database)
-           included? (fn [schema]
-                       (sql-jdbc.describe-database/include-schema-logging-exclusion inclusion-patterns exclusion-patterns schema))]
-       (into
-        #{}
-        (filter (comp included? :schema))
-        (sql-jdbc.execute/reducible-query database (get-tables-sql driver (driver.conn/effective-details database)))))}
-    (catch Throwable e
-      (throw (ex-info (format "Error in %s describe-database: %s" driver (ex-message e))
-                      {}
-                      e)))))
+  {:tables
+   (reify clojure.lang.IReduceInit
+     (reduce [_this rf init]
+       (try
+         (let [[inclusion-patterns
+                exclusion-patterns] (driver.s/db-details->schema-filter-patterns database)
+               included? (fn [schema]
+                           (sql-jdbc.describe-database/include-schema-logging-exclusion inclusion-patterns exclusion-patterns schema))]
+           (reduce rf init
+                   (eduction
+                    (filter (comp included? :schema))
+                    (sql-jdbc.execute/reducible-query database (get-tables-sql driver (driver.conn/effective-details database))))))
+         (catch Throwable e
+           (throw (ex-info (format "Error in %s describe-database: %s" driver (ex-message e))
+                           {}
+                           e))))))})
 
 (defn- schema-names-filter [schema-names multi-level-schema catalog-column schema-column]
   (when schema-names
     (if multi-level-schema
-      [:in [:composite catalog-column schema-column]
-       (map (comp (fn [catalog+schema]
-                    (into [:composite] catalog+schema))
-                  split-catalog+schema)
-            schema-names)]
+      ;; Use OR / AND because they are faster than IN for tuples on Databricks
+      (into [:or]
+            (map (fn [schema-name]
+                   (let [[catalog schema] (split-catalog+schema schema-name)]
+                     [:and [:= catalog-column catalog] [:= schema-column schema]])))
+            schema-names)
       [:in schema-column schema-names])))
 
 (defmethod sql-jdbc.sync/describe-fields-sql :databricks

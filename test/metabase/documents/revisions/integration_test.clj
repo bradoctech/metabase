@@ -82,7 +82,6 @@
                                                  :document {:type "doc" :content [{:type "paragraph" :content [{:type "text" :text "Initial content"}]}]}
                                                  :creator_id (mt/user->id :rasta)}]
       (create-document-revision! doc-id true :rasta)
-
       (testing "GET /api/revision/document/:id returns Document revisions"
         (let [revisions (get-document-revisions doc-id)]
           (is (= 1 (count revisions)))
@@ -92,11 +91,9 @@
             (is (= "created this." (:description revision)))
             (is (=? @rasta-revision-info (:user revision)))
             (is (= config/mb-version-string (:metabase_version revision))))))
-
       (testing "Multiple revisions are returned in correct order"
         (t2/update! :model/Document doc-id {:name "Updated Document"})
         (create-document-revision! doc-id false :rasta)
-
         (let [revisions (get-document-revisions doc-id)]
           (is (= 2 (count revisions)))
           (let [[latest-revision creation-revision] revisions]
@@ -111,15 +108,12 @@
                                                  :document {:type "doc" :content [{:type "paragraph" :content [{:type "text" :text "Original content"}]}]}
                                                  :creator_id (mt/user->id :rasta)}]
       (create-document-revision! doc-id true :rasta)
-
       (testing "Document can be updated and reverted"
         (t2/update! :model/Document doc-id {:name "Updated Document"
                                             :document {:type "doc" :content [{:type "paragraph" :content [{:type "text" :text "Updated content"}]}]}})
         (create-document-revision! doc-id false :rasta)
-
         (let [revisions (revision/revisions :model/Document doc-id)
               [_ {original-revision-id :id}] revisions]
-
           (testing "Revert via API endpoint"
             (let [revert-response (mt/user-http-request :rasta :post "revision/revert"
                                                         {:entity :document
@@ -128,13 +122,11 @@
               (is (:is_reversion revert-response))
               (is (= "reverted to an earlier version." (:description revert-response)))
               (is (=? @rasta-revision-info (:user revert-response)))))
-
           (testing "Document state is restored"
             (let [reverted-document (t2/select-one :model/Document :id doc-id)]
               (is (= "Original Document" (:name reverted-document)))
               (is (= {:type "doc" :content [{:type "paragraph" :content [{:type "text" :text "Original content"}]}]}
                      (:document reverted-document)))))
-
           (testing "Reversion creates new revision entry"
             (let [final-revisions (get-document-revisions doc-id)]
               (is (= 3 (count final-revisions)))
@@ -153,14 +145,11 @@
         (create-document-revision! (:id document) true :crowberto)
         (t2/update! :model/Document (:id document) {:name "Updated Private Document"})
         (create-document-revision! (:id document) false :crowberto)
-
         (let [document-id (u/the-id document)
               [_ {prev-rev-id :id}] (revision/revisions :model/Document document-id)]
-
           (testing "User without permissions cannot access revisions"
             (is (= "You don't have permissions to do that."
                    (mt/user-http-request :rasta :get 403 (format "revision/document/%d" document-id)))))
-
           (testing "User without permissions cannot revert"
             (is (= "You don't have permissions to do that."
                    (mt/user-http-request :rasta :post 403 "revision/revert"
@@ -173,7 +162,6 @@
     (mt/with-temp [:model/Document {doc-id :id} {:name "Cross-boundary Document"
                                                  :document {:type "doc" :content [{:type "paragraph" :content [{:type "text" :text "Enterprise content"}]}]}
                                                  :creator_id (mt/user->id :rasta)}]
-
       (testing "Document revisions work with OSS revision/revisions function"
         (create-document-revision! doc-id true :rasta)
         (let [revisions (revision/revisions :model/Document doc-id)]
@@ -182,17 +170,14 @@
           (let [revision (first revisions)]
             (is (= doc-id (:model_id revision)))
             (is (= "Document" (:model revision))))))
-
       (testing "Document revisions work with OSS revision API routes"
         (let [revisions-response (mt/user-http-request :rasta :get (format "revision/document/%d" doc-id))]
           (is (seq revisions-response))
           (is (every? #(contains? % :is_creation) revisions-response))
           (is (every? #(contains? % :description) revisions-response))))
-
       (testing "Document reversion integrates with OSS revert endpoint"
         (t2/update! :model/Document doc-id {:name "Modified Document"})
         (create-document-revision! doc-id false :rasta)
-
         (let [[_ {original-rev-id :id}] (revision/revisions :model/Document doc-id)
               revert-response (mt/user-http-request :rasta :post "revision/revert"
                                                     {:entity :document
@@ -212,13 +197,11 @@
         (mt/with-temp [:model/Document {doc-id :id, :as document} {:name "Event Test Document"
                                                                    :document {:type "doc" :content []}
                                                                    :creator_id (mt/user->id :rasta)}]
-
           (testing "Create event triggers revision creation"
             (events/publish-event! :event/document-create {:object document :user-id (mt/user->id :rasta)})
             (let [revision (t2/select-one :model/Revision :model "Document" :model_id doc-id)]
               (is revision)
               (is (:is_creation revision))))
-
           (testing "Update event triggers revision creation"
             (let [updated-document (assoc document :name "Updated Event Document")]
               (events/publish-event! :event/document-update {:object updated-document :user-id (mt/user->id :rasta)})
@@ -227,7 +210,6 @@
                 (let [latest-revision (first revisions)]
                   (is (not (:is_creation latest-revision)))
                   (is (= "Updated Event Document" (get-in latest-revision [:object :name])))))))
-
           (testing "Events were published correctly"
             (is (>= (count @events-received) 2))
             (is (some #(= :event/document-create (first %)) @events-received))
@@ -239,24 +221,65 @@
                                                  :document {:type "doc" :content [{:type "paragraph" :content [{:type "text" :text "Original content"}]}]}
                                                  :creator_id (mt/user->id :rasta)}]
       (create-document-revision! doc-id true :rasta)
-
       (testing "Name change produces correct diff and description"
         (t2/update! :model/Document doc-id {:name "Updated Title"})
         (create-document-revision! doc-id false :rasta)
-
         (let [revisions (get-document-revisions doc-id)
               update-revision (first revisions)]
           (is (= "Original Title" (get-in update-revision [:diff :before :name])))
           (is (= "Updated Title" (get-in update-revision [:diff :after :name])))
           (is (str/includes? (:description update-revision) "renamed"))))
-
       (testing "Content change produces diff"
         (t2/update! :model/Document doc-id {:document {:type "doc" :content [{:type "paragraph" :content [{:type "text" :text "New content"}]}]}})
         (create-document-revision! doc-id false :rasta)
-
         (let [revisions (get-document-revisions doc-id)
               content-revision (first revisions)]
           (is (= {:content [{:content [{:text "Original content"}]}]}
                  (get-in content-revision [:diff :before :document])))
           (is (= {:content [{:content [{:text "New content"}]}]}
                  (get-in content-revision [:diff :after :document]))))))))
+
+(deftest document-revert-cannot-resurrect-public-link-test
+  (testing "a curator cannot reinstate a revoked public link by reverting a revision (POST /api/revision/revert)"
+    (mt/with-temporary-setting-values [enable-public-sharing true]
+      (mt/with-temp [:model/Document {doc-id :id} {:name "Shared Document"
+                                                   :document {:type "doc" :content []}
+                                                   :creator_id (mt/user->id :crowberto)}]
+        (let [public-uuid (str (random-uuid))]
+          ;; an admin publishes the document, then it is edited
+          (t2/update! :model/Document doc-id {:public_uuid       public-uuid
+                                              :made_public_by_id (mt/user->id :crowberto)})
+          (create-document-revision! doc-id true :crowberto)
+          (testing "the stored revision does not carry the public sharing columns"
+            (let [object (t2/select-one-fn :object :model/Revision :model "Document" :model_id doc-id)]
+              (is (not (contains? object :public_uuid)))
+              (is (not (contains? object :made_public_by_id)))))
+          ;; Revisions are immutable, so insert one shaped the way it would have been recorded before those
+          ;; columns were excluded — that is the snapshot a curator would replay.
+          (let [rev-id (t2/insert-returning-pk! :model/Revision
+                                                :model        "Document"
+                                                :model_id     doc-id
+                                                :user_id      (mt/user->id :crowberto)
+                                                :object       (assoc (revision/serialize-instance
+                                                                      :model/Document doc-id
+                                                                      (t2/select-one :model/Document :id doc-id))
+                                                                     :public_uuid       public-uuid
+                                                                     :made_public_by_id (mt/user->id :crowberto))
+                                                :is_creation  false
+                                                :is_reversion false)]
+            (t2/update! :model/Document doc-id {:name              "Unshared Document"
+                                                :public_uuid       nil
+                                                :made_public_by_id nil})
+            (create-document-revision! doc-id false :crowberto)
+            (testing "reverting restores the content but leaves the link revoked"
+              (is (:is_reversion (mt/user-http-request :rasta :post "revision/revert"
+                                                       {:entity      :document
+                                                        :id          doc-id
+                                                        :revision_id rev-id})))
+              (let [reverted (t2/select-one :model/Document :id doc-id)]
+                (is (= "Shared Document" (:name reverted)))
+                (is (nil? (:public_uuid reverted)))
+                (is (nil? (:made_public_by_id reverted)))))
+            (testing "the document is no longer reachable by an anonymous visitor"
+              (is (= "Not found."
+                     (mt/client :get 404 (str "public/document/" public-uuid)))))))))))

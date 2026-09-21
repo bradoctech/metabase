@@ -1,7 +1,7 @@
 import type { NumberValue } from "d3-scale";
 
 import { render, screen } from "__support__/ui";
-import { measureTextWidth } from "metabase/lib/measure-text";
+import { measureTextWidth } from "metabase/utils/measure-text";
 
 import type { ChartFont } from "../../types/style";
 

@@ -551,7 +551,7 @@
 
 ;;; adapted from [[metabase.query-processor.explicit-joins-test/test-31769]]
 (deftest ^:parallel test-31769
-  (testing "Make sure queries built with MLv2 that have source Cards with joins work correctly (#31769) (#33083)"
+  (testing "Make sure queries built with Lib that have source Cards with joins work correctly (#31769) (#33083)"
     (let [mp    (lib.tu.mocks-31769/mock-metadata-provider meta/metadata-provider meta/id)
           query (lib.tu.mocks-31769/query mp)]
       (is (=? {:stages [{:source-card 1}
@@ -636,3 +636,8 @@
                     :lib/source-column-alias  "count"
                     :lib/desired-column-alias "count"}]
                   (qp.preprocess/query->expected-cols query))))))))
+
+(deftest ^:parallel remove-internal-keys-test
+  (testing "an internal namespaced key supplied in an incoming query does not survive preprocessing"
+    (is (not (contains? (qp.preprocess/preprocess (assoc (mt/mbql-query venues) :a/b 1))
+                        :a/b)))))

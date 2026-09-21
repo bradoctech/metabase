@@ -1,11 +1,12 @@
 // NOTE: this file is used on the frontend and backend and there are some
-// limitations. See frontend/src/metabase-shared/color_selector for details
+// limitations. On the backend it is bundled into the static-viz bundle and
+// called via getCellBackgroundColors; see frontend/src/metabase/static-viz/index.tsx.
 
 import Color from "color";
 
-import { isNumber } from "metabase/lib/types";
 import { alpha } from "metabase/ui/colors";
-import { getLinearColorScale, getSafeColor } from "metabase/ui/colors/scales";
+import { getSafeColor } from "metabase/ui/colors/safe-color";
+import { isNumber } from "metabase/utils/types";
 import type {
   ColumnFormattingOperator,
   ColumnFormattingSetting,
@@ -15,6 +16,8 @@ import type {
 } from "metabase-types/api";
 
 import type { Extent, Formatter } from "../types";
+
+import { getLinearColorScale } from "./color-scales";
 
 type Formatters = Record<string, Formatter[]>;
 
@@ -185,6 +188,9 @@ export function compileFormatter(
       return () => null;
     }
 
+    const lowerBound = Math.min(min, max);
+    const upperBound = Math.max(min, max);
+
     const scale = getLinearColorScale(
       [min, max],
       format.colors.map((c) => {
@@ -194,7 +200,7 @@ export function compileFormatter(
       }),
     ).clamp(true);
     return (value) => {
-      if (!isNumber(value)) {
+      if (!isNumber(value) || value < lowerBound || value > upperBound) {
         return null;
       }
       const colorValue = scale(value);

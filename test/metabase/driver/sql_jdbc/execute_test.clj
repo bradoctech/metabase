@@ -5,8 +5,10 @@
    [metabase.config.core :as config]
    [metabase.driver :as driver]
    [metabase.driver.connection :as driver.conn]
+   [metabase.driver.h2 :as h2]
    [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
    [metabase.test :as mt]
+   [metabase.test.data.interface :as tx]
    [metabase.util.malli.registry :as mr])
   (:import
    (java.sql Connection DatabaseMetaData)
@@ -17,6 +19,7 @@
                           (me/humanize (mr/explain sql-jdbc.execute/ConnectionOptions options)))
     nil                              nil
     {}                               nil
+    {:stream? true}                  nil
     {:session-timezone nil}          nil
     {:session-timezone "US/Pacific"} nil
     {:session-timezone "X"}          {:session-timezone ["invalid timezone ID: \"X\"" "timezone offset string literal"]}))
@@ -85,7 +88,7 @@
     #_{:clj-kondo/ignore [:metabase/disallow-hardcoded-driver-names-in-tests]}
     (mt/test-drivers (disj (descendants driver/hierarchy :sql-jdbc)
                            ;; too tricky to stub the connection
-                           :presto-jdbc :databricks :starburst)
+                           :presto-jdbc :databricks :starburst :clickhouse)
       (let [connection-option-calls (volatile! [])
             is-default-options
             (identical? (get-method sql-jdbc.execute/do-with-connection-with-options :sql-jdbc)
@@ -130,16 +133,13 @@
                           (let [ret (original-recursive-fn)]
                             (vswap! connection-option-calls conj [:recursive-connection-check ret])
                             ret)))]
-
           (driver/do-with-resilient-connection
            driver/*driver* (mt/id)
            (fn [driver _db]
              (let [result (sql-jdbc.execute/try-ensure-open-conn! driver closed-conn)]
                ;; Should return the new connection
                (is (identical? new-conn result))
-
                (is (some #(= % [:recursive-connection-check false]) @connection-option-calls))
-
                ;; Should have set connection options (since it's non-recursive)
                (when is-default-options
                  (let [calls @connection-option-calls]
@@ -155,13 +155,11 @@
                    (isClosed [_] false)
                    (isValid [_ _] true))]
         (is (true? (sql-jdbc.execute/is-conn-open? conn :check-valid? true)))))
-
     (testing "returns false when connection is closed"
       (let [conn (reify Connection
                    (isClosed [_] true)
                    (isValid [_ _] true))]
         (is (false? (sql-jdbc.execute/is-conn-open? conn :check-valid? true)))))
-
     (testing "closes connection and returns false when connection is open but not valid"
       (let [close-called? (atom false)
             conn (reify Connection
@@ -214,3 +212,79 @@
                    (fn [_conn] nil)))
                 (is (pos? (mt/metric-value system :metabase-db-connection/write-op
                                            {:connection-type "write-data"})))))))))))
+
+(deftest bad-connection-details-throw-client-error-test
+  (mt/test-drivers (mt/normal-driver-select {:+parent :sql-jdbc})
+    #_{:clj-kondo/ignore [:discouraged-var]}
+    (mt/with-temp [:model/Database tmp-db {:details (tx/bad-connection-details driver/*driver*)
+                                           :engine  driver/*driver*}]
+      ;; It's not straightforward to trigger a `.getConnection` error for some drivers (e.g. sqlite)
+      ;; so just mock the exception. Also need to mock this h2 method so that the query doesn't fail
+      ;; before it gets to `do-with-resolved-connection-data-source`.
+      (with-redefs [h2/check-read-only-statements (fn [_query] nil)
+                    sql-jdbc.execute/do-with-resolved-connection-data-source
+                    (fn [_driver _db-or-id-or-spec _options]
+                      (reify javax.sql.DataSource
+                        (getConnection [_]
+                          (throw (java.sql.SQLException. "connection error")))))]
+        (let [query    {:database (:id tmp-db)
+                        :type     :native
+                        :native   {:query "SELECT 1"}}
+              response (mt/user-http-request :crowberto :post 400 "dataset" query)]
+          (is (= "unable-to-acquire-connection" (:error_type response))))))))
+
+(deftest connection-pool-checkout-timeout-returns-503-test
+  (testing "A c3p0 checkout timeout (saturated pool) surfaces to the frontend as a retriable HTTP 503"
+    (mt/test-drivers (mt/normal-driver-select {:+parent :sql-jdbc})
+      #_{:clj-kondo/ignore [:discouraged-var]}
+      (mt/with-temp [:model/Database tmp-db {:details (tx/bad-connection-details driver/*driver*)
+                                             :engine  driver/*driver*}]
+        (with-redefs [h2/check-read-only-statements (fn [_query] nil)
+                      sql-jdbc.execute/do-with-resolved-connection-data-source
+                      (fn [_driver _db-or-id-or-spec _options]
+                        (reify javax.sql.DataSource
+                          (getConnection [_]
+                            (throw (java.sql.SQLException.
+                                    "An attempt by a client to checkout a Connection has timed out."
+                                    (com.mchange.v2.resourcepool.TimeoutException. "timed out"))))))]
+          (let [query    {:database (:id tmp-db)
+                          :type     :native
+                          :native   {:query "SELECT 1"}}
+                response (mt/user-http-request :crowberto :post 503 "dataset" query)]
+            (is (= "connection-pool-checkout-timeout" (:error_type response)))))))))
+
+(deftest checkout-queue-full?-test
+  (let [full? #'sql-jdbc.execute/checkout-queue-full?]
+    (testing "a limit of 0 (the default) disables the check even when many queries are waiting"
+      (mt/with-temporary-setting-values [jdbc-data-warehouse-connection-pool-max-pending-checkouts 0]
+        (is (false? (full? (reify com.mchange.v2.c3p0.PooledDataSource
+                             (getNumThreadsAwaitingCheckoutDefaultUser [_] 100)))))))
+    (testing "non-pooled data sources are never considered full"
+      (mt/with-temporary-setting-values [jdbc-data-warehouse-connection-pool-max-pending-checkouts 1]
+        (is (false? (full? (reify javax.sql.DataSource
+                             (getConnection [_] nil)))))))
+    (testing "full only once the waiting count reaches the limit"
+      (mt/with-temporary-setting-values [jdbc-data-warehouse-connection-pool-max-pending-checkouts 3]
+        (is (false? (full? (reify com.mchange.v2.c3p0.PooledDataSource
+                             (getNumThreadsAwaitingCheckoutDefaultUser [_] 2)))))
+        (is (true? (full? (reify com.mchange.v2.c3p0.PooledDataSource
+                            (getNumThreadsAwaitingCheckoutDefaultUser [_] 3)))))))))
+
+(deftest connection-pool-full-checkout-queue-returns-503-test
+  (testing "When the checkout queue is full, additional queries fail fast with a retriable HTTP 503"
+    (mt/test-drivers (mt/normal-driver-select {:+parent :sql-jdbc})
+      #_{:clj-kondo/ignore [:discouraged-var]}
+      (mt/with-temp [:model/Database tmp-db {:details (tx/bad-connection-details driver/*driver*)
+                                             :engine  driver/*driver*}]
+        (mt/with-temporary-setting-values [jdbc-data-warehouse-connection-pool-max-pending-checkouts 1]
+          (with-redefs [h2/check-read-only-statements (fn [_query] nil)
+                        sql-jdbc.execute/do-with-resolved-connection-data-source
+                        (fn [_driver _db-or-id-or-spec _options]
+                          ;; a pool that already has more queries waiting than the configured max
+                          (reify com.mchange.v2.c3p0.PooledDataSource
+                            (getNumThreadsAwaitingCheckoutDefaultUser [_] 5)))]
+            (let [query    {:database (:id tmp-db)
+                            :type     :native
+                            :native   {:query "SELECT 1"}}
+                  response (mt/user-http-request :crowberto :post 503 "dataset" query)]
+              (is (= "connection-pool-checkout-queue-full" (:error_type response))))))))))

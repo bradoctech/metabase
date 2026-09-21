@@ -40,109 +40,6 @@ describe(
   },
 );
 
-describe(
-  "admin > database > external databases > workspaces",
-  { tags: ["@external"] },
-  () => {
-    beforeEach(() => {
-      cy.intercept("POST", "/api/database/*/permission/workspace/check").as(
-        "checkPermissions",
-      );
-    });
-
-    [
-      { dbName: "Writable Postgres12", snapshot: "postgres-writable" },
-      { dbName: "Writable MySQL8", snapshot: "mysql-writable" },
-    ].forEach(({ dbName, snapshot }) => {
-      it(`should allow to enable and disable workspaces in ${snapshot} database`, () => {
-        H.restore(snapshot);
-        cy.signInAsAdmin();
-        H.activateToken("bleeding-edge");
-        H.addPostgresDatabase("Test DB");
-
-        visitDatabase(WRITABLE_DB_ID);
-
-        cy.findByLabelText("Enable workspaces").should("not.be.checked");
-        cy.findByLabelText("Enable workspaces").parent().click();
-
-        cy.wait("@checkPermissions");
-        cy.findByLabelText("Enable workspaces").should("be.checked");
-
-        cy.findByLabelText("Settings").click();
-        H.popover().findByText("Data studio").click();
-        H.Workspaces.getNewWorkspaceButton().click();
-        cy.findByPlaceholderText("Select a database").click();
-        H.popover().within(() => {
-          cy.findByText(dbName).should("be.visible");
-          cy.findByText("Test DB").should("not.exist");
-        });
-
-        cy.go(-2);
-        cy.findByLabelText("Enable workspaces").should("be.checked");
-        cy.findByLabelText("Enable workspaces").parent().click();
-        cy.findByLabelText("Enable workspaces").should("not.be.checked");
-
-        cy.go(2);
-        cy.findByPlaceholderText("No database supports workspaces").should(
-          "be.visible",
-        );
-      });
-    });
-
-    it("should not show workspaces setting for unsupported mysql database", () => {
-      H.restore();
-      cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
-
-      visitDatabase(WRITABLE_DB_ID);
-
-      cy.findByLabelText("Enable workspaces").should("not.exist");
-    });
-
-    it("should not allow to enable workspaces for a db user that cannot create users/schemas", () => {
-      H.restore("postgres-writable");
-      cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
-
-      // Create a limited postgres user without CREATE USER/SCHEMA permissions
-      const limitedUser = "limited_user";
-      const limitedPassword = "limited_pass";
-
-      H.queryWritableDB(`
-        DROP USER IF EXISTS ${limitedUser};
-        CREATE USER ${limitedUser} WITH PASSWORD '${limitedPassword}';
-      `);
-
-      // Update the existing database connection to use the limited user
-      cy.request("PUT", `/api/database/${WRITABLE_DB_ID}`, {
-        details: {
-          host: "localhost",
-          port: QA_POSTGRES_PORT,
-          dbname: "writable_db",
-          user: limitedUser,
-          password: limitedPassword,
-        },
-      });
-
-      visitDatabase(WRITABLE_DB_ID);
-
-      cy.findByLabelText("Enable workspaces").should("not.be.checked");
-      cy.findByLabelText("Enable workspaces").parent().click();
-
-      cy.wait("@checkPermissions");
-
-      cy.findByTestId("database-workspaces-section").should(
-        "contain.text",
-        "Failed to initialize workspace isolation",
-      );
-      cy.findByLabelText("Enable workspaces").should("not.be.checked");
-
-      // Cleanup: just drop the postgres user, H.restore() resets the DB connection
-      H.queryWritableDB(`DROP USER IF EXISTS ${limitedUser};`);
-    });
-  },
-);
-
 describe("admin > database > add", () => {
   function toggleFieldWithDisplayName(displayName) {
     cy.findByLabelText(new RegExp(displayName)).click({ force: true });
@@ -793,23 +690,22 @@ describe("scenarios > admin > databases > sample database", () => {
     // `auto_run_queries` toggle should be ON by default
     cy.findByLabelText(/Rerun queries for simple explorations/)
       .should("have.attr", "data-checked", "true")
-      .click({ force: true });
+      .click();
     // Reported failing in v0.36.4
     cy.log(
       "should respect the settings for automatic query running (metabase#13187)",
     );
     cy.findByLabelText(/Rerun queries for simple explorations/).should(
-      "not.have.attr",
+      "have.attr",
       "data-checked",
+      "false",
     );
 
     cy.log("change the metadata_sync period");
-    cy.findByLabelText(/Choose when syncs and scans happen/).click({
-      force: true,
-    });
+    cy.findByLabelText(/Choose when syncs and scans happen/).click();
     cy.findByDisplayValue("Hourly").click();
     H.popover().within(() => {
-      cy.findByText("Daily").click({ force: true });
+      cy.findByText("Daily").click();
     });
 
     // "lets you change the cache_field_values period"
@@ -915,9 +811,12 @@ describe("scenarios > admin > databases > sample database", () => {
       description: "All orders with a total under $100.",
       table_id: ORDERS_ID,
       definition: {
-        "source-table": ORDERS_ID,
-        aggregation: [["count"]],
-        filter: ["<", ["field", ORDERS.TOTAL, null], 100],
+        database: SAMPLE_DB_ID,
+        type: "query",
+        query: {
+          "source-table": ORDERS_ID,
+          filter: ["<", ["field", ORDERS.TOTAL, null], 100],
+        },
       },
     });
 
@@ -970,7 +869,7 @@ describe("scenarios > admin > databases > sample database", () => {
     });
 
     H.modal().within(() => {
-      cy.button("Delete this content and the DB connection")
+      cy.button("Delete this DB connection")
         .as("deleteButton")
         .should("be.disabled");
       cy.findByLabelText(/Delete [0-9]* saved questions?/)
@@ -990,7 +889,7 @@ describe("scenarios > admin > databases > sample database", () => {
         .click()
         .should("be.checked");
       cy.findByText(
-        "This will delete every saved question, model, metric, and segment you’ve made that uses this data, and can’t be undone!",
+        "This will delete every saved question, model, metric, and segment you’ve made that uses this data, and can’t be undone. Transforms that use this database won’t be deleted, but they will stop working.",
       );
 
       cy.get("@deleteButton").should("be.disabled");
@@ -1046,7 +945,7 @@ describe("scenarios > admin > databases > sample database", () => {
       cy.findByTestId("database-name-confirmation-input").type(
         "Sample Database",
       );
-      cy.findByText("Delete this content and the DB connection").click();
+      cy.findByText("Delete this DB connection").click();
       cy.wait("@deleteDatabase");
     });
 
