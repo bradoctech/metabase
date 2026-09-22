@@ -11,7 +11,12 @@ import type {
   TimeSeriesXAxisModel,
   YAxisModel,
 } from "metabase/visualizations/echarts/cartesian/model/types";
-import { getPaddedAxisLabel } from "metabase/visualizations/echarts/cartesian/option/utils";
+import {
+  getPaddedAxisLabel,
+  registerAxisLabel,
+  toTitleCase,
+  truncateAxisLabel,
+} from "metabase/visualizations/echarts/cartesian/option/utils";
 import type {
   ComputedVisualizationSettings,
   RenderingContext,
@@ -68,7 +73,11 @@ export const getYAxisRange = (
 };
 
 export const getAxisNameDefaultOption = (
-  { getColor, fontFamily, theme }: RenderingContext,
+  {
+    getColor,
+    fontFamily,
+    // theme
+  }: RenderingContext,
   nameGap: number,
   name: string | undefined,
   rotate?: number,
@@ -78,22 +87,24 @@ export const getAxisNameDefaultOption = (
   nameLocation: "middle",
   nameRotate: rotate,
   nameTextStyle: {
-    color: getColor("text-primary"),
-    fontSize: theme.cartesian.label.fontSize,
+    color: getColor("text-secondary"),
+    // fontSize: theme.cartesian.label.fontSize,
+    fontSize: "0.75rem",
     fontWeight: CHART_STYLE.axisName.weight,
     fontFamily,
   },
 });
 
 export const getTicksDefaultOption = ({
-  theme,
+  // theme,
   getColor,
   fontFamily,
 }: RenderingContext) => {
   return {
     hideOverlap: true,
-    color: getColor("text-primary"),
-    fontSize: theme.cartesian.label.fontSize,
+    color: getColor("text-secondary"),
+    // fontSize: theme.cartesian.label.fontSize,
+    fontSize: "0.75rem",
     fontWeight: CHART_STYLE.axisTicks.weight,
     fontFamily,
   };
@@ -253,11 +264,16 @@ export const buildNumericDimensionAxis = (
     axisLabel: {
       margin: CHART_STYLE.axisTicksMarginX,
       ...getDimensionTicksDefaultOption(settings, renderingContext),
+      triggerEvent: true,
       formatter: (rawValue: number) => {
         if (isPadded && (rawValue < min || rawValue > max)) {
           return "";
         }
-        return getPaddedAxisLabel(formatter(fromEChartsAxisValue(rawValue)));
+        const fullText = formatter(fromEChartsAxisValue(rawValue));
+        const titleCased = toTitleCase(fullText);
+        const truncated = truncateAxisLabel(titleCased);
+        registerAxisLabel(truncated, fullText);
+        return getPaddedAxisLabel(truncated);
       },
     },
     ...(isPadded
@@ -289,12 +305,15 @@ export const buildTimeSeriesDimensionAxis = (
         CHART_STYLE.axisTicksMarginX +
         (hasTimelineEvents ? CHART_STYLE.timelineEvents.height : 0),
       ...getDimensionTicksDefaultOption(settings, renderingContext),
+      triggerEvent: true,
       formatter: (rawValue: number) => {
         const value = xAxisModel.fromEChartsAxisValue(rawValue);
         if (canRender(value)) {
-          return getPaddedAxisLabel(
-            formatter(value.format("YYYY-MM-DDTHH:mm:ss[Z]")),
-          );
+          const fullText = formatter(value.format("YYYY-MM-DDTHH:mm:ss[Z]"));
+          const titleCased = toTitleCase(fullText);
+          const truncated = truncateAxisLabel(titleCased);
+          registerAxisLabel(truncated, fullText);
+          return getPaddedAxisLabel(truncated);
         }
         return "";
       },
@@ -337,13 +356,19 @@ export const buildCategoricalDimensionAxis = (
         renderingContext,
       ),
       interval: () => true,
+      triggerEvent: true,
       formatter: (value: string) => {
         const numberValue = parseNumberValue(value);
+        let fullText: string;
         if (column && isNumericBaseType(column) && numberValue !== null) {
-          return getPaddedAxisLabel(formatter(numberValue));
+          fullText = formatter(numberValue);
+        } else {
+          fullText = formatter(value);
         }
-
-        return getPaddedAxisLabel(formatter(value));
+        const titleCased = toTitleCase(fullText);
+        const truncated = truncateAxisLabel(titleCased);
+        registerAxisLabel(truncated, fullText);
+        return getPaddedAxisLabel(truncated);
       },
     },
   };
