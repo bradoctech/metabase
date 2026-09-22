@@ -33,14 +33,14 @@
 - [x] Commit do merge 61 (`--no-verify` por OOM nos hooks)
 - [x] Fixups: restore largo desfeito (upstream nos não-curated), migrations, CLJS, home XrayCard SP
 - [x] Script: restore só curated + assets/docs (não todo drift BASE…SP)
-- [ ] Smoke Trilhas restante: dashboard, filtros cascata, chart, datagrid
-- [ ] Commit dos adapters home ainda unstaged (se houver)
-- [ ] Revisar dual/behavior DIFFERS restantes
-- [ ] **Não** tratar logo SP oculto no header como regressão (commits recentes escondem de propósito)
+- [x] Smoke Trilhas 61: login/DS, home, cascata, datagrid pin+hover, dashcards, eixos 969, paleta 1092, i18n amostra, LogoIcon brasão, SpLogo hide
+- [x] Commits de fixups smoke (por EDD/lote) na `EDD-1355`
+- [ ] Revisar dual/behavior DIFFERS restantes antes/durante 62
+- [ ] Tag snapshot pré-62 (`saopaulo-pre-62x` ou equivalente no script)
 
 ## Próxima etapa
 
-Só após smoke mínimo OK.  
+Smoke 61 OK → seguir **61→62**.  
 62: `BASE_REF=upstream/release-x.61.x`, `UPSTREAM_REF=upstream/release-x.62.x`, `SP_REF=HEAD`  
 
-Detalhe operacional para agentes: [INSTRUCOES-AGENTE.md](./INSTRUCOES-AGENTE.md) (lições 60→61).
+Detalhe operacional para agentes: [INSTRUCOES-AGENTE.md](./INSTRUCOES-AGENTE.md) (lições 60→61 + tabela “customizações que o merge comeu”).

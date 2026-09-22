@@ -3,7 +3,7 @@
 **Como usar:** no início de uma nova conversa sobre EDD-1355, EDD-1356, EDD-1361, EDD-1362, tema SP ou upgrade do fork, peça ao agente para ler este arquivo (e, se precisar de detalhe, os outros `.md` desta pasta) antes de planejar ou editar código.
 
 **Pasta:** `docs/internal/atualizacao-metabase-sp/`  
-**Última consolidação de contexto:** etapa **60→61** da EDD-1355 em andamento na branch `EDD-1355` (merge + smoke parcial); EDD-1361/1356 MVP já na base; notas em [notas-etapa-60-61.md](./notas-etapa-60-61.md).
+**Última consolidação de contexto:** etapa **60→61** da EDD-1355 **fechada no smoke** na branch `EDD-1355`; próximo passo **61→62**; EDD-1361/1356 MVP já na base; notas em [notas-etapa-60-61.md](./notas-etapa-60-61.md).
 
 ---
 
@@ -22,7 +22,7 @@ Trate isto como verdade até alguém atualizar este arquivo após nova verifica�
 | Remote do fork           | `origin` → `git@github.com:bradoctech/metabase.git`                                           |
 | Remote oficial           | `upstream` → `https://github.com/metabase/metabase.git` (fetch de releases; não é destino SP) |
 | Branch principal do fork | `saopaulo` — ainda **0.60.x** até a EDD-1355 mergear de volta                                 |
-| Branch da PoC de upgrade | `EDD-1355` — tip já inclui merge de `upstream/release-x.61.x` + fixups de smoke               |
+| Branch da PoC de upgrade | `EDD-1355` — tip com merge `upstream/release-x.61.x` + fixups de smoke **validados**            |
 | Backup da etapa 60→61    | Tag `saopaulo-pre-61x`                                                                        |
 | Script de merge          | `bin/merge-upstream-preserve-sp.sh` (EDD-1356); **restore estreito** após lição da 61         |
 | Alvo final da EDD-1355   | Linha **63.x** (caminho em etapas 61→62→63; não pular para 63 com adapters 61 quebrados)      |
@@ -33,9 +33,9 @@ Trate isto como verdade até alguém atualizar este arquivo após nova verifica�
 - Tokens: `frontend/src/metabase/ui/colors/constants/sp-colors.ts`
 - Tema adapter: `frontend/src/metabase/ui/colors/constants/themes/light.ts` (e correlatos dark/accent)
 - Fontes: `frontend/src/metabase/css/core/fonts.saopaulo.styled.ts`; `"Rawline"` hardcoded em vários viz/static-viz
-- Assets: `resources/frontend_client/app/assets/img/logo-sp-gov.*` (existem no tree; **ver regra de logo abaixo**)
-- i18n: `locales/pt-BR.po`
-- Behavior: datagrid (pin), eixos (`toTitleCase` / `AXIS_LABEL_MAX_CHARS`), home badges/cards, filtros cascata QB (`chain-filter-constraints`), stubs de upsell
+- Assets: `resources/frontend_client/app/assets/img/logo.svg` (brasão / LogoIcon) e `logo-sp-gov.*` (SpLogo nos headers — oculto)
+- i18n: `locales/pt-BR.po` (+ rebuild local `resources/frontend_client/app/locales/*.json` via `./bin/i18n/build-translation-resources` quando mudar `.po`)
+- Behavior: datagrid (pin + hover), eixos (`toTitleCase` / `AXIS_LABEL_MAX_CHARS`), home badges/cards, filtros cascata QB (`chain-filter-constraints`), stubs de upsell, dashcards DS (EDD-792), paleta charts (EDD-1092)
 
 ### Logos São Paulo (dois conceitos distintos)
 
@@ -70,7 +70,7 @@ Trate isto como verdade até alguém atualizar este arquivo após nova verifica�
 ```text
 EDD-1361 (inventário + isolamento mínimo)     ✅
   → EDD-1356 MVP (script + runbook)           ✅ MVP
-  → EDD-1355 (update = PoC)                   🔄 60→61 em curso
+  → EDD-1355 (update = PoC)                   🔄 60→61 smoke OK; próximo 61→62
   → EDD-1362 (tema/marca pós-update)
   → EDD-1356 v2 (endurecer com aprendizados)
 ```
@@ -84,7 +84,7 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 
 | ID           | Papel                                                      | Estado                                                 |
 | ------------ | ---------------------------------------------------------- | ------------------------------------------------------ |
-| **EDD-1355** | Atualizar Metabase + reaplicar customizações               | Em andamento — merge 61 + smoke; falta fechar adapters |
+| **EDD-1355** | Atualizar Metabase + reaplicar customizações               | Em andamento — **61 smoke OK**; próximo merge **62**   |
 | **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | MVP entregue; v2 após lições da 1355                   |
 | **EDD-1361** | Inventário + quick wins de isolamento                      | Concluída (manifesto publicado)                        |
 | **EDD-1362** | Refatorar tema/marca na base já atualizada                 | Após 1355                                              |
@@ -115,14 +115,30 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 - `build-hot:js` **não** recompila CLJS. Precisa `bun run build:cljs` (ou `build-hot` / `build-hot:js-wait`) quando módulos novos entram (ex. `cljs/metabase.util.markdown.image`).
 - `bun.lock`: preferir o do upstream na major nova; regenerar com `bun install` se lock e `package.json` divergirem.
 
+### Customizações que o merge 61 “comeu” (reaplicar / smoke)
+
+Estes voltaram ao tip upstream e tiveram de ser recolocados no smoke — **priorizar no verify da 62**:
+
+| Área | Paths-chave | Sintoma se perdeu |
+| ---- | ----------- | ----------------- |
+| LogoIcon brasão | `common/components/LogoIcon/LogoIcon.tsx` | Diamante Metabase no AppBar/login |
+| SpLogo hide | `css/core/layout.module.css` (`.SpLogo`) | logo-gov aparece no header do painel |
+| Login / DS | `auth/components/AuthLayout/*`, `Login*`, `Button`/`Input`/`Checkbox` CSS | Layout login padrão Metabase |
+| Hover linha | `DataGrid.module.css` **e** `css/admin.module.css` | Clique marca linha; hover não (admin CSS não carrega na view de pergunta) |
+| Dashcards DS | `DashCard.*`, `LegendCaption`, `padding.ts`, `series.ts`, `Progress` | Cards sem shadow/legenda SP |
+| Eixos 969 | `echarts/cartesian/option/axis.ts` (+ helpers em `utils.ts`) | Sem TitleCase/truncate nos cartesianos (RowChart pode continuar ok) |
+| Home Xray | `HomeXrayCard.tsx` + styled | Crash / badge quebrado |
+| i18n | `locales/pt-BR.po`; títulos LDAP com `t\`` (não string crua) | Inglês em admin; typo em msgstr |
+
 ### Smoke Trilhas (mínimo antes da próxima major)
 
 1. Backend sobe (`clojure -M:run:dev:dev-start:…`).
 2. FE hot compila sem erros de módulo.
-3. Login / setup (H2 novo após reset é esperado).
-4. Home (cards SP / badges).
-5. Dashboard, filtros cascata, chart, datagrid básico.
-6. **Não** reabrir “logo SP no header” como bug (ver regra acima).
+3. Login SP (painel esquerdo + brasão via LogoIcon) / setup (H2 novo após reset é esperado).
+4. Home (cards SP / badges) + brasão no AppBar.
+5. Dashboard (dashcards DS), filtros cascata, charts (eixos 969 + paleta 1092), datagrid (pin 944 + hover 564).
+6. SpLogo nos headers de painel continua **oculto**; LogoIcon continua **brasão** (ver seção Logos).
+7. Amostra i18n admin (LDAP titles traduzidos; e-mail sem typo “Adicionr”).
 
 ---
 
@@ -133,7 +149,7 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 1. Ler este arquivo e, se na EDD-1355, [notas-etapa-60-61.md](./notas-etapa-60-61.md).
 2. Confirmar branch (`EDD-1355` vs `saopaulo`) e remotes `origin` / `upstream`.
 3. Seguir a sequência oficial; não inverter para “refatorar tema grande → depois update” sem o usuário pedir.
-4. Não sugerir salto para 63 enquanto a major atual não passar do smoke mínimo.
+4. Não sugerir salto para 63 enquanto a major atual não passar do smoke mínimo. Após smoke 61 OK, o próximo passo canônico é **61→62** (não 63).
 
 ### Ao inventariar customizações (EDD-1361)
 
@@ -168,7 +184,7 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 - Refatoração completa de DS na 0.60 como gate obrigatório da 1355.
 - Prometer zero conflitos em todo update.
 - Restore largo de todo drift BASE…SP.
-- “Trazer de volta o logo SP no header” como correção padrão.
+- Tratar “SpLogo sumiu do header do painel” como regressão (é hide EDD-791); o bug real de marca no AppBar/login é **LogoIcon sem brasão**.
 - Ir para 62/63 com home ou boot quebrados “para resolver na major seguinte”.
 
 ---
