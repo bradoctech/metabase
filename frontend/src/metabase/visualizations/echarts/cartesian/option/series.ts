@@ -286,7 +286,8 @@ export const buildEChartsLabelOptions = (
   chartDataDensity?: ChartDataDensity,
   position?: LabelOption["position"],
 ): SeriesLabelOption => {
-  const { fontSize } = renderingContext.theme.cartesian.label;
+  // SP DS (EDD-792): fixed 11px label size
+  const fontSize = "11px";
 
   return {
     show: !!formatter,
@@ -385,8 +386,8 @@ export const buildEChartsStackLabelOptions = (
     opacity: 1,
     show: true,
     fontFamily: renderingContext.fontFamily,
-    fontWeight: CHART_STYLE.seriesLabels.weight,
-    fontSize: CHART_STYLE.seriesLabels.size,
+    fontWeight: 600,
+    fontSize: "11px",
     color: getTextColorForBackground(
       seriesModel.color,
       renderingContext.getColor,
@@ -435,8 +436,8 @@ function getDataLabelSeriesOption(
       position,
       formatter,
       fontFamily: renderingContext.fontFamily,
-      fontWeight: CHART_STYLE.seriesLabels.weight,
-      fontSize: CHART_STYLE.seriesLabels.size,
+      fontWeight: 600,
+      fontSize: "11px",
       color: renderingContext.getColor("text-primary"),
       textBorderColor: renderingContext.getColor("background-primary"),
       textBorderWidth: 3,
