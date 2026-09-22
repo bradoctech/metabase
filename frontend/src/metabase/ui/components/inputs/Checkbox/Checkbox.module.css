@@ -54,7 +54,7 @@
       }
 
       &:disabled:after {
-        border: 1px solid var(--mb-color-border);
+        border: 1px solid var(--mb-color-sp-color-border);
       }
     }
   }
@@ -65,7 +65,8 @@
 }
 
 .input {
-  border: 1px solid var(--mb-color-border);
+  cursor: pointer;
+  border: 1px solid var(--mb-color-sp-color-border);
   background-color: var(--mb-color-background-primary);
 
   /* Mantine compatibility: supports old and new data-indeterminate. See: https://github.com/mantinedev/mantine/pull/8385 */
@@ -76,12 +77,8 @@
   }
 
   &:checked {
-    border-color: var(--mb-color-brand);
-    background-color: var(--mb-color-brand);
-  }
-
-  &:not(:disabled) {
-    cursor: pointer;
+    border-color: var(--mb-color-text-primary);
+    background-color: var(--mb-color-background-primary);
   }
 
   &:disabled {
@@ -96,6 +93,7 @@
   color: var(--mb-color-text-primary);
   font-size: var(--mantine-font-size-md);
   line-height: var(--mantine-line-height-md);
+  cursor: pointer;
 }
 
 .description {
@@ -113,6 +111,10 @@
 
 .icon {
   color: var(--mb-color-text-primary-inverse);
+}
+
+.root:has(.input:checked) .icon {
+  color: #1a1a1a;
 }
 
 .labelWrapper {
