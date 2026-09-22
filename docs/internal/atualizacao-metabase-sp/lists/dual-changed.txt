@@ -4,6 +4,9 @@ Dockerfile
 bun.lock
 deps.edn
 frontend/src/metabase/dashboard/components/DashboardHeader/DashboardHeaderView.module.css
+frontend/src/metabase/css/core/layout.module.css
+frontend/src/metabase/css/admin.module.css
+frontend/src/metabase/common/components/LogoIcon/LogoIcon.tsx
 frontend/src/metabase/dashboard/components/DashboardHeader/DashboardHeaderView.tsx
 frontend/src/metabase/dashboard/containers/AutomaticDashboardApp/AutomaticDashboardApp.module.css
 frontend/src/metabase/dashboard/containers/AutomaticDashboardApp/AutomaticDashboardApp.tsx

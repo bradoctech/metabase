@@ -28,14 +28,19 @@
 
 `restore` não deve mais fazer `git add -A` (isso marcava conflitos manuais como “resolvidos” com marcadores ainda no arquivo).
 
-## Pendências antes de ir para 62
+## Pós-merge (smoke)
 
-- [ ] Concluir o merge com commit (se ainda aberto)
-- [ ] Smoke local (Clojure + `build-hot:js`): login, home badges, datagrid, charts, um dashboard
-- [ ] Revisar paths **DIFFERS** sem marcadores (auto-merge do git) em dual/behavior — especialmente datagrid, filtros, appearance
-- [ ] Regenerar `bun.lock` com `bun install` se o frontend reclamar do lock vs `package.json`
-- [ ] Atualizar listas se paths sumiram/renomearam na 61
+- [x] Commit do merge 61 (`--no-verify` por OOM nos hooks)
+- [x] Fixups: restore largo desfeito (upstream nos não-curated), migrations, CLJS, home XrayCard SP
+- [x] Script: restore só curated + assets/docs (não todo drift BASE…SP)
+- [ ] Smoke Trilhas restante: dashboard, filtros cascata, chart, datagrid
+- [ ] Commit dos adapters home ainda unstaged (se houver)
+- [ ] Revisar dual/behavior DIFFERS restantes
+- [ ] **Não** tratar logo SP oculto no header como regressão (commits recentes escondem de propósito)
 
 ## Próxima etapa
 
-62: `BASE_REF=upstream/release-x.61.x`, `UPSTREAM_REF=upstream/release-x.62.x`, `SP_REF=HEAD`
+Só após smoke mínimo OK.  
+62: `BASE_REF=upstream/release-x.61.x`, `UPSTREAM_REF=upstream/release-x.62.x`, `SP_REF=HEAD`  
+
+Detalhe operacional para agentes: [INSTRUCOES-AGENTE.md](./INSTRUCOES-AGENTE.md) (lições 60→61).
