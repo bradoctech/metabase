@@ -85,6 +85,12 @@
   width: 100%;
   position: relative;
 
+  /* EDD-564: row hover highlight (kept here — admin.module.css is not
+     loaded on question/datagrid views; click uses .activeRow below) */
+  &:hover {
+    background-color: var(--mb-color-background-hover);
+  }
+
   &.active {
     background-color: color-mix(
       in srgb,
