@@ -244,6 +244,7 @@
      :display-name
      :id
      :semantic-type
+     :settings
      :table-id}))
 
 (declare resolve-in-previous-stage-returned-columns-and-update-keys)

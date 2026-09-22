@@ -172,7 +172,8 @@
                    :perms/download-results :no
                    :perms/manage-table-metadata :no
                    :perms/manage-database :no
-                   :perms/transforms :no}}}
+                   :perms/transforms :no
+                   :perms/workspaces :no}}}
                 (data-perms.graph/data-permissions-graph :group-id group-id :db-id db-id)))))))))
 
 (deftest hydrate-members-tests

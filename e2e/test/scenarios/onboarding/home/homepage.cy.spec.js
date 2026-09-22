@@ -347,24 +347,30 @@ describe("scenarios > home > custom homepage", () => {
       H.restore();
       cy.signInAsAdmin();
       cy.intercept("GET", "/api/search*").as("search");
+      cy.intercept("PUT", "/api/setting").as("putSettings");
     });
 
     it("should give you the option to set a custom home page in settings", () => {
       cy.visit("/admin/settings/general");
 
-      cy.findByTestId("custom-homepage-setting").within(() => {
-        cy.findByText("Disabled").should("be.visible");
-        cy.findByLabelText("Disabled").click();
-        cy.findByText("Enabled").should("be.visible");
+      cy.findByTestId("homepage-setting").within(() => {
+        cy.findByRole("radio", { name: "Default Metabase home" }).should(
+          "be.checked",
+        );
+        cy.findByRole("radio", { name: "Dashboard" }).click();
       });
+      cy.wait("@putSettings");
+      H.undoToast().icon("close").click();
 
       cy.findByTestId("custom-homepage-dashboard-setting")
         .findByRole("button")
+        .should("be.visible")
         .click();
 
       H.entityPickerModal().findByText("Orders in a dashboard").click();
 
       H.undoToast().findByText("Changes saved").should("be.visible");
+      H.undoToast().icon("close").click();
 
       cy.findByTestId("custom-homepage-dashboard-setting").should(
         "contain",
@@ -372,34 +378,23 @@ describe("scenarios > home > custom homepage", () => {
       );
 
       cy.log(
-        "disabling custom-homepage-setting should also remove custom-homepage-dashboard-setting",
+        "switching to Default Metabase home should hide the dashboard picker but keep the persisted id",
       );
       cy.visit("/admin/settings/general");
 
-      cy.findByTestId("custom-homepage-setting").within(() => {
-        cy.findByText("Enabled").should("exist");
-        cy.findByLabelText("Enabled").click();
-        cy.findByText("Disabled").should("exist");
+      cy.findByTestId("homepage-setting").within(() => {
+        cy.findByRole("radio", { name: "Dashboard" }).should("be.checked");
+        cy.findByRole("radio", { name: "Default Metabase home" }).click();
       });
+      cy.wait("@putSettings");
 
       H.undoToast().findByText("Changes saved").should("be.visible");
+      cy.findByTestId("custom-homepage-dashboard-setting").should("not.exist");
 
-      cy.findByTestId("custom-homepage-setting").within(() => {
-        cy.findByText("Disabled").should("exist");
-        cy.findByLabelText("Disabled").click();
-        cy.findByText("Enabled").should("exist");
-      });
-
-      cy.findByTestId("custom-homepage-dashboard-setting").should(
-        "contain",
-        "Pick a dashboard",
-      );
-
-      cy.findByTestId("custom-homepage-dashboard-setting")
-        .findByRole("button")
+      cy.findByTestId("homepage-setting")
+        .findByRole("radio", { name: "Dashboard" })
         .click();
-
-      H.entityPickerModal().findByText("Orders in a dashboard").click();
+      cy.wait("@putSettings");
 
       cy.findByTestId("custom-homepage-dashboard-setting").should(
         "contain",
@@ -659,13 +654,17 @@ describe("scenarios > setup", () => {
   });
 
   it("should send snowplow events through admin settings", () => {
+    cy.intercept("PUT", "/api/setting").as("putSettings");
     cy.visit("/admin/settings/general");
-    cy.findByTestId("custom-homepage-setting")
-      .findByLabelText("Disabled")
+    cy.findByTestId("homepage-setting")
+      .findByRole("radio", { name: "Dashboard" })
       .click();
+    cy.wait("@putSettings");
+    H.undoToast().icon("close").click();
 
     cy.findByTestId("custom-homepage-dashboard-setting")
       .findByRole("button")
+      .should("be.visible")
       .click();
 
     H.entityPickerModal().findByText("Orders in a dashboard").click();

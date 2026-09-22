@@ -1,10 +1,14 @@
 import type {
   BaseUser,
+  CustomVizPluginId,
   DatabaseId,
   FieldId,
   SchemaName,
   SegmentId,
   TableId,
+  TaskRunDateFilterOption,
+  TaskRunEntityType,
+  TaskRunType,
 } from "metabase-types/api";
 
 export const isInternalUser = (user: Pick<BaseUser, "tenant_id">) =>
@@ -69,6 +73,10 @@ export function editDatabaseWritableConnection(databaseId: DatabaseId) {
   return `/admin/databases/${databaseId}/write-data`;
 }
 
+export function editDatabaseAdminConnection(databaseId: DatabaseId) {
+  return `/admin/databases/${databaseId}/admin`;
+}
+
 type DataModelParams = {
   databaseId?: DatabaseId;
   schemaName?: SchemaName | null;
@@ -131,6 +139,10 @@ export function dataModelSegmentRevisions(segmentId: SegmentId) {
   return `${dataModelSegment(segmentId)}/revisions`;
 }
 
+export function generalSettings() {
+  return "/admin/settings/general";
+}
+
 export function uploadsSettings() {
   return "/admin/settings/uploads";
 }
@@ -139,15 +151,31 @@ export function adminLicense() {
   return "/admin/settings/license";
 }
 
+export function customViz() {
+  return "/admin/settings/custom-visualizations";
+}
+
+export function customVizAdd() {
+  return `${customViz()}/new`;
+}
+
+export function customVizEdit(id: CustomVizPluginId | undefined) {
+  return `${customViz()}/edit/${id ?? ""}`;
+}
+
+export function customVizDev() {
+  return `${customViz()}/development`;
+}
+
 export function adminToolsHelp() {
   return "/admin/tools/help";
 }
 
-export function adminToolsTasksBase() {
+export function adminToolsTasks() {
   return "/admin/tools/tasks";
 }
 export function adminToolsTasksList() {
-  return `${adminToolsTasksBase()}/list`;
+  return `${adminToolsTasks()}/list`;
 }
 
 export function adminToolsTaskDetails(taskId: number) {
@@ -155,11 +183,32 @@ export function adminToolsTaskDetails(taskId: number) {
 }
 
 export function adminToolsTasksRuns() {
-  return `${adminToolsTasksBase()}/runs`;
+  return `${adminToolsTasks()}/runs`;
 }
 
 export function adminToolsTaskRunDetails(runId: number) {
   return `${adminToolsTasksRuns()}/${runId}`;
+}
+
+export function adminToolsTasksRunsFor(opts: {
+  runType: TaskRunType;
+  entityType: TaskRunEntityType;
+  entityId: number;
+  startedAt?: TaskRunDateFilterOption;
+  includeToday?: boolean;
+}) {
+  const params: Record<string, string> = {
+    "run-type": opts.runType,
+    "entity-type": opts.entityType,
+    "entity-id": String(opts.entityId),
+  };
+  if (opts.startedAt) {
+    params["started-at"] = opts.startedAt;
+  }
+  if (opts.includeToday) {
+    params["include-today"] = "true";
+  }
+  return `${adminToolsTasksRuns()}?${new URLSearchParams(params).toString()}`;
 }
 
 export function adminToolsJobs() {
@@ -180,4 +229,12 @@ export function adminToolsModelCaching() {
 
 export function adminToolsGrantAccess() {
   return "/admin/tools/help/grant-access";
+}
+
+export function adminToolsNotifications() {
+  return "/admin/tools/notifications";
+}
+
+export function adminToolsNotificationDetail(id: number) {
+  return `/admin/tools/notifications/${id}`;
 }

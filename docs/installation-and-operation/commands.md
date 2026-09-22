@@ -1,11 +1,13 @@
 ---
-title: Metabase CLI
-description: CLI commands for managing your Metabase instance, including database migrations, serialization, and administrative tasks.
+title: Metabase JAR commands
+description: Commands built into the Metabase JAR for managing your instance, including database migrations, serialization, and administrative tasks.
 ---
 
-# Metabase CLI
+# Metabase JAR commands
 
-Metabase ships with some handy CLI commands for administration, maintenance, and automation tasks. These commands let you manage your Metabase instance, migrate databases, handle serialization, and generate documentation.
+> Looking for the `mb` command-line client that drives a Metabase instance over its API, on its own or through an AI agent? Check out the [Metabase CLI](./metabase-cli.md).
+
+Metabase ships with some handy commands for administration, maintenance, and automation tasks. These commands run on the server, built into the Metabase JAR, and let you manage your Metabase instance, migrate databases, handle serialization, and generate documentation.
 
 To view a list of commands, run the Metabase jar followed by `help`.
 
@@ -64,7 +66,6 @@ Options:
 - `-S, --no-settings` - Do not export settings.yaml
 - `-D, --no-data-model` - Do not export any data model entities; useful for subsequent exports.
 - `-f, --include-field-values` - Include field values along with field metadata.
-- `-s, --include-database-secrets` - Include database connection details (in plain text; use caution).
 - `-e, --continue-on-error` - Do not break execution on errors.
 - `--full-stacktrace` - Output full stacktraces on errors.
 

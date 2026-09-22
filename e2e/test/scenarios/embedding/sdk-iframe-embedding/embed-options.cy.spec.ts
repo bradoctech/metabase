@@ -263,7 +263,10 @@ describe("scenarios > embedding > sdk iframe embed options passthrough", () => {
       cy.findByText(/Filter by this value/).should("be.visible");
 
       cy.log("4. clicking on the filter should drill down");
-      cy.get('[type="filter"] button').first().click();
+      cy.findByTestId("click-actions-filter-section")
+        .find("button")
+        .first()
+        .click();
       cy.findAllByText("29.8").first().should("be.visible");
 
       cy.log("5. should not show a save button");
@@ -303,7 +306,10 @@ describe("scenarios > embedding > sdk iframe embed options passthrough", () => {
       cy.findByText(/Filter by this value/).should("be.visible");
 
       cy.log("5. clicking on the filter should drill down");
-      cy.get('[type="filter"] button').first().click();
+      cy.findByTestId("click-actions-filter-section")
+        .find("button")
+        .first()
+        .click();
       cy.findAllByText("29.8").first().should("be.visible");
 
       cy.log("6. saving should be disabled in drill-throughs");

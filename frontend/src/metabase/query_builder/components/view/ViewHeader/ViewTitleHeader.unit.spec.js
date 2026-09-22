@@ -95,6 +95,25 @@ function getSavedGUIQuestionCard(overrides) {
   return { ...BASE_GUI_QUESTION, ...SAVED_QUESTION, ...overrides };
 }
 
+function getNativeQuestionCardWithUnmappedTag(type) {
+  return createAdHocNativeCard({
+    dataset_query: {
+      type: "native",
+      database: SAMPLE_DB_ID,
+      native: {
+        query: "select * from products where {{my_filter}}",
+        "template-tags": {
+          my_filter: {
+            id: "24d574c5-40e7-4e9d-9d0e-3fbc7b1f7bd0",
+            name: "my_filter",
+            "display-name": "My Filter",
+            type,
+          },
+        },
+      },
+    },
+  });
+}
 function getSavedNativeQuestionCard(overrides) {
   return {
     ...BASE_NATIVE_QUESTION,

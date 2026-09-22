@@ -132,8 +132,8 @@
               #"<a[^>]*href=\"https?://metabase\.com/auth/reset_password/.*#new\"[^>]*>Join now</a>"]
              "Ngoc")
       (testing "with sso enabled"
-        (with-redefs [sso.settings/sso-enabled? (constantly true)
-                      session.settings/enable-password-login (constantly false)]
+        (mt/with-dynamic-fn-redefs [sso.settings/sso-enabled? (constantly true)
+                                    session.settings/enable-password-login (constantly false)]
           (check false
                  "You're invited to join SuperStar's Metabase"
                  [#"<a[^>]*href=\"https?://metabase\.com/auth/login\"[^>]*>Join now</a>"]

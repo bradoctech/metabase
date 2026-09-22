@@ -4,13 +4,13 @@ import _ from "underscore";
 
 import { EmptyState } from "metabase/common/components/EmptyState";
 import { SidebarContent } from "metabase/common/components/SidebarContent";
-import type { EmbeddingParameterVisibility } from "metabase/public/lib/types";
 import { Box, Tabs } from "metabase/ui";
 import type Question from "metabase-lib/v1/Question";
 import type Database from "metabase-lib/v1/metadata/Database";
 import type NativeQuery from "metabase-lib/v1/queries/NativeQuery";
 import type {
   DatabaseId,
+  EmbeddingParameterVisibility,
   NativeDatasetQuery,
   Parameter,
   ParameterId,

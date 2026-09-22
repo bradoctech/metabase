@@ -113,7 +113,6 @@ export const ErrorDiagnosticModal = ({
           addUndo({
             message: t`Failed to send diagnostic information to Slack`,
             icon: "warning",
-            variant: "error",
           }),
         );
       }
@@ -123,7 +122,6 @@ export const ErrorDiagnosticModal = ({
         addUndo({
           message: t`Error sending diagnostic information to Slack`,
           icon: "warning",
-          variant: "error",
         }),
       );
     } finally {

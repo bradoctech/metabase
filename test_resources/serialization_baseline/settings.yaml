@@ -1,6 +1,7 @@
 agent-api-enabled?: null
 aggregated-query-row-limit: null
 ai-features-enabled?: null
+ai-usage-max-retention-days: null
 allowed-iframe-hosts: null
 application-colors: null
 application-favicon-url: null
@@ -12,12 +13,15 @@ available-fonts: null
 available-locales: null
 available-timezones: null
 breakout-bins-num: null
+csp-img-allowed-hosts: null
+csp-img-enabled: null
 csv-field-separator: nil
 custom-formatting: null
 custom-geojson: null
 custom-geojson-enabled: null
 custom-homepage: null
 custom-homepage-dashboard: null
+custom-viz-enabled: null
 default-maps-enabled: null
 disable-cors-on-localhost: null
 email-max-recipients-per-second: null
@@ -43,6 +47,7 @@ login-page-illustration: null
 login-page-illustration-custom: null
 metabot-enabled?: null
 mcp-enabled?: null
+mcp-execute-sql-enabled: null
 native-query-autocomplete-match-style: null
 no-data-illustration: null
 no-data-illustration-custom: null

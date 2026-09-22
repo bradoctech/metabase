@@ -48,7 +48,7 @@ import { useDispatch } from "metabase/redux";
 import { setUIControls } from "metabase/redux/query-builder";
 import { Flex, type MantineTheme } from "metabase/ui";
 import { getScrollBarSize } from "metabase/utils/dom";
-import { formatValue } from "metabase/utils/formatting";
+import { formatValue } from "metabase/visualizations/lib/formatting";
 import {
   getTableCellClickedObject,
   getTableClickedObjectRowData,
@@ -77,7 +77,6 @@ import {
   type HeaderCellWithColumnInfoProps,
 } from "./cells/HeaderCellWithColumnInfo";
 import { MiniBarCell } from "./cells/MiniBarCell";
-import { useObjectDetail } from "./hooks/use-object-detail";
 import { useResetWidthsOnColumnsChange } from "./hooks/use-reset-widths-on-columns-change";
 import { getInfoPopoversDisabled } from "./utils/get-info-popovers-disabled";
 import { tableThemeToDataGridTheme } from "./utils/table-theme-to-data-grid-theme";
@@ -118,7 +117,7 @@ interface TableProps extends VisualizationProps {
   getColumnSortDirection: (columnIndex: number) => OrderByDirection | undefined;
   renderTableHeader: HeaderCellWithColumnInfoProps["renderTableHeader"];
   onUpdateVisualizationSettings: (settings: VisualizationSettings) => void;
-  onZoomRow?: (objectId: number | string) => void;
+  onZoomRow?: (rowIndex: number) => void;
   tableFooterExtraButtons?: React.ReactNode;
 }
 
@@ -177,6 +176,7 @@ export const TableInteractiveInner = forwardRef(function TableInteractiveInner(
     onVisualizationClick,
     onUpdateVisualizationSettings,
     zoomedRowIndex,
+    onZoomRow,
     tableFooterExtraButtons,
   }: TableProps,
   ref: Ref<HTMLDivElement>,
@@ -215,8 +215,6 @@ export const TableInteractiveInner = forwardRef(function TableInteractiveInner(
   const columnSizingMap = useMemo(() => {
     return getColumnSizing(cols, columnWidths);
   }, [cols, columnWidths]);
-
-  const onOpenObjectDetail = useObjectDetail(data);
 
   const getIsCellClickable = useMemoizedCallback(
     (clicked: ClickObject) => {
@@ -310,7 +308,7 @@ export const TableInteractiveInner = forwardRef(function TableInteractiveInner(
     ) => {
       if (columnId === ROW_ID_COLUMN_ID) {
         if (!isDashboard) {
-          onOpenObjectDetail(rowIndex);
+          onZoomRow?.(rowIndex);
         }
         return;
       }
@@ -342,7 +340,7 @@ export const TableInteractiveInner = forwardRef(function TableInteractiveInner(
       columnFormatters,
       getIsCellClickable,
       getCellClickedObject,
-      onOpenObjectDetail,
+      onZoomRow,
       onVisualizationClick,
     ],
   );

@@ -1,6 +1,5 @@
 import { PLUGIN_API } from "metabase/plugins";
-import { updateMetadata } from "metabase/redux/metadata";
-import { QueryMetadataSchema } from "metabase/schema";
+import { DashboardSchema, QueryMetadataSchema } from "metabase/schema";
 import type {
   CopyDashboardRequest,
   CreateDashboardRequest,
@@ -36,7 +35,7 @@ import {
   provideValidDashboardFilterFieldTags,
   tag,
 } from "./tags";
-import { handleQueryFulfilled } from "./utils/lifecycle";
+import { hydrateMetadataStore } from "./utils/hydrate-metadata-store";
 
 export const dashboardApi = Api.injectEndpoints({
   endpoints: (builder) => {
@@ -71,6 +70,7 @@ export const dashboardApi = Api.injectEndpoints({
         }),
         providesTags: (dashboards) =>
           dashboards ? provideDashboardListTags(dashboards) : [],
+        onQueryStarted: hydrateMetadataStore([DashboardSchema]),
       }),
       getDashboard: builder.query<Dashboard, GetDashboardRequest>({
         query: ({ id, ignore_error }) => ({
@@ -80,6 +80,7 @@ export const dashboardApi = Api.injectEndpoints({
         }),
         providesTags: (dashboard) =>
           dashboard ? provideDashboardTags(dashboard) : [],
+        onQueryStarted: hydrateMetadataStore(DashboardSchema),
       }),
       getDashboardQueryMetadata: builder.query<
         DashboardQueryMetadata,
@@ -92,10 +93,7 @@ export const dashboardApi = Api.injectEndpoints({
         }),
         providesTags: (metadata) =>
           metadata ? provideDashboardQueryMetadataTags(metadata) : [],
-        onQueryStarted: (_, { queryFulfilled, dispatch }) =>
-          handleQueryFulfilled(queryFulfilled, (data) =>
-            dispatch(updateMetadata(data, QueryMetadataSchema)),
-          ),
+        onQueryStarted: hydrateMetadataStore(QueryMetadataSchema),
       }),
       getRemappedDashboardParameterValue: builder.query<
         FieldValue,
@@ -156,12 +154,15 @@ export const dashboardApi = Api.injectEndpoints({
           url: `/api/dashboard/${id}`,
           body,
         }),
+        // Subscriptions can be archived server-side when a referenced
+        // parameter is removed, so invalidate the subscription list too.
         invalidatesTags: (_, error, { id }) =>
           invalidateTags(error, [
             listTag("dashboard"),
             idTag("dashboard", id),
             tag("parameter-values"),
             listTag("revision"),
+            listTag("subscription"),
           ]),
       }),
       deleteDashboard: builder.mutation<void, DashboardId>({
@@ -282,6 +283,7 @@ export const {
     deleteDashboardPublicLink,
     createDashboard,
     createDashboardPublicLink,
+    updateDashboard,
     updateDashboardEnableEmbedding,
     updateDashboardEmbeddingParams,
   },

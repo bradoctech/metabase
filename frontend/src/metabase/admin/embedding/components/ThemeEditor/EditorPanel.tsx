@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { t } from "ttag";
 
 import type { EmbeddingThemeEditorResult } from "metabase/admin/embedding/hooks/use-embedding-theme-editor";
-import type { MetabaseFontFamily } from "metabase/embedding-sdk/theme/fonts";
 import {
   Box,
   Button,
@@ -18,6 +17,7 @@ import {
   Tooltip,
   UnstyledButton,
 } from "metabase/ui";
+import type { MetabaseFontFamily } from "metabase/ui/fonts";
 
 import { ColorSwatchCard } from "./ColorSwatchCard";
 import {

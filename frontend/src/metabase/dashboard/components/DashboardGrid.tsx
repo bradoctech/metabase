@@ -18,7 +18,7 @@ import {
 import { ContentViewportContext } from "metabase/common/context/ContentViewportContext";
 import DashboardS from "metabase/css/dashboard.module.css";
 import { getVisibleCardIds } from "metabase/dashboard/utils";
-import EmbedFrameS from "metabase/public/components/EmbedFrame/EmbedFrame.module.css";
+import EmbedFrameS from "metabase/embedding/theme.module.css";
 import { connect } from "metabase/redux";
 import type { State } from "metabase/redux/store";
 import { addUndo } from "metabase/redux/undo";
@@ -398,7 +398,6 @@ class DashboardGridInner extends Component<
 
       addUndo({
         message: getUndoReplaceCardMessage(replaceCardModalDashCard.card),
-        undo: true,
         action: () =>
           setDashCardAttributes({
             id: replaceCardModalDashCard.id,
@@ -522,14 +521,16 @@ class DashboardGridInner extends Component<
     );
   }
 
-  onVisualizerModalSave = (visualization: VisualizerVizDefinition) => {
+  onVisualizerModalSave = async (visualization: VisualizerVizDefinition) => {
     const { visualizerModalStatus } = this.state;
 
     if (!visualizerModalStatus) {
       return;
     }
 
-    this.props.replaceCardWithVisualization({
+    // Await the commit before closing — closing early lets a dashboard save
+    // run against the not-yet-updated dashcard and drop the change.
+    await this.props.replaceCardWithVisualization({
       dashcardId: visualizerModalStatus.dashcardId,
       visualization,
     });
@@ -564,6 +565,7 @@ class DashboardGridInner extends Component<
         initialState={{ state: visualizerModalStatus.state }}
         saveLabel={t`Save`}
         allowSaveWhenPristine={allowSaveWhenPristine}
+        dashboardId={this.props.dashboard.id}
       />
     );
   }

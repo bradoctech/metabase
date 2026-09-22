@@ -30,8 +30,9 @@ import { FullWidthContainer } from "metabase/styled-components/layout/FullWidthC
 import { Box, Flex } from "metabase/ui";
 import type { Collection, Dashboard as IDashboard } from "metabase-types/api";
 
-import { Dashboard } from "../Dashboard";
 import { FixedWidthContainer } from "../Dashboard/DashboardComponents";
+import { DashboardTabs } from "../DashboardTabs";
+import { DashboardTitle } from "../DashboardTitle";
 
 import S from "./DashboardHeaderView.module.css";
 
@@ -144,7 +145,7 @@ export function DashboardHeaderView({
                       alt="São Paulo"
                       className={CS.SpLogo}
                     />
-                    <Dashboard.Title className={S.HeaderCaption} />
+                    <DashboardTitle className={S.HeaderCaption} />
 
                     <Flex
                       align="center"
@@ -188,7 +189,7 @@ export function DashboardHeaderView({
             data-testid="fixed-width-dashboard-tabs"
             isFixedWidth={dashboard?.width === "fixed"}
           >
-            <Dashboard.Tabs />
+            <DashboardTabs />
           </FixedWidthContainer>
         </FullWidthContainer>
       </div>

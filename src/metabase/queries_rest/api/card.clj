@@ -534,7 +534,26 @@
    [:result_metadata        {:optional true} [:maybe [:ref ::lib.schema.metadata/card.result-metadata]]]
    [:cache_ttl              {:optional true} [:maybe ms/PositiveInt]]
    [:dashboard_id           {:optional true} [:maybe ms/PositiveInt]]
-   [:dashboard_tab_id       {:optional true} [:maybe ms/PositiveInt]]])
+   [:dashboard_tab_id       {:optional true} [:maybe ms/PositiveInt]]
+   [:size                   {:optional true} [:maybe [:map
+                                                      [:size_x ms/PositiveInt]
+                                                      [:size_y ms/PositiveInt]]]]])
+
+(defn- check-parameter-permissions
+  "Read-check the Cards `parameters` draw their values from, and data-permission-check the Fields their targets name.
+
+  Asking for a parameter's values runs a query against the Field its `:target` names -- for a public or embedded Card,
+  as-if superuser. A target may name any Field, whether or not the Card's own query goes anywhere near it (`query` is
+  only needed to resolve targets that go through a template tag), so which Fields it may name is decided here, when
+  the parameters are saved."
+  [parameters query]
+  (queries/check-parameter-source-card-permissions parameters)
+  (query-perms/check-parameter-field-permissions
+   (into []
+         (keep (fn [{:keys [target]}]
+                 (when target
+                   (params/param-target->field-id target {:dataset_query query}))))
+         parameters)))
 
 (defn- check-parameter-permissions
   "Read-check the Cards `parameters` draw their values from, and data-permission-check the Fields their targets name.

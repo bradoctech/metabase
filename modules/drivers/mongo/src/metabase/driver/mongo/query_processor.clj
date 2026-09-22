@@ -23,6 +23,7 @@
                                             $strcasecmp $subtract $sum
                                             $toBool $toLower $unwind $year]]
    [metabase.driver.util :as driver.u]
+   [metabase.lib.core :as lib]
    [metabase.util :as u]
    [metabase.util.date-2 :as u.date]
    [metabase.util.i18n :refer [tru]]
@@ -157,12 +158,26 @@
   {:arglists '([field])}
   driver-api/dispatch-by-clause-name-or-class)
 
-(defn- col->name-components [{:keys [parent-id], field-name :name, :as _col}]
-  (concat
-   ;; TODO (Cam 8/11/25) -- this should be using `:nfc-path` instead of looking this up the hard way
-   (when parent-id
-     (col->name-components (driver-api/field (driver-api/metadata-provider) parent-id)))
-   [field-name]))
+(defn- col->name-components [{:keys [parent-id nfc-path], field-name :name, :as _col}]
+  (cond
+    ;; mongo sync stores `:nfc-path` with the field's own name as the last element, matching sql-jdbc nested json
+    (seq nfc-path)
+    nfc-path
+
+    ;; fall back to walking `:parent-id` for fields synced before `:nfc-path` was populated
+    parent-id
+    (concat (col->name-components (driver-api/field (driver-api/metadata-provider) parent-id))
+            [field-name])
+
+    :else
+    [field-name]))
+
+(defn- raw-path->components
+  "Split a `parent.child.leaf`-style Mongo path string into a vector of path components. The Mongo driver
+  treats `.` as the unambiguous nested-key separator everywhere (sync, projection, ordering); literal dots in
+  document field names aren't supported."
+  [^String path]
+  (str/split path #"\."))
 
 (defn- raw-path->components
   "Split a `parent.child.leaf`-style Mongo path string into a vector of path components. The Mongo driver
@@ -969,7 +984,10 @@ function(bin) {
   driver-api/dispatch-by-clause-name-or-class)
 
 (defmethod negate :default [clause]
-  (driver-api/negate-filter-clause clause))
+  (-> clause
+      lib/->mbql5
+      lib/negate-boolean-expression
+      lib/->legacy-MBQL))
 
 (defmethod negate :and [[_ & subclauses]] (apply vector :or  (map negate subclauses)))
 (defmethod negate :or  [[_ & subclauses]] (apply vector :and (map negate subclauses)))

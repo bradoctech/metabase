@@ -5,6 +5,7 @@
    [metabase.api.common :as api]
    [metabase.driver :as driver]
    [metabase.driver.sql :as driver.sql]
+   [metabase.driver.util :as driver.u]
    [metabase.test :as mt]
    [metabase.test.data.interface :as tx]
    [metabase.util :as u]
@@ -14,6 +15,11 @@
    (java.time Instant LocalDateTime ZonedDateTime ZoneId)))
 
 (set! *warn-on-reflection* true)
+
+(def transform-run-timeout-seconds
+  "How long tests wait for a transform run to finish execution and sync."
+  ;; BigQuery runs routinely take 50-70s in CI.
+  120)
 
 (defn seconds-from-now-ns
   "Returns a deadline `seconds` from now in nanoseconds, for use with `System/nanoTime`.
@@ -85,10 +91,12 @@
   (if-let [[sym prefix & more-gens] (seq table-gens)]
     `(let [target# (gen-table-name ~prefix)
            ~sym target#]
-       (try
-         (with-transform-cleanup! ~more-gens ~@body)
-         (finally
-           (drop-target! target#))))
+       (when (or (nil? driver/*driver*)
+                 (driver.u/supports? driver/*driver* :test/dynamic-dataset-loading nil))
+         (try
+           (with-transform-cleanup! ~more-gens ~@body)
+           (finally
+             (drop-target! target#)))))
     `(mt/with-model-cleanup [:model/Transform]
        ~@body)))
 
@@ -135,7 +143,7 @@
 (defn test-run
   [transform-id]
   (let [resp      (mt/user-http-request :crowberto :post 202 (format "transform/%s/run" transform-id))
-        timeout-s 20 ; 20 seconds is our timeout to finish execution and sync
+        timeout-s transform-run-timeout-seconds
         deadline  (seconds-from-now-ns timeout-s)]
     (is (=? {:message "Transform run started"}
             resp))

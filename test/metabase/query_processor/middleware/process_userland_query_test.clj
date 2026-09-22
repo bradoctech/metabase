@@ -1,4 +1,7 @@
 (ns metabase.query-processor.middleware.process-userland-query-test
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query     {:namespaces [metabase.query-processor.middleware.process-userland-query-test]}
+                                                            metabase.test.data/query          {:namespaces [metabase.query-processor.middleware.process-userland-query-test]}
+                                                            metabase.test.data/run-mbql-query {:namespaces [metabase.query-processor.middleware.process-userland-query-test]}}}}}}
   (:require
    [buddy.core.codecs :as codecs]
    [clojure.core.async :as a]
@@ -206,8 +209,8 @@
 
 (deftest cancel-test
   (let [saved-query-execution? (atom false)]
-    (with-redefs [process-userland-query/save-execution-metadata! (fn [info]
-                                                                    (reset! saved-query-execution? info))]
+    (mt/with-dynamic-fn-redefs [process-userland-query/save-execution-metadata! (fn [info]
+                                                                                  (reset! saved-query-execution? info))]
       (mt/with-open-channels [canceled-chan (a/promise-chan)]
         (let [status (atom ::not-started)]
           (binding [qp.pipeline/*canceled-chan* canceled-chan

@@ -13,6 +13,7 @@ import { getFontFamilyValue } from "metabase/embedding-sdk/theme/fonts";
 import { useSelector } from "metabase/redux";
 import { getMetabaseCssVariables } from "metabase/styled-components/theme/css-variables";
 import { useMantineTheme } from "metabase/ui";
+import { getFontFamilyValue } from "metabase/ui/fonts";
 import { getSitePath } from "metabase/utils/dom";
 import { saveDomImageStyles } from "metabase/visualizations/lib/image-exports";
 

@@ -1,4 +1,5 @@
 (ns ^:mb/driver-tests metabase.driver-test
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.driver-test]}}}}}}
   (:require
    [clojure.set :as set]
    [clojure.string :as str]
@@ -44,7 +45,7 @@
            (.getContextClassLoader (Thread/currentThread))))))
 
 (deftest available?-test
-  (with-redefs [driver.impl/concrete? (constantly true)]
+  (mt/with-dynamic-fn-redefs [driver.impl/concrete? (constantly true)]
     (is (driver/available? ::test-driver))
     (is (driver/available? "metabase.driver-test/test-driver")
         "`driver/available?` should work for if `driver` is a string -- see #10135")))
@@ -151,9 +152,8 @@
                                       (#'task.sync-databases/sync-and-analyze-database*! (u/the-id db))
                                       (some?
                                        (some
-                                        (fn [{:keys [level e message]}]
+                                        (fn [{:keys [level message]}]
                                           (and (= level :warn)
-                                               (instance? clojure.lang.ExceptionInfo e)
                                                (re-matches #"^Cannot sync Database ([\s\S]+): ([\s\S]+)" message)))
                                         (messages)))))]
             (testing "sense checks before deleting the database"

@@ -1,5 +1,6 @@
 (ns ^:mb/driver-tests metabase.transforms-rest.api.transform-test
   "Tests for /api/transform endpoints."
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.transforms-rest.api.transform-test]}}}}}}
   (:require
    [clojure.test :refer :all]
    [medley.core :as m]
@@ -20,6 +21,7 @@
    [metabase.transforms.test-util :refer [get-test-schema
                                           parse-instant
                                           seconds-from-now-ns
+                                          transform-run-timeout-seconds
                                           utc-timestamp
                                           with-transform-cleanup!]]
    [metabase.util :as u]
@@ -152,7 +154,8 @@
     (mt/test-drivers (mt/normal-drivers-with-feature :transforms/table)
       (mt/dataset transforms-dataset/transforms-test
         (mt/with-data-analyst-role! (mt/user->id :lucky)
-          (mt/with-db-perm-for-group! (perms-group/all-users) (mt/id) :perms/transforms :yes
+          (mt/with-db-perms-for-group! (perms-group/all-users) (mt/id) {:perms/transforms     :yes
+                                                                        :perms/create-queries :query-builder-and-native}
             (with-transform-cleanup! [table-name "gadget_products"]
               (testing "Can create a transform with a param"
                 (let [query        (lib/native-query (mt/metadata-provider) "select * from foo [[where {{id}} = id]]")
@@ -172,7 +175,8 @@
     (mt/test-drivers (mt/normal-drivers-with-feature :transforms/table)
       (mt/dataset transforms-dataset/transforms-test
         (mt/with-data-analyst-role! (mt/user->id :lucky)
-          (mt/with-db-perm-for-group! (perms-group/all-users) (mt/id) :perms/transforms :yes
+          (mt/with-db-perms-for-group! (perms-group/all-users) (mt/id) {:perms/transforms     :yes
+                                                                        :perms/create-queries :query-builder-and-native}
             (with-transform-cleanup! [table-name "gadget_products"]
               (testing "Cannot create a transform with a required param"
                 (let [base-query   (lib/native-query (mt/metadata-provider) "select * from foo where {{id}} = id")
@@ -197,7 +201,8 @@
     (mt/test-drivers (mt/normal-drivers-with-feature :transforms/table)
       (mt/dataset transforms-dataset/transforms-test
         (mt/with-data-analyst-role! (mt/user->id :lucky)
-          (mt/with-db-perm-for-group! (perms-group/all-users) (mt/id) :perms/transforms :yes
+          (mt/with-db-perms-for-group! (perms-group/all-users) (mt/id) {:perms/transforms     :yes
+                                                                        :perms/create-queries :query-builder-and-native}
             (with-transform-cleanup! [table-name "gadget_products"]
               (testing "Cannot create a transform with a param that is necessary but not marked as required"
                 (let [query   (lib/native-query (mt/metadata-provider) "select * from foo where {{id}} = id")
@@ -383,7 +388,8 @@
       (mt/test-drivers (mt/normal-drivers-with-feature :transforms/table)
         (mt/dataset transforms-dataset/transforms-test
           (mt/with-data-analyst-role! (mt/user->id :lucky)
-            (mt/with-db-perm-for-group! (perms-group/all-users) (mt/id) :perms/transforms :yes
+            (mt/with-db-perms-for-group! (perms-group/all-users) (mt/id) {:perms/transforms     :yes
+                                                                          :perms/create-queries :query-builder-and-native}
               (testing "MBQL query transforms are detected as :mbql"
                 (with-transform-cleanup! [table-name "mbql_transform"]
                   (let [mbql-query (mt/mbql-query transforms_products)
@@ -414,7 +420,8 @@
       (mt/test-drivers (mt/normal-drivers-with-feature :transforms/table)
         (mt/dataset transforms-dataset/transforms-test
           (mt/with-data-analyst-role! (mt/user->id :lucky)
-            (mt/with-db-perm-for-group! (perms-group/all-users) (mt/id) :perms/transforms :yes
+            (mt/with-db-perms-for-group! (perms-group/all-users) (mt/id) {:perms/transforms     :yes
+                                                                          :perms/create-queries :query-builder-and-native}
               (with-transform-cleanup! [table-name "type_update_transform"]
                 (let [native-query (lib/native-query (mt/metadata-provider) "SELECT 1")
                       mbql-query (mt/mbql-query transforms_products)
@@ -495,6 +502,27 @@
                       response (mt/user-http-request :lucky :post 202
                                                      (format "transform/%d/run" (:id created)))]
                   (is (= "Transform run started" (:message response))))))))))))
+
+(deftest run-transform-permission-test
+  (mt/with-premium-features #{}
+    (mt/test-drivers (mt/normal-drivers-with-feature :transforms/table)
+      (testing "POST /transform/:id/run requires only read permission, not write"
+        (mt/dataset transforms-dataset/transforms-test
+          (mt/with-data-analyst-role! (mt/user->id :lucky)
+            (with-transform-cleanup! [table-name "test_read_run"]
+              (mt/with-temp [:model/Transform transform {:name   "Test Read Run Transform"
+                                                         :source {:type  "query"
+                                                                  :query (make-query "Gadget")}
+                                                         :target {:type   "table"
+                                                                  :schema (get-test-schema)
+                                                                  :name   table-name}}]
+                (testing "modifying the transform is forbidden (no write permission)"
+                  (mt/user-http-request :lucky :put 403 (format "transform/%d" (:id transform))
+                                        {:name "Renamed"}))
+                (testing "running the transform succeeds (only read permission required)"
+                  (is (= "Transform run started"
+                         (:message (mt/user-http-request :lucky :post 202
+                                                         (format "transform/%d/run" (:id transform)))))))))))))))
 
 (deftest list-transforms-test
   (mt/with-premium-features #{}
@@ -626,7 +654,8 @@
       (mt/test-drivers (mt/normal-drivers-with-feature :transforms/table)
         (mt/with-temp [:model/Table {table :id} {:schema "public", :name "orders_2"}
                        :model/Field _           {:table_id table, :name "foo"}
-                       :model/Transform parent  (->transform "transform1" (mt/mbql-query orders))
+                       :model/Transform parent  (-> (->transform "transform1" (mt/mbql-query orders))
+                                                    (assoc :target_table_id table))
                        :model/Transform child   (-> (->transform "transform2" (mt/mbql-query nil {:source-table table}))
                                                     (assoc-in [:target :name] "orders_3"))]
           (let [deps-resp (mt/user-http-request :lucky :get 200 (format "transform/%s/dependencies" (:id child)))]
@@ -741,7 +770,7 @@
   (mt/with-db-perm-for-group! (perms-group/all-users) (mt/id) :perms/transforms :yes
     (mt/with-data-analyst-role! (mt/user->id :lucky)
       (let [resp      (mt/user-http-request :lucky :post 202 (format "transform/%s/run" transform-id))
-            timeout-s 20 ; 20 seconds is our timeout to finish execution and sync
+            timeout-s transform-run-timeout-seconds
             deadline  (seconds-from-now-ns timeout-s)]
         (is (=? {:message "Transform run started"}
                 resp))
@@ -775,7 +804,6 @@
     (when-not table
       (throw (ex-info (str "Table not found in metadata: " table-name)
                       {:table-name table-name})))
-
     ;; Build a query for the table
     (let [base-query      (lib/query mp table)
           ;; Find the category column
@@ -1300,26 +1328,22 @@
               (is (= 1 (count items)))
               (is (= "transform" (:model (first items))))
               (is (= "Test Transform" (:name (first items)))))
-
             ;; Test 2: Transform appears when filtered by models=transform
             (let [items (:data (mt/user-http-request :lucky :get 200
                                                      (format "collection/%d/items" collection-id)
                                                      :models "transform"))]
               (is (= 1 (count items)))
               (is (= transform-id (:id (first items)))))
-
             ;; Test 3: Transform NOT returned when filtering for other models only
             (let [items (:data (mt/user-http-request :lucky :get 200
                                                      (format "collection/%d/items" collection-id)
                                                      :models "card"))]
               (is (empty? items)))
-
             ;; Test 4: Non-analysts users don't see transforms
             (perms/grant-collection-read-permissions! (perms/all-users-group) collection-id)
             (let [items (:data (mt/user-http-request :rasta :get 200
                                                      (format "collection/%d/items" collection-id)))]
               (is (empty? items)))
-
             ;; Test 5: Admins see transforms
             (let [items (:data (mt/user-http-request :crowberto :get 200
                                                      (format "collection/%d/items" collection-id)))]
@@ -1475,14 +1499,11 @@
                 (try
                   ;; Add both tags to transform
                   (transform.model/update-transform-tags! (:id transform) [(:id tag1) (:id tag2)])
-
                   ;; Verify tags are associated
                   (let [fetched (mt/user-http-request :lucky :get 200 (str "transform/" (:id transform)))]
                     (is (= (set [(:id tag1) (:id tag2)]) (set (:tag_ids fetched)))))
-
                   ;; Delete tag1
                   (mt/user-http-request :lucky :delete 204 (str "transform-tag/" (:id tag1)))
-
                   ;; Verify tag1 is removed but tag2 remains
                   (let [fetched (mt/user-http-request :lucky :get 200 (str "transform/" (:id transform)))]
                     (is (= [(:id tag2)] (vec (:tag_ids fetched)))))
@@ -1498,7 +1519,6 @@
             (mt/with-temp [:model/TransformTag tag1 {:name "order-tag-1"}
                            :model/TransformTag tag2 {:name "order-tag-2"}
                            :model/TransformTag tag3 {:name "order-tag-3"}]
-
               (let [schema (t2/select-one-fn :schema :model/Table :db_id (mt/id) :active true)]
                 (testing "Creating transform with specific tag order preserves that order"
                   (let [transform-request (-> (merge (mt/with-temp-defaults :model/Transform)
@@ -1550,7 +1570,6 @@
               (is (= "transform" (:model (first items))))
               (is (= "Root Transform" (:name (first items))))))
           (testing "Transform appears when filtered by models=trans form"
-
             (let [items (:data (mt/user-http-request :crowberto :get 200
                                                      "collection/root/items"
                                                      :namespace "transforms"
@@ -1660,6 +1679,41 @@
                     (is (string? response))
                     (is (re-find #"unsupported type" response))))))))))))
 
+(deftest update-tag-ids-with-stale-checkpoint-field-test
+  (testing "Updating only tag_ids succeeds even when the checkpoint field has since been deleted (GDGT-2410)"
+    (mt/with-premium-features #{}
+      (mt/test-drivers (mt/normal-drivers-with-feature :transforms/table)
+        (mt/dataset transforms-dataset/transforms-test
+          (let [schema      (get-test-schema)
+                id-field-id (mt/id :transforms_products :id)]
+            (mt/with-temp [:model/TransformTag {tag-id :id} {:name "stale-checkpoint-tag"}]
+              (with-transform-cleanup! [table-name "stale_checkpoint_test"]
+                (let [created (mt/user-http-request :crowberto :post 200 "transform"
+                                                    {:name    "Stale Checkpoint Transform"
+                                                     :tag_ids [tag-id]
+                                                     :source  {:type  "query"
+                                                               :query (lib/native-query (mt/metadata-provider)
+                                                                                        "SELECT id, name, category FROM transforms_products")
+                                                               :source-incremental-strategy {:type "checkpoint"
+                                                                                             :checkpoint-filter-field-id id-field-id}}
+                                                     :target  {:type "table-incremental"
+                                                               :schema schema
+                                                               :name table-name
+                                                               :target-incremental-strategy {:type "append"}}})
+                      source  (t2/select-one-fn :source :model/Transform (:id created))]
+                  ;; Simulate the checkpoint field being deleted out from under the transform
+                  ;; (e.g. its source table was re-synced), as happened with production transform 2344.
+                  ;; A non-existent field id is equivalent to a deleted field: the validator's
+                  ;; (select-one :model/Field id) returns nil either way.
+                  (t2/update! :model/Transform (:id created)
+                              {:source (assoc-in source [:source-incremental-strategy :checkpoint-filter-field-id]
+                                                 Integer/MAX_VALUE)})
+                  (testing "removing the tag (tag_ids-only update) should not re-validate the stale checkpoint field"
+                    (let [updated (mt/user-http-request :crowberto :put 200
+                                                        (format "transform/%d" (:id created))
+                                                        {:tag_ids []})]
+                      (is (= [] (:tag_ids updated))))))))))))))
+
 (deftest search-filters-transform-source-types-test
   (mt/with-premium-features #{}
     (mt/test-drivers (mt/normal-drivers-with-feature :transforms/table)
@@ -1684,7 +1738,7 @@
                                                                     :schema   (get-test-schema)
                                                                     :name     (str "target_" (u/generate-nano-id))
                                                                     :database (mt/id)}}]
-            (search.tu/with-new-search-and-legacy-search
+            (search.tu/with-appdb-search-and-legacy-search
               (let [transform-ids (search-transform-ids search-term)]
                 (is (contains? transform-ids query-id))
                 (is (not (contains? transform-ids python-id)))))))))))
@@ -1702,7 +1756,7 @@
                                                               :target {:type   "table"
                                                                        :schema (get-test-schema)
                                                                        :name   (str "target_" (u/generate-nano-id))}}]
-            (search.tu/with-new-search-and-legacy-search
+            (search.tu/with-appdb-search-and-legacy-search
               (let [results (mt/user-http-request :rasta :get 200 "search" :q search-term :models "transform")
                     ids     (set (map :id (:data results)))]
                 (is (empty? ids))
@@ -1729,6 +1783,50 @@
                                                          :target {:type   "table"
                                                                   :schema (get-test-schema)
                                                                   :name   (str "target_" (u/generate-nano-id))}}]
-            (search.tu/with-new-search-and-legacy-search
+            (search.tu/with-appdb-search-and-legacy-search
               (is (= #{native-id mbql-id}
                      (search-transform-ids search-term))))))))))
+
+(deftest get-runs-sort-by-duration-test
+  (testing "GET /api/transform/run supports sort-column=duration"
+    (mt/with-premium-features #{}
+      (mt/with-temp [:model/Transform     {tid :id}        {}
+                     ;; 1s short run
+                     :model/TransformRun  {short-id :id}   {:transform_id tid
+                                                            :status :succeeded
+                                                            :start_time #t "2026-01-01T00:00:00Z"
+                                                            :end_time   #t "2026-01-01T00:00:01Z"
+                                                            :run_method "cron"}
+                     ;; 10s longer run
+                     :model/TransformRun  {long-id :id}    {:transform_id tid
+                                                            :status :succeeded
+                                                            :start_time #t "2026-01-01T00:00:00Z"
+                                                            :end_time   #t "2026-01-01T00:00:10Z"
+                                                            :run_method "cron"}
+                     ;; in-progress run (no end_time, no measurable duration)
+                     :model/TransformRun  {running-id :id} {:transform_id tid
+                                                            :status :started
+                                                            :start_time #t "2026-01-01T00:00:00Z"
+                                                            :end_time   nil
+                                                            :is_active true
+                                                            :run_method "cron"}]
+        (let [run-id?      #{short-id long-id running-id}
+              seed-runs    (fn [data] (filter (comp run-id? :id) data))]
+          (testing "desc — longest completed runs first; in-progress (null duration) sinks to the bottom"
+            (let [resp (mt/user-http-request :crowberto :get 200 "transform/run"
+                                             :transform-ids [tid]
+                                             :sort-column "duration"
+                                             :sort-direction "desc")
+                  ids  (map :id (seed-runs (:data resp)))]
+              (is (= [long-id short-id running-id] ids))))
+          (testing "asc — shortest completed runs first; in-progress run still last"
+            (let [resp (mt/user-http-request :crowberto :get 200 "transform/run"
+                                             :transform-ids [tid]
+                                             :sort-column "duration"
+                                             :sort-direction "asc")
+                  ids  (map :id (seed-runs (:data resp)))]
+              (is (= [short-id long-id running-id] ids))))
+          (testing "unknown sort-column is rejected with a 400"
+            (mt/user-http-request :crowberto :get 400 "transform/run"
+                                  :sort-column "bogus"
+                                  :sort-direction "asc")))))))

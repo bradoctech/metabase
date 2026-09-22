@@ -18,7 +18,7 @@ type UsageAnalytics = {
   embedHostUrl: string;
 };
 
-const sendMessage = (message: SdkIframeEmbedTagMessage) => {
+export const sendMessage = (message: SdkIframeEmbedTagMessage) => {
   window.parent.postMessage(message, "*");
 };
 

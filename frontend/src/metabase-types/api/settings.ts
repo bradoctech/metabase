@@ -333,6 +333,8 @@ export const tokenFeatures = [
   "cloud_custom_smtp",
   "content_translation",
   "content_verification",
+  "custom-viz",
+  "custom-viz-available",
   "data-complexity-score",
   "disable_password_login",
   "embedding",
@@ -361,9 +363,6 @@ export const tokenFeatures = [
   "upload_management",
   "collection_cleanup",
   "cache_preemptive",
-  "ai_sql_fixer",
-  "ai_sql_generation",
-  "ai_entity_analysis",
   "database_routing",
   "development_mode",
   "etl_connections",
@@ -371,6 +370,7 @@ export const tokenFeatures = [
   "table_data_editing",
   "remote_sync",
   "dependencies",
+  "schema-viewer",
   "semantic_search",
   "transforms-python",
   "transforms-basic",
@@ -380,6 +380,7 @@ export const tokenFeatures = [
   "writable_connection",
   "admin_security_center",
   "ai_controls",
+  "workspaces",
 ] as const;
 
 export type TokenFeature = (typeof tokenFeatures)[number];
@@ -516,6 +517,7 @@ interface AdminSettings {
   "system-timezone"?: string;
   "embedding-homepage": EmbeddingHomepageStatus;
   "setup-license-active-at-setup": boolean;
+  "setup-embedding-autoenabled": boolean;
   "embedding-hub-test-embed-snippet-created": boolean;
   "embedding-hub-production-embed-snippet-created": boolean;
   "embedding-hub-sso-auth-manual-tested": boolean;
@@ -546,10 +548,14 @@ type PrivilegedSettings = AdminSettings & SettingsManagerSettings;
 
 interface PublicSettings {
   "allowed-iframe-hosts": string;
+  "csp-img-allowed-hosts": string;
+  "csp-img-enabled": boolean;
   "ai-features-enabled?": boolean;
   "agent-api-enabled?": boolean;
   "analytics-uuid": string;
   "anon-tracking-enabled": boolean;
+  "metaplow-tracking-enabled": boolean;
+  "metaplow-url": string | null;
   "application-font": string;
   "application-font-files": FontFile[] | null;
   "application-name": string;
@@ -640,6 +646,8 @@ interface PublicSettings {
   version: Version;
   "version-info-last-checked": string | null;
   "airgap-enabled": boolean;
+  "custom-viz-enabled": boolean;
+  "custom-viz-plugin-dev-mode-enabled": boolean;
   "non-table-chart-generated": boolean;
   "use-tenants": boolean;
 }

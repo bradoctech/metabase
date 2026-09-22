@@ -1,4 +1,5 @@
 import { createMockMetadata } from "__support__/metadata";
+import { convertParametersToMbql } from "metabase/querying/parameters/utils/query";
 import * as Lib from "metabase-lib";
 import {
   createMockColumn,
@@ -748,10 +749,10 @@ describe("Question", () => {
     });
   });
 
-  describe("Question.prototype.convertParametersToMbql", () => {
+  describe("convertParametersToMbql", () => {
     it("should do nothing to a native question", () => {
       expect(
-        native_orders_count_question._convertParametersToMbql({
+        convertParametersToMbql(native_orders_count_question, {
           isComposed: false,
         }),
       ).toBe(native_orders_count_question);
@@ -779,7 +780,7 @@ describe("Question", () => {
           foo_id: "abc",
         });
 
-      const questionWithFilters = question._convertParametersToMbql({
+      const questionWithFilters = convertParametersToMbql(question, {
         isComposed: false,
       });
 

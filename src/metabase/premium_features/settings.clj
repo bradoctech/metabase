@@ -3,6 +3,7 @@
   (:require
    [metabase.app-db.core :as mdb]
    [metabase.config.core :as config]
+   [metabase.premium-features.defenterprise :refer [defenterprise]]
    [metabase.settings.core :as setting :refer [defsetting]]
    [metabase.util.i18n :refer [deferred-tru]]))
 
@@ -344,6 +345,13 @@
   "Should we offer users the Metabase-managed AI provider?"
   :offer-metabase-ai-managed)
 
+(defenterprise enable-custom-viz?
+  "Should we enable custom visualizations? OSS falls back to `false`; the EE implementation checks the
+  `custom-viz-enabled` setting and the `:custom-viz` premium feature."
+  metabase-enterprise.custom-viz-plugin.settings
+  []
+  false)
+
 (define-premium-feature enable-data-complexity-score?
   "Should we expose Data Complexity Score?"
   :data-complexity-score)
@@ -355,6 +363,14 @@
 (define-premium-feature ^{:added "0.61.0"} enable-ai-controls?
   "Should we enable AI controls (metabot permissions, scope management)?"
   :ai-controls)
+
+(define-premium-feature ^{:added "0.62.0"} enable-schema-viewer?
+  "Should we allow users to view database schemas as ER diagrams?"
+  :schema-viewer)
+
+(define-premium-feature enable-workspaces?
+  "Should we allow users to manage workspaces?"
+  :workspaces)
 
 (defn- -token-features []
   {:admin_security_center          (security-center-enabled?)
@@ -368,12 +384,15 @@
    :config_text_file               (enable-config-text-file?)
    :content_translation            (enable-content-translation?)
    :content_verification           (enable-content-verification?)
+   :custom-viz                     (enable-custom-viz?)
+   :custom-viz-available           (has-feature? :custom-viz)
    :data-complexity-score          (enable-data-complexity-score?)
    :dashboard_subscription_filters (enable-dashboard-subscription-filters?)
    :database_auth_providers        (enable-database-auth-providers?)
    :database_routing               (enable-database-routing?)
    :library                        (enable-library?)
    :dependencies                   (enable-dependencies?)
+   :schema-viewer                  (enable-schema-viewer?)
    :development_mode               (development-mode?)
    :disable_password_login         (can-disable-password-login?)
    :email_allow_list               (enable-email-allow-list?)
@@ -407,6 +426,7 @@
    :transforms-basic               (enable-basic-transforms?)
    :transforms-python              (enable-python-transforms?)
    :upload_management              (enable-upload-management?)
+   :workspaces                     (enable-workspaces?)
    :whitelabel                     (enable-whitelabeling?)
    :writable_connection            (enable-writable-connection?)
    :ai_controls                    (enable-ai-controls?)})

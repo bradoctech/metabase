@@ -1,4 +1,3 @@
-import { Api } from "metabase/api";
 import type {
   AcknowledgeAdvisoriesResponse,
   AcknowledgeAdvisoryResponse,
@@ -7,6 +6,7 @@ import type {
   SendTestNotificationRequest,
 } from "metabase-types/api";
 
+import { Api } from "./api";
 import { listTag } from "./tags";
 
 export const securityCenterApi = Api.injectEndpoints({

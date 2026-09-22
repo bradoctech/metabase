@@ -28,6 +28,9 @@
   has-any-features?
   has-feature?
   log-enabled?
+  query-transforms-enabled?
+  python-transforms-enabled?
+  any-transforms-enabled?
   max-users-allowed
   meters
   plan-alias
@@ -53,6 +56,7 @@
   enable-config-text-file?
   enable-content-translation?
   enable-content-verification?
+  enable-custom-viz?
   enable-data-complexity-score?
   enable-dashboard-subscription-filters?
   enable-database-auth-providers?
@@ -61,6 +65,7 @@
   enable-metabase-ai-managed?
   enable-metabot-v3?
   enable-dependencies?
+  enable-schema-viewer?
   enable-email-allow-list?
   enable-email-restrict-recipients?
   enable-embedding-sdk-origins?
@@ -84,6 +89,7 @@
   enable-basic-transforms?
   enable-python-transforms?
   enable-upload-management?
+  enable-workspaces?
   enable-whitelabeling?
   enable-writable-connection?
   has-attached-dwh?

@@ -57,7 +57,7 @@
 
 (deftest enhance-context-with-schema-native
   (let [mock-tables [{:id 1 :name "table1"} {:id 2 :name "table2"}]]
-    (with-redefs [context/database-tables-for-context (fn [_] mock-tables)]
+    (mt/with-dynamic-fn-redefs [context/database-tables-for-context (fn [_] mock-tables)]
       (testing "Enhances context with schema for native queries"
         (let [input {:user_is_viewing [{:query users-native-query}]}
               result (#'context/enhance-context-with-schema input)]
@@ -78,7 +78,7 @@
 (deftest enhance-context-with-schema-complete-native-query
   (testing "Enhances context with schema for complete native query structure"
     (let [mock-tables [{:id 1 :name "users"} {:id 2 :name "orders"}]]
-      (with-redefs [context/database-tables-for-context (fn [_] mock-tables)]
+      (mt/with-dynamic-fn-redefs [context/database-tables-for-context (fn [_] mock-tables)]
         (let [input {:user_is_viewing [{:query users-native-query}]}
               result (#'context/enhance-context-with-schema input)]
           (is (= (get-in result [:user_is_viewing 0 :used_tables]) mock-tables)))))))
@@ -86,9 +86,9 @@
 (deftest enhance-context-with-schema-complete-mbql-query
   (testing "Does not enhance context for complete MBQL query structure and doesn't call database-tables-for-context"
     (let [call-count (atom 0)]
-      (with-redefs [context/database-tables-for-context (fn [_]
-                                                          (swap! call-count inc)
-                                                          [{:id 1 :name "should-not-be-used"}])]
+      (mt/with-dynamic-fn-redefs [context/database-tables-for-context (fn [_]
+                                                                        (swap! call-count inc)
+                                                                        [{:id 1 :name "should-not-be-used"}])]
         (let [input {:user_is_viewing [{:query users-mbql-query}]}
               result (#'context/enhance-context-with-schema input)]
           (is (nil? (get-in result [:user_is_viewing 0 :used_tables]))
@@ -100,8 +100,8 @@
   (testing "Enhances context with schema for Python transforms"
     (let [mock-tables [{:id 24 :name "orders" :schema "public"}
                        {:id 31 :name "products" :schema "public"}]]
-      (with-redefs [context/python-transform-tables-for-context
-                    (fn [_] mock-tables)]
+      (mt/with-dynamic-fn-redefs [context/python-transform-tables-for-context
+                                  (fn [_] mock-tables)]
         (let [input {:user_is_viewing [{:type "transform"
                                         :source {:type "python"
                                                  :source-database 2
@@ -123,8 +123,8 @@
 (deftest enhance-context-with-schema-python-transform-no-source-tables
   (testing "Handles Python transform without source-tables"
     (let [called? (atom false)]
-      (with-redefs [context/python-transform-tables-for-context
-                    (fn [_] (reset! called? true) nil)]
+      (mt/with-dynamic-fn-redefs [context/python-transform-tables-for-context
+                                  (fn [_] (reset! called? true) nil)]
         (let [input {:user_is_viewing [{:type "transform"
                                         :source {:type "python"
                                                  :source-database 2
@@ -136,8 +136,8 @@
 (deftest enhance-context-with-schema-python-transform-no-source-database
   (testing "Handles Python transform without source-database"
     (let [called? (atom false)]
-      (with-redefs [context/python-transform-tables-for-context
-                    (fn [_] (reset! called? true) nil)]
+      (mt/with-dynamic-fn-redefs [context/python-transform-tables-for-context
+                                  (fn [_] (reset! called? true) nil)]
         (let [input {:user_is_viewing [{:type "transform"
                                         :source {:type "python"
                                                  :source-tables [{:alias "orders" :table_id 24}]}}]}
@@ -356,10 +356,10 @@
   (testing "Native query inside adhoc still uses SQL parsing path, not MBQL path"
     (let [called-mbql?   (atom false)
           called-native? (atom false)]
-      (with-redefs [context/mbql-source-table-ids
-                    (fn [_] (reset! called-mbql? true) nil)
-                    context/database-tables-for-context
-                    (fn [_] (reset! called-native? true) [{:id 1 :name "t"}])]
+      (mt/with-dynamic-fn-redefs [context/mbql-source-table-ids
+                                  (fn [_] (reset! called-mbql? true) nil)
+                                  context/database-tables-for-context
+                                  (fn [_] (reset! called-native? true) [{:id 1 :name "t"}])]
         (let [input  {:user_is_viewing [{:type  "adhoc"
                                          :query {:database (mt/id)
                                                  :type     "native"

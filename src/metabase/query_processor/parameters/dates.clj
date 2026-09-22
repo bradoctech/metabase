@@ -8,6 +8,7 @@
    [clojure.string :as str]
    [java-time.api :as t]
    [medley.core :as m]
+   [metabase.driver :as driver]
    [metabase.driver.common :as driver.common]
    [metabase.lib.core :as lib]
    [metabase.lib.schema.common :as lib.schema.common]
@@ -15,6 +16,7 @@
    [metabase.lib.schema.id :as lib.schema.id]
    [metabase.lib.schema.parameter :as lib.schema.parameter]
    [metabase.query-processor.error-type :as qp.error-type]
+   ^{:clj-kondo/ignore [:deprecated-namespace]} [metabase.query-processor.store :as qp.store]
    [metabase.query-processor.timezone :as qp.timezone]
    [metabase.util.date-2 :as u.date]
    [metabase.util.i18n :refer [tru]]
@@ -406,18 +408,18 @@
             (parser-result-decoder parser-result decoder-param)))
         decoders))
 
-(def ^:private TemporalUnit
+(mr/def ::temporal-unit
   (into [:enum] u.date/add-units))
 
-(def ^:private TemporalRange
+(mr/def ::temporal-range
   [:map
    [:start {:optional true} (lib.schema.common/instance-of-class Temporal)]
    [:end   {:optional true} (lib.schema.common/instance-of-class Temporal)]
-   [:unit                   TemporalUnit]])
+   [:unit                   ::temporal-unit]])
 
-(mu/defn- adjust-inclusive-range-if-needed :- [:maybe TemporalRange]
+(mu/defn- adjust-inclusive-range-if-needed :- [:maybe ::temporal-range]
   "Make an inclusive date range exclusive as needed."
-  [temporal-range :- [:maybe TemporalRange] {:keys [inclusive-start? inclusive-end?]}]
+  [temporal-range :- [:maybe ::temporal-range] {:keys [inclusive-start? inclusive-end?]}]
   (-> temporal-range
       (m/update-existing :start #(if inclusive-start?
                                    %
@@ -455,7 +457,9 @@
 
 (defn- date-string->raw-range
   [date-string]
-  (let [now (t/local-date-time)]
+  (let [now (if (and driver/*driver* (qp.store/initialized?))
+              (t/local-date-time (qp.timezone/now))
+              (t/local-date-time))]
     ;; Relative dates respect the given time zone because a notion like "last 7 days" might mean a different range of
     ;; days depending on the user timezone
     (or (execute-decoders relative-date-string-decoders :range now date-string)

@@ -222,16 +222,16 @@ export type TextFingerprintDisplayInfo = {
   percentUrl: number;
 };
 
-// We're setting the values here as unknown even though
-// the API will return numbers most of the time, because
-// sometimes it doesn't!
+// Properties are typed as optional unknown: the API returns numbers most of
+// the time but sometimes returns non-numbers, and sometimes omits the property
+// entirely.
 export type NumberFingerprintDisplayInfo = {
-  avg: unknown;
-  max: unknown;
-  min: unknown;
-  q1: unknown;
-  q3: unknown;
-  sd: unknown;
+  avg?: unknown;
+  max?: unknown;
+  min?: unknown;
+  q1?: unknown;
+  q3?: unknown;
+  sd?: unknown;
 };
 
 export type DateTimeFingerprintDisplayInfo = {
@@ -642,6 +642,6 @@ export type ValidationError = { message: string };
 
 export type JsColumnTypeInfo = {
   base_type?: string;
-  effective_type?: string;
+  effective_type?: string | null;
   semantic_type?: string | null;
 };

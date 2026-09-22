@@ -1,26 +1,28 @@
 import type { LocationDescriptorObject } from "history";
 import { replace } from "react-router-redux";
 
+import { cardApi, snippetApi } from "metabase/api";
+import { runRtkEndpoint } from "metabase/api/utils/run-rtk-endpoint";
 import {
   cardIsEquivalent,
   deserializeCard,
   parseHash,
 } from "metabase/common/utils/card";
-import { Questions } from "metabase/entities/questions";
-import { Snippets } from "metabase/entities/snippets";
 import {
   getIsEditingInDashboard,
   getNotebookNativePreviewSidebarWidth,
 } from "metabase/query_builder/selectors";
 import { loadMetadataForCard } from "metabase/questions/actions";
 import { setErrorPage } from "metabase/redux/app";
-import { addFields } from "metabase/redux/metadata";
+import type { DispatchFn } from "metabase/redux/hooks";
+import { fetchTableMetadata, updateMetadata } from "metabase/redux/metadata";
 import { INITIALIZE_QB, resetQB } from "metabase/redux/query-builder";
 import type {
   Dispatch,
   GetState,
   QueryBuilderUIControls,
 } from "metabase/redux/store";
+import { FieldSchema } from "metabase/schema";
 import { getMetadata } from "metabase/selectors/metadata";
 import { canUserCreateQueries, getUser } from "metabase/selectors/user";
 import * as Urls from "metabase/urls";
@@ -233,10 +235,11 @@ export async function updateTemplateTagNames(
     await Promise.all(
       query.referencedQuestionIds().map(async (id) => {
         try {
-          const actionResult = await dispatch(
-            Questions.actions.fetch({ id }, { noEvent: true }),
+          return await runRtkEndpoint(
+            { id, ignore_error: true },
+            dispatch,
+            cardApi.endpoints.getCard,
           );
-          return Questions.HACK_getObjectFromAction(actionResult);
         } catch {
           return null;
         }
@@ -246,9 +249,17 @@ export async function updateTemplateTagNames(
 
   query = updateCardTemplateTagNames(query, referencedCards);
   if (query.hasSnippets()) {
-    await dispatch(Snippets.actions.fetchList());
-    const snippets = Snippets.selectors.getList(getState());
-    query = query.updateSnippetNames(snippets);
+    const action = (dispatch as DispatchFn)(
+      snippetApi.endpoints.listSnippets.initiate(undefined, {
+        forceRefetch: true,
+      }),
+    );
+    try {
+      const snippets = await action.unwrap();
+      query = query.updateSnippetNames(snippets);
+    } finally {
+      action.unsubscribe();
+    }
   }
   return query;
 }
@@ -276,11 +287,34 @@ async function handleQBInit(
   dispatch(cancelQuery());
 
   const queryParams = location.query;
-  const cardId = Urls.extractEntityId(params.slug);
+  const isTableRoute = location.pathname?.startsWith("/table");
+  const slugEntityId = Urls.extractEntityId(params.slug);
+  // On the /table/:slug route the slug identifies a table, not a saved card.
+  const cardId = isTableRoute ? undefined : slugEntityId;
   const uiControls: UIControls = getQueryBuilderModeFromLocation(location);
-  const { options, serializedCard } = parseHash(location.hash);
-  const hasCard = cardId || serializedCard;
+  let { options, serializedCard } = parseHash(location.hash);
   const currentUser = getUser(getState());
+
+  if (isTableRoute && slugEntityId != null) {
+    await dispatch(fetchTableMetadata(slugEntityId));
+    if (isStale()) {
+      return;
+    }
+    const table = getMetadata(getState()).table(slugEntityId);
+    if (!table) {
+      dispatch(setErrorPage(NOT_FOUND_ERROR));
+      return;
+    }
+    // The /table URL only carries the table id; resolve its db so the QB can
+    // build the table's default ad-hoc question, just like `?db=&table=`.
+    options = {
+      ...options,
+      db: String(table.db_id),
+      table: String(slugEntityId),
+    };
+  }
+
+  const hasCard = cardId || serializedCard;
 
   if (uiControls.queryBuilderMode === "notebook") {
     if (!canUserCreateQueries(getState())) {
@@ -351,7 +385,9 @@ async function handleQBInit(
   // This ensures field filter widgets have has_field_values even when the user
   // lacks create-queries permission on the underlying table (GHY-1605).
   if (card.param_fields) {
-    await dispatch(addFields(Object.values(card.param_fields).flat()));
+    await dispatch(
+      updateMetadata(Object.values(card.param_fields).flat(), [FieldSchema]),
+    );
   }
 
   const metadata = getMetadata(getState());

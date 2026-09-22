@@ -1,8 +1,10 @@
 (ns metabase-enterprise.remote-sync.impl-test
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase-enterprise.remote-sync.impl-test]}}}}}}
   (:require
    [clojure.string :as str]
    [clojure.test :refer :all]
    [java-time.api :as t]
+   [metabase-enterprise.remote-sync.guards :as guards]
    [metabase-enterprise.remote-sync.impl :as impl]
    [metabase-enterprise.remote-sync.models.remote-sync-task :as remote-sync.task]
    [metabase-enterprise.remote-sync.settings :as remote-sync.settings]
@@ -105,16 +107,131 @@
                       :model "Database"
                       :id    "clickhouse"
                       :error :metabase-enterprise.serialization.v2.load/not-found})]
-      (is (= "Import failed: Database 'clickhouse' does not exist on this instance. Make sure all referenced databases and other dependencies are set up before importing."
+      (is (= "Import failed: Database (`clickhouse`) does not exist on this instance. Make sure all referenced databases and other dependencies are set up before importing."
              (impl/source-error-message e)))))
+  (testing "source-error-message names the entity holding the dangling reference when known (GHY-3992)"
+    (let [e (ex-info "Collection 'xyz789' was not found"
+                     {:path     "Collection xyz789"
+                      :model    "Collection"
+                      :id       "xyz789"
+                      :referrer {:model "Card" :id "abc123" :name "Orders by Month"}
+                      :error    :metabase-enterprise.serialization.v2.load/not-found})]
+      (is (= (str "Import failed: Card `Orders by Month` (`abc123`) references Collection (`xyz789`), which does not "
+                  "exist on this instance. Make sure all referenced databases and other dependencies are set up "
+                  "before importing.")
+             (impl/source-error-message e)))))
+  (testing "surrounding whitespace in a referenced name is visible because names are backtick-quoted (GHY-3992)"
+    (doseq [db-name ["My Database " " My Database" "My Database"]]
+      (let [e (ex-info (format "Database '%s' was not found" db-name)
+                       {:path  (str "Database " db-name)
+                        :model "Database"
+                        :id    db-name
+                        :error :metabase-enterprise.serialization.v2.load/not-found})]
+        (is (str/includes? (impl/source-error-message e)
+                           (format "Database (`%s`)" db-name))
+            (format "expected %s to be quoted verbatim" (pr-str db-name)))))))
 
-  (testing "source-error-message produces helpful message for FK database-not-found errors"
+(deftest source-error-message-database-not-found-test
+  (testing "source-error-message names the card and the missing database for FK database-not-found errors"
     (let [cause (ex-info "table id present, but database not found: [clickhouse nil some_table]"
-                         {:table-id ["clickhouse" nil "some_table"]})
+                         {:table-id ["clickhouse" nil "some_table"]
+                          :db-name  "clickhouse"
+                          :error    :metabase.models.serialization.resolve.db/database-not-found})
           e     (ex-info "Failed to load into database for Card abc123"
-                         {:path "Card abc123"}
+                         {:path   "Card abc123"
+                          :entity {:model "Card" :id "abc123" :name "Some card"}}
                          cause)]
-      (is (str/includes? (impl/source-error-message e) "A referenced database does not exist on this instance")))))
+      (is (= (str "Import failed: Card `Some card` (`abc123`) references Database (`clickhouse`), which does not "
+                  "exist on this instance. Make sure all referenced databases and other dependencies are set up "
+                  "before importing.")
+             (impl/source-error-message e)))))
+  (testing "database-not-found is found anywhere in the cause chain, not only at the immediate cause"
+    (let [root   (ex-info "table id present, but database not found: [clickhouse nil t]"
+                          {:db-name "clickhouse"
+                           :error   :metabase.models.serialization.resolve.db/database-not-found})
+          middle (ex-info "wrapped by an intervening helper" {} root)
+          e      (ex-info "Failed to load into database for Card abc123" {:path "Card abc123"} middle)]
+      (is (str/includes? (impl/source-error-message e) "Database (`clickhouse`)")))))
+
+(deftest source-error-message-load-failure-test
+  (testing "source-error-message names the entity and the underlying reason (GHY-3992)"
+    (let [cause (ex-info "NOT NULL constraint failed: report_card.display" {})
+          e     (ex-info "Failed to load into database for Card abc123"
+                         {:path   "Card abc123"
+                          :entity {:model "Card" :id "abc123" :name "Orders by Month"}
+                          :error  :metabase-enterprise.serialization.v2.load/load-failure}
+                         cause)]
+      (is (= (str "Import failed: could not save Card `Orders by Month` (`abc123`). "
+                  "NOT NULL constraint failed: report_card.display.")
+             (impl/source-error-message e)))))
+  (testing "a reason that already ends in a period is not double-punctuated"
+    (let [e (ex-info "Failed to load into database for Card abc123"
+                     {:entity {:model "Card" :id "abc123" :name "Orders by Month"}
+                      :error  :metabase-enterprise.serialization.v2.load/load-failure}
+                     (ex-info "Something went wrong." {}))]
+      (is (str/ends-with? (impl/source-error-message e) "went wrong."))))
+  (testing "a load-failure with no cause omits the reason clause"
+    (let [e (ex-info "Failed to load into database for Card abc123"
+                     {:entity {:model "Card" :id "abc123" :name "Orders by Month"}
+                      :error  :metabase-enterprise.serialization.v2.load/load-failure})]
+      (is (= "Import failed: could not save Card `Orders by Month` (`abc123`)."
+             (impl/source-error-message e)))))
+  (testing "stripped keys are reported, since a partial row may have been committed (GHY-3992)"
+    (let [cause (ex-info "some db error" {})
+          e     (ex-info "Failed to load into database for Dashboard xyz"
+                         {:path          "Dashboard xyz"
+                          :entity        {:model "Dashboard" :id "xyz" :name "Sales"}
+                          :stripped-keys #{:parameters :dashcards}
+                          :error         :metabase-enterprise.serialization.v2.load/load-failure}
+                         cause)]
+      (is (= (str "Import failed: could not save Dashboard `Sales` (`xyz`). some db error. "
+                  "It may have been saved without: `dashcards`, `parameters`.")
+             (impl/source-error-message e)))))
+  (testing "a database-not-found cause still wins over the generic load-failure branch"
+    (let [cause (ex-info "table id present, but database not found: [ch nil t]"
+                         {:db-name "ch"
+                          :error   :metabase.models.serialization.resolve.db/database-not-found})
+          e     (ex-info "Failed to load into database for Card abc123"
+                         {:entity {:model "Card" :id "abc123" :name "Some card"}
+                          :error  :metabase-enterprise.serialization.v2.load/load-failure}
+                         cause)]
+      (is (str/includes? (impl/source-error-message e) "references Database (`ch`)"))))
+  (testing "a tenant-collection cause still wins over the generic load-failure branch"
+    (let [cause (ex-info "Can't create a tenant collection without tenants enabled" {})
+          e     (ex-info "Failed to load into database for Collection abc"
+                         {:entity {:model "Collection" :id "abc"}
+                          :error  :metabase-enterprise.serialization.v2.load/load-failure}
+                         cause)]
+      (is (str/includes? (impl/source-error-message e) "tenants feature is disabled")))))
+
+(deftest source-error-message-ingest-errors-test
+  (testing "source-error-message lists each unreadable file with its parse reason (GHY-3887)"
+    (let [ingest-err (ex-info "Failed to parse file: collections/transforms/a.yaml"
+                              {:file "collections/transforms/a.yaml"
+                               :reason "found character '@' that cannot start any token. (Do not use @ for indentation) (line 1, column 1)"})
+          e          (ex-info "Failed to read 1 file(s) during ingestion: collections/transforms/a.yaml"
+                              {:ingest-errors [ingest-err]
+                               :files         ["collections/transforms/a.yaml"]}
+                              ingest-err)
+          msg        (impl/source-error-message e)]
+      (is (str/includes? msg "Failed to read 1 file(s)"))
+      (is (str/includes? msg "`collections/transforms/a.yaml`"))
+      (is (str/includes? msg "found character '@'"))))
+  (testing "file paths are backtick-quoted so surrounding whitespace is visible (GHY-3992)"
+    (let [ingest-err (ex-info "Failed to read file: collections/bar .yaml"
+                              {:file   "collections/bar .yaml"
+                               :reason "IOException"})
+          e          (ex-info "Failed to read 1 file(s) during ingestion: collections/bar .yaml"
+                              {:ingest-errors [ingest-err]}
+                              ingest-err)]
+      (is (= "Failed to read 1 file(s) from the repository: `collections/bar .yaml`: IOException"
+             (impl/source-error-message e)))))
+  (testing "each unreadable file is quoted independently when several fail"
+    (let [errs [(ex-info "a" {:file "a.yaml" :reason "bad"})
+                (ex-info "b" {:file "b.yaml" :reason "worse"})]
+          e    (ex-info "Failed to read 2 file(s) during ingestion" {:ingest-errors errs} (first errs))]
+      (is (= "Failed to read 2 file(s) from the repository: `a.yaml`: bad; `b.yaml`: worse"
+             (impl/source-error-message e))))))
 
 ;; We need to make sure the task-id we use to track the Remote Sync is not bound to a transactions because of the behavior of
 ;; update-sync-progress. So the follow two tests cannot use with-temp to create models
@@ -224,23 +341,19 @@
               export-result (impl/export! (source.p/snapshot mock-main) (:id export-task) "Test export")]
           (remote-sync.task/complete-sync-task! (:id export-task))
           (is (= :success (:status export-result)))
-
           (let [files-after-export (get @(:files-atom mock-main) "test-branch")]
             (is (map? files-after-export))
             (is (not-empty files-after-export))
             (is (some #(str/includes? % "collection") (keys files-after-export)))
             (is (some #(str/includes? % "card") (keys files-after-export))))
-
           (t2/delete! :model/RemoteSyncTask :id (:id export-task))
           (let [import-task (t2/with-connection [_conn (app-db/app-db) (t2/insert-returning-instance! :model/RemoteSyncTask {:sync_task_type "import" :initiated_by (mt/user->id :rasta)})])
                 import-result (impl/import! (source.p/snapshot mock-main) (:id import-task))]
             (remote-sync.task/complete-sync-task! (:id import-task))
             (is (= :success (:status import-result)))
             (is (= "Successfully reloaded from git repository" (:message import-result)))
-
             (is (t2/exists? :model/Collection :id coll-id))
             (is (t2/exists? :model/Card :id card-id))
-
             (let [collection (t2/select-one :model/Collection :id coll-id)
                   card (t2/select-one :model/Card :id card-id)]
               (is (= "Test Collection" (:name collection)))
@@ -264,7 +377,6 @@
               mock-main (test-helpers/create-mock-source :initial-files test-files :branch "test-branch")
               result (impl/import! (source.p/snapshot mock-main) (:id import-task))]
           (is (= :success (:status result)))
-
           (is (t2/exists? :model/Card :id card1-id))
           (is (not (t2/exists? :model/Collection :id coll2-id)))
           (is (not (t2/exists? :model/Card :id card2-id))))))))
@@ -296,6 +408,23 @@
               (is (= 0.8 (:progress (nth @progress-calls 3))))
               (is (= 0.95 (:progress (nth @progress-calls 4)))))))))))
 
+(deftest import!-runs-a-single-reindex-inside-the-task-test
+  (testing "a full import runs exactly one reindex, synchronous on H2 and asynchronous elsewhere"
+    (mt/dataset test-data
+      (mt/db)
+      (let [task-id (t2/insert-returning-pk! :model/RemoteSyncTask
+                                             {:sync_task_type "import"
+                                              :initiated_by   (mt/user->id :rasta)})
+            calls   (atom [])]
+        (mt/with-dynamic-fn-redefs [search/reindex! (fn [& {:as opts}]
+                                                      (swap! calls conj opts)
+                                                      nil)]
+          (let [result (impl/import! (source.p/snapshot (test-helpers/create-mock-source))
+                                     task-id
+                                     :force? true)]
+            (is (= :success (:status result)))))
+        (is (= [{:async? (not= :h2 (app-db/db-type))}] @calls))))))
+
 (deftest export!-calls-update-progress-with-expected-values-test
   (testing "export! calls update-progress! with expected progress values"
     (mt/dataset test-data
@@ -321,26 +450,30 @@
       (let [task-id (t2/insert-returning-pk! :model/RemoteSyncTask {:sync_task_type "import" :initiated_by (mt/user->id :rasta)})]
         (mt/with-temp [:model/Collection {coll-id :id} {:name "Test Collection" :is_remote_synced true :entity_id "test-collection-1xxxx" :location "/"}
                        :model/Card {card-id :id} {:name "Test Card" :collection_id coll-id :entity_id "test-card-1xxxxxxxxxx"}]
-          (t2/insert! :model/RemoteSyncObject
-                      [{:model_type "Collection" :model_id coll-id :model_name "Test Collection" :status "created" :status_changed_at (t/offset-date-time)}
-                       {:model_type "Card" :model_id card-id :model_name "Test Card" :status "updated" :status_changed_at (t/offset-date-time)}
-                       {:model_type "Card" :model_id 999 :model_name "Test Card2" :status "deleted" :status_changed_at (t/offset-date-time)}])
-          (is (= 3 (t2/count :model/RemoteSyncObject)))
-          (let [test-files {"main" {"collections/main/test_collection/test_collection.yaml"
-                                    (test-helpers/generate-collection-yaml "test-collection-1xxxx" "Test Collection")
-                                    "collections/main/test_collection/test_card.yaml"
-                                    (test-helpers/generate-card-yaml "test-card-1xxxxxxxxxx" "Test Card" "test-collection-1xxxx")}}
-                mock-source (test-helpers/create-mock-source :initial-files test-files)
-                result (impl/import! (source.p/snapshot mock-source) task-id)]
-            (is (= :success (:status result)))
-            (let [entries (t2/select :model/RemoteSyncObject)]
-              (is (= 2 (count entries)))
-              (is (every? #(= "synced" (:status %)) entries))
-              (is (some #(and (= "Collection" (:model_type %))
-                              (= coll-id (:model_id %))) entries))
-              (is (some #(and (= "Card" (:model_type %))
-                              (= card-id (:model_id %))) entries))
-              (is (not (some #(= 999 (:model_id %)) entries))))))))))
+          ;; the entry that must not survive the import. Derived from the real IDs rather than hard-coded: a literal
+          ;; collided with `card-id` once the app DB's auto-increment happened to reach it, and the last assertion
+          ;; then failed because the *surviving* Card carried the id it was checking had gone
+          (let [stale-id (+ 1000 (max coll-id card-id))]
+            (t2/insert! :model/RemoteSyncObject
+                        [{:model_type "Collection" :model_id coll-id :model_name "Test Collection" :status "created" :status_changed_at (t/offset-date-time)}
+                         {:model_type "Card" :model_id card-id :model_name "Test Card" :status "updated" :status_changed_at (t/offset-date-time)}
+                         {:model_type "Card" :model_id stale-id :model_name "Test Card2" :status "deleted" :status_changed_at (t/offset-date-time)}])
+            (is (= 3 (t2/count :model/RemoteSyncObject)))
+            (let [test-files {"main" {"collections/main/test_collection/test_collection.yaml"
+                                      (test-helpers/generate-collection-yaml "test-collection-1xxxx" "Test Collection")
+                                      "collections/main/test_collection/test_card.yaml"
+                                      (test-helpers/generate-card-yaml "test-card-1xxxxxxxxxx" "Test Card" "test-collection-1xxxx")}}
+                  mock-source (test-helpers/create-mock-source :initial-files test-files)
+                  result (impl/import! (source.p/snapshot mock-source) task-id)]
+              (is (= :success (:status result)))
+              (let [entries (t2/select :model/RemoteSyncObject)]
+                (is (= 2 (count entries)))
+                (is (every? #(= "synced" (:status %)) entries))
+                (is (some #(and (= "Collection" (:model_type %))
+                                (= coll-id (:model_id %))) entries))
+                (is (some #(and (= "Card" (:model_type %))
+                                (= card-id (:model_id %))) entries))
+                (is (not (some #(= stale-id (:model_id %)) entries)))))))))))
 
 (deftest export!-updates-all-statuses-to-synced-test
   (testing "export! updates all RemoteSyncObject entries to synced status"
@@ -720,6 +853,7 @@
                          {:name "Test Collection"
                           :is_remote_synced true
                           :entity_id "test-collection-1xxxx"
+                          :type      "library-data"
                           :location "/"}
                          ;; Table must have collection_id and is_published to be included as Collection descendant
                          :model/Table {table-id :id} {:name "test-table"
@@ -1433,3 +1567,161 @@ serdes/meta:
             "import should succeed with old-format paths")
         (is (t2/exists? :model/Collection :entity_id coll-eid)
             "collection should have been imported from old-format path")))))
+
+;; ---------- GHY-3505: captured-branch race ---------------------------------------------------------
+;;
+;; The original repros for GHY-3505 demonstrated the captured-branch race by writing the setting
+;; directly via `setting/set!`, simulating a path that bypassed all coordination. With the
+;; operation-level guards in place (see *-refuses-while-task-running-test below and the
+;; corresponding API-level tests in api_test.clj), the race is no longer reachable through any
+;; user-facing path: every code that mutates remote-sync state now calls `guards/ensure-no-active-task!`
+;; first and refuses with 400 if a RemoteSyncTask is in flight.
+;;
+;; Coverage of the fix is split across:
+;;   - guards-test (the predicate itself: catches stalled tasks too)
+;;   - operation-level guard tests in this file, core_test, settings_test
+;;   - API-level guard tests in api_test
+;;
+;; As a defense-in-depth measure for any future code path that bypasses the guards, async-import!
+;; and async-export! capture the setting at scheduling time and the work function aborts if it
+;; observes a different setting at start. This is not separately tested because the window in
+;; which the setting could change between scheduling and start is sub-millisecond.
+
+;; ---------- Guard contract: mutating operations must refuse while a task is running ----------------
+;;
+;; Every mutating remote-sync operation consults `guards/task-running?` and refuses if it returns
+;; true. The tests use `with-redefs` to flip it to `(constantly true)` so they don't depend on
+;; actually inserting a RemoteSyncTask row.
+
+(deftest async-import!-refuses-while-task-running-test
+  (testing "async-import! must refuse when guards/task-running? returns true,
+            without creating a RemoteSyncTask row"
+    (mt/with-temporary-setting-values [remote-sync-enabled true
+                                       remote-sync-url     "https://github.com/test/repo.git"
+                                       remote-sync-token   "token"
+                                       remote-sync-branch  "main"
+                                       remote-sync-type    :read-write]
+      (with-redefs [guards/task-running?        (constantly true)
+                    source/source-from-settings (fn [& _] (test-helpers/create-mock-source))]
+        (is (thrown-with-msg? Exception #"Remote sync task in progress"
+                              (impl/async-import! "main" true {})))
+        (is (zero? (t2/count :model/RemoteSyncTask))
+            "no RemoteSyncTask row should be created when the guard fires")))))
+
+(deftest async-export!-refuses-while-task-running-test
+  (testing "async-export! must refuse when guards/task-running? returns true,
+            without creating a RemoteSyncTask row"
+    (mt/with-temporary-setting-values [remote-sync-enabled true
+                                       remote-sync-url     "https://github.com/test/repo.git"
+                                       remote-sync-token   "token"
+                                       remote-sync-branch  "main"
+                                       remote-sync-type    :read-write]
+      (with-redefs [guards/task-running?        (constantly true)
+                    source/source-from-settings (fn [& _] (test-helpers/create-mock-source))]
+        (is (thrown-with-msg? Exception #"Remote sync task in progress"
+                              (impl/async-export! "main" true "msg")))
+        (is (zero? (t2/count :model/RemoteSyncTask))
+            "no RemoteSyncTask row should be created when the guard fires")))))
+
+(deftest create-branch!-refuses-while-task-running-test
+  (testing "create-branch! must refuse when guards/task-running? returns true,
+            without pushing a branch to the source or changing the setting"
+    (mt/with-temporary-setting-values [remote-sync-enabled true
+                                       remote-sync-url     "https://github.com/test/repo.git"
+                                       remote-sync-token   "token"
+                                       remote-sync-branch  "main"
+                                       remote-sync-type    :read-write]
+      (let [mock-source      (test-helpers/create-mock-source)
+            initial-branches @(:branches-atom mock-source)]
+        (with-redefs [guards/task-running?        (constantly true)
+                      source/source-from-settings (fn [& _] mock-source)]
+          (is (thrown-with-msg? Exception #"Remote sync task in progress"
+                                (impl/create-branch! "feature-x" "main")))
+          (is (= "main" (remote-sync.settings/remote-sync-branch))
+              "remote-sync-branch must remain unchanged when the guard fires")
+          (is (= initial-branches @(:branches-atom mock-source))
+              "no new branch should be pushed to the source when the guard fires"))))))
+
+(deftest stash!-refuses-while-task-running-test
+  (testing "stash! must refuse when guards/task-running? returns true,
+            without pushing a branch to the source, creating a task, or changing the setting"
+    (mt/with-temporary-setting-values [remote-sync-enabled true
+                                       remote-sync-url     "https://github.com/test/repo.git"
+                                       remote-sync-token   "token"
+                                       remote-sync-branch  "main"
+                                       remote-sync-type    :read-write]
+      (let [mock-source      (test-helpers/create-mock-source)
+            initial-branches @(:branches-atom mock-source)]
+        (with-redefs [guards/task-running?        (constantly true)
+                      source/source-from-settings (fn [& _] mock-source)]
+          (is (thrown-with-msg? Exception #"Remote sync task in progress"
+                                (impl/stash! "stash-branch" "stash message")))
+          (is (= "main" (remote-sync.settings/remote-sync-branch))
+              "remote-sync-branch must remain unchanged when the guard fires")
+          (is (= initial-branches @(:branches-atom mock-source))
+              "no new branch should be pushed to the source when the guard fires")
+          (is (zero? (t2/count :model/RemoteSyncTask))
+              "no RemoteSyncTask row should be created when the guard fires"))))))
+
+;; ---------- handle-task-result! is robust against double-handling -----------------------------
+;;
+;; If an admin cancels a task via POST /current-task/cancel while its virtual thread is still
+;; running, the thread will eventually reach handle-task-result!. Without protection, the :success
+;; path would write the captured branch (stomping any setting change since cancellation) and
+;; complete-sync-task! would overwrite the cancellation bookkeeping. The check at the top of
+;; handle-task-result! short-circuits when the task is already terminated.
+
+(deftest handle-task-result!-skips-already-terminated-task-test
+  (testing "handle-task-result! must not write the setting or update the task row when the task
+            is already terminated (e.g., cancelled by admin while the virtual thread was running)"
+    (mt/with-temporary-setting-values [remote-sync-branch "dev"]
+      (let [task-id (t2/insert-returning-pk!
+                     :model/RemoteSyncTask
+                     {:sync_task_type "import"
+                      :initiated_by   (mt/user->id :rasta)
+                      :started_at     (t/offset-date-time)
+                      :ended_at       (t/offset-date-time)
+                      :cancelled      true
+                      :error_message  "Cancelled by admin"
+                      :progress       0.5})]
+        (impl/handle-task-result! {:status :success :version "abc"} task-id "feature-x")
+        (is (= "dev" (remote-sync.settings/remote-sync-branch))
+            "setting must remain unchanged — already-terminated task must not write it")
+        (let [task-after (t2/select-one :model/RemoteSyncTask :id task-id)]
+          (is (true? (:cancelled task-after))
+              "cancellation bookkeeping must be preserved")
+          (is (= "Cancelled by admin" (:error_message task-after))
+              "error message must be preserved")
+          (is (= 0.5 (double (:progress task-after)))
+              "progress must not be overwritten to 1.0"))))))
+
+;; ---------- create-task-with-lock! integrates supersession ------------------------------------
+;;
+;; The auto-import path (task/import.clj) calls create-task-with-lock! directly, without going
+;; through the strict ensure-no-active-task! guard. So when an auto-import runs and finds the
+;; previous task to be stale, supersede-stale-tasks! cleans up the stale row before inserting
+;; the new one. This is the self-healing behavior we want for automatic operations.
+
+(deftest create-task-with-lock!-supersedes-stale-tasks-test
+  (testing "create-task-with-lock! marks stale tasks superseded before creating a new task,
+            so auto-imports recover after a JVM/thread death"
+    (let [old-time (t/minus (t/offset-date-time) (t/hours 1))
+          stale-task (t2/insert-returning-instance!
+                      :model/RemoteSyncTask
+                      {:sync_task_type          "import"
+                       :initiated_by            (mt/user->id :rasta)
+                       :started_at              old-time
+                       :last_progress_report_at old-time
+                       :progress                0.5})
+          new-task (impl/create-task-with-lock! "import")]
+      (let [stale-after (t2/select-one :model/RemoteSyncTask :id (:id stale-task))]
+        (is (true? (:cancelled stale-after))
+            "stale task must be marked cancelled")
+        (is (some? (:ended_at stale-after))
+            "stale task must be terminated"))
+      (is (some? (:id new-task))
+          "new task must be created")
+      (is (nil? (:ended_at new-task))
+          "new task must be active")
+      (is (not (:existing? new-task))
+          "new task must not be marked as existing"))))

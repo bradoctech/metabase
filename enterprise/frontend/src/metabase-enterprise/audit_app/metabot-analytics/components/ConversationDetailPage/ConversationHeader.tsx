@@ -3,6 +3,7 @@ import { msgid, ngettext, t } from "ttag";
 import _ from "underscore";
 
 import { getGroupFocusPermissionsUrl } from "metabase/admin/permissions/utils/urls";
+import { isAdminGroup, isDefaultGroup } from "metabase/admin/utils/groups";
 import {
   skipToken,
   useListPermissionsGroupsQuery,
@@ -27,7 +28,6 @@ import {
   Title,
 } from "metabase/ui";
 import * as Urls from "metabase/urls";
-import { isAdminGroup, isDefaultGroup } from "metabase/utils/groups";
 import { getUserName } from "metabase/utils/user";
 import { useGetTenantQuery } from "metabase-enterprise/api";
 import * as EnterpriseUrls from "metabase-enterprise/urls";

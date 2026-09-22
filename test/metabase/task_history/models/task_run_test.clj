@@ -123,7 +123,7 @@
       (let [run-id (task-run/create-task-run! {:run_type    :sync
                                                :entity_type :database
                                                :entity_id   1})]
-        (with-redefs [task-run/current-run-id (constantly run-id)]
+        (mt/with-dynamic-fn-redefs [task-run/current-run-id (constantly run-id)]
           (task-history/with-task-history {:task "t1"} :ok)
           (task-history/with-task-history {:task "t2"} :ok))
         (task-history/complete-task-run! run-id)
@@ -132,7 +132,7 @@
       (let [run-id (task-run/create-task-run! {:run_type    :sync
                                                :entity_type :database
                                                :entity_id   1})]
-        (with-redefs [task-run/current-run-id (constantly run-id)]
+        (mt/with-dynamic-fn-redefs [task-run/current-run-id (constantly run-id)]
           (task-history/with-task-history {:task "t1"} :ok)
           (try
             (task-history/with-task-history {:task "t2"}
@@ -147,14 +147,14 @@
       (let [run-id (task-run/create-task-run! {:run_type    :sync
                                                :entity_type :database
                                                :entity_id   1})]
-        (with-redefs [task-run/current-run-id (constantly run-id)]
+        (mt/with-dynamic-fn-redefs [task-run/current-run-id (constantly run-id)]
           (task-history/with-task-history {:task "t1"} :ok))
         ;; First completion
         (task-history/complete-task-run! run-id)
         (let [first-ended-at (:ended_at (t2/select-one :model/TaskRun :id run-id))]
           (is (= :success (:status (t2/select-one :model/TaskRun :id run-id))))
           ;; Add a failing task and try to complete again
-          (with-redefs [task-run/current-run-id (constantly run-id)]
+          (mt/with-dynamic-fn-redefs [task-run/current-run-id (constantly run-id)]
             (try
               (task-history/with-task-history {:task "t2"}
                 (throw (Exception. "fail")))
@@ -329,19 +329,21 @@
 
 (deftest notification->task-run-info-test
   (testing "notification->task-run-info extracts correct info"
-    (testing "card notification (alert)"
-      (is (= {:run_type :alert :entity_type :card :entity_id 123}
+    (testing "card notification (alert) is attributed to the notification id"
+      (is (= {:run_type :alert :entity_type :card :entity_id 123 :notification_id 7}
              (notification.send/notification->task-run-info
-              {:payload_type :notification/card
+              {:id           7
+               :payload_type :notification/card
                :payload      {:card_id 123}}))))
     (testing "card notification with nil card_id returns nil"
       (is (nil? (notification.send/notification->task-run-info
                  {:payload_type :notification/card
                   :payload      {:card_id nil}}))))
-    (testing "dashboard notification (subscription)"
-      (is (= {:run_type :subscription :entity_type :dashboard :entity_id 456}
+    (testing "dashboard notification (subscription) is attributed to the notification id"
+      (is (= {:run_type :subscription :entity_type :dashboard :entity_id 456 :notification_id 9}
              (notification.send/notification->task-run-info
-              {:payload_type :notification/dashboard
+              {:id           9
+               :payload_type :notification/dashboard
                :payload      {:dashboard_id 456}}))))
     (testing "dashboard notification with nil dashboard_id returns nil"
       (is (nil? (notification.send/notification->task-run-info

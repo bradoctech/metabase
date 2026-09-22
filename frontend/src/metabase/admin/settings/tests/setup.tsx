@@ -1,4 +1,6 @@
+import { render as testingLibraryRender } from "@testing-library/react";
 import fetchMock from "fetch-mock";
+import type { ReactNode } from "react";
 import { Route } from "react-router";
 
 import {
@@ -22,7 +24,7 @@ import {
 } from "__support__/server-mocks";
 import { setupWebhookChannelsEndpoint } from "__support__/server-mocks/channel";
 import { mockSettings } from "__support__/settings";
-import { renderWithProviders, screen } from "__support__/ui";
+import { getTestStoreAndWrapper, screen } from "__support__/ui";
 import { getSettingsRoutes } from "metabase/admin/settingsRoutes";
 import { createMockState } from "metabase/redux/store/mocks";
 import type { TokenFeature, TokenFeatures } from "metabase-types/api";
@@ -154,6 +156,11 @@ export const setup = async ({
     key: "upsell-dev_instances",
     value: true,
   });
+  setupUserKeyValueEndpoints({
+    namespace: "user_acknowledgement",
+    key: "upsell-remote-sync-dev-instance",
+    value: true,
+  });
 
   setupNotificationChannelsEndpoints({
     email: { configured: false } as any,
@@ -178,7 +185,7 @@ export const setup = async ({
     is_superuser: isAdmin,
   });
 
-  const store = createMockState({
+  const initialState = createMockState({
     currentUser: user,
     settings: mockSettings(settings),
   });
@@ -192,13 +199,21 @@ export const setup = async ({
     setupTokenStatusEndpoint({ valid: hasTokenFeatures });
   }
 
-  renderWithProviders(
-    <Route path="admin/settings">{getSettingsRoutes()}</Route>,
-    {
-      storeInitialState: store,
-      withRouter: true,
-      initialRoute: `/admin/settings${initialRoute}`,
-    },
+  const { wrapper, store } = getTestStoreAndWrapper({
+    storeInitialState: initialState,
+    withRouter: true,
+    initialRoute: `/admin/settings${initialRoute}`,
+  });
+
+  const PassThroughGuard = ({ children }: { children: ReactNode }) => (
+    <>{children}</>
+  );
+
+  testingLibraryRender(
+    <Route path="admin/settings">
+      {getSettingsRoutes(store, PassThroughGuard)}
+    </Route>,
+    { wrapper },
   );
 
   await screen.findByTestId("admin-layout-content");

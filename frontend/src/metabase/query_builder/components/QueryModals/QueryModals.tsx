@@ -5,15 +5,16 @@ import _ from "underscore";
 
 import { getDashboard } from "metabase/api";
 import { useGetDefaultCollectionId } from "metabase/collections/hooks";
+import { CopyModal } from "metabase/common/components/CopyModal";
 import { Modal } from "metabase/common/components/Modal";
+import { AddToDashSelectDashModal } from "metabase/common/components/Pickers/AddToDashSelectDashModal";
 import { SaveQuestionModal } from "metabase/common/components/SaveQuestionModal";
 import { type ToastArgs, useToast } from "metabase/common/hooks";
-import EntityCopyModal from "metabase/entities/containers/EntityCopyModal";
+import { QuestionEmbedWidget } from "metabase/embedding/components/QuestionEmbedWidget";
 import { QuestionAlertListModal } from "metabase/notifications/modals";
 import { setArchivedQuestion } from "metabase/query_builder/actions";
 import { ImpossibleToCreateModelModal } from "metabase/query_builder/components/ImpossibleToCreateModelModal";
 import { NewDatasetModal } from "metabase/query_builder/components/NewDatasetModal";
-import { QuestionEmbedWidget } from "metabase/query_builder/components/QuestionEmbedWidget";
 import { PreviewQueryModal } from "metabase/query_builder/components/view/PreviewQueryModal";
 import { getQuestionWithoutComposing } from "metabase/query_builder/selectors";
 import { MODAL_TYPES, type QueryModalType } from "metabase/querying/constants";
@@ -28,8 +29,6 @@ import { Text } from "metabase/ui";
 import * as Urls from "metabase/urls";
 import Question from "metabase-lib/v1/Question";
 import type { Card, DashboardTabId } from "metabase-types/api";
-
-import { AddToDashSelectDashModal } from "../AddToDashSelectDashModal";
 
 type OnCreateOptions = { dashboardTabId?: DashboardTabId | undefined };
 
@@ -237,7 +236,7 @@ export function QueryModals({
       );
     case MODAL_TYPES.CLONE:
       return (
-        <EntityCopyModal
+        <CopyModal
           entityType="cards"
           entityObject={{
             ...question.card(),
@@ -247,7 +246,7 @@ export function QueryModals({
           }}
           copy={async (formValues) => {
             if (!underlyingQuestion) {
-              return;
+              throw new Error(t`Unable to duplicate this question.`);
             }
 
             const question = underlyingQuestion

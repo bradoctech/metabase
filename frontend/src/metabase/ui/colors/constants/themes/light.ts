@@ -39,12 +39,13 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     overlay: baseColors.orionAlpha[60],
     "background-error": spColors.redDark[10], // SP Paleta Secundaria: sp-red-dark
     "background-success": spColors.green.bg, // SP Paleta Secundaria: sp-green
+    "background-success-secondary": spColors.green.medium, // key from upstream 62; SP green
     brand: spColors.red[40], // SP Paleta Primaria: sp-red
     "brand-hover": `color-mix(in srgb, ${spColors.red[40]}, white 12%)`, // SP Paleta Primaria: sp-red
     danger: spColors.redDark.base, // SP Paleta Secundaria: sp-red-dark
     error: spColors.status.error.base, // utiliza spColors.status.error
     filter: spColors.blueMedium.base, // azul medio na paleta SP
-    focus: spColors.grayLight.base, // SP Paleta Prim?ria: sp-gray-light
+    focus: spColors.grayLight.base, // SP Paleta Primária: sp-gray-light
     "icon-brand": spColors.red[30], // SP Paleta Primaria: sp-red
     "icon-primary": spColors.black.alpha80, // SP Paleta Primaria: sp-black
     "icon-disabled": spColors.grayLight.base, // SP Paleta Primaria: sp-gray-light
@@ -83,7 +84,7 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "tooltip-text": baseColors.white,
     warning: spColors.yellow.base, // SP Paleta Secundaria: sp-yellow
     "background-warning": spColors.yellow.bg, // SP Paleta Secundaria: sp-yellow
-    "background-warning-secondary": spColors.yellow.medium, // from upstream 61.x key
+    "background-warning-secondary": spColors.yellow.medium, // from upstream 61/62 key
     info: spColors.gray.base, // SP Paleta Primaria: sp-gray
     "background-info": spColors.gray.bg, // SP Paleta Primaria: sp-gray
     white: baseColors.white,

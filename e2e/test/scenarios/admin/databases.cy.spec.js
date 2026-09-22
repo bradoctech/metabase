@@ -322,7 +322,7 @@ describe("admin > database > add", () => {
           cy.button("Save", { timeout: 7000 })
             .should("not.be.disabled")
             .click();
-          cy.findByText(/Exception authenticating MongoCredential/);
+          cy.findByText(/Authentication failed/);
           cy.button("Failed");
 
           cy.findByLabelText("Paste your connection string")
@@ -449,7 +449,7 @@ describe("database page > side panel", () => {
       { name: "Amazon Redshift", file: "redshift" },
       { name: "ClickHouse", file: "clickhouse" },
       { name: "Databricks", file: "databricks" },
-      { name: "Druid", file: "druid" },
+      { name: "Druid JDBC", file: "druid" },
       { name: "MongoDB", file: "mongo" },
       { name: "MySQL", file: "mysql" },
       { name: "PostgreSQL", file: "postgresql" },

@@ -1,4 +1,6 @@
 (ns ^:mb/driver-tests metabase.driver.druid-jdbc-test
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.driver.druid-jdbc-test]}
+                                                            metabase.test.data/run-mbql-query {:namespaces [metabase.driver.druid-jdbc-test]}}}}}}
   (:require
    [clojure.test :refer :all]
    [java-time.api :as t]
@@ -591,3 +593,11 @@
                (mt/rows (qp/process-query query))))
         (is (= "select count(1) from checkins where __time >= '2014-04-07'"
                (:query (qp.compile/compile-with-inline-parameters query))))))))
+
+(deftest ^:parallel null-timestamp-test
+  (mt/test-driver :druid-jdbc
+    (is (= [[nil]]
+           (-> (mt/metadata-provider)
+               (lib/native-query "SELECT CAST(NULL AS TIMESTAMP) FROM checkins LIMIT 1")
+               qp/process-query
+               mt/rows)))))

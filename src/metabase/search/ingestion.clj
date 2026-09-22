@@ -95,7 +95,8 @@
   (perf/select-keys m [:name :display_name :description :collection_name]))
 
 (defn- execute-function-attr
-  "Execute a single function attribute and return the result"
+  "Execute a single function attribute and return the result, or nil if the function throws.
+  nil is valid for every column type, so a failure can never poison the document's insert batch."
   [attr-key attr-def record]
   (try
     (let [f (:fn attr-def)
@@ -106,27 +107,18 @@
       (f input))
     (catch Exception e
       (log/warn e "Function execution failed for attribute" attr-key)
-      false)))
+      nil)))
 
 (defn- execute-all-function-attrs
   "Execute all function attributes for a given spec and return computed values.
-  If a function returns a map, its entries are merged directly into the result —
-  this allows a single function to populate multiple document keys (e.g. :temporal-info
-  returns both :has_temporal_dim and :non_temporal_dim_ids in one call).
-
-  When a function attr declares `:provides`, the attr-key itself is not a column in
-  the index — it's a logical grouping whose `:provides` keys are the real columns.
-  In that case, on non-map results (e.g. when the function threw and `false` was
-  returned), skip writing instead of poisoning the document with an unknown column."
+  Each function's result is written under the attr key (snake_case) — the attr's index column."
   [spec record]
   (reduce-kv
    (fn [acc attr-key attr-def]
      (if (search.spec/function-attr? attr-def)
-       (let [result (execute-function-attr attr-key attr-def record)]
-         (cond
-           (map? result)                          (merge acc result)
-           (seq (search.spec/function-attr-provides attr-def)) acc
-           :else                                  (assoc acc (keyword (u/->snake_case_en (name attr-key))) result)))
+       (assoc acc
+              (keyword (u/->snake_case_en (name attr-key)))
+              (execute-function-attr attr-key attr-def record))
        acc))
    {}
    (:attrs spec)))
@@ -140,7 +132,7 @@
                         (update :archived boolean)
                         (assoc
                          :display_data (display-data m)
-                         :legacy_input (json/encode (dissoc m :pinned :view_count :last_viewed_at :native_query :dataset_query))
+                         :legacy_input (json/encode (apply dissoc m search.spec/legacy-input-excluded-keys))
                          :searchable_text (searchable-text m)
                          :embeddable_text (embeddable-text m)))]
     (merge fn-results sql-results)))
@@ -202,6 +194,28 @@
 
 (defn- search-items-reducible []
   (reduce u/rconcat [] (map spec-index-reducible search.spec/search-models)))
+
+(defn indexable-row?
+  "Whether the row identified by `search-model` + `id` would be indexed, i.e. it satisfies the spec's `:where`.
+  `id` is the toucan PK of the underlying model (not the compound `indexed-entity` id). Returns:
+
+  - `:no-spec`   the model is not searchable
+  - `:not-found` no such row exists in the underlying table
+  - `:excluded`  the row exists but the spec's `:where` filters it out
+  - `:indexable` ingestion would index it"
+  [search-model id]
+  (if-not (contains? (set search.spec/search-models) search-model)
+    :no-spec
+    (let [spec      (search.spec/spec search-model)
+          indexed?  (-> (spec-index-query-where search-model [:= :this.id id])
+                        (assoc :select [[[:inline 1] :one]] :limit 1)
+                        t2/query
+                        seq
+                        boolean)]
+      (cond
+        indexed?                              :indexable
+        (t2/exists? (:model spec) :id id)     :excluded
+        :else                                 :not-found))))
 
 (def ^:private max-document-error-logs 10)
 
