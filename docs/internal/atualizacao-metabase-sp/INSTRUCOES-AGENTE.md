@@ -3,7 +3,7 @@
 **Como usar:** no início de uma nova conversa sobre EDD-1355, EDD-1356, EDD-1361, EDD-1362, tema SP ou upgrade do fork, peça ao agente para ler este arquivo (e, se precisar de detalhe, os outros `.md` desta pasta) antes de planejar ou editar código.
 
 **Pasta:** `docs/internal/atualizacao-metabase-sp/`  
-**Última consolidação de contexto:** etapa **60→61** da EDD-1355 **fechada no smoke** na branch `EDD-1355`; próximo passo **61→62**; EDD-1361/1356 MVP já na base; notas em [notas-etapa-60-61.md](./notas-etapa-60-61.md).
+**Última consolidação de contexto:** etapa **61→62** da EDD-1355 **fechada no smoke** na branch `EDD-1355`; próximo passo **62→63**; EDD-1361/1356 MVP já na base; notas em [notas-etapa-61-62.md](./notas-etapa-61-62.md) (e [notas-etapa-60-61.md](./notas-etapa-60-61.md) para a etapa anterior).
 
 ---
 
@@ -22,8 +22,9 @@ Trate isto como verdade até alguém atualizar este arquivo após nova verifica�
 | Remote do fork           | `origin` → `git@github.com:bradoctech/metabase.git`                                           |
 | Remote oficial           | `upstream` → `https://github.com/metabase/metabase.git` (fetch de releases; não é destino SP) |
 | Branch principal do fork | `saopaulo` — ainda **0.60.x** até a EDD-1355 mergear de volta                                 |
-| Branch da PoC de upgrade | `EDD-1355` — tip com merge `upstream/release-x.61.x` + fixups de smoke **validados**            |
+| Branch da PoC de upgrade | `EDD-1355` — tip com merge `upstream/release-x.62.x` + fixups de smoke **validados**            |
 | Backup da etapa 60→61    | Tag `saopaulo-pre-61x`                                                                        |
+| Backup da etapa 61→62    | Tag `saopaulo-pre-62x`                                                                        |
 | Script de merge          | `bin/merge-upstream-preserve-sp.sh` (EDD-1356); **restore estreito** após lição da 61         |
 | Alvo final da EDD-1355   | Linha **63.x** (caminho em etapas 61→62→63; não pular para 63 com adapters 61 quebrados)      |
 | Customizações            | Commits `feat[EDD-…]` + listas em `lists/`; isolamento ainda parcial                          |
@@ -62,15 +63,15 @@ Trate isto como verdade até alguém atualizar este arquivo após nova verifica�
 5. Refatoração **grande** de tema/marca **depois** do update (EDD-1362), não como gate do salto.
 6. EDD-1355 é a **PoC** do processo da EDD-1356.
 7. `update_with_upstream_61` está **desatualizada** vs `saopaulo` — não usar sozinha como base.
-8. **Estabilizar smoke na major atual** antes da próxima etapa (não ir 61→63 com home/adapters quebrados).
-9. Commits de merge grandes: hooks locais podem OOM; na prática `--no-verify` nas etapas intermediárias, insistir em hooks/checks no PR final / etapa 63.
+8. **Estabilizar smoke na major atual** antes da próxima etapa (não ir 62→63 com home/adapters quebrados).
+9. Commits de merge grandes: hooks locais podem OOM/falhar em `cljfmt`/`token-scan`; `--no-verify` só em levas intermediárias de infra/restore stuck — **não** em ajustes com risco de lint. Insistir em hooks no PR final / etapa 63.
 
 ### Sequência oficial
 
 ```text
 EDD-1361 (inventário + isolamento mínimo)     ✅
   → EDD-1356 MVP (script + runbook)           ✅ MVP
-  → EDD-1355 (update = PoC)                   🔄 60→61 smoke OK; próximo 61→62
+  → EDD-1355 (update = PoC)                   🔄 61→62 smoke OK; próximo 62→63
   → EDD-1362 (tema/marca pós-update)
   → EDD-1356 v2 (endurecer com aprendizados)
 ```
@@ -84,14 +85,14 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 
 | ID           | Papel                                                      | Estado                                                 |
 | ------------ | ---------------------------------------------------------- | ------------------------------------------------------ |
-| **EDD-1355** | Atualizar Metabase + reaplicar customizações               | Em andamento — **61 smoke OK**; próximo merge **62**   |
+| **EDD-1355** | Atualizar Metabase + reaplicar customizações               | Em andamento — **62 smoke OK**; próximo merge **63**   |
 | **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | MVP entregue; v2 após lições da 1355                   |
 | **EDD-1361** | Inventário + quick wins de isolamento                      | Concluída (manifesto publicado)                        |
 | **EDD-1362** | Refatorar tema/marca na base já atualizada                 | Após 1355                                              |
 
 ---
 
-## Lições da etapa 60→61 (obrigatório para o agente)
+## Lições das etapas 60→61 e 61→62 (obrigatório para o agente)
 
 ### Script / restore
 
@@ -102,8 +103,8 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 
 ### Clojure / backend (smoke)
 
-- Sintomas típicos de restore errado: `typed?` privado (`honey_sql_2` vs `honeysql_guard`), `clojure.core.match` ausente (`custom_migrations` pré-61), settings sem `:encryption`, migration sem `public_uuid_prefix`.
-- Remédio: trazer do `upstream/release-x.N.x` arquivos **não-curated** que ainda estão iguais ao tip pré-merge; **preservar** curated (e reaplicar SP por cima quando for adapter/behavior).
+- Sintomas típicos de restore errado: `typed?` privado (`honey_sql_2` vs `honeysql_guard`), `clojure.core.match` ausente (`custom_migrations` pré-61), settings sem `:encryption`, migration sem `public_uuid_prefix`, vars EE novas ausentes (ex. `semantic-search-vector-strategy` com `settings.clj` stuck pré-N).
+- Remédio: trazer do `upstream/release-x.N.x` arquivos **não-curated** que ainda estão iguais ao tip pré-merge; varrer **`src/`**, **`test/`**, **`enterprise/`** e **`modules/`** — não só `src/`. **Preservar** curated (e reaplicar SP por cima quando for adapter/behavior).
 - Migrations incompletas: restaurar YAMLs do upstream; H2 local de smoke pode precisar **reset** (`metabase.db.mv.db`) — isso **não** é o banco de produção SP.
 - Settings SP (`version/settings.clj`, `config/core.clj`): manter getter AGPL (`mb-source-code-url`) e alinhar opções obrigatórias da major (ex. `:encryption :no`).
 
@@ -111,13 +112,16 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 
 - Na 61, `metabase/lib/*` virou `metabase/utils/*` e `metabase/redux`. Arquivos pré-61 com imports `metabase/lib/...` quebram o Rspack.
 - Após merge grande: restaurar FE não-curated do upstream; **não** apagar paths de `behavior-manual` / `dual-changed` só porque “não existem no upstream” (ex. `chain-filter-constraints`).
-- Pares **tsx + styled** dual-changed devem casar (mesmo “lado”). Misturar TSX 61 + styled SP derruba a home (`CardTitlePrimary` inexistente, etc.).
-- `build-hot:js` **não** recompila CLJS. Precisa `bun run build:cljs` (ou `build-hot` / `build-hot:js-wait`) quando módulos novos entram (ex. `cljs/metabase.util.markdown.image`).
+- Pares **tsx + styled** dual-changed devem casar (mesmo “lado”). Misturar TSX upstream + styled SP derruba a home (`CardTitlePrimary` / `XrayCardRoot`, etc.).
+- `build-hot:js` **não** recompila CLJS. Precisa `bun run build:cljs` / `build-pure:cljs` (ou `build-hot` / `build-hot:js-wait`) quando módulos novos entram ou artefatos em `target/cljs_dev` ficam stale (ex. `analytics.impl.js`, `DEFAULT_CARD_SIZE_JSON`).
+- **`package.json` stuck pré-N** com patches/lock da major nova: sintoma típico `patch-package` (Mantine/Rspack versão errada) + SWC plugin incompatível. Restaurar `package.json` + `bun.lock` + `patches/` do upstream da major alvo e `bun install` limpo.
+- Na 62, órfãos pré-N (ex. `entities/tables.js`, `utils/formatting/ui.tsx`) quebram o bundle se o restore stuck trouxer só metade do rename. Remover o que o upstream apagou **fora** das listas curated.
 - `bun.lock`: preferir o do upstream na major nova; regenerar com `bun install` se lock e `package.json` divergirem.
+- Heap do Rspack: o script `build-hot:js` força `NODE_OPTIONS=--max-old-space-size=8192` no `rspack serve`. Um `NODE_OPTIONS=1024` externo **não** sobrescreve isso; `1024` direto no `bunx rspack serve` OOM. No WSL, `RSPACK_WORKER_THREADS=1` + heap ≥4–8 GB costuma ser o piso.
 
-### Customizações que o merge 61 “comeu” (reaplicar / smoke)
+### Customizações que o merge “come” (reaplicar / smoke)
 
-Estes voltaram ao tip upstream e tiveram de ser recolocados no smoke — **priorizar no verify da 62**:
+Voltam ao tip upstream com frequência — **priorizar no verify de cada major** (válido na 63):
 
 | Área | Paths-chave | Sintoma se perdeu |
 | ---- | ----------- | ----------------- |
@@ -146,10 +150,10 @@ Estes voltaram ao tip upstream e tiveram de ser recolocados no smoke — **prior
 
 ### Ao começar
 
-1. Ler este arquivo e, se na EDD-1355, [notas-etapa-60-61.md](./notas-etapa-60-61.md).
+1. Ler este arquivo e, se na EDD-1355, [notas-etapa-61-62.md](./notas-etapa-61-62.md) (e [notas-etapa-60-61.md](./notas-etapa-60-61.md) se precisar da etapa anterior).
 2. Confirmar branch (`EDD-1355` vs `saopaulo`) e remotes `origin` / `upstream`.
 3. Seguir a sequência oficial; não inverter para “refatorar tema grande → depois update” sem o usuário pedir.
-4. Não sugerir salto para 63 enquanto a major atual não passar do smoke mínimo. Após smoke 61 OK, o próximo passo canônico é **61→62** (não 63).
+4. Não sugerir salto além da próxima major enquanto a atual não passar do smoke mínimo. Após smoke 62 OK, o próximo passo canônico é **62→63**.
 
 ### Ao inventariar customizações (EDD-1361)
 
@@ -185,7 +189,7 @@ Estes voltaram ao tip upstream e tiveram de ser recolocados no smoke — **prior
 - Prometer zero conflitos em todo update.
 - Restore largo de todo drift BASE…SP.
 - Tratar “SpLogo sumiu do header do painel” como regressão (é hide EDD-791); o bug real de marca no AppBar/login é **LogoIcon sem brasão**.
-- Ir para 62/63 com home ou boot quebrados “para resolver na major seguinte”.
+- Ir para a próxima major com home ou boot quebrados “para resolver na etapa seguinte”.
 
 ---
 
@@ -201,6 +205,7 @@ Estes voltaram ao tip upstream e tiveram de ser recolocados no smoke — **prior
 | [runbook-atualizacao.md](./runbook-atualizacao.md)         | Como rodar o merge semi-automático               |
 | [issue-edd-1356.md](./issue-edd-1356.md)                   | Entrega da EDD-1356                              |
 | [notas-etapa-60-61.md](./notas-etapa-60-61.md)             | Diário da etapa 60→61 (EDD-1355)                 |
+| [notas-etapa-61-62.md](./notas-etapa-61-62.md)             | Diário da etapa 61→62 (EDD-1355)                 |
 | [lists/](./lists/)                                         | Listas restore-ours / dual-changed / behavior    |
 | **Este arquivo**                                           | Bootstrap de contexto para o agente em chat novo |
 
