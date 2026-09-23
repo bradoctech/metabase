@@ -59,8 +59,8 @@ export function AppColorSchemeProvider({
     if (getIsEmbeddingIframe()) {
       return "light";
     }
-    return colorScheme === "auto" ? "light" : colorScheme;
-  }, [colorScheme, forceColorScheme]);
+    return colorScheme === "auto" ? systemColorScheme : colorScheme;
+  }, [colorScheme, forceColorScheme, systemColorScheme]);
 
   const handleColorSchemeUpdate = useCallback(
     (value: ColorScheme) => {

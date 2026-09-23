@@ -6,11 +6,13 @@
    [metabase-enterprise.impersonation.util-test :as impersonation.util-test]
    [metabase.api.common :as api]
    [metabase.llm.context :as llm.context]
+   [metabase.parameters.field-values :as params.field-values]
    [metabase.permissions.core :as perms]
    [metabase.permissions.models.data-permissions :as data-perms]
    [metabase.permissions.test-util :as perms.test-util]
    [metabase.sync.core :as sync]
    [metabase.test :as mt]
+   [metabase.warehouse-schema.models.field-values :as field-values]
    [toucan2.core :as t2]))
 
 (set! *warn-on-reflection* true)
@@ -63,8 +65,14 @@
                        "the price column gets a DDL comment with sample values")
                    (is (not (str/includes? (str comment) "-11"))
                        "values cached for the unrestricted role are not sent to the LLM")
-                   (is (t2/exists? :model/FieldValues :field_id field-id :type :advanced)
-                       "values are fetched and cached per impersonation role instead")))))))))))
+                   (let [per-role (t2/select-one-fn :values :model/FieldValues
+                                                    :field_id field-id :type :advanced)]
+                     (is (seq per-role)
+                         "values are fetched and cached per impersonation role instead")
+                     ;; Without this the test would still pass if the values were dropped rather than
+                     ;; re-resolved, since the sentinel would be absent either way.
+                     (is (str/includes? (str comment) (str (first per-role)))
+                         "and those per-role values are the ones that reach the DDL"))))))))))))
 
 (deftest schema-context-omits-fingerprints-for-impersonated-users-test
   (testing "fingerprint statistics describe every row, so an impersonated user gets none of them"
@@ -110,30 +118,68 @@
                         (llm.context/build-schema-context (mt/id) #{(mt/id :venues)}))
                       (is (true? @superuser)))))))))))))
 
+(defn- venues-field-ids []
+  (t2/select-pks-vec :model/Field :table_id (mt/id :venues)))
+
 (defn- advanced-value-rows
-  "How many per-role FieldValues rows exist for `table-kw`'s fields."
-  [table-kw]
-  (t2/count :model/FieldValues
-            :type :advanced
-            :field_id [:in (t2/select-pks-vec :model/Field :table_id (mt/id table-kw))]))
+  "How many per-role FieldValues rows exist for the venues fields."
+  []
+  (t2/count :model/FieldValues :type :advanced :field_id [:in (venues-field-ids)]))
 
 (deftest schema-context-caps-per-user-value-fetches-test
   (testing "a restricted user's value lookups are capped, so one request cannot spend the timeout on distinct-values"
     (mt/with-premium-features #{:advanced-permissions}
       (mt/with-model-cleanup [:model/FieldValues]
-        (let [fetched-under-cap
-              (fn [cap]
-                (t2/delete! :model/FieldValues :type :advanced)
-                ;; `max-value-fetches` holds a number, not a function, so `with-dynamic-fn-redefs` cannot
-                ;; bind it, and it is private so it has to be reached through the var.
-                (with-redefs-fn {#'llm.context/max-value-fetches cap}
-                  (fn []
-                    (impersonation.util-test/with-impersonations!
-                      {:impersonations [{:db-id (mt/id) :attribute "impersonation_attr"}]
-                       :attributes     {"impersonation_attr" "impersonation_role"}}
-                      (llm.context/build-schema-context (mt/id) #{(mt/id :venues)}))))
-                (advanced-value-rows :venues))]
-          (is (< 1 (fetched-under-cap 20))
-              "venues has more than one list-eligible column, so the cap has something to bite on")
-          (is (= 1 (fetched-under-cap 1))
-              "and past the cap a restricted column is left without sample values"))))))
+        ;; Make the eligible columns explicit rather than relying on whatever sync left on venues, so the
+        ;; cap always has at least two columns to choose between.
+        (mt/with-temp-vals-in-db :model/Field (mt/id :venues :price) {:has_field_values :list}
+          (mt/with-temp-vals-in-db :model/Field (mt/id :venues :name) {:has_field_values :list}
+            (let [fetched-under-cap
+                  (fn [cap]
+                    ;; Scoped to venues: a blanket delete would clear cached values for every other field
+                    ;; in the app-db, which `with-model-cleanup` cannot put back.
+                    (t2/delete! :model/FieldValues :type :advanced :field_id [:in (venues-field-ids)])
+                    ;; `max-value-fetches` holds a number, not a function, so `with-dynamic-fn-redefs`
+                    ;; cannot bind it, and it is private so it has to be reached through the var.
+                    (with-redefs-fn {#'llm.context/max-value-fetches cap}
+                      (fn []
+                        (impersonation.util-test/with-impersonations!
+                          {:impersonations [{:db-id (mt/id) :attribute "impersonation_attr"}]
+                           :attributes     {"impersonation_attr" "impersonation_role"}}
+                          (llm.context/build-schema-context (mt/id) #{(mt/id :venues)}))))
+                    (advanced-value-rows))]
+              (is (< 1 (fetched-under-cap 20))
+                  "venues has more than one list-eligible column, so the cap has something to bite on")
+              (is (= 1 (fetched-under-cap 1))
+                  "and past the cap a restricted column is left without sample values"))))))))
+
+(deftest schema-context-fails-closed-when-restrictions-cannot-be-determined-test
+  (testing "a restriction check that throws restricts everything rather than serving shared data"
+    (mt/with-premium-features #{:advanced-permissions}
+      (mt/with-test-user :rasta
+        (with-redefs-fn {#'perms/impersonation-enforced-for-db?
+                         (fn [_db-id] (throw (ex-info "conflicting policies" {})))}
+          (fn []
+            (is (= #{(mt/id :venues) (mt/id :checkins)}
+                   (#'llm.context/row-restricted-table-ids (mt/id) [(mt/id :venues) (mt/id :checkins)]))
+                "every table is treated as restricted")))))))
+
+(deftest schema-context-withholds-shared-values-from-a-restricted-table-test
+  (testing "a restricted table gets no values when the per-user cache hands back a shared row"
+    (mt/with-premium-features #{:advanced-permissions}
+      (mt/with-model-cleanup [:model/FieldValues]
+        (let [field-id (mt/id :venues :price)]
+          (mt/with-temp-vals-in-db :model/Field field-id {:has_field_values :list}
+            ;; Stand in for a `:sandboxes` token blip: the restriction check says restricted, but the
+            ;; cache-key hash comes back trivial so the shared `:full` row is returned.
+            (with-redefs-fn {#'params.field-values/get-or-create-field-values!
+                             (fn [field]
+                               (assoc (field-values/get-or-create-full-field-values! field) :type :full))}
+              (fn []
+                (impersonation.util-test/with-impersonations!
+                  {:impersonations [{:db-id (mt/id) :attribute "impersonation_attr"}]
+                   :attributes     {"impersonation_attr" "impersonation_role"}}
+                  (let [{:keys [ddl]} (llm.context/build-schema-context (mt/id) #{(mt/id :venues)})]
+                    ;; The column keeps its semantic-type hint; what it must not carry is the prices.
+                    (is (not (re-find #"\d" (str (column-comment ddl "PRICE"))))
+                        "no sample values, because the row was not resolved for this user")))))))))))

@@ -4,6 +4,12 @@ import { t } from "ttag";
 import { GroupSummary } from "metabase/admin/people/components/GroupSummary";
 import type { GroupIds, UserGroupType } from "metabase/admin/types";
 import {
+  canEditMembership,
+  getGroupNameLocalized,
+  isAdminGroup,
+  isDefaultGroup,
+} from "metabase/admin/utils/groups";
+import {
   Box,
   Checkbox,
   Combobox,
@@ -13,12 +19,6 @@ import {
   rem,
   useCombobox,
 } from "metabase/ui";
-import {
-  canEditMembership,
-  getGroupNameLocalized,
-  isAdminGroup,
-  isDefaultGroup,
-} from "metabase/utils/groups";
 import { isNotNull } from "metabase/utils/types";
 import type { GroupInfo } from "metabase-types/api";
 

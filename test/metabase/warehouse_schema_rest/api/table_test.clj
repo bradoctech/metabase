@@ -1,5 +1,6 @@
 (ns ^:mb/driver-tests metabase.warehouse-schema-rest.api.table-test
   "Tests for /api/table endpoints."
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.warehouse-schema-rest.api.table-test]}}}}}}
   (:require
    [clojure.java.jdbc :as jdbc]
    [clojure.set :as set]
@@ -10,6 +11,7 @@
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
    [metabase.driver.util :as driver.u]
    [metabase.events.core :as events]
+   [metabase.lib.core :as lib]
    [metabase.permissions.models.data-permissions :as data-perms]
    [metabase.permissions.models.permissions :as perms]
    [metabase.permissions.models.permissions-group :as perms-group]
@@ -45,6 +47,7 @@
     :name                        "test-data (h2)"
     :is_attached_dwh             false
     :is_sample                   false
+    :is_stub                     false
     :is_full_sync                true
     :is_on_demand                false
     :description                 nil
@@ -241,7 +244,7 @@
           (mt/user-http-request :rasta :get 404 (format "table/%d/data" 133713371337)))))))
 
 (defn- query-metadata-defaults []
-  (table-defaults))
+  (assoc (table-defaults) :transform nil))
 
 (deftest ^:parallel sensitive-fields-included-test
   (mt/with-premium-features #{}
@@ -391,6 +394,22 @@
                (mt/user-http-request :rasta :get 200 (format "table/%d/query_metadata" (mt/id :users))))
             "Make sure that getting the User table does *not* include password info")))))
 
+(deftest query-metadata-transform-hydration-test
+  (testing "GET /api/table/:id/query_metadata hydrates the source :transform based on transforms availability (GDGT-2523)"
+    (mt/with-temp [:model/Transform transform {:name   "My transform"
+                                               :source {:type  "query"
+                                                        :query (lib/native-query (mt/metadata-provider) "SELECT 1")}
+                                               :target {:database (mt/id) :table "my_transform_table"}}
+                   :model/Table     {table-id :id} {:db_id        (mt/id)
+                                                    :transform_id (:id transform)}]
+      (testing "self-hosted (not hosted) without :transforms-basic still hydrates the source transform"
+        (mt/with-premium-features #{}
+          (is (=? {:transform {:id (:id transform)}}
+                  (mt/user-http-request :crowberto :get 200 (format "table/%d/query_metadata" table-id))))))
+      (testing "hosted instance without :transforms-basic does not hydrate the source transform"
+        (mt/with-premium-features #{:hosting}
+          (is (nil? (:transform (mt/user-http-request :crowberto :get 200 (format "table/%d/query_metadata" table-id))))))))))
+
 (deftest fk-target-permissions-test
   (testing "GET /api/table/:id/query_metadata"
     (testing (str "Check that FK fields belonging to Tables we don't have permissions for don't come back as hydrated "
@@ -426,7 +445,7 @@
       (is (= (merge
               (-> (table-defaults)
                   (dissoc :segments :field_values :metrics :measures :updated_at)
-                  (update :db merge (select-keys (mt/db) [:details :write_data_details])))
+                  (update :db merge (select-keys (mt/db) [:details :write_data_details :admin_details])))
               (t2/hydrate (t2/select-one [:model/Table :id :schema :name :created_at :initial_sync_status] :id (u/the-id table))
                           :pk_field :collection)
               {:description     "What a nice table!"
@@ -523,17 +542,17 @@
                                                (assoc :db_id (:id db)))]
         (let [called (atom 0)
               ;; original is private so a var will pick up the redef'd. need contents of var before
-              original (var-get #'api.table/sync-unhidden-tables)]
-          (with-redefs [api.table/sync-unhidden-tables
-                        (fn [unhidden]
-                          (when (seq unhidden)
-                            (is (= (:id table)
-                                   (:id (first unhidden)))
-                                "Unhidden callback did not get correct tables.")
-                            (swap! called inc)
-                            (let [fut (original unhidden)]
-                              (when (future? fut)
-                                (deref fut)))))]
+              original (mt/original-fn #'api.table/sync-unhidden-tables)]
+          (mt/with-dynamic-fn-redefs [api.table/sync-unhidden-tables
+                                      (fn [unhidden]
+                                        (when (seq unhidden)
+                                          (is (= (:id table)
+                                                 (:id (first unhidden)))
+                                              "Unhidden callback did not get correct tables.")
+                                          (swap! called inc)
+                                          (let [fut (original unhidden)]
+                                            (when (future? fut)
+                                              (deref fut)))))]
             (letfn [(set-visibility! [state]
                       (testing (format "Set state => %s" (pr-str state))
                         (mt/user-http-request :crowberto :put 200 (format "table/%d" (:id table))
@@ -561,12 +580,14 @@
               (testing "Update table's properties shouldn't trigger sync"
                 (set-name!)
                 (is (= 2
-                       @called)))))))))
+                       @called))))))))))
+
+(deftest update-table-sync-test-2
   (testing "Bulk updating visibility"
     (let [unhidden-ids (atom #{})]
       (mt/with-temp [:model/Table {id-1 :id} {}
                      :model/Table {id-2 :id} {:visibility_type "hidden"}]
-        (with-redefs [api.table/sync-unhidden-tables (fn [unhidden] (reset! unhidden-ids (set (map :id unhidden))))]
+        (mt/with-dynamic-fn-redefs [api.table/sync-unhidden-tables (fn [unhidden] (reset! unhidden-ids (set (map :id unhidden))))]
           (letfn [(set-many-vis! [ids state]
                     (reset! unhidden-ids #{})
                     (testing (format "Set visibility type => %s" (pr-str state))
@@ -1085,6 +1106,16 @@
                  (->> (t2/hydrate (t2/select-one :model/Table :id (mt/id :venues)) :fields)
                       :fields
                       (map u/the-id))))))
+      (testing "Can we set custom field ordering with a wrapped {:field_order [...]} body?"
+        (let [custom-field-order [(mt/id :venues :name) (mt/id :venues :id) (mt/id :venues :price)
+                                  (mt/id :venues :latitude) (mt/id :venues :longitude) (mt/id :venues :category_id)]]
+          (is (=? {:success true}
+                  (mt/user-http-request :crowberto :put 200 (format "table/%s/fields/order" (mt/id :venues))
+                                        {:field_order custom-field-order})))
+          (is (= custom-field-order
+                 (->> (t2/hydrate (t2/select-one :model/Table :id (mt/id :venues)) :fields)
+                      :fields
+                      (map u/the-id))))))
       (finally (mt/user-http-request :crowberto :put 200 (format "table/%s" (mt/id :venues))
                                      {:field_order original-field-order})))))
 
@@ -1114,7 +1145,7 @@
     (mt/with-empty-db
       (testing "Happy path"
         (upload-test/with-uploads-enabled!
-          (is (= {:status 200, :body nil}
+          (is (= {:status 204, :body nil}
                  (update-csv-via-api! :metabase.upload/append)))))
       (testing "Failure paths return an appropriate status code and a message in the body"
         (upload-test/with-uploads-disabled!
@@ -1145,7 +1176,7 @@
     (mt/with-empty-db
       (testing "Happy path"
         (upload-test/with-uploads-enabled!
-          (is (= {:status 200, :body nil}
+          (is (= {:status 204, :body nil}
                  (update-csv-via-api! :metabase.upload/replace)))))
       (testing "Failure paths return an appropriate status code and a message in the body"
         (upload-test/with-uploads-disabled!

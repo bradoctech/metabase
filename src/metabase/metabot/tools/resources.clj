@@ -58,7 +58,7 @@
    [metabase.metabot.tools.entity-details :as entity-details]
    [metabase.metabot.tools.field-stats :as field-stats]
    [metabase.metabot.tools.shared.instructions :as instructions]
-   [metabase.metabot.tools.shared.llm-representations :as llm-rep]
+   [metabase.metabot.tools.shared.llm-shape :as llm-shape]
    [metabase.models.interface :as mi]
    [metabase.transforms.core :as transforms]
    [metabase.util.log :as log]
@@ -152,7 +152,7 @@
    :name        name
    :engine      (some-> engine clojure.core/name)
    :description description
-   :uri         (llm-rep/metabase-uri :database id)})
+   :uri         (llm-shape/metabase-uri :database id)})
 
 (defn- present-collection
   "Trim a collection row to an item map. `path-name` may be supplied if the caller pre-computed it."
@@ -166,7 +166,7 @@
     :authority_level   authority_level
     :is_personal       (boolean personal_owner_id)
     :description       description
-    :uri               (llm-rep/metabase-uri :collection id)}))
+    :uri               (llm-shape/metabase-uri :collection id)}))
 
 (defn- present-table
   [{:keys [id name display_name schema db_id description]}]
@@ -177,7 +177,7 @@
    :schema       schema
    :database_id  db_id
    :description  description
-   :uri          (llm-rep/metabase-uri :table id)})
+   :uri          (llm-shape/metabase-uri :table id)})
 
 (defn- present-card
   "Cards (questions or models) — :type on a Card is :question / :model / :metric."
@@ -194,7 +194,7 @@
      :database_id   database_id
      :table_id      table_id
      :description   description
-     :uri           (llm-rep/metabase-uri (keyword model-type) id)}))
+     :uri           (llm-shape/metabase-uri (keyword model-type) id)}))
 
 (defn- present-dashboard
   [{:keys [id name collection_id description]}]
@@ -203,7 +203,7 @@
    :name          name
    :collection_id collection_id
    :description   description
-   :uri           (llm-rep/metabase-uri :dashboard id)})
+   :uri           (llm-shape/metabase-uri :dashboard id)})
 
 (defn- present-transform
   [{:keys [id name description source_database_id]}]
@@ -212,7 +212,7 @@
    :name        name
    :database_id source_database_id
    :description description
-   :uri         (llm-rep/metabase-uri :transform id)})
+   :uri         (llm-shape/metabase-uri :transform id)})
 
 (defn- present-source-card
   "Resolve a source-card id to a typed item map (model / metric / question)."
@@ -224,7 +224,7 @@
                    "question")]
     {:type src-type
      :id   source-card-id
-     :uri  (llm-rep/metabase-uri (keyword src-type) source-card-id)}))
+     :uri  (llm-shape/metabase-uri (keyword src-type) source-card-id)}))
 
 ;; ----- Lineage helpers -----
 
@@ -234,10 +234,10 @@
   (cond-> []
     database_id    (conj {:type "database"
                           :id   database_id
-                          :uri  (llm-rep/metabase-uri :database database_id)})
+                          :uri  (llm-shape/metabase-uri :database database_id)})
     table_id       (conj {:type "table"
                           :id   table_id
-                          :uri  (llm-rep/metabase-uri :table table_id)})
+                          :uri  (llm-shape/metabase-uri :table table_id)})
     source_card_id (conj (present-source-card source_card_id))))
 
 (defn- transform-source-table-ids
@@ -298,7 +298,7 @@
                            :id        id
                            :name      name
                            :timestamp timestamp
-                           :uri       (llm-rep/metabase-uri (keyword type) id)}))
+                           :uri       (llm-shape/metabase-uri (keyword type) id)}))
                       recents)]
     (list-result :recent-items items)))
 
@@ -346,7 +346,7 @@
                              {:type        "schema"
                               :name        s
                               :database_id db-id
-                              :uri         (llm-rep/metabase-uri :database db-id "schemas" s "tables")})))]
+                              :uri         (llm-shape/metabase-uri :database db-id "schemas" s "tables")})))]
     (list-result :database-schemas schemas)))
 
 (defn- fetch-database-schema-tables [id-str schema-name]
@@ -541,7 +541,7 @@
         items            (cond-> []
                            db-id         (conj {:type "database"
                                                 :id   db-id
-                                                :uri  (llm-rep/metabase-uri :database db-id)})
+                                                :uri  (llm-shape/metabase-uri :database db-id)})
                            source-tables (into source-tables))]
     (list-result :transform-sources items)))
 
@@ -557,7 +557,7 @@
         items        (cond-> []
                        db-id        (conj {:type "database"
                                            :id   db-id
-                                           :uri  (llm-rep/metabase-uri :database db-id)})
+                                           :uri  (llm-shape/metabase-uri :database db-id)})
                        target-table (conj (present-table target-table)))]
     (list-result :transform-target items)))
 
@@ -588,6 +588,29 @@
 
 ;; ----- Dispatch -----
 
+(def ^:private numeric-id-uri-types
+  "URI entity-type segments whose next segment must be a numeric id (see `dispatch`)."
+  #{"database" "collection" "table" "model" "question" "metric"
+    "measure" "segment" "transform" "dashboard"})
+
+(defn- check-numeric-id-segment!
+  "Entity URIs take numeric ids only. The common miss is the LLM pasting a 21-char entity id
+   where the numeric id belongs; without this check that fails downstream as a bare 404 the
+   LLM misreads as a permissions problem. Throw a directive error instead so it
+   self-corrects in one step."
+  [uri [type-seg id-seg]]
+  (when (and (numeric-id-uri-types type-seg)
+             (some? id-seg)
+             (nil? (parse-long id-seg)))
+    (throw (ex-info
+            (str "Invalid id `" id-seg "` in URI. read_resource URIs use the numeric entity "
+                 "id — copy the `uri` attribute from a search result, or build the URI from "
+                 "its numeric `id` attribute, e.g. metabase://" type-seg "/42.")
+            {:agent-error? true
+             :status-code  400
+             :uri          uri
+             :id-segment   id-seg}))))
+
 (defn- dispatch
   "Route a parsed URI to the right fetch handler. The match-one table is the canonical
    list of supported URI shapes — adding a new URI = adding a clause here + a handler.
@@ -596,6 +619,7 @@
    ones (with rest-binding) so the exact-length match wins for the no-extra-segments case."
   [uri]
   (let [{:keys [segments query-params]} (parse-uri uri)]
+    (check-numeric-id-segment! uri segments)
     (match/match-one segments
       ;; Navigation
       ["databases"]                                    (fetch-databases-list)
@@ -670,20 +694,20 @@
 
 (defn- format-content
   "Format a tool result as an LLM-ready string.
-   Dispatches to the right llm-rep formatter based on :result-type.
+   Dispatches to the right llm-shape formatter based on :result-type.
    Returns the :output string directly for error results (404s etc.)."
   [content]
   (if-let [structured (:structured-output content)]
     (case (:result-type structured)
       ;; NOTE: keep in sync with agent/tools/metadata.clj/format-field-metadata-output
       :field-metadata (format-with-instructions
-                       (llm-rep/field-metadata->xml structured)
+                       (llm-shape/field-metadata->xml structured)
                        instructions/field-metadata-instructions)
-      :entity         (llm-rep/entity->xml structured)
-      :metabot-list   (llm-rep/metabot-list->xml structured)
-      :metabot-entity (llm-rep/metabot-entity->xml structured)
+      :entity         (llm-shape/entity->xml structured)
+      :metabot-list   (llm-shape/metabot-list->xml structured)
+      :metabot-entity (llm-shape/metabot-entity->xml structured)
       ;; fallback — should not happen, but better than EDN
-      (llm-rep/entity->xml structured))
+      (llm-shape/entity->xml structured))
     ;; error case — :output is already a string
     (:formatted content)))
 
@@ -731,8 +755,8 @@
            :scope     scope/agent-resource-read}
   read-resource-tool
   "Read detailed information about Metabase resources via URI patterns. Use this to navigate
-  the instance and drill into specific entities. URIs returned by `search` and other
-  read_resource calls can be fed directly back here.
+  the instance and drill into specific entities. URIs returned by `search` can be fed directly
+  back here. Only numeric IDs accepted, never alphanumeric entity-id's.
 
   Up to 5 URIs may be requested in one call. List responses are capped at 25 items; if
   truncated, drill into individual items via their URIs or refine via `search`.

@@ -89,6 +89,7 @@ export const ComboChart = ({
     chartModel,
     settings,
   );
+
   const totalHeight = height + legendHeight;
 
   return (

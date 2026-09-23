@@ -4,8 +4,9 @@ import { t } from "ttag";
 import _ from "underscore";
 
 import NoResults from "assets/img/no_results.svg";
+import { AdminContentTable } from "metabase/admin/components/AdminContentTable";
+import { isDefaultGroup } from "metabase/admin/utils/groups";
 import { getErrorMessage } from "metabase/api/utils/errors";
-import { AdminContentTable } from "metabase/common/components/AdminContentTable";
 import { EmptyState } from "metabase/common/components/EmptyState";
 import { useToast } from "metabase/common/hooks";
 import { FormSwitch } from "metabase/forms";
@@ -19,7 +20,6 @@ import {
   Tooltip,
   rem,
 } from "metabase/ui";
-import { isDefaultGroup } from "metabase/utils/groups";
 import type { GroupId, GroupInfo } from "metabase-types/api";
 
 import { AddMappingRow } from "./AddMappingRow";

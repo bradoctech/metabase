@@ -228,7 +228,6 @@
   user-http-request
   user-http-request-full-response
   user-real-request
-  user-real-request-full-response
   with-group
   with-group-for-user
   with-test-user]

@@ -83,7 +83,7 @@
    `MongoClientSettings$Builder` first. Then credentials are set and ssl context is updated in the `builder` object.
    Afterwards, `MongoClientSettings` are built using `.build`."
   ^MongoClientSettings
-  [{:keys [authdb user pass use-conn-uri ssl tunnel-enabled] :as db-details}]
+  [{:keys [authdb user pass use-conn-uri ssl additional-options tunnel-enabled] :as db-details}]
   (let [connection-string (-> db-details
                               db-details->connection-string
                               ConnectionString.)
@@ -97,9 +97,13 @@
       ;;       manually verified that's not necessary.
       (when (seq user)
         (.credential builder
-                     (MongoCredential/createCredential user
-                                                       (or (not-empty authdb) "admin")
-                                                       (char-array pass))))
+                     (if (some-> additional-options
+                                 u/lower-case-en
+                                 (str/index-of "authmechanism=mongodb-x509"))
+                       (MongoCredential/createMongoX509Credential user)
+                       (MongoCredential/createCredential user
+                                                         (or (not-empty authdb) "admin")
+                                                         (char-array pass)))))
       (when ssl
         (maybe-add-ssl-context-to-builder! builder db-details)))
     (.build builder)))

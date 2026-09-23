@@ -166,12 +166,56 @@
               :errors      {:host (str (deferred-tru "check your host settings"))}}
              cause)))
 
+(def ^:private ^:dynamic *allow-private-connection-hosts*
+  "When true, an `:external-only` [[driver.settings/warehouse-allowed-networks]] policy is enforced as
+  `:allow-private`. Bound only by [[do-with-database-network-policy]]."
+  false)
+
+(defn- effective-warehouse-allowed-networks
+  "[[driver.settings/warehouse-allowed-networks]] as it applies to the connection being validated right now:
+  [[*allow-private-connection-hosts*]] relaxes `:external-only` to `:allow-private`."
+  []
+  (let [policy (driver.settings/warehouse-allowed-networks)]
+    (if (and *allow-private-connection-hosts* (= policy :external-only))
+      :allow-private
+      policy)))
+
+(defn network-exempt-warehouse?
+  "Whether `database` may sit on a private network under an `:external-only`
+  [[driver.settings/warehouse-allowed-networks]] policy: today only the attached DWH, and only when the token also
+  carries the `:attached-dwh` feature. The flag alone is not enough -- serialization import can set it -- so the
+  exemption is confined to instances whose token vouches that a DWH really was attached.
+
+  `database` may be a Toucan row or a config-file entry (`:is_attached_dwh`) or a Lib metadata
+  database (`:is-attached-dwh` -- and a map that throws on `:snake_case` lookups outside prod, which is why the two
+  shapes are told apart rather than the keys tried in turn)."
+  [database]
+  (boolean (and (if (= (:lib/type database) :metadata/database)
+                  (:is-attached-dwh database)
+                  (:is_attached_dwh database))
+                (premium-features/has-attached-dwh?))))
+
+(defn do-with-database-network-policy
+  "Impl for [[with-database-network-policy]]."
+  [database thunk]
+  (binding [*allow-private-connection-hosts* (network-exempt-warehouse? database)]
+    (thunk)))
+
+(defmacro with-database-network-policy
+  "Run `body` with [[driver.settings/warehouse-allowed-networks]] enforced the way it applies to `database`: a
+  network-exempt warehouse (see [[network-exempt-warehouse?]]) gets `:external-only` relaxed to `:allow-private`,
+  any other database the policy as configured. Wrap this around anything that validates connection hosts on
+  `database`'s behalf."
+  {:style/indent 1}
+  [database & body]
+  `(do-with-database-network-policy ~database (^:once fn* [] ~@body)))
+
 (defn validate-resolved-addresses!
   "Throw when any of the already-resolved `addresses` is disallowed by [[driver.settings/warehouse-allowed-networks]].
   Used by connection transports, such as Mongo's `InetAddressResolver`, that can enforce the policy on the exact
   addresses used to open a socket."
   [addresses]
-  (let [policy (driver.settings/warehouse-allowed-networks)]
+  (let [policy (effective-warehouse-allowed-networks)]
     (when (some #(not (u.http/address-allowed-for-network-policy? policy %)) addresses)
       (throw (blocked-network-address-exception)))))
 
@@ -179,7 +223,7 @@
   "Throw a 400 if `details` would have Metabase open a connection to an address disallowed by
   [[driver.settings/warehouse-allowed-networks]]. Returns nil when the details are acceptable."
   [driver details]
-  (let [policy (driver.settings/warehouse-allowed-networks)]
+  (let [policy (effective-warehouse-allowed-networks)]
     (when (not= policy :allow-all)
       (let [hosts (try
                     (hosts-metabase-will-connect-to driver details)
@@ -801,20 +845,33 @@
       (into default-sensitive-fields (map (comp keyword :name) password-fields)))
     default-sensitive-fields))
 
-(defn fields-hidden-for-write-data-connection
-  "Returns the set of field names (strings) that should NOT appear in `write_data_details` for the given `driver`.
-   These are fields whose resolved `visible-if` includes `\"write-data-connection\" false`, meaning they are hidden
-   when the write-data-connection form marker is true."
-  [driver]
+(defn- fields-hidden-by-form-marker
+  "Returns the set of field names (strings) whose resolved `visible-if` includes `marker false`,
+   meaning they are hidden when the named form marker is set on the connection-edit form."
+  [driver marker]
   (when-some [conn-prop-fn (get-method driver/connection-properties driver)]
     (let [all-props     (conn-prop-fn driver)
           resolved      (connection-props-server->client driver all-props)
           props-by-name (collect-all-props-by-name resolved)]
       (into #{}
             (keep (fn [[field-name {:keys [visible-if]}]]
-                    (when (false? (get visible-if "write-data-connection"))
+                    (when (false? (get visible-if marker))
                       field-name)))
             props-by-name))))
+
+(defn fields-hidden-for-write-data-connection
+  "Returns the set of field names (strings) that should NOT appear in `write_data_details` for the given `driver`.
+   These are fields whose resolved `visible-if` includes `\"write-data-connection\" false`, meaning they are hidden
+   when the write-data-connection form marker is true."
+  [driver]
+  (fields-hidden-by-form-marker driver "write-data-connection"))
+
+(defn fields-hidden-for-admin-connection
+  "Returns the set of field names (strings) that should NOT appear in `admin_details` for the given `driver`.
+   These are fields whose resolved `visible-if` includes `\"admin-connection\" false`, meaning they are hidden
+   when the admin-connection form marker is true."
+  [driver]
+  (fields-hidden-by-form-marker driver "admin-connection"))
 
 (defn fetch-and-incorporate-auth-provider-details
   "Incorporates auth-provider responses with db-details.
@@ -897,6 +954,33 @@
        (map rand-nth)
        shuffle
        (apply str)))
+
+(defn- redact-msg
+  "Replace all `secrets` in `msg` with `****`."
+  [msg secrets]
+  (reduce (fn [s secret] (str/replace s secret "****")) (or msg "") secrets))
+
+(defn scrub-exceptions
+  "Scrub `secrets` from the exception message and cause chain of `t`. Returns a new
+   exception with every occurrence of each secret replaced by `****`. Use this to prevent
+   credentials embedded in DDL SQL from leaking into logs via exception messages."
+  [^Throwable t secrets]
+  (let [msg   (redact-msg (ex-message t) secrets)
+        cause (some-> (.getCause t) (scrub-exceptions secrets))]
+    (cond
+      (instance? clojure.lang.ExceptionInfo t)
+      (ex-info msg (ex-data t) cause)
+
+      (instance? java.sql.SQLException t)
+      (let [^java.sql.SQLException sql-ex t
+            next-ex (some-> (.getNextException sql-ex) (scrub-exceptions secrets))]
+        (doto (java.sql.SQLException. msg (.getSQLState sql-ex) (.getErrorCode sql-ex) cause)
+          (.setStackTrace (.getStackTrace t))
+          (cond-> next-ex (.setNextException next-ex))))
+
+      :else
+      (doto (Exception. msg cause)
+        (.setStackTrace (.getStackTrace t))))))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                           Macaw parsing helpers                                                |

@@ -71,7 +71,7 @@ export const FUNNEL_CHART_DEFINITION: VisualizationDefinition = {
   hasEmptyState: true,
 
   settings: {
-    ...columnSettings({ hidden: true }),
+    ...columnSettings({ getHidden: () => true }),
     ...dimensionSetting("funnel.dimension", {
       getSection: () => t`Data`,
       // eslint-disable-next-line ttag/no-module-declaration -- see metabase#5504

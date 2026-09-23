@@ -1,4 +1,4 @@
-import api from "metabase/utils/api";
+import api from "metabase/api/legacy-client";
 import {
   type LocaleDataWithLanguage,
   setLocalization,
@@ -8,6 +8,8 @@ import {
 export async function loadLocalization(
   locale: string,
 ): Promise<LocaleDataWithLanguage> {
+  // we need to be sure to set the initial localization before loading any files
+  // so load metabase/services only when we need it
   // load and parse the locale
   const translationsObject: LocaleDataWithLanguage =
     locale !== "en"

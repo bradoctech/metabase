@@ -2,7 +2,7 @@
   "Shared test utilities for document tests.")
 
 (defn text->prose-mirror-ast
-  "Convert plain text to a ProseMirror AST structure. Empty text yields an empty document."
+  "Convert plain text to a ProseMirror AST structure."
   [text]
   (if (empty? text)
     {:type "doc" :content []}

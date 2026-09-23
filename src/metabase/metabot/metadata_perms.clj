@@ -65,6 +65,8 @@
   (->> (memoized k table-ids
                  (fn [ids]
                    (let [tables (into [] (keep (table-rows ids)) ids)]
+                     ;; this release has no `prime-table-perms-cache`; per-table checks prime the
+                     ;; db-level permission cache themselves, so we just check each table.
                      (into {} (comp (filter pred) (map (juxt :id (constantly true)))) tables)))
                  false)
        (into #{} (keep (fn [[id permitted?]] (when permitted? id))))))

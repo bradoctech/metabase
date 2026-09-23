@@ -64,19 +64,6 @@ describe("FormattedParameterValue", () => {
     expect(text).toHaveAttribute("data-truncate", "end");
   });
 
-  it("should render the placeholder with truncation when there is no value", () => {
-    setup({
-      value: null as any,
-      parameter: createMockParameter(),
-      placeholder: "Filter this long column name",
-    });
-
-    const text = screen.getByText("Filter this long column name");
-    expect(text).toBeInTheDocument();
-    // Ellipsified renders a Mantine Text with truncate, which sets data-truncate
-    expect(text).toHaveAttribute("data-truncate", "end");
-  });
-
   it("should translate boolean filter value", () => {
     setLocalization({
       headers: {

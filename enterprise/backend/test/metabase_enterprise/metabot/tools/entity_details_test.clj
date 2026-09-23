@@ -37,16 +37,15 @@
                                                                   :type     :query
                                                                   :query    {:source-table (mt/id :venues)
                                                                              :aggregation  [[:count]]}}}]
-        (let [metric-dimensions (fn []
+        (let [venue-name        (:name (lib.metadata/table (mt/metadata-provider) (mt/id :venues)))
+              metric-dimensions (fn []
                                   (-> (entity-details/get-metric-details {:metric-id          metric-id
                                                                           :with-field-values? false})
                                       :structured-output
                                       :queryable-dimensions))
-              ;; Columns reached through an FK carry a `:table_reference`; the source table's
-              ;; own columns do not.
               source-names      (fn [dimensions]
                                   (into #{}
-                                        (comp (remove :table_reference)
+                                        (comp (filter #(= venue-name (get-in % [:portable_fk 2])))
                                               (map :name))
                                         dimensions))]
           (testing "only source-card columns are returned"

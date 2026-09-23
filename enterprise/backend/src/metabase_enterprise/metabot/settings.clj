@@ -7,13 +7,13 @@
 (def ^:private valid-limit-units #{:tokens :messages})
 
 (defsetting metabot-limit-unit
-  (deferred-tru "The unit used for Metabot usage limits: `tokens` or `messages`.")
+  (deferred-tru "The unit used for metabot usage limits.")
   :type       :keyword
   :default    :tokens
   :visibility :settings-manager
   :encryption :no
   :export?    true
-  :feature    :ai-controls
+  :doc        false
   :setter     (fn [new-value]
                 (let [v (some-> new-value keyword)]
                   (when (and v (not (contains? valid-limit-units v)))
@@ -25,13 +25,13 @@
 (def ^:private valid-reset-rates #{:daily :weekly :monthly})
 
 (defsetting metabot-limit-reset-rate
-  (deferred-tru "How often Metabot usage limits reset: `daily`, `weekly`, or `monthly`.")
+  (deferred-tru "How often metabot usage limits reset.")
   :type       :keyword
   :default    :monthly
   :visibility :settings-manager
   :encryption :no
   :export?    true
-  :feature    :ai-controls
+  :doc        false
   :setter     (fn [new-value]
                 (let [v (some-> new-value keyword)]
                   (when (and v (not (contains? valid-reset-rates v)))
@@ -47,13 +47,13 @@
   :visibility :settings-manager
   :encryption :no
   :export?    true
-  :feature    :ai-controls)
+  :doc        false)
 
 (defsetting metabot-advanced-permissions
-  (deferred-tru "Whether the AI feature access admin page shows granular, per-tool group permissions instead of a single on/off toggle per group.")
+  (deferred-tru "Whether AI feature access uses advanced group-level permissions.")
   :type       :boolean
   :default    false
   :visibility :admin
   :encryption :no
   :export?    true
-  :feature    :ai-controls)
+  :doc        false)

@@ -1,4 +1,5 @@
 (ns metabase-enterprise.serialization.v2.load-test
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase-enterprise.serialization.v2.load-test]}}}}}}
   (:require
    [clojure.string :as str]
    [clojure.test :refer :all]
@@ -8,10 +9,12 @@
    [metabase-enterprise.serialization.v2.ingest :as serdes.ingest]
    [metabase-enterprise.serialization.v2.load :as serdes.load]
    [metabase.actions.models :as action]
+   [metabase.collections.models.collection :as collection]
    [metabase.lib-be.core :as lib-be]
    [metabase.lib.core :as lib]
    [metabase.lib.metadata :as lib.metadata]
    [metabase.models.serialization :as serdes]
+   [metabase.permissions.core :as perms]
    [metabase.search.core :as search]
    [metabase.test :as mt]
    [metabase.util :as u]
@@ -59,6 +62,59 @@
 ;;; WARNING for test authors: [[extract/extract]] returns a lazy reducible value. To make sure you don't
 ;;; confound your tests with data from your dev appdb, remember to eagerly
 ;;; `(into [] (extract/extract ...))` in these tests.
+
+(defn- cause-chain-messages
+  "Messages of `e` and every exception beneath it, skipping any that have none."
+  [e]
+  ;; `keep`, not `map` - an exception with a nil message would NPE the callers' `re-find` and hide the real failure
+  (into [] (keep ex-message) (take-while some? (iterate ex-cause e))))
+
+(defn- load-failure-messages!
+  "Loads `ingestion`, expecting it to throw, and returns the thrown exception's cause-chain messages."
+  [ingestion]
+  (try
+    (serdes.load/load-metabase! ingestion)
+    ["load-metabase! unexpectedly succeeded"]
+    (catch Exception e
+      (cause-chain-messages e))))
+
+(deftest schema-validation-opt-out-reaches-import-test
+  (testing (str "GHY-4241: MB_SERIALIZATION_SKIP_SCHEMA_VALIDATION has to travel env var -> Setting -> the binding "
+                "in load-metabase! -> import-mbql. Nothing else covers that chain, so dropping the binding would "
+                "silently disable the opt-out.")
+    (let [extracted (atom nil)]
+      (mt/with-empty-h2-app-db!
+        (let [db   (ts/create! :model/Database :name "my-db")
+              coll (ts/create! :model/Collection :name "Some collection")
+              card (ts/create! :model/Card
+                               :name          "Native with a variable"
+                               :collection_id (:id coll)
+                               :dataset_query {:database (:id db)
+                                               :type     :native
+                                               :native   {:template-tags {"id" {:id           "e2d15f07-37b3-01fc-3944-2ff860a5eb46"
+                                                                                :name         "id"
+                                                                                :display-name "ID"
+                                                                                :type         :number}}
+                                                          :query         "SELECT 1 WHERE x = {{id}}"}})]
+          (reset! extracted {:db   (serdes/extract-one "Database" {} db)
+                             :coll (serdes/extract-one "Collection" {} coll)
+                             :card (serdes/extract-one "Card" {} card)})))
+      ;; a tag type this version has no representation for - what an export from a newer Metabase that introduced
+      ;; one would look like
+      (let [{:keys [db coll card]} @extracted
+            bad-card  (assoc-in card [:dataset_query :stages 0 :template-tags]
+                                {"id" {:type :tag-type-from-the-future :name "id" :display-name "ID" :id "abc-123"}})
+            ingestion #(ingestion-in-memory [db coll bad-card])
+            ours?     #(some (partial re-find #"does not match this Metabase's query schema") %)]
+        (testing "by default the schema check is what refuses the import"
+          (mt/with-empty-h2-app-db!
+            (is (ours? (load-failure-messages! (ingestion))))))
+        (testing "with the opt-out set the schema check is skipped, so the import fails downstream instead"
+          (mt/with-empty-h2-app-db!
+            (mt/with-temp-env-var-value! [mb-serialization-skip-schema-validation "true"]
+              (let [messages (load-failure-messages! (ingestion))]
+                (is (some (partial re-find #"Invalid input.*:template-tags") messages))
+                (is (not (ours? messages)))))))))))
 
 (deftest load-basics-test
   (testing "a simple, fresh collection is imported"
@@ -319,6 +375,49 @@
                 (is (= "Custom Category" (:display_name cat))
                     "user override on the column survived the round-trip")))))))))
 
+(deftest card-with-unexported-table-and-field-test
+  (testing "a Card referencing a Table/Field absent from the bundle still loads by synthesizing inactive rows"
+    (let [serialized (atom nil)]
+      (ts/with-dbs [source-db dest-db]
+        (testing "serializing a database, table, field and a card that references them"
+          (ts/with-db source-db
+            (let [coll  (ts/create! :model/Collection :name "pop! minis")
+                  db    (ts/create! :model/Database :name "my-db")
+                  table (ts/create! :model/Table :name "customers" :db_id (:id db))
+                  field (ts/create! :model/Field :name "age" :table_id (:id table) :base_type :type/Integer)
+                  _user (ts/create! :model/User :first_name "Tom" :last_name "Scholz" :email "tom@bost.on")
+                  mp    (lib-be/application-database-metadata-provider (:id db))
+                  query (-> (lib/query mp (lib.metadata/table mp (:id table)))
+                            (lib/filter (lib/>= (lib.metadata/field mp (:id field)) 18))
+                            (lib/aggregate (lib/count)))]
+              (ts/create! :model/Card
+                          :database_id   (:id db)
+                          :table_id      (:id table)
+                          :collection_id (:id coll)
+                          :query_type    :query
+                          :name          "Example Card"
+                          :dataset_query query
+                          :display       :line)
+              (reset! serialized (into [] (remove #(#{"Table" "Field"} (-> % :serdes/meta last :model))
+                                                  (serdes.extract/extract {})))))))
+        (testing "the bundle has the Card but no Table/Field"
+          (is (seq (by-model @serialized "Card")))
+          (is (empty? (by-model @serialized "Table")))
+          (is (empty? (by-model @serialized "Field"))))
+        (testing "deserializing synthesizes inactive Table and Field for the dangling references"
+          (ts/with-db dest-db
+            (ts/create! :model/Database :name "my-db")
+            (serdes.load/load-metabase! (ingestion-in-memory @serialized))
+            (let [db    (t2/select-one :model/Database :name "my-db")
+                  table (t2/select-one :model/Table :name "customers" :db_id (:id db))
+                  field (and table (t2/select-one :model/Field :name "age" :table_id (:id table)))
+                  card  (t2/select-one :model/Card :name "Example Card")
+                  query (:dataset_query card)]
+              (is (=? {:active false} table))
+              (is (=? {:active false} field))
+              (is (= (:id db) (lib/database-id query)))
+              (is (= (:id table) (lib/primary-source-table-id query))))))))))
+
 (deftest segment-test
   ;; Segment.definition is a JSON-encoded MBQL query, which contain database, table, and field IDs - these need to be
   ;; converted to a portable form and read back in.
@@ -513,7 +612,6 @@
             (is (=? {:definition {:stages [{:aggregation [[:* {} [:measure {} (:entity_id @msr1s)] 2]]}]}}
                     derived-measure))
             (is (= #{[{:id "my-db", :model "Database"}]
-                     [{:id "my-db", :model "Database"} {:id "sales", :model "Table"}]
                      [{:id (:entity_id @msr1s), :model "Measure"}]}
                    (serdes/mbql-deps (:definition derived-measure))))))
         (testing "deserializing adjusts the measure IDs properly"
@@ -1167,7 +1265,43 @@
             ;; attaching the referrer must not nest the original beneath itself: error reporting renders the
             ;; whole cause chain, and a self-nested exception prints the same message twice
             (testing "attaching the referrer does not duplicate the error through the cause chain"
-              (is (nil? (ex-cause e))))))))))
+              (is (nil? (ex-cause e))))))
+        ;; `result-metadata-deps` derives deps only from each entry's `:field_ref`, never from its `:table_id`.
+        ;; So a result_metadata `:table_id` naming an absent database gets past dependency resolution and only
+        ;; fails inside `serdes/load-one!`, where `import-table-fk` raises ::database-not-found. (The Card's own
+        ;; top-level `table_id` cannot be used here: `populate-query-fields` recomputes it from `dataset_query`.)
+        (testing "a result_metadata table_id naming an absent database names the database and the card (GHY-3992)"
+          (let [ingestion (ingestion-in-memory [{:serdes/meta     [{:model "Card" :id "0123456789abcdef_0123"}]
+                                                 :created_at      (t/instant)
+                                                 :creator_id      "glee@rush.yyz"
+                                                 :database_id     "my-db"
+                                                 :dataset_query   {:database "my-db"
+                                                                   :type     :query
+                                                                   :query    {:source-table ["my-db" nil "CUSTOMERS"]}}
+                                                 :display         :table
+                                                 :entity_id       "0123456789abcdef_0123"
+                                                 :name            "Some card"
+                                                 :result_metadata [{:name      "STATE"
+                                                                    :base_type :type/Text
+                                                                    :table_id  ["absent-db" nil "CUSTOMERS"]}]
+                                                 :table_id        ["my-db" nil "CUSTOMERS"]
+                                                 :visualization_settings {}}])
+                e         (try
+                            (serdes.load/load-metabase! ingestion)
+                            nil
+                            (catch clojure.lang.ExceptionInfo e e))
+                root      (->> (iterate ex-cause e)
+                               (take-while some?)
+                               (some #(when (= :metabase.models.serialization.resolve.db/database-not-found
+                                               (:error (ex-data %)))
+                                        %)))]
+            (is (some? e))
+            (testing "the root cause carries the missing database name"
+              (is (some? root))
+              (is (= "absent-db" (:db-name (ex-data root)))))
+            (testing "the outer load-failure names the card that failed to load"
+              (is (= {:model "Card" :id "0123456789abcdef_0123" :name "Some card"}
+                     (:entity (ex-data e)))))))))))
 
 (deftest card-with-snippet-test
   (let [db1s      (atom nil)
@@ -2176,14 +2310,12 @@
                                         :target {:database (:id db)
                                                  :type "table"
                                                  :schema "public"
-                                                 :name "hello_transforms_world"})
-                  ;; Transform's before-insert (pre-#73741) already inserted the
-                  ;; metabase_table row via upsert-target-table!; adopt that row.
-                  table-id  (t2/select-one-pk :model/Table
-                                              :db_id (:id db)
-                                              :schema "public"
-                                              :name "hello_transforms_world")]
-              (t2/update! :model/Table table-id {:transform_id (:id transform), :active true})
+                                                 :name "hello_transforms_world"})]
+              (ts/create! :model/Table
+                          :name "hello_transforms_world"
+                          :db_id (:id db)
+                          :schema "public"
+                          :transform_id (:id transform))
               (reset! serialized (into [] (serdes.extract/extract {})))))
           (ts/with-db dest-db
             (t2/delete! :model/TransformTag)
@@ -2512,3 +2644,108 @@
                 card-ser   (first (filter #(= "Card" (-> % :serdes/meta last :model)) serialized))]
             (is (not (contains? card-ser :table_id))    "table_id always skipped for cards — re-derived on import")
             (is (contains? card-ser :database_id) "database_id exported — not derivable from broken query")))))))
+
+(deftest library-subcollection-round-trip-test
+  (testing "Library subcollection structure and types are preserved through serdes round-trip"
+    (let [serialized (atom nil)
+          library    (atom nil)
+          data-root  (atom nil)
+          metrics-root (atom nil)
+          data-sub   (atom nil)]
+      (ts/with-dbs [source-db dest-db]
+        (testing "extraction of library hierarchy"
+          (ts/with-db source-db
+            (reset! library      (ts/create! :model/Collection
+                                             :name      "Library"
+                                             :type      collection/library-collection-type
+                                             :location  "/"
+                                             :entity_id @#'collection/library-entity-id))
+            (reset! data-root    (ts/create! :model/Collection
+                                             :name      "Data"
+                                             :type      collection/library-data-collection-type
+                                             :location  (format "/%d/" (:id @library))
+                                             :entity_id @#'collection/library-data-entity-id))
+            (reset! metrics-root (ts/create! :model/Collection
+                                             :name      "Metrics"
+                                             :type      collection/library-metrics-collection-type
+                                             :location  (format "/%d/" (:id @library))
+                                             :entity_id @#'collection/library-metrics-entity-id))
+            (reset! data-sub     (ts/create! :model/Collection
+                                             :name     "Sales Tables"
+                                             :type     collection/library-data-collection-type
+                                             :location (format "/%d/%d/" (:id @library) (:id @data-root))))
+            (reset! serialized (into [] (serdes.extract/extract {})))
+            (is (some (fn [{[{:keys [model id]}] :serdes/meta}]
+                        (and (= model "Collection") (= id (:entity_id @library))))
+                      @serialized))))
+        (testing "loading into destination preserves library structure"
+          (ts/with-db dest-db
+            (serdes.load/load-metabase! (ingestion-in-memory @serialized))
+            (let [lib-dest     (t2/select-one :model/Collection :entity_id (:entity_id @library))
+                  data-dest    (t2/select-one :model/Collection :entity_id (:entity_id @data-root))
+                  metrics-dest (t2/select-one :model/Collection :entity_id (:entity_id @metrics-root))
+                  sub-dest     (t2/select-one :model/Collection :entity_id (:entity_id @data-sub))]
+              (testing "all collections exist"
+                (is (some? lib-dest))
+                (is (some? data-dest))
+                (is (some? metrics-dest))
+                (is (some? sub-dest)))
+              (testing "types are preserved"
+                (is (= collection/library-collection-type (:type lib-dest)))
+                (is (= collection/library-data-collection-type (:type data-dest)))
+                (is (= collection/library-metrics-collection-type (:type metrics-dest)))
+                (is (= collection/library-data-collection-type (:type sub-dest))))
+              (testing "parent-child hierarchy is correct"
+                (is (= "/" (:location lib-dest)))
+                (is (= (format "/%d/" (:id lib-dest)) (:location data-dest)))
+                (is (= (format "/%d/" (:id lib-dest)) (:location metrics-dest)))
+                (is (= (format "/%d/%d/" (:id lib-dest) (:id data-dest)) (:location sub-dest)))))))))))
+
+(deftest library-import-preserves-existing-permissions-test
+  (testing "Importing library subcollections does not overwrite existing permissions on destination"
+    (let [serialized (atom nil)
+          eid-data   "testdataeid0000000000"
+          eid-sub    "testsubeid00000000000"]
+      (ts/with-dbs [source-db dest-db]
+        (testing "extract from source"
+          (ts/with-db source-db
+            (let [data-coll (ts/create! :model/Collection
+                                        :name      "Data"
+                                        :type      collection/library-data-collection-type
+                                        :location  "/"
+                                        :entity_id eid-data)
+                  _sub-coll (ts/create! :model/Collection
+                                        :name     "Sales Tables"
+                                        :type     collection/library-data-collection-type
+                                        :location (format "/%d/" (:id data-coll))
+                                        :entity_id eid-sub)]
+              (reset! serialized (into [] (serdes.extract/extract {}))))))
+        (testing "pre-populate dest with same collections and custom permissions"
+          (ts/with-db dest-db
+            (let [data-dest (ts/create! :model/Collection
+                                        :name      "Data"
+                                        :type      collection/library-data-collection-type
+                                        :location  "/"
+                                        :entity_id eid-data)
+                  sub-dest  (ts/create! :model/Collection
+                                        :name     "Sales Tables"
+                                        :type     collection/library-data-collection-type
+                                        :location (format "/%d/" (:id data-dest))
+                                        :entity_id eid-sub)
+                  group     (ts/create! :model/PermissionsGroup :name "Custom Group")]
+              (perms/grant-collection-readwrite-permissions! group data-dest)
+              (perms/grant-collection-read-permissions! group sub-dest)
+              (let [perms-before (set (map #(select-keys % [:group_id :object])
+                                           (t2/select :model/Permissions
+                                                      :object [:like (format "/collection/%d/%%" (:id data-dest))])))]
+                (testing "custom permissions exist before import"
+                  (is (seq perms-before)))
+                (serdes.load/load-metabase! (ingestion-in-memory @serialized))
+                (let [data-after (t2/select-one :model/Collection :entity_id eid-data)
+                      perms-after (set (map #(select-keys % [:group_id :object])
+                                            (t2/select :model/Permissions
+                                                       :object [:like (format "/collection/%d/%%" (:id data-after))])))]
+                  (testing "collection still exists with same ID"
+                    (is (= (:id data-dest) (:id data-after))))
+                  (testing "permissions are unchanged after import"
+                    (is (= perms-before perms-after))))))))))))

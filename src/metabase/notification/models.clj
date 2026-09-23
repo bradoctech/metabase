@@ -627,10 +627,9 @@
 (defn hydrated-notification-schema
   "Schema for a notification hydrated with its creator, subscriptions and handlers, where each handler matches
   `handler-schema`. Callers supply the handler schema because API input accepts a narrower set of templates than what
-  we hand back out.
+  we hand back out. `:update-input? true` keeps only the entries `notification-update-spec` uses.
 
-  `{:with-id? false}` builds the create-request variant, which carries no `:id` at any level.
-  `:update-input? true` keeps only the entries `notification-update-spec` uses."
+  `{:with-id? false}` builds the create-request variant, which carries no `:id` at any level."
   ([handler-schema]
    (hydrated-notification-schema handler-schema {:with-id? true}))
   ([handler-schema {:keys [with-id? update-input?] :as opts}]

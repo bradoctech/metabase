@@ -6,12 +6,12 @@
    [clojure.string :as str]
    [clojure.walk :as walk]
    [compojure.response :as compojure.response]
-   [java-time.api :as t]
    [metabase.api.common :as api]
    [metabase.api.macros.scope :as scope]
    [metabase.api.open-api :as open-api]
    [metabase.mcp.core :as mcp]
    [metabase.mcp.resources :as mcp.resources]
+   [metabase.mcp.session :as mcp.session]
    [metabase.mcp.tools :as mcp.tools]
    [metabase.mcp.validation :as mcp.validation]
    [metabase.oauth-server.core :as oauth-server]
@@ -22,41 +22,20 @@
    [metabase.util :as u]
    [metabase.util.json :as json]
    [metabase.util.log :as log]
-   [oidc-provider.store :as oidc.store]
    [throttle.core :as throttle])
   (:import
    (java.io BufferedWriter OutputStreamWriter)
-   (java.nio.charset StandardCharsets)
-   (java.util UUID)))
+   (java.nio.charset StandardCharsets)))
 
 (set! *warn-on-reflection* true)
-
-;;; --------------------------------------------------- Sessions ----------------------------------------------------
-
-(defn- create-session!
-  "Generate an MCP session ID for protocol compatibility.
-   The server currently treats MCP sessions as degenerate: callers must still
-   send a session ID after `initialize`, but the ID is not otherwise required
-   for auth, initialization state, or server-side validation."
-  [_user-id]
-  (str (UUID/randomUUID)))
 
 ;;; -------------------------------------------------- Auth --------------------------------------------------------
 
 (defn- validate-bearer-token
-  "Look up and validate an OAuth bearer token. Returns `{:user-id <int> :scopes <set>}` on success, nil on failure."
+  "Look up and validate an OAuth bearer token. Returns `{:user-id <int> :scopes <set>}` on success, nil on failure.
+   Delegates to the shared resolver so MCP and the core session middleware agree on token validity and scopes."
   [token-string]
-  (when-let [provider (oauth-server/get-provider)]
-    (when-let [token-data (oidc.store/get-access-token (:token-store provider) token-string)]
-      (let [expiry (:expiry token-data)]
-        (when (or (nil? expiry)
-                  (t/after? (t/instant expiry) (t/instant)))
-          (let [user-id (some-> (:user-id token-data) parse-long)
-                scopes  (when-let [scope-vec (:scope token-data)]
-                          (into #{} scope-vec))]
-            (when user-id
-              {:user-id user-id
-               :scopes  (or scopes #{})})))))))
+  (oauth-server/resolve-access-token token-string))
 
 ;;; ------------------------------------------------- JSON-RPC 2.0 --------------------------------------------------
 
@@ -81,13 +60,30 @@
     :capabilities    {:tools {:listChanged true} :resources {}}
     :serverInfo      server-info}))
 
-(defn- handle-tools-list [id _params token-scopes]
-  (jsonrpc-response id {:tools (mcp.tools/list-tools token-scopes)}))
+(defn- mcp-app-ui-capability?
+  "Return true if initialize params advertise support for MCP Apps HTML resources."
+  [params]
+  ;; `json/decode+kw` preserves the slash in the JSON extension key `"io.modelcontextprotocol/ui"` as the
+  ;; namespaced keyword `:io.modelcontextprotocol/ui`.
+  (contains?
+   (set (get-in params [:capabilities :extensions :io.modelcontextprotocol/ui :mimeTypes]))
+   "text/html;profile=mcp-app"))
 
-(defn- handle-tools-call [id params token-scopes]
+(defn- handle-tools-list [id _params session-id token-scopes]
+  (let [supports-mcp-ui? (mcp.session/supports-mcp-ui? session-id)]
+    (jsonrpc-response id {:tools (mcp.tools/list-tools token-scopes {:supports-mcp-ui?
+                                                                     supports-mcp-ui?})})))
+
+(defn- handle-tools-call [id params session-id token-scopes]
   (let [tool-name (:name params)
-        arguments (or (:arguments params) {})]
-    (jsonrpc-response id (mcp.tools/call-tool token-scopes tool-name arguments))))
+        arguments (or (:arguments params) {})
+        supports-mcp-ui? (mcp.session/supports-mcp-ui? session-id)]
+    (jsonrpc-response id (mcp.tools/call-tool token-scopes
+                                              session-id
+                                              tool-name
+                                              arguments
+                                              {:supports-mcp-ui?
+                                               supports-mcp-ui?}))))
 
 (defn- handle-resources-list [id _params token-scopes]
   (jsonrpc-response id (mcp.resources/list-resources token-scopes)))
@@ -96,36 +92,31 @@
   (let [uri (:uri params)]
     (if (or (not (string? uri)) (str/blank? uri))
       (jsonrpc-error id -32602 "Missing required parameter: uri")
-      (let [{:keys [status contents]} (mcp.resources/read-resource uri token-scopes {})]
-        ;; :not-found and :scope-denied collapse to the same generic error so we
-        ;; don't leak resource existence to callers without scope.
-        (case status
+      (let [result (mcp.resources/read-resource uri token-scopes {})]
+        (case (:status result)
           (:not-found :scope-denied) (jsonrpc-error id -32602 "Resource not found")
-          :ok                        (jsonrpc-response id {:contents contents}))))))
+          :ok                        (jsonrpc-response id {:contents (:contents result)}))))))
 
 (defn- handle-ping [id _params]
   (jsonrpc-response id {}))
 
 (defn- dispatch-request
   "Dispatch a single JSON-RPC request. Returns a response map or nil for notifications."
-  [msg _session-id token-scopes]
-  (let [id     (:id msg)
-        method (:method msg)
-        params (:params msg)]
-    (try
-      (case method
-        "notifications/initialized" nil
-        "tools/list"                (handle-tools-list id params token-scopes)
-        "tools/call"                (handle-tools-call id params token-scopes)
-        "resources/list"            (handle-resources-list id params token-scopes)
-        "resources/read"            (handle-resources-read id params token-scopes)
-        "ping"                      (handle-ping id params)
-        (if id
-          (jsonrpc-error id -32601 (str "Method not found: " method))
-          nil))
-      (catch Throwable e
-        (log/error e "Error dispatching JSON-RPC method" method)
-        (jsonrpc-error id -32603 (or (ex-message e) "Internal error"))))))
+  [{:keys [id method params] :as _msg} session-id token-scopes]
+  (try
+    (case method
+      "notifications/initialized" nil
+      "tools/list"                (handle-tools-list id params session-id token-scopes)
+      "tools/call"                (handle-tools-call id params session-id token-scopes)
+      "resources/list"            (handle-resources-list id params token-scopes)
+      "resources/read"            (handle-resources-read id params token-scopes)
+      "ping"                      (handle-ping id params)
+      (if id
+        (jsonrpc-error id -32601 (str "Method not found: " method))
+        nil))
+    (catch Throwable e
+      (log/error e "Error dispatching JSON-RPC method" method)
+      (jsonrpc-error id -32603 (or (ex-message e) "Internal error")))))
 
 ;;; ----------------------------------------------------- SSE ------------------------------------------------------
 
@@ -138,7 +129,8 @@
 (defn- sse-body
   "Format a sequence of JSON-RPC messages as SSE event text."
   [messages]
-  (str/join (map #(str "event: message\ndata: " (json/encode %) "\n\n") messages)))
+  (str/join (for [message messages]
+              (str "event: message\ndata: " (json/encode message) "\n\n"))))
 
 ;;; -------------------------------------------------- Responses ---------------------------------------------------
 
@@ -199,22 +191,31 @@
                     (approved-mcp-origin? origin))
         (json-response 403 (jsonrpc-error nil -32600 "Origin not allowed"))))))
 
-(defn- session-error-response
-  "Return an HTTP error response when the MCP session header is missing, or nil if present.
-   The session ID is compatibility-only and is not validated server-side."
-  [session-id]
-  (when (str/blank? session-id)
-    (json-response 400 (jsonrpc-error nil -32600 "Missing Mcp-Session-Id header"))))
+(defn- require-valid-session
+  "Validate the Mcp-Session-Id header value. Checks UUID format and, when a
+   `core_session` has been materialized, verifies it belongs to `user-id`."
+  [user-id session-id]
+  (cond
+    (str/blank? session-id)
+    {:error (json-response 400 (jsonrpc-error nil -32600 "Missing Mcp-Session-Id header"))}
+
+    (not (mcp.session/valid-id? session-id))
+    {:error (json-response 404 (jsonrpc-error nil -32600 "Invalid or expired session"))}
+
+    (not (mcp.session/owned-by-user? session-id user-id))
+    {:error (json-response 404 (jsonrpc-error nil -32600 "Invalid or expired session"))}
+
+    :else
+    {:session-id session-id}))
 
 ;;; -------------------------------------------------- Handlers ---------------------------------------------------
 
 (defn- handle-post
   "Handle a POST request containing one or more JSON-RPC messages."
   [user-id request]
-  (let [body        (walk/keywordize-keys (:body request))
-        session-id  (get-in request [:headers "mcp-session-id"])
-        batch?      (sequential? body)
-        session-err (delay (session-error-response session-id))]
+  (let [body       (walk/keywordize-keys (:body request))
+        session-id (get-in request [:headers "mcp-session-id"])
+        batch?     (sequential? body)]
     (cond
       (nil? body)
       (json-response 400 (jsonrpc-error nil -32700 "Parse error: empty body"))
@@ -232,31 +233,34 @@
 
       ;; Initialize: create session and return response with session header
       (and (not batch?) (= "initialize" (:method body)))
-      (let [session-id    (create-session! user-id)
+      (let [params           (:params body)
+            supports-mcp-ui? (mcp-app-ui-capability? params)
+            session-id       (mcp.session/create! user-id {:supports-mcp-ui?
+                                                           supports-mcp-ui?})
             init-response (handle-initialize (:id body) (:params body))]
         (if (accepts-sse? request)
           (sse-response [init-response] {"Mcp-Session-Id" session-id})
           (json-response 200 init-response {"Mcp-Session-Id" session-id})))
 
-      ;; All other requests require a valid session (400 for missing header, 404 for invalid)
-      (some? @session-err) @session-err
-
+      ;; All other requests require a valid session
       :else
-      (let [messages  (if batch? body [body])
-            results   (mapv #(dispatch-request % session-id (:token-scopes request)) messages)
-            responses (filterv some? results)]
-        (cond
-          (empty? responses)
-          {:status 202 :headers {} :body ""}
+      (let [{:keys [error]} (require-valid-session user-id session-id)]
+        (if error
+          error
+          (let [messages  (if batch? body [body])
+                responses (into [] (keep #(dispatch-request % session-id (:token-scopes request))) messages)]
+            (cond
+              (empty? responses)
+              {:status 202 :headers {} :body ""}
 
-          (accepts-sse? request)
-          (sse-response responses)
+              (accepts-sse? request)
+              (sse-response responses)
 
-          (and (not batch?) (= 1 (count responses)))
-          (json-response 200 (first responses))
+              (and (not batch?) (= 1 (count responses)))
+              (json-response 200 (first responses))
 
-          :else
-          (json-response 200 responses))))))
+              :else
+              (json-response 200 responses))))))))
 
 (def ^:private tools-list-changed-notification
   {:jsonrpc "2.0" :method "notifications/tools/list_changed"})
@@ -267,13 +271,13 @@
    changed since the previous tick, emits an MCP `notifications/tools/list_changed`
    message so the client knows to refetch `tools/list`. Stateless: each connection
    tracks its own last-seen hash; no shared registry."
-  [_user-id request respond raise]
+  [user-id request respond raise]
   (let [session-id (get-in request [:headers "mcp-session-id"])
         token-scopes (:token-scopes request)
-        session-err (session-error-response session-id)]
+        {:keys [error]} (require-valid-session user-id session-id)]
     (cond
-      (some? session-err)
-      (respond session-err)
+      (some? error)
+      (respond error)
 
       :else
       (let [resp (streaming-response/streaming-response
@@ -296,11 +300,12 @@
 
 (defn- handle-delete
   "Handle a DELETE request to tear down a session."
-  [_user-id request]
-  (let [session-id (get-in request [:headers "mcp-session-id"])
-        session-err (session-error-response session-id)]
-    (or session-err
-        {:status 200 :headers {"Content-Type" "application/json"} :body ""})))
+  [user-id request]
+  (let [session-id-header (get-in request [:headers "mcp-session-id"])
+        {:keys [session-id error]} (require-valid-session user-id session-id-header)]
+    (or error
+        (do (mcp.session/delete! session-id user-id)
+            {:status 200 :headers {"Content-Type" "application/json"} :body ""}))))
 
 ;;; -------------------------------------------------- Throttling --------------------------------------------------
 
@@ -350,28 +355,32 @@
   "Wrap routes so they may only be accessed when the MCP server is enabled."
   mcp.validation/+mcp-enabled)
 
-(def +mcp-enabled
-  "Wrap routes so they may only be accessed when the MCP server is enabled."
-  mcp.validation/+mcp-enabled)
-
 (def ^{:arglists '([request respond raise])} handler
   "Ring async handler for the MCP endpoint.
    Uses JSON-RPC 2.0 over HTTP rather than REST, so the OpenAPI spec is empty."
   (open-api/handler-with-open-api-spec
    (fn [request respond raise]
-     (let [origin-error    (validate-origin request)
-           bearer-token    (oauth-server/extract-bearer-token request)
-           session-auth    api/*current-user-id*]
+     (let [origin-error (validate-origin request)
+           bearer-token (oauth-server/extract-bearer-token request)
+           session-auth api/*current-user-id*
+           token-scopes (:token-scopes request)]
        (letfn [(dispatch [user-id token-scopes]
                  (request/with-current-user user-id
                    (if-let [throttle-err (check-throttle user-id)]
                      (respond throttle-err)
                      (try
                        (let [request (assoc request :token-scopes token-scopes)]
-                         (case (:request-method request)
-                           :post   (respond (handle-post user-id request))
-                           :get    (handle-get user-id request respond raise)
-                           :delete (respond (handle-delete user-id request))
+                         (cond
+                           (= :post (:request-method request))
+                           (respond (handle-post user-id request))
+
+                           (= :get (:request-method request))
+                           (handle-get user-id request respond raise)
+
+                           (= :delete (:request-method request))
+                           (respond (handle-delete user-id request))
+
+                           :else
                            (respond (json-response 405 (jsonrpc-error nil -32600 "Method not allowed")))))
                        (catch Throwable e
                          (raise e))))))]
@@ -379,9 +388,10 @@
            (some? origin-error)
            (respond origin-error)
 
-           ;; Session auth (browser/cookie) — unrestricted scopes
+           ;; Respect the scope set attached to an authenticated request. Sessions without one
+           ;; retain unrestricted access.
            session-auth
-           (dispatch session-auth #{::scope/unrestricted})
+           (dispatch session-auth (or token-scopes #{::scope/unrestricted}))
 
            ;; Bearer token auth — validate and extract scopes
            bearer-token

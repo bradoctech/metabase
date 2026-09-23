@@ -410,7 +410,7 @@
                             :table_id           (u/the-id table)
                             :fk_target_field_id [:not= nil]
                             :active             true))]
-    ;; master batch-primes a table-granular perms cache here; v61 has no such API, so the per-target
+    ;; ponytail: master batch-primes a table-granular perms cache here; v61 has no such API, so the per-target
     ;; mi/can-read? checks below just resolve on cache-miss. Correct, only unbatched.
     (for [{:keys [id target]} fields
           :when (some-> target mi/can-read?)]

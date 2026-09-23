@@ -97,7 +97,7 @@ const HomeXrayView = ({ database, candidates = [] }: HomeXrayViewProps) => {
           <DatabaseInfo database={database} />
         </HomeCaption>
       ) : null}
-      <SectionBody $compact={true}>
+      <SectionBody>
         {candidate?.tables.map((table, index) => (
           <HomeXrayCard
             key={table.url}

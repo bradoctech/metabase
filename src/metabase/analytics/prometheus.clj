@@ -333,6 +333,10 @@
                        {:description "Number of successful search requests."})
    (prometheus/counter :metabase-search/response-error
                        {:description "Number of errors when responding to search requests."})
+   (prometheus/histogram :metabase-search/response-results
+                         {:description "Distribution of the total number of results matched by a search request."
+                          ;; `:total` is capped at *db-max-results* (1000).
+                          :buckets [0 1 2 5 10 25 50 100 250 500 1000]})
    (prometheus/gauge :metabase-search/engine-default
                      {:description "Whether a given engine is being used as the default. User can override via cookie."
                       :labels [:engine]})
@@ -523,6 +527,18 @@
                           :labels [:stage-label]
                           ;; 10 -> 10M rows
                           :buckets [10 100 1000 10000 100000 1000000 10000000]})
+   ;; Transform cancelation observability
+   (prometheus/counter :metabase-transforms/cancelation-requests
+                       {:description "Number of transform run cancelation requests issued, labeled by status (ok, error)."
+                        :labels [:status]})
+   (prometheus/counter :metabase-transforms/cancelation-completed
+                       {:description "Number of transform run cancelations that completed, labeled by outcome (success, timeout, error)."
+                        :labels [:outcome]})
+   (prometheus/histogram :metabase-transforms/cancelation-latency-ms
+                         {:description "Duration in milliseconds from a cancelation request to its completion, labeled by outcome."
+                          :labels [:outcome]
+                          ;; 20s poll loop + 10min timeout sweep; buckets bracket both tails.
+                          :buckets [100 500 1000 5000 10000 20000 30000 60000 120000 300000 600000]})
    ;; Python-transform specific metrics
    (prometheus/histogram :metabase-transforms/python-api-call-duration-ms
                          {:description "Duration of Python runner API calls."
@@ -532,6 +548,15 @@
    (prometheus/counter :metabase-transforms/python-api-calls-total
                        {:description "Total number of Python runner API calls."
                         :labels [:status]})
+   (prometheus/counter :metabase-transforms/timeouts-total
+                       {:description "Number of transform runs and job runs marked timed out (per-run timeout handler or sweeper)."
+                        :labels [:type]})
+   (prometheus/histogram :metabase-transforms/timeout-detection-latency-ms
+                         {:description "Time in ms between a transform run/job exceeding its timeout and the sweeper detecting it."
+                          :labels [:type]
+                          ;; Sweepers run every 10 minutes, so detection latency is bounded by sweep cadence.
+                          ;; 0s -> 30 minutes covers normal case + tail when a sweep is delayed.
+                          :buckets [0 1000 10000 30000 60000 120000 300000 600000 900000 1200000 1800000]})
    (prometheus/counter :metabase-transforms/inspector-discovery
                        {:description "Transform Inspector lens discovery calls."
                         :labels [:status]})
@@ -546,12 +571,12 @@
    (prometheus/counter :metabase-token-check/attempt
                        {:description "Total number of token checks. Includes a status label."
                         :labels [:status]})
-   ;; Write-connection telemetry
+   ;; Connection-type telemetry (default / write-data / admin)
    (prometheus/counter :metabase-db-connection/write-op
-                       {:description "JDBC connection pool acquisitions by connection type (default or write-data)."
+                       {:description "JDBC connection pool acquisitions by connection type (default, write-data, or admin)."
                         :labels [:connection-type]})
    (prometheus/counter :metabase-db-connection/type-resolved
-                       {:description "Write-data details resolved by effective-details (driver-agnostic). Only incremented when write-data-details are genuinely used, not on fallback or workspace swap."
+                       {:description "Non-default connection details resolved by effective-details (driver-agnostic). Only incremented when an overlay (write-data or admin details) is genuinely used, not on fallback or workspace swap."
                         :labels [:connection-type]})
    ;; SQL parsing metrics
    (prometheus/counter :metabase-sql-parsing/context-timeouts
@@ -673,12 +698,38 @@
    (prometheus/counter :metabase-export/errors
                        {:description "Number of errors during data export."
                         :labels [:format]})
+   ;; experiment metrics
+   (prometheus/counter :experiment/runs-total
+                       {:description "Number of experiment candidate runs."
+                        :labels [:experiment]})
+   (prometheus/counter :experiment/matches-total
+                       {:description "Number of experiment runs where control and candidate matched."
+                        :labels [:experiment]})
+   (prometheus/counter :experiment/mismatches-total
+                       {:description "Number of experiment runs where control and candidate differed."
+                        :labels [:experiment]})
+   (prometheus/counter :experiment/errors-total
+                       {:description "Number of experiment runs where the candidate threw."
+                        :labels [:experiment]})
+   (prometheus/counter :experiment/control-duration-ms
+                       {:description "Cumulative duration in milliseconds of experiment control code path."
+                        :labels [:experiment]})
+   (prometheus/counter :experiment/candidate-duration-ms
+                       {:description "Cumulative duration in milliseconds of experiment candidate code path."
+                        :labels [:experiment]})
+   (prometheus/counter :experiment/candidate-error-duration-ms
+                       {:description "Cumulative duration in milliseconds of experiment candidate code path when it threw."
+                        :labels [:experiment]})
    ;; security center metrics
    (prometheus/gauge :metabase-security-center/last-sync-timestamp-seconds
                      {:description "Unix timestamp (seconds since epoch) of the last successful Security Center."})
    (prometheus/gauge :metabase-security-center/vulnerable-advisories
                      {:description "Number of advisories where this Metabase instance is potentially affected."
-                      :labels [:severity :acknowledged]})])
+                      :labels [:severity :acknowledged]})
+   ;; metaplow analytics metrics
+   (prometheus/counter :metabase-metaplow/errors
+                       {:description "Metaplow event pipeline errors by stage."
+                        :labels [:stage]})])
 
 (defn- quartz-collectors
   []

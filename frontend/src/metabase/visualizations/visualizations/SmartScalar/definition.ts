@@ -69,8 +69,7 @@ export const SETTINGS_DEFINITIONS: VisualizationSettingsDefinitions = {
     getDefault: () => VIZ_SETTINGS_DEFAULTS["scalar.compact_primary_number"],
   },
   ...columnSettings({
-    // eslint-disable-next-line ttag/no-module-declaration -- see metabase#55045
-    section: t`Display`,
+    getSection: () => t`Display`,
     getColumns: (
       [
         {

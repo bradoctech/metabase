@@ -12,7 +12,6 @@ import {
   SDK_TO_MAIN_APP_TOOLTIP_COLORS_MAPPING,
   SDK_UNCHANGEABLE_COLORS,
 } from "metabase/embedding-sdk/theme/embedding-color-palette";
-import { getFontFamilyValue } from "metabase/embedding-sdk/theme/fonts";
 import type { MantineTheme } from "metabase/ui";
 import { deriveFullMetabaseTheme } from "metabase/ui/colors";
 import type { ColorName } from "metabase/ui/colors/types";

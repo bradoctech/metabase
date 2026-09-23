@@ -30,13 +30,9 @@ import type { ConversationSummary } from "../../types";
 
 import { ConversationsPage } from "./ConversationsPage";
 
-jest.mock(
-  "metabase/metabot/components/MetabotAdmin/MetabotAdminLayout",
-  () => ({
-    MetabotAdminLayout: ({ children }: { children: React.ReactNode }) =>
-      children,
-  }),
-);
+jest.mock("metabase/admin/ai/MetabotAdminLayout", () => ({
+  MetabotAdminLayout: ({ children }: { children: React.ReactNode }) => children,
+}));
 
 const CONVERSATIONS_PATH = "/admin/metabot/usage-auditing/conversations";
 const CONVERSATIONS_ENDPOINT = "path:/api/ee/metabot-analytics/conversations";
@@ -53,6 +49,7 @@ function createSummary(
     user_message_count: 0,
     assistant_message_count: 0,
     total_tokens: 0,
+    cache_read_tokens: 0,
     last_message_at: null,
     profile_id: null,
     search_count: 0,
@@ -203,6 +200,7 @@ describe("ConversationsPage", () => {
       { headerLabel: /^Date/, sortBy: "created_at" },
       { headerLabel: /^Messages/, sortBy: "message_count" },
       { headerLabel: /^Tokens/, sortBy: "total_tokens" },
+      { headerLabel: /^Cached tokens/, sortBy: "cache_read_tokens" },
       { headerLabel: /^IP/, sortBy: "ip_address" },
     ])("sorts by $sortBy", async ({ headerLabel, sortBy }) => {
       setup();

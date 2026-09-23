@@ -1,4 +1,7 @@
-import type { DiagnosticInfoPayload } from "metabase-types/api";
+import type {
+  BugReportDetails,
+  DiagnosticInfoPayload,
+} from "metabase-types/api";
 
 import { Api } from "./api";
 
@@ -18,7 +21,14 @@ export const bugReportApi = Api.injectEndpoints({
         body,
       }),
     }),
+    getBugReportDetails: builder.query<BugReportDetails, void>({
+      query: () => "/api/bug-reporting/details",
+    }),
   }),
 });
 
-export const { useSendBugReportMutation } = bugReportApi;
+export const {
+  useSendBugReportMutation,
+  useGetBugReportDetailsQuery,
+  useLazyGetBugReportDetailsQuery,
+} = bugReportApi;

@@ -3,15 +3,20 @@
    tool calls to existing agent API endpoints."
   (:require
    [clojure.core.async :as a]
+   [clojure.set :as set]
    [clojure.string :as str]
    [metabase.agent-api.api :as agent-api]
    [metabase.api.common :as api]
    [metabase.api.macros.defendpoint.tools-manifest :as tools-manifest]
    [metabase.config.core :as config]
+   [metabase.mcp.resources :as mcp.resources]
    [metabase.mcp.scope :as mcp.scope]
+   [metabase.mcp.session :as mcp.session]
    [metabase.server.streaming-response :as streaming-response]
    [metabase.util :as u]
    [metabase.util.json :as json]
+   [metabase.util.log :as log]
+   [metabase.util.malli.registry :as mr]
    [metabase.util.malli.schema :as ms])
   (:import
    (java.io ByteArrayOutputStream)
@@ -27,81 +32,117 @@
 ;; describes its own wire schema, and this layer patches the manifest to publish the MCP-visible
 ;; shape.
 
-;; Shared sub-shapes for the program-shaped tools (`construct_query`, `query`). Extracted so the two
-;; tools can't drift on what a program looks like to the LLM — both reuse the same `:source` map and
-;; the same flattened `:operations` (`[:sequential [:sequential :any]]`, no tuple-of-anys, no `:and`).
-;; The wire schemas under `agent_api` use the precise tuple/composite grammar; this layer publishes
-;; the permissive variant strict MCP clients (ChatGPT) accept.
+;; Shared sub-shapes for the representations-shaped tools (`construct_query`, `query`).
+;;
+;; The wire schemas under `agent-api` describe the body as `{:query <::lib.schema/external-query>}`,
+;; and `::external-query` references `::lib.schema/query`, which carries `:optional` keys (notably
+;; `:lib/metadata`) that are not `[:maybe ...]`. The new `assert-optional-fields-nullable!` lint in
+;; `tools-manifest` walks every reachable map and fails on those — which is the right behaviour for
+;; tool inputs but not for the lib-internal query map we never want strict MCP clients to populate.
+;;
+;; The override here publishes a permissive `:query` field (an opaque JSON object) and conveys the
+;; real grammar through the tool description + `metabase://docs/construct-query.md`. Strict MCP
+;; clients (ChatGPT) get a clean JSON Schema (no `prefixItems` / `allOf`); the agent learns the
+;; actual MBQL 5 shape from the prompt.
 
-(def ^:private program-source-malli
-  [:map
-   [:type {:tool/description "Entity kind."}
-    [:enum "table" "card" "dataset" "metric"]]
-   [:id ms/PositiveInt]])
-
-(def ^:private program-operations-malli
-  [:sequential
-   [:sequential
-    {:tool/description (str "First element is the operator string; remaining "
-                            "elements are operator-specific arguments (scalars, "
-                            "references, or nested arrays).")}
-    :any]])
-
-(def ^:private operations-description
-  (str "Array of operator tuples like [\"filter\", clause] or [\"aggregate\", agg-clause]. "
-       "See metabase://docs/construct-query.md for the full grammar."))
+(def ^:private external-query-mcp-malli
+  "MCP-visible shape for the `query` field of `construct_query` / `query`. Deliberately opaque:
+  publishing the full `::lib.schema/external-query` recursively would pull in `::query`'s optional
+  non-nullable `:lib/metadata` (which trips the manifest's strict-tool lint) and emit `prefixItems` /
+  `allOf` JSON Schema constructs that strict MCP clients (ChatGPT) reject."
+  [:map {:tool/description (str "A Metabase MBQL 5 query as a JSON object. See the "
+                                "`construct_notebook_query` tool for the format reference.")}])
 
 (def ^:private construct-query-mcp-input-malli
   "MCP-visible input for `construct_query`.
-  Deliberately flatter than the wire schema — the operator/ref grammar is conveyed through the tool
-  description and the construct-query.md MCP resource, not the schema."
+  Deliberately flatter than the wire schema — the MBQL 5 representations grammar is conveyed through
+  the tool description and the construct-query.md MCP resource, not the schema."
   [:map
-   [:source     {:tool/description "Database entity to query."}
-    program-source-malli]
-   [:operations {:tool/description operations-description}
-    program-operations-malli]])
+   [:query  {:tool/description "Metabase MBQL 5 query."}
+    external-query-mcp-malli]
+   ;; Length bounds + description go on the inner `:string` so they end up on the JSON Schema branch
+   ;; (and not as an `:allOf`, which ChatGPT's strict validator rejects).
+   [:prompt {:optional true}
+    [:maybe [:string {:min               1
+                      :max               10000
+                      :tool/description  (str "The user's exact original message, when available. "
+                                              "Pass it as-is without summarizing or rewriting.")}]]]])
 
 (def ^:private query-mcp-input-malli
-  "MCP-visible input for `query`. The wire body is a `:multi` whose `:program` branch references
-  agent-lib tuple/composite schemas — those emit `prefixItems`/`allOf` JSON Schema constructs that
-  strict MCP clients (ChatGPT) reject. This override publishes the same flattened program shape used
-  by `construct_query`, plus the `:continuation_token` alternative for pagination."
+  "MCP-visible input for `query`. The wire body is a `:multi` whose `:fresh` branch references
+  `::lib.schema/external-query` — that pulls in `::query`'s `:optional` non-nullable
+  `:lib/metadata` (and emits `prefixItems` / `allOf` JSON Schema constructs that strict MCP
+  clients reject). This override publishes the same opaque-object `:query` field used by
+  `construct_query`, plus the `:query_handle` and `:continuation_token` alternatives. The handle
+  is swapped for the stored base64 `:query` by [[resolve-query-arg]] before dispatch."
   [:map
-   [:source             {:optional true
-                         :tool/description (str "Database entity to query. Omit when paginating via "
+   [:query              {:optional true
+                         :tool/description (str "Metabase MBQL 5 query. Use `query_handle` instead "
+                                                "when you have one. Omit when paginating via "
                                                 "`continuation_token`.")}
-    [:maybe program-source-malli]]
-   [:operations         {:optional true
-                         :tool/description operations-description}
-    [:maybe program-operations-malli]]
+    [:maybe external-query-mcp-malli]]
+   [:query_handle       {:optional true
+                         :tool/description (str "Handle returned by construct_query — preferred over "
+                                                "raw `query`.")}
+    [:maybe ms/UUIDString]]
    [:continuation_token {:optional true
                          :tool/description (str "Token returned by a previous `query` response — pass "
                                                 "it back to fetch the next page. Mutually exclusive "
-                                                "with `source`/`operations`.")}
+                                                "with `query`.")}
     [:maybe ms/NonBlankString]]])
 
+(def ^:private execute-query-mcp-input-malli
+  "MCP-visible input for `execute_query`.
+  The wire endpoint requires `:query`; the MCP tool also accepts `:query_handle`, resolved by
+  [[resolve-query-arg]] before dispatch."
+  [:map
+   [:query {:optional true
+            :tool/description "Base64-encoded MBQL query. Use `query_handle` instead when available."}
+    [:maybe ms/NonBlankString]]
+   [:query_handle {:optional true
+                   :tool/description "Handle returned by construct_query — preferred over raw `query`."}
+    [:maybe ms/UUIDString]]])
+
+(def ^:private construct-query-mcp-output-malli
+  "MCP-visible output of `construct_query`.
+   The agent_api endpoint returns `{:query base64}`; the MCP body transform stores that and emits
+   `{:query_handle}`."
+  [:map
+   [:query_handle
+    {:tool/description (str "Opaque UUID handle for the stored query. "
+                            "Pass as `query_handle` to `execute_query` or `visualize_query`.")}
+    ms/UUIDString]])
+
 (def ^:private mcp-input-overrides
-  "tool-name → Malli schema. Replaces the manifest's derived `:inputSchema` for tools whose wire
-  schema would otherwise emit prefixItems/allOf JSON Schema constructs that strict MCP clients
-  (notably ChatGPT) reject."
+  "tool-name → Malli schema. Replaces the manifest's derived `:inputSchema`."
   {"construct_query" construct-query-mcp-input-malli
-   "query"           query-mcp-input-malli})
+   "query"           query-mcp-input-malli
+   "execute_query"   execute-query-mcp-input-malli})
+
+(def ^:private mcp-output-overrides
+  "tool-name → Malli schema. Replaces the manifest's derived `:outputSchema`."
+  {"construct_query" construct-query-mcp-output-malli})
 
 (defn- override->input-json-schema [malli tool-name]
   (tools-manifest/assert-optional-fields-nullable! malli tool-name)
   (-> malli tools-manifest/malli->json-schema tools-manifest/strict-tool-input-schema))
 
 (defn- apply-schema-overrides
-  "Replace `:inputSchema` on tools whose MCP-visible shape differs from the wire shape."
+  "Replace `:inputSchema`/`:outputSchema` on tools whose MCP-visible shape differs from the wire shape.
+   The `overrides-cover-known-tools-test` test asserts every key here matches a real tool name; a
+   misspelled or drifted key would otherwise silently no-op and leave the wire shape published."
   [tools]
   (mapv (fn [{tool-name :name :as tool}]
           (cond-> tool
             (mcp-input-overrides tool-name)
-            (assoc :inputSchema (override->input-json-schema (mcp-input-overrides tool-name) tool-name))))
+            (assoc :inputSchema (override->input-json-schema (mcp-input-overrides tool-name) tool-name))
+
+            (mcp-output-overrides tool-name)
+            (assoc :outputSchema (tools-manifest/malli->json-schema (mcp-output-overrides tool-name)))))
         tools))
 
 (defn- generate-manifest
-  "Generate tools manifest from agent API endpoint metadata, then patch input schemas for tools
+  "Generate tools manifest from agent API endpoint metadata, then patch input/output schemas for tools
   whose MCP-visible shape differs from the wire shape."
   []
   (-> (tools-manifest/generate-tools-manifest
@@ -118,16 +159,40 @@
     (generate-manifest)
     @manifest-delay))
 
+(def ^:private extension-labels
+  "Human-readable labels for required-extension keywords in tool-call error messages."
+  {:mcp-app-ui "MCP Apps UI"})
+
+(defn- supported-extensions
+  [{:keys [supports-mcp-ui?]}]
+  (if supports-mcp-ui?
+    #{:mcp-app-ui}
+    #{}))
+
+(defn- missing-required-extensions
+  [tool supported-extensions]
+  (seq (set/difference (:required-extensions tool #{}) supported-extensions)))
+
+(defn- missing-extensions-error
+  [tool-name missing-extensions]
+  (let [extension-names (str/join ", " (map #(get extension-labels % (name %)) missing-extensions))]
+    (str tool-name " requires a client that supports " extension-names ". "
+         "Reconnect from a client that advertises text/html;profile=mcp-app.")))
+
 (defn list-tools
   "Return the tool definitions suitable for MCP `tools/list` responses.
    When `token-scopes` is provided, only tools whose scope matches are included."
-  [token-scopes]
-  (let [{:keys [tools]} (manifest)]
-    (into []
-          (comp (filter #(mcp.scope/matches? token-scopes (:scope %)))
-                (map (fn [tool]
-                       (select-keys tool [:name :title :description :inputSchema :outputSchema :annotations]))))
-          tools)))
+  ([token-scopes]
+   (list-tools token-scopes {:supports-mcp-ui? true}))
+  ([token-scopes options]
+   (let [{:keys [tools]} (manifest)
+         supported       (supported-extensions options)]
+     (into []
+           (comp (filter #(mcp.scope/matches? token-scopes (:scope %)))
+                 (remove #(missing-required-extensions % supported))
+                 (map (fn [tool]
+                        (select-keys tool [:name :title :description :inputSchema :outputSchema :annotations :_meta]))))
+           (concat tools (mcp.resources/list-ui-tools))))))
 
 (defn- pad-left
   [^String s width]
@@ -204,6 +269,66 @@
       body-str         body-str
       :else            (str "Agent API error: " (:status response)))))
 
+;;; ------------------------------------------- Query Handle Transforms -------------------------------------------
+
+(defn- resolve-query-arg
+  "Resolve the query argument for tools that accept a handle.
+   If :query_handle is present, look it up and replace with :query.
+   If :query is itself a UUID (the LLM passed the handle in the wrong field), resolve
+   it too (and log a warning).
+   Returns updated arguments, or ::handle-not-found if the handle doesn't exist."
+  [session-id tool-name arguments]
+  (let [user-id api/*current-user-id*]
+    (cond
+      (:query_handle arguments)
+      (if-let [{:keys [encoded_query]} (mcp.session/resolve-query-handle
+                                        session-id user-id (:query_handle arguments))]
+        (-> arguments (dissoc :query_handle) (assoc :query encoded_query))
+        ::handle-not-found)
+
+      (mcp.session/valid-id? (:query arguments))
+      (do (log/warnf "MCP tool %s: agent passed a UUID handle in :query; resolving as :query_handle"
+                     tool-name)
+          (if-let [{:keys [encoded_query]} (mcp.session/resolve-query-handle
+                                            session-id user-id (:query arguments))]
+            (assoc arguments :query encoded_query)
+            ::handle-not-found))
+
+      :else
+      arguments)))
+
+(def ^:private construct-query-output-validator
+  (mr/validator construct-query-mcp-output-malli))
+
+(defn- make-store-construct-query-result
+  "Build a body-transform fn for construct_query.
+   The fn stores the base64 payload server-side under the calling user (with the current MCP session id
+   recorded for cleanup) and returns {:query_handle uuid} instead of {:query base64}, so the LLM carries
+   a short opaque UUID rather than the full base64 string.
+   The optional prompt is stored with the handle for later feedback submission.
+
+   The fn validates its emitted shape against `construct-query-mcp-output-malli` — the same schema the
+   manifest publishes as the tool's outputSchema — keeping the published schema and the actual emitted
+   body in lockstep."
+  [session-id user-id]
+  (fn [body]
+    (if-let [encoded (:query body)]
+      (let [handle   (mcp.session/store-handle! session-id user-id encoded (:prompt body))
+            new-body {:query_handle handle}]
+        (when-not (construct-query-output-validator new-body)
+          (throw (ex-info (str "construct_query body transform produced a shape that doesn't "
+                               "match the declared outputSchema")
+                          {:body new-body})))
+        new-body)
+      body)))
+
+;; Tools whose :query_handle is resolved by `resolve-query-arg` (it swaps the handle for the stored
+;; base64 :query) before the agent-api dispatch in `call-tool`. `visualize_query` also accepts a
+;; handle, but it's a UI tool that resolves the handle itself (see `metabase.mcp.resources`) and
+;; never reaches this dispatch path, so it's intentionally absent here.
+(def ^:private tools-accepting-query-handle
+  #{"execute_query" "query" "create_question" "update_question"})
+
 ;;; ------------------------------------------------- Tool Dispatch -------------------------------------------------
 
 (defn- text-content
@@ -237,8 +362,8 @@
 
 (defn- deliver-agent-api-response
   "Dispatch to agent API routes and deliver response to promise.
-   For POST requests, `params` is sent as the request body.
-   For GET/DELETE requests, `params` is sent as parsed query params.
+   For POST/PUT/PATCH requests, `params` is sent as the request body.
+   For other methods (GET/DELETE), `params` is sent as parsed query params.
    Materializes StreamingResponse bodies in-process before delivering."
   [result method path token-scopes params]
   (agent-api/routes
@@ -246,8 +371,9 @@
             :uri              path
             :metabase-user-id api/*current-user-id*
             :token-scopes     token-scopes}
-     (and (seq params) (= :post method))    (assoc :body params)
-     (and (seq params) (not= :post method)) (assoc :query-params params))
+     ;; POST/PUT/PATCH carry params in the body; GET/DELETE carry them as query params.
+     (and (seq params) (#{:post :put :patch} method))    (assoc :body params)
+     (and (seq params) (not (#{:post :put :patch} method))) (assoc :query-params params))
    (fn [{resp-body :body :as response}]
      (deliver result (if (instance? StreamingResponse resp-body)
                        (capture-streaming-response resp-body)
@@ -261,11 +387,15 @@
 (defn- invoke-agent-api
   "Invoke an Agent API endpoint with a synthetic Ring request.
    Returns MCP content (text-content on success, error-content on failure).
-   For POST, `params` becomes the request body; for GET/DELETE, `params` becomes query-params.
+   For POST/PUT/PATCH, `params` becomes the request body; otherwise (GET/DELETE)
+   `params` becomes query-params.
 
    Propagates `token-scopes` from the original MCP request so that scope restrictions
-   are preserved through the synthetic request."
-  [method path token-scopes params]
+   are preserved through the synthetic request.
+
+   `body-transform-fn`, when provided, is applied to the 200 response body before
+   wrapping with text-content. Used to post-process construct_query results."
+  [method path token-scopes params & {:keys [body-transform-fn]}]
   (let [result (promise)]
     (deliver-agent-api-response result method path token-scopes params)
     (let [response (deref result 30000 {:status 504 :body {:message "Timeout"}})]
@@ -275,7 +405,8 @@
         response
 
         (= 200 (:status response))
-        (text-content (:body response))
+        (text-content (cond-> (:body response)
+                        body-transform-fn (body-transform-fn)))
 
         :else
         (error-content (extract-error-message response))))))
@@ -305,15 +436,21 @@
 (defn- dispatch-via-agent-api
   "Generic dispatch for tools whose responseFormat is \"json\".
    Looks up method/path from the tool definition, interpolates path params,
-   and calls `invoke-agent-api`. For POST requests, remaining args are sent as the
-   request body. For GET/DELETE requests, remaining args are sent as query params."
-  [tool-def arguments token-scopes]
+   and calls `invoke-agent-api`. For POST/PUT/PATCH requests, remaining args are
+   sent as the request body. For other methods (GET/DELETE), remaining args are
+   sent as query params."
+  [tool-def arguments token-scopes session-id]
   (let [{:keys [method path]} (:endpoint tool-def)
+        tool-name             (:name tool-def)
         method                (keyword (u/lower-case-en method))
         [resolved-path
          remaining-args]      (interpolate-path path arguments)
-        api-path              (strip-api-prefix resolved-path)]
-    (invoke-agent-api method api-path token-scopes remaining-args)))
+        api-path              (strip-api-prefix resolved-path)
+        body-transform-fn     (when (= tool-name "construct_query")
+                                (make-store-construct-query-result
+                                 session-id api/*current-user-id*))]
+    (invoke-agent-api method api-path token-scopes remaining-args
+                      :body-transform-fn body-transform-fn)))
 
 ;; --- Design note: centralized null-stripping at the MCP boundary --------------------------------
 ;; The MCP inputSchema we publish makes every optional field required-and-nullable, because strict
@@ -344,13 +481,32 @@
   "Dispatch an MCP `tools/call` request to the appropriate handler.
    `token-scopes` from the original MCP session are propagated to the synthetic
    agent-api request so that scope restrictions are enforced by the agent API's
-   `defendpoint` middleware.
+   `defendpoint` middleware. UI tool response-fns receive `{:session-id session-id}`
+   as opts in case a tool needs to scope reads to the calling MCP session.
    Returns MCP content on success, or error content on failure."
-  [token-scopes tool-name arguments]
-  (let [arguments (drop-nil-args arguments)]
-    (if-let [tool-def (get (tool-index) tool-name)]
-      (try
-        (dispatch-via-agent-api tool-def arguments token-scopes)
-        (catch Exception e
-          (error-content (or (ex-message e) "Internal error"))))
-      (error-content (str "Unknown tool: " tool-name)))))
+  ([token-scopes session-id tool-name arguments]
+   (call-tool token-scopes session-id tool-name arguments {:supports-mcp-ui? true}))
+  ([token-scopes session-id tool-name arguments options]
+   (let [arguments (drop-nil-args arguments)
+         supported (supported-extensions options)]
+     (if-let [ui-tool (some #(when (= tool-name (:name %)) %) (mcp.resources/list-ui-tools))]
+       (if-not (mcp.scope/matches? token-scopes (:scope ui-tool))
+         (error-content (str "Insufficient scope to call tool: " tool-name))
+         (if-let [missing-extensions (missing-required-extensions ui-tool supported)]
+           (error-content (missing-extensions-error tool-name missing-extensions))
+           ((:response-fn ui-tool) arguments {:session-id session-id})))
+       (if-let [tool-def (get (tool-index) tool-name)]
+         (if-not (mcp.scope/matches? token-scopes (:scope tool-def))
+           (error-content (str "Insufficient scope to call tool: " tool-name))
+           (if-let [missing-extensions (missing-required-extensions tool-def supported)]
+             (error-content (missing-extensions-error tool-name missing-extensions))
+             (let [arguments (if (tools-accepting-query-handle tool-name)
+                               (resolve-query-arg session-id tool-name arguments)
+                               arguments)]
+               (if (= arguments ::handle-not-found)
+                 (error-content "Query handle not found. The query may have expired — try running construct_query again.")
+                 (try
+                   (dispatch-via-agent-api tool-def arguments token-scopes session-id)
+                   (catch Exception e
+                     (error-content (or (ex-message e) "Internal error"))))))))
+         (error-content (str "Unknown tool: " tool-name)))))))

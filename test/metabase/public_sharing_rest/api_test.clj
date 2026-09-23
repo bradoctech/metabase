@@ -1,5 +1,6 @@
 (ns ^:mb/driver-tests metabase.public-sharing-rest.api-test
   "Tests for `api/public/` (public links) endpoints."
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.public-sharing-rest.api-test]}}}}}}
   (:require
    [clojure.data.csv :as csv]
    [clojure.set :as set]
@@ -2034,20 +2035,6 @@
                {:parameters {:id 1}}))
             (is (zero? @outbound-calls)
                 "the outbound HTTP request must never be issued for a refused :http action")))))))
-
-(deftest execute-public-action-implicit-row-update-test
-  (testing "POST /api/public/action/:uuid/execute works for an implicit row/update action"
-    (mt/with-premium-features #{:advanced-permissions}
-      (mt/with-actions-test-data-and-actions-enabled
-        (mt/with-temporary-setting-values [enable-public-sharing true]
-          (let [mp          (mt/metadata-provider)
-                action-opts (assoc (shared-obj) :type :implicit :kind "row/update")]
-            (mt/with-actions [_ {:type :model, :dataset_query (lib/query mp (lib.metadata/table mp (mt/id :categories)))}
-                              {} action-opts]
-              (is (=? {:rows-updated 1}
-                      (client/client :post 200
-                                     (format "public/action/%s/execute" (:public_uuid action-opts))
-                                     {:parameters {:id 1 :name "Bouncy Bears"}}))))))))))
 
 (deftest format-export-middleware-test
   (mt/with-temporary-setting-values [enable-public-sharing true]

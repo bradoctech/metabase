@@ -267,7 +267,7 @@
   [{{field-ref :pk_ref} :model-index {rsmd :result_metadata} :model}]
   (when-let [field-id (:id (some #(when ((comp #{field-ref} :field_ref) %) %) rsmd))]
     (let [fields (t2/hydrate (t2/select :model/Field :fk_target_field_id field-id) :table)]
-      ;; master batch-primes a table-granular perms cache here; v61 has no such API, so the per-field
+      ;; ponytail: master batch-primes a table-granular perms cache here; v61 has no such API, so the per-field
       ;; mi/can-read? checks below just resolve on cache-miss. Correct, only unbatched.
       (for [{:keys [table_id id] :as field} fields
             :when (mi/can-read? field)]

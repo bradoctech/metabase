@@ -128,7 +128,8 @@
    [:download       {:optional true} [:ref ::strict-data-perms]]
    [:data-model     {:optional true} [:ref ::strict-data-perms]]
    [:details        {:optional true} [:enum :yes :no]]
-   [:transforms     {:optional true} [:enum :yes :no]]])
+   [:transforms     {:optional true} [:enum :yes :no]]
+   [:workspaces     {:optional true} [:enum :yes :no]]])
 
 (defn- valid-db-perms?
   "Whether the permissions a group has on one database hang together: 'view-data' may not be 'blocked' when

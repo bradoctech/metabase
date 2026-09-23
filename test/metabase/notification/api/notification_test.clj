@@ -1,4 +1,5 @@
 (ns metabase.notification.api.notification-test
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.notification.api.notification-test]}}}}}}
   (:require
    [clojure.test :refer :all]
    [java-time.api :as t]
@@ -504,6 +505,26 @@
         (testing "no orphan payload rows were created along the way"
           (is (= 1 (t2/count :model/NotificationCard :card_id card-id))))))))
 
+(deftest put-creator-id-permissions-test
+  (testing "PUT /api/notification/:id and creator_id"
+    (notification.tu/with-card-notification
+      [notification {:notification {:creator_id (mt/user->id :rasta)}}]
+      (let [notification-id (:id notification)
+            put!            (fn [user expected-status body]
+                              (mt/user-http-request user :put expected-status
+                                                    (format "notification/%d" notification-id)
+                                                    (merge notification body)))]
+        (testing "superuser can reassign owner"
+          (put! :crowberto 200 {:creator_id (mt/user->id :lucky)})
+          (is (= (mt/user->id :lucky)
+                 (t2/select-one-fn :creator_id :model/Notification notification-id))))
+        (testing "non-superuser cannot reassign owner — even the current owner (403 from mi/can-update?)"
+          (put! :lucky 403 {:creator_id (mt/user->id :rasta)})
+          (is (= (mt/user->id :lucky)
+                 (t2/select-one-fn :creator_id :model/Notification notification-id))))
+        (testing "echoing back the unchanged creator_id is fine for non-superusers"
+          (put! :lucky 200 {:creator_id (mt/user->id :lucky)}))))))
+
 (deftest send-notification-by-id-api-test
   (mt/with-temp [:model/Channel {http-channel-id :id} {:type    :channel/http
                                                        :details {:url         "https://metabase.com/testhttp"
@@ -863,7 +884,7 @@
           [:model/Collection {collection-id :id} {:personal_owner_id (:id user)}
            :model/Card {card-id :id} {:collection_id collection-id}]
           (let [create-notification! (fn [user-or-id expected-status]
-                                       (with-redefs [notification/send-notification! (fn [& _args] :done)]
+                                       (mt/with-dynamic-fn-redefs [notification/send-notification! (fn [& _args] :done)]
                                          (mt/user-http-request user-or-id :post expected-status "notification/send"
                                                                {:payload_type  "notification/card"
                                                                 :creator_id    (mt/user->id :rasta)

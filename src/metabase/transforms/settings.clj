@@ -1,7 +1,7 @@
 (ns metabase.transforms.settings
   (:require
    [metabase.settings.core :as setting]
-   [metabase.transforms.feature-gating :as transforms.gating]
+   [metabase.transforms.usage :as transforms.usage]
    [metabase.util.i18n :refer [deferred-tru]]))
 
 (set! *warn-on-reflection* true)
@@ -17,6 +17,21 @@
   connection pool whose c3p0 leak-detector tolerates this longer runtime, so non-transform connections continue to
   use the shorter `MB_DB_QUERY_TIMEOUT_MINUTES` leak-detector."
   :feature    :transforms-basic
+  :export?    false
+  :encryption :no
+  :audit      :getter)
+
+;; Only governs the SQL lane. Python transforms always run one-at-a-time within a job because the
+;; python-runner service is single-threaded; dispatching them in parallel would just queue them
+;; against their own per-call timeouts.
+(setting/defsetting transform-run-job-sql-concurrency
+  (deferred-tru "Maximum number of SQL-backed transforms a single transform-job run may execute in parallel.")
+  :type       :integer
+  :visibility :internal
+  :default    3
+  :feature    :transforms-basic
+  :doc        "This setting is only configurable on instances with the transforms add-on; OSS
+  deployments without the add-on always use the default."
   :export?    false
   :encryption :no
   :audit      :getter)
@@ -38,4 +53,4 @@
   :export?    false
   :default    false
   :doc        false
-  :getter     transforms.gating/transforms-meter-locked?)
+  :getter     transforms.usage/transforms-meter-locked?)

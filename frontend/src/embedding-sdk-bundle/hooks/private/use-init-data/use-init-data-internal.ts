@@ -16,13 +16,13 @@ import { useLazySelector } from "embedding-sdk-shared/hooks/use-lazy-selector";
 import { useMetabaseProviderPropsStore } from "embedding-sdk-shared/hooks/use-metabase-provider-props-store";
 import { ensureMetabaseProviderPropsStore } from "embedding-sdk-shared/lib/ensure-metabase-provider-props-store";
 import { getBuildInfo } from "embedding-sdk-shared/lib/get-build-info";
+import api from "metabase/api/legacy-client";
 import registerDashboardVisualizations from "metabase/dashboard/visualizations/register";
 import {
   EMBEDDING_SDK_CONFIG,
   isEmbeddingEajs,
 } from "metabase/embedding-sdk/config";
 import type { OnBeforeRequestHandlerConfig } from "metabase/plugins/oss/api";
-import api from "metabase/utils/api";
 import { registerVisualizations } from "metabase/visualizations/register";
 
 const reactSdkEmbedReferrerHandler = async (
@@ -38,6 +38,22 @@ const reactSdkEmbedReferrerHandler = async (
     },
   },
 });
+
+const sdkResponseErrorHandler = ({
+  metabaseVersion,
+}: {
+  metabaseVersion: string | null;
+}) => {
+  if (metabaseVersion == null) {
+    return;
+  }
+  // Use ensureMetabaseProviderPropsStore to access the current instance of reduxStore
+  ensureMetabaseProviderPropsStore()
+    .getState()
+    .internalProps.reduxStore?.dispatch(
+      setMetabaseInstanceVersion(metabaseVersion),
+    );
+};
 
 const registerVisualizationsOnce = _.once(registerVisualizations);
 const registerDashboardVisualizationsOnce = _.once(
@@ -113,18 +129,11 @@ export const useInitDataInternal = ({
     api.beforeRequestHandlers.push(reactSdkEmbedReferrerHandler);
   }
 
-  if (!api.onResponseError) {
-    api.onResponseError = ({ metabaseVersion }) => {
-      if (metabaseVersion == null) {
-        return;
-      }
-      // Use ensureMetabaseProviderPropsStore to access the current instance of reduxStore
-      ensureMetabaseProviderPropsStore()
-        .getState()
-        .internalProps.reduxStore?.dispatch(
-          setMetabaseInstanceVersion(metabaseVersion),
-        );
-    };
+  // Dedupe by handler identity (matches the `beforeRequestHandlers` pattern
+  // above) rather than total listener count — other code can register its own
+  // `responseError` listeners without disabling ours.
+  if (!api.listeners("responseError").includes(sdkResponseErrorHandler)) {
+    api.on("responseError", sdkResponseErrorHandler);
   }
 
   useEffect(() => {

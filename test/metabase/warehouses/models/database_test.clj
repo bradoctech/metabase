@@ -34,6 +34,30 @@
 
 (use-fixtures :once (fixtures/initialize :db :plugins :test-drivers))
 
+(deftest should-auto-sync?-respects-disable-auto-sync-test
+  (testing "should-auto-sync? gates automatically-triggered syncs on the disable-auto-sync setting,"
+    (testing "so that newly inserted or edited databases skip Quartz trigger registration."
+      (mt/with-temp [:model/Database db {}]
+        (testing "default (disable-auto-sync=false): a regular database is auto-sync-eligible"
+          (is (true? (database/should-auto-sync? db))))
+        (testing "with disable-auto-sync=true: a regular database is not auto-sync-eligible"
+          (mt/with-temporary-setting-values [disable-auto-sync true]
+            (is (false? (database/should-auto-sync? db)))))))
+    (testing "but should-sync? (the gate for explicit, user-requested syncs) ignores the setting"
+      (mt/with-temp [:model/Database db {}]
+        (is (true? (database/should-sync? db)))
+        (mt/with-temporary-setting-values [disable-auto-sync true]
+          (is (true? (database/should-sync? db))
+              "an explicit Sync-now must remain available even when auto-sync is disabled")))))
+  (testing "destination databases (router children) are excluded from both, regardless of the flag"
+    (mt/with-temp [:model/Database router {}
+                   :model/Database dest   {:router_database_id (:id router)}]
+      (is (false? (database/should-sync? dest)))
+      (is (false? (database/should-auto-sync? dest)))
+      (mt/with-temporary-setting-values [disable-auto-sync true]
+        (is (false? (database/should-sync? dest)))
+        (is (false? (database/should-auto-sync? dest)))))))
+
 (defn- trigger-for-db [db-id]
   (some (fn [{trigger-key :key, :as trigger}]
           (when (str/ends-with? trigger-key (str \. db-id))
@@ -61,7 +85,6 @@
           (#'database/delete-database-fields! db-id))
         (is (empty? @delete-queries))))))
 
-#_{:clj-kondo/ignore [:metabase/validate-deftest]}
 (deftest ^:parallel delete-database-fields-test
   (testing "Fields, including nested Fields, are deleted when the Database has Fields"
     (mt/with-temp [:model/Database {db-id :id}     {}
@@ -70,6 +93,7 @@
                    :model/Field    _               {:table_id table-id :parent_id parent-id}]
       (t2/with-call-count [call-count]
         ;; This only deletes the test-local Database Fields created above.
+        #_{:clj-kondo/ignore [:metabase/validate-deftest]}
         (#'database/delete-database-fields! db-id)
         (is (= 4 (call-count))
             "One existence check, two successful DELETEs, and one terminating DELETE"))
@@ -142,7 +166,7 @@
 
 (deftest health-check-database-test
   (mt/test-drivers (mt/normal-drivers)
-    (with-redefs [quick-task/submit-task! (fn [task] (task))]
+    (mt/with-dynamic-fn-redefs [quick-task/submit-task! (fn [task] (task))]
       (binding [driver.settings/*allow-testing-h2-connections* true]
         (testing "successes"
           (mt/with-prometheus-system! [_ system]
@@ -189,7 +213,7 @@
   (mt/test-drivers (mt/normal-drivers)
     (when config/ee-available?
       (mt/with-premium-features #{:writable-connection}
-        (with-redefs [quick-task/submit-task! (fn [task] (task))]
+        (mt/with-dynamic-fn-redefs [quick-task/submit-task! (fn [task] (task))]
           (binding [driver.settings/*allow-testing-h2-connections* true]
             (testing "database with write_data_details checks both connections"
               (mt/with-prometheus-system! [_ system]
@@ -822,6 +846,37 @@
                                         :engine     (u/qualified-name ::host-details-driver)
                                         :details    {:host "127.0.0.1"}}))))))
 
+(deftest attached-dwh-relaxes-the-network-policy-test
+  (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "external-only"]
+    (mt/with-premium-features #{:attached-dwh}
+      ;; the exemption requires the :attached-dwh token feature, which an OSS build can never have
+      (when config/ee-available?
+        (testing "an attached DWH on a private address can be written"
+          (mt/with-temp [:model/Database db {:engine          (u/qualified-name ::host-details-driver)
+                                             :is_attached_dwh true
+                                             :details         {:host "10.224.7.141"}}]
+            (testing "and updated"
+              (is (pos? (t2/update! :model/Database (:id db) {:details {:host "10.224.7.142"}})))))))
+      (testing "loopback and link-local stay blocked even for the attached DWH"
+        (doseq [host ["127.0.0.1" "169.254.169.254"]]
+          (is (thrown-with-msg?
+               clojure.lang.ExceptionInfo
+               #"private or internal network address"
+               (t2/insert! :model/Database {:name            "attached dwh"
+                                            :engine          (u/qualified-name ::host-details-driver)
+                                            :is_attached_dwh true
+                                            :details         {:host host}}))
+              (str "should be refused: " host)))))
+    (testing "without the :attached-dwh token feature the flag confers no exemption"
+      (mt/with-premium-features #{}
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"private or internal network address"
+             (t2/insert! :model/Database {:name            "dwh-flavored smuggling"
+                                          :engine          (u/qualified-name ::host-details-driver)
+                                          :is_attached_dwh true
+                                          :details         {:host "10.224.7.141"}})))))))
+
 (deftest preserve-driver-namespaces-test
   (testing "Make sure databases preserve namespaced driver names"
     (mt/with-temp [:model/Database {db-id :id} {:engine (u/qualified-name ::test)}]
@@ -835,6 +890,15 @@
              (serdes/identity-hash db)))
       (is (= "b6f1a9e8"
              (serdes/identity-hash db))))))
+
+(deftest ^:parallel serdes-extract-is-stub-test
+  (testing "serdes/extract-one preserves :is_stub true and elides it when false"
+    (mt/with-temp [:model/Database stub     {:engine :h2 :name "stub" :is_stub true}
+                   :model/Database non-stub {:engine :h2 :name "non-stub"}]
+      (testing "stub DB carries :is_stub true into the extracted map"
+        (is (true? (:is_stub (serdes/extract-one "Database" nil stub)))))
+      (testing "non-stub DB elides :is_stub from the extracted map (matches default)"
+        (is (not (contains? (serdes/extract-one "Database" nil non-stub) :is_stub)))))))
 
 (deftest create-database-with-null-details-test
   (testing "Details should get a default value of {} if unspecified"

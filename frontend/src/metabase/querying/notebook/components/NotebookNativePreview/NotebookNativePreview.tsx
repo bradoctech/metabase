@@ -36,6 +36,7 @@ type NotebookNativePreviewProps = {
   buttonTitle?: string;
   onConvertClick: (newQuestion: Question) => void;
   readOnly?: boolean;
+  disableConvert?: boolean;
 };
 
 export const NotebookNativePreview = ({
@@ -44,6 +45,7 @@ export const NotebookNativePreview = ({
   buttonTitle,
   onConvertClick,
   readOnly,
+  disableConvert,
 }: NotebookNativePreviewProps) => {
   const database = question.database();
   const engine = database?.engine;
@@ -120,7 +122,7 @@ export const NotebookNativePreview = ({
             variant="subtle"
             p={0}
             onClick={handleConvertClick}
-            disabled={!showQuery}
+            disabled={!showQuery || disableConvert}
           >
             {buttonTitle ?? BUTTON_TITLE[engineType]}
           </Button>

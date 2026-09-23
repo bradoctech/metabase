@@ -1,8 +1,7 @@
 import { t } from "ttag";
 
+import { MetabotSetupInner } from "metabase/admin/ai/MetabotSetup";
 import { Modal, type ModalProps } from "metabase/ui";
-
-import { MetabotSetupInner } from "./MetabotAdmin/MetabotSetup";
 
 export function AIProviderConfigurationModal({
   opened,

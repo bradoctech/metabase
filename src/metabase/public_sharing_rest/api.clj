@@ -476,8 +476,7 @@
           ;; failing because there are no current user perms; if this Dashcard is public
           ;; you're by definition allowed to run it without a perms check anyway
           (request/as-admin
-            ;; Undo middleware string->keyword coercion. Refuse `:http` actions on this
-            ;; public/unauthenticated path by passing `:allow-http-actions? false`.
+            ;; Undo middleware string->keyword coercion. Refuse `:http` actions on the anonymous execute path.
             (actions/execute-dashcard! dashboard-id dashcard-id (update-keys parameters name)
                                        {:allow-http-actions? false})))))))
 
@@ -721,8 +720,7 @@
                                      :source    :public_form
                                      :type      (:type action)
                                      :action_id (:id action)})
-            ;; Undo middleware string->keyword coercion. Refuse `:http` actions on this
-            ;; public/unauthenticated path by passing `:allow-http-actions? false`.
+            ;; Undo middleware string->keyword coercion. Refuse `:http` actions on the anonymous execute path.
             (actions/execute-action! action (update-keys parameters name)
                                      {:allow-http-actions? false})))))))
 

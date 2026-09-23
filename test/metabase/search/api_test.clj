@@ -1,6 +1,9 @@
 (ns metabase.search.api-test
   "There are more tests around search in [[metabase.search.impl-test]]. TODO: we should move more of the tests
   below into that namespace."
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query     {:namespaces [metabase.search.api-test]}
+                                                            metabase.test.data/query          {:namespaces [metabase.search.api-test]}
+                                                            metabase.test.data/run-mbql-query {:namespaces [metabase.search.api-test]}}}}}}
   (:require
    [clojure.set :as set]
    [clojure.string :as str]
@@ -28,7 +31,7 @@
    [metabase.warehouses.models.database :as database]
    [toucan2.core :as t2]))
 
-(use-fixtures :once (fixtures/initialize :db))
+(use-fixtures :once (fixtures/initialize :db :test-users :test-users-personal-collections))
 
 (comment
   ;; We need this to ensure the engine hierarchy is registered
@@ -308,6 +311,39 @@
 (defn- unsorted-search-request-data
   [& args]
   (map clean-result (apply search-request-data-with identity args)))
+
+(deftest context-param-test
+  (testing "context is an enum parameter that defaults to :api"
+    (testing "a missing context is accepted and resolves to :api"
+      (let [captured (atom nil)]
+        (mt/with-dynamic-fn-redefs [search/search (fn [search-ctx]
+                                                    (reset! captured search-ctx)
+                                                    {:data [] :total 0 :engine "test"})]
+          (is (=? {:engine string?}
+                  (mt/user-http-request :crowberto :get 200 "search" :q "x"))))
+        (is (= :api (:context @captured)))))
+    (testing "an unknown context value is rejected"
+      (is (=? {:errors {:context #"enum of.*"}}
+              (mt/user-http-request :crowberto :get 400 "search" :q "x" :context "bogus"))))
+    (testing "a known context value is accepted"
+      (is (=? {:engine string?}
+              (mt/user-http-request :crowberto :get 200 "search" :q "x" :context "search-app"))))))
+
+(deftest removed-temporal-params-ignored-test
+  (testing "the removed has_temporal_dim / non_temporal_dim_ids params are silently ignored"
+    ;; Stale FE bundles may still send these during rolling deploys; the request schema is an open map,
+    ;; so they pass validation and never reach the search context.
+    (let [captured (atom nil)]
+      (mt/with-dynamic-fn-redefs [search/search (fn [search-ctx]
+                                                  (reset! captured search-ctx)
+                                                  {:data [] :total 0 :engine "test"})]
+        (is (=? {:engine string?}
+                (mt/user-http-request :crowberto :get 200 "search"
+                                      :q "x"
+                                      :has_temporal_dim "true"
+                                      :non_temporal_dim_ids "[1,2]"))))
+      (is (not (contains? @captured :has-temporal-dim)))
+      (is (not (contains? @captured :non-temporal-dim-ids))))))
 
 (deftest explicit-engine-validation-test
   (testing "an explicit search_engine that cannot serve returns a 400 naming the reason"
@@ -888,9 +924,9 @@
                      (into #{} (comp relevant-2 (map (juxt :name normalize)))
                            (search! "rom" :rasta))))))
           (testing "Sandboxed users do not see indexed entities in search"
-            (with-redefs [perms-util/impersonated-user? (constantly true)]
+            (mt/with-dynamic-fn-redefs [perms-util/impersonated-user? (constantly true)]
               (is (empty? (into #{} (comp relevant-1 (map :name)) (search! "fort")))))
-            (with-redefs [perms-util/sandboxed-user? (constantly true)]
+            (mt/with-dynamic-fn-redefs [perms-util/sandboxed-user? (constantly true)]
               (is (empty? (into #{} (comp relevant-1 (map :name)) (search! "fort")))))))))))
 
 (defn- archived-collection [m]
@@ -1593,7 +1629,60 @@
                (search :rasta "exclude"))))
       (testing "getting models should return only models that are applied"
         (is (= #{"dashboard" "collection"}
-               (get-available-models :q search-term :filter_items_in_personal_collection "exclude")))))))
+               (get-available-models :q search-term :filter_items_in_personal_collection "exclude"))))
+      (testing "admin exclude-others excludes other users' personal collection items"
+        (is (= #{["dashboard" dash-public]
+                 ["dashboard" dash-sub-public]
+                 ["collection" coll-sub-public]
+                 ["dataset" model-crowberto]
+                 ["dataset" model-sub-crowberto]
+                 ["collection" coll-sub-crowberto]}
+               (search :crowberto "exclude-others"))))
+      (testing "non-admin exclude-others sees own personal items plus public"
+        (is (= #{["dashboard" dash-public]
+                 ["dashboard" dash-sub-public]
+                 ["collection" coll-sub-public]
+                 ["card" card-rasta]
+                 ["card" card-sub-rasta]
+                 ["collection" coll-sub-rasta]}
+               (search :rasta "exclude-others"))))
+      (testing "admin only-mine"
+        (is (= #{["dataset" model-crowberto]
+                 ["dataset" model-sub-crowberto]
+                 ["collection" coll-sub-crowberto]}
+               (search :crowberto "only-mine"))))
+      (testing "non-admin only-mine"
+        (is (= #{["card" card-rasta]
+                 ["card" card-sub-rasta]
+                 ["collection" coll-sub-rasta]}
+               (search :rasta "only-mine"))))
+      (testing "search-app context default excludes others' personal collections for admin"
+        (let [search-with-context (fn [user]
+                                    (->> (mt/user-http-request user :get 200 "search"
+                                                               :q search-term
+                                                               :context "search-app")
+                                         :data
+                                         (map (juxt :model :id))
+                                         set))]
+          (is (not (contains? (search-with-context :crowberto) ["card" card-rasta]))
+              "Admin should not see rasta's card in search-app context with default filter")
+          (is (not (contains? (search-with-context :crowberto) ["card" card-sub-rasta]))
+              "Admin should not see rasta's sub-collection card in search-app context with default filter")
+          (is (contains? (search-with-context :crowberto) ["dataset" model-crowberto])
+              "Admin should still see their own personal collection items")))
+      (testing "in-place engine: search-app context default should still exclude others' personal collections (#UXW-3238)"
+        (search.tu/with-legacy-search
+          (let [search-with-context (fn [user]
+                                      (->> (mt/user-http-request user :get 200 "search"
+                                                                 :q search-term
+                                                                 :context "search-app")
+                                           :data
+                                           (map (juxt :model :id))
+                                           set))]
+            (is (not (contains? (search-with-context :crowberto) ["card" card-rasta]))
+                "Admin should not see rasta's card even with in-place engine")
+            (is (not (contains? (search-with-context :crowberto) ["card" card-sub-rasta]))
+                "Admin should not see rasta's sub-collection card even with in-place engine")))))))
 
 (deftest collection-effective-parent-test
   (mt/with-temp [:model/Collection coll-1  {:name "Collection 1"}
@@ -1835,6 +1924,16 @@
                 (mt/user-http-request :crowberto :put 200 (weights-url context {:model/dataset 5}))))
         (is (= 5.0 (search.config/scorer-param search-ctx :model :dataset)))))))
 
+(deftest ^:synchronized weights-normalize-context-test
+  (mt/with-temporary-setting-values [experimental-search-weight-overrides nil]
+    (testing "the /weights endpoints normalize context, so introspection and overrides match search"
+      (testing "surfaces that share a normalized context report the same weights"
+        (is (= (mt/user-http-request :crowberto :get 200 (weights-url :global {}))
+               (mt/user-http-request :crowberto :get 200 (weights-url :command-palette {})))))
+      (testing "an override set via one normalized surface is read back via another"
+        (mt/user-http-request :crowberto :put 200 (weights-url :command-palette {:recency 9}))
+        (is (= 9.0 (:recency (mt/user-http-request :crowberto :get 200 (weights-url :search-app {})))))))))
+
 (deftest ^:synchronized dashboard-questions
   (testing "Dashboard questions get a dashboard_id when searched"
     (let [search-name (random-uuid)
@@ -1907,22 +2006,31 @@
 
 (deftest ^:synchronized prometheus-response-metrics-test
   (testing "Prometheus counters get incremented for error responses"
-    (let [calls (atom nil)]
-      (mt/with-dynamic-fn-redefs [analytics/inc! #(swap! calls conj %)]
+    (let [calls    (atom nil)
+          observed (atom [])]
+      (mt/with-dynamic-fn-redefs [analytics/inc!     (fn [metric & _] (swap! calls conj metric))
+                                  analytics/observe! (fn [& args] (swap! observed conj (vec args)))]
         (testing "Success response"
-          (search-request :crowberto :q "test")
-          (is (= 1 (count (filter #{:metabase-search/response-ok} @calls))))
-          (is (= 0 (count (filter #{:metabase-search/response-error} @calls)))))
+          (let [response (search-request :crowberto :q "test")]
+            (is (= 1 (count (filter #{:metabase-search/response-ok} @calls))))
+            (is (= 0 (count (filter #{:metabase-search/response-error} @calls))))
+            (testing "result count is observed and matches the response :total"
+              (is (= [[:metabase-search/response-results (:total response)]]
+                     (filter (comp #{:metabase-search/response-results} first) @observed))))))
         (testing "Bad request (400)"
           (mt/user-http-request :crowberto :get 400 "/search" :archived "meow")
           (is (= 1 (count (filter #{:metabase-search/response-ok} @calls))))
           ;; We do not treat client side errors as errors for our alerts.
-          (is (= 0 (count (filter #{:metabase-search/response-error} @calls)))))
+          (is (= 0 (count (filter #{:metabase-search/response-error} @calls))))
+          (is (= 1 (count (filter (comp #{:metabase-search/response-results} first) @observed)))
+              "result count is not observed on error responses"))
         (testing "Unexpected server error (500)"
           (mt/with-dynamic-fn-redefs [search/search (fn [& _] (throw (Exception.)))]
             (mt/user-http-request :crowberto :get 500 "/search" :q "test")
             (is (= 1 (count (filter #{:metabase-search/response-ok} @calls))))
-            (is (= 1 (count (filter #{:metabase-search/response-error} @calls))))))))))
+            (is (= 1 (count (filter #{:metabase-search/response-error} @calls))))
+            (is (= 1 (count (filter (comp #{:metabase-search/response-results} first) @observed)))
+                "result count is not observed on error responses")))))))
 
 (deftest ^:synchronized multiple-limits-test
   (when (search/supports-index?)

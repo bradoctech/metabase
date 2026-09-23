@@ -24,6 +24,7 @@
    [metabase.util.i18n :refer [tru]]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
+   [metabase.workspaces.core :as workspaces]
    [toucan2.core :as t2]))
 
 (mu/defn- execute-query-action!
@@ -197,6 +198,7 @@
   ([action request-parameters]
    (execute-action! action request-parameters nil))
   ([action request-parameters {:keys [allow-http-actions?] :or {allow-http-actions? true}}]
+   (workspaces/check-not-in-workspace-mode! "Actions")
    (when (and (= (:type action) :http) (not allow-http-actions?))
      (throw (ex-info (tru "HTTP actions cannot be executed from public endpoints.")
                      {:status-code 403})))

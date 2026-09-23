@@ -1,8 +1,8 @@
 import dayjs from "dayjs";
 
-import { ROOT_COLLECTION } from "metabase/entities/collections/constants";
-import { type RecentItem, isRecentTableItem } from "metabase-types/api";
+import { ROOT_COLLECTION } from "metabase/collections/constants";
 import { parseTimestamp } from "metabase/utils/time-dayjs";
+import { type RecentItem, isRecentTableItem } from "metabase-types/api";
 
 export const isWithinWeeks = (
   timestamp: string,

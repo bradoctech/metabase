@@ -24,6 +24,7 @@
 
 (defmethod find-stale-query :model/Card
   [_model args]
+  ;; nested as a `:union-all` arm in [[rows-query]]/[[total-query]]
   ^:allow-subquery
   {:select [:report_card.id
             [(h2x/literal "Card") :model]
@@ -60,6 +61,7 @@
 
 (defmethod find-stale-query :model/Dashboard
   [_model args]
+  ;; nested as a `:union-all` arm in [[rows-query]]/[[total-query]]
   ^:allow-subquery
   {:select [:report_dashboard.id
             [(h2x/literal "Dashboard") :model]

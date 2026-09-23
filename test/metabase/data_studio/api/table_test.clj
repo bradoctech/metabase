@@ -104,17 +104,17 @@
                        :model/Table    {_  :id} {:db_id d2, :schema "PUBLIC"}
                        :model/Table    {t4 :id} {:db_id d2, :schema "PUBLIC"}
                        :model/Table    {t5 :id} {:db_id d2, :schema "FOO"}]
-          (with-redefs [quick-task/executor (delay pool)
-                        sync/sync-table!    (fn [table]
-                                              (swap! tables conj table)
-                                              (.countDown latch)
-                                              nil)]
-            (mt/user-http-request :crowberto :post 204 "data-studio/table/sync-schema" {:database_ids [d1],
-                                                                                        :schema_ids   [(format "%d:FOO" d2)]
-                                                                                        :table_ids    [t4]})
-            (testing "sync called?"
-              (is (true? (.await latch 4 TimeUnit/SECONDS)))
-              (is (= [t1 t2 t4 t5] (map :id @tables))))))
+          (with-redefs [quick-task/executor (delay pool)]
+            (mt/with-dynamic-fn-redefs [sync/sync-table! (fn [table]
+                                                           (swap! tables conj table)
+                                                           (.countDown latch)
+                                                           nil)]
+              (mt/user-http-request :crowberto :post 204 "data-studio/table/sync-schema" {:database_ids [d1],
+                                                                                          :schema_ids   [(format "%d:FOO" d2)]
+                                                                                          :table_ids    [t4]})
+              (testing "sync called?"
+                (is (true? (.await latch 4 TimeUnit/SECONDS)))
+                (is (= [t1 t2 t4 t5] (map :id @tables)))))))
         (finally
           (.shutdownNow pool))))))
 
@@ -139,17 +139,17 @@
                        :model/Table    {_  :id} {:db_id d2, :schema "PUBLIC"}
                        :model/Table    {t4 :id} {:db_id d2, :schema "PUBLIC"}
                        :model/Table    {t5 :id} {:db_id d2, :schema "FOO"}]
-          (with-redefs [quick-task/executor                (delay pool)
-                        sync/update-field-values-for-table! (fn [table]
-                                                              (swap! tables conj table)
-                                                              (.countDown latch)
-                                                              nil)]
-            (mt/user-http-request :crowberto :post 204 "data-studio/table/rescan-values" {:database_ids [d1],
-                                                                                          :schema_ids   [(format "%d:FOO" d2)]
-                                                                                          :table_ids    [t4]})
-            (testing "rescanned?"
-              (is (true? (.await latch 4 TimeUnit/SECONDS)))
-              (is (= [t1 t2 t4 t5] (map :id @tables))))))
+          (with-redefs [quick-task/executor (delay pool)]
+            (mt/with-dynamic-fn-redefs [sync/update-field-values-for-table! (fn [table]
+                                                                              (swap! tables conj table)
+                                                                              (.countDown latch)
+                                                                              nil)]
+              (mt/user-http-request :crowberto :post 204 "data-studio/table/rescan-values" {:database_ids [d1],
+                                                                                            :schema_ids   [(format "%d:FOO" d2)]
+                                                                                            :table_ids    [t4]})
+              (testing "rescanned?"
+                (is (true? (.await latch 4 TimeUnit/SECONDS)))
+                (is (= [t1 t2 t4 t5] (map :id @tables)))))))
         (finally
           (.shutdownNow pool))))))
 

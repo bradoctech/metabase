@@ -3,18 +3,22 @@
    [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.test :refer :all]
+   [metabase.config.core :as config]
    [metabase.driver :as driver]
    [metabase.driver.h2 :as h2]
    [metabase.driver.impl :as driver.impl]
    [metabase.driver.settings :as driver.settings]
+   [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
    [metabase.driver.util :as driver.u]
    [metabase.lib.test-metadata :as meta]
    [metabase.lib.test-util :as lib.tu]
    ^{:clj-kondo/ignore [:deprecated-namespace]} [metabase.query-processor.store :as qp.store]
    [metabase.test :as mt]
    [metabase.test.fixtures :as fixtures]
-   [metabase.util :as u])
+   [metabase.util :as u]
+   [metabase.util.snake-hating-map :as snake-hating-map])
   (:import
+   (java.sql SQLException)
    (javax.net.ssl SSLSocketFactory)))
 
 (comment h2/keep-me)
@@ -231,20 +235,26 @@
                (#'driver.u/resolve-transitive-visible-if
                 c
                 props-by-name
-                :test-driver))))))
+                :test-driver)))))))
+
+(deftest ^:parallel resolve-transitive-visible-if-test-2
   (testing "empty visible-if is removed"
     (is (= {:name "prop-x"}
            (#'driver.u/resolve-transitive-visible-if
             {:name "prop-x" :visible-if {}}
             {}
-            :test-driver))))
+            :test-driver)))))
+
+(deftest ^:parallel resolve-transitive-visible-if-test-3
   (testing "dependencies on non-existent properties are kept (not filtered)"
     (let [props-by-name {"prop-a" {:name "prop-a"}}]
       (is (= {:name "prop-b" :visible-if {:non-existent-prop true}}
              (#'driver.u/resolve-transitive-visible-if
               {:name "prop-b" :visible-if {:non-existent-prop true}}
               props-by-name
-              :test-driver)))))
+              :test-driver))))))
+
+(deftest ^:parallel resolve-transitive-visible-if-test-4
   (testing "false dependencies (from removed :checked-section) are filtered out"
     (let [props-by-name {"prop-a" {:name "prop-a"}}]
       (is (= {:name "prop-b" :visible-if {:prop-a true}}
@@ -252,7 +262,9 @@
               {:name "prop-b" :visible-if {:prop-a true
                                            :removed-section false}}
               props-by-name
-              :test-driver)))))
+              :test-driver))))))
+
+(deftest ^:parallel resolve-transitive-visible-if-test-5
   (testing "multi-level transitive dependencies are fully resolved"
     (let [props-by-name {"prop-a" {:name "prop-a"}
                          "prop-b" {:name "prop-b" :visible-if {:prop-a true}}
@@ -264,7 +276,9 @@
              (#'driver.u/resolve-transitive-visible-if
               {:name "prop-d" :visible-if {:prop-c true}}
               props-by-name
-              :test-driver)))))
+              :test-driver))))))
+
+(deftest ^:parallel resolve-transitive-visible-if-test-6
   (testing "cycle detection throws exception with appropriate error data"
     (let [props-by-name {"prop-a" {:name "prop-a" :visible-if {:prop-c true}}
                          "prop-b" {:name "prop-b" :visible-if {:prop-a true}}
@@ -586,6 +600,53 @@
           (is (= "Group info message" (:placeholder group-info)))
           (is (nil? (:getter group-info)) "Getter should be removed"))))))
 
+;;; ---------------------------------------- scrub-exceptions -------------------------------------------------
+
+(deftest ^:parallel scrub-exceptions-test
+  (testing "plain Exception: secret is redacted from message"
+    (let [e (driver.u/scrub-exceptions (Exception. "PASSWORD='s3cret'") ["s3cret"])]
+      (is (= "PASSWORD='****'" (ex-message e)))))
+  (testing "secret not present: message unchanged"
+    (let [e (driver.u/scrub-exceptions (Exception. "no secret here") ["s3cret"])]
+      (is (= "no secret here" (ex-message e)))))
+  (testing "cause chain is scrubbed"
+    (let [e (driver.u/scrub-exceptions
+             (Exception. "outer pw=s3cret" (Exception. "inner pw=s3cret"))
+             ["s3cret"])]
+      (is (= "outer pw=****" (ex-message e)))
+      (is (= "inner pw=****" (ex-message (.getCause ^Exception e))))))
+  (testing "ExceptionInfo: ex-data is preserved, message is scrubbed"
+    (let [e (driver.u/scrub-exceptions (ex-info "pw=s3cret" {:code 42}) ["s3cret"])]
+      (is (= "pw=****" (ex-message e)))
+      (is (= {:code 42} (ex-data e)))))
+  (testing "SQLException: SQLState and errorCode are preserved"
+    (let [e (driver.u/scrub-exceptions (SQLException. "pw=s3cret" "42501" 7) ["s3cret"])]
+      (is (= "pw=****" (ex-message e)))
+      (is (= "42501" (.getSQLState ^SQLException e)))
+      (is (= 7 (.getErrorCode ^SQLException e)))))
+  (testing "SQLException next-exception chain is scrubbed"
+    (let [next-ex (SQLException. "next pw=s3cret" "42501" 7)
+          main    (doto (SQLException. "main pw=s3cret" "42000" 1)
+                    (.setNextException next-ex))
+          e       (driver.u/scrub-exceptions main ["s3cret"])]
+      (is (= "main pw=****" (ex-message e)))
+      (is (= "next pw=****" (ex-message (.getNextException ^SQLException e))))
+      (is (= "42501" (.getSQLState (.getNextException ^SQLException e))))))
+  (testing "multiple secrets are all redacted"
+    (let [e (driver.u/scrub-exceptions
+             (Exception. "user=admin password=s3cret escaped=s3cr\\et")
+             ["s3cret" "s3cr\\et"])]
+      (is (= "user=admin password=**** escaped=****" (ex-message e)))))
+  (testing "password with backslash sequences is treated literally, not as regex"
+    (let [pw "p\\nass\\r\\twor$d"
+          e  (driver.u/scrub-exceptions (Exception. (str "CREATE USER x PASSWORD='" pw "'")) [pw])]
+      (is (= "CREATE USER x PASSWORD='****'" (ex-message e)))))
+  (testing "stack trace is preserved"
+    (let [original (Exception. "pw=s3cret")
+          trace    (.getStackTrace original)
+          e        (driver.u/scrub-exceptions original ["s3cret"])]
+      (is (= (seq trace) (seq (.getStackTrace ^Exception e)))))))
+
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                            SSRF: blocking connections to private network addresses                             |
 ;;; +----------------------------------------------------------------------------------------------------------------+
@@ -785,6 +846,75 @@
     (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "allow-all"]
       (is (nil? (driver.u/validate-connection-hosts! :postgres {:host "127.0.0.1" :port 5432})))
       (is (nil? (driver.u/validate-connection-hosts! :postgres {:host "10.224.7.141"}))))))
+
+(deftest with-database-network-policy-test
+  (mt/with-premium-features #{:attached-dwh}
+    (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "external-only"]
+      (if config/ee-available?
+        (testing "the attached DWH relaxes an external-only policy to allow-private"
+          (driver.u/with-database-network-policy {:is_attached_dwh true}
+            (is (nil? (driver.u/validate-connection-hosts! :postgres {:host "10.224.7.141"})))
+            (testing "and no further: loopback and link-local are still refused"
+              (is (=? {:status-code 400}
+                      (ssrf-error #(driver.u/validate-connection-hosts! :postgres {:host "127.0.0.1"}))))
+              (is (=? {:status-code 400}
+                      (ssrf-error #(driver.u/validate-connection-hosts! :postgres {:host "169.254.169.254"})))))))
+        (testing "on an OSS build no token feature can be present, so not even the attached DWH is relaxed"
+          (driver.u/with-database-network-policy {:is_attached_dwh true}
+            (is (=? {:status-code 400}
+                    (ssrf-error #(driver.u/validate-connection-hosts! :postgres {:host "10.224.7.141"})))))))
+      (testing "an ordinary database is not relaxed"
+        (driver.u/with-database-network-policy {:name "ordinary"}
+          (is (=? {:status-code 400}
+                  (ssrf-error #(driver.u/validate-connection-hosts! :postgres {:host "10.224.7.141"})))))))
+    (testing "an explicit allow-all policy is left alone"
+      (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "allow-all"]
+        (driver.u/with-database-network-policy {:is_attached_dwh true}
+          (is (nil? (driver.u/validate-connection-hosts! :postgres {:host "127.0.0.1"}))))))))
+
+(deftest network-exempt-warehouse?-test
+  (testing "the exemption needs both the database's attached-DWH flag and the :attached-dwh token feature"
+    (mt/with-premium-features #{:attached-dwh}
+      ;; the token can only carry a feature at all when EE code is available, so on an OSS build the flag confers
+      ;; nothing even with the feature in the (test-stubbed) token
+      (let [exempt? config/ee-available?]
+        (testing "a Toucan row or config-file entry carries the flag in snake_case"
+          (is (= exempt? (driver.u/network-exempt-warehouse? {:is_attached_dwh true})))
+          (is (false? (driver.u/network-exempt-warehouse? {:is_attached_dwh false})))
+          (is (false? (driver.u/network-exempt-warehouse? {:name "ordinary"}))))
+        (testing "a Lib metadata database carries it in kebab-case, in a map that throws on snake_case lookups"
+          (is (= exempt? (driver.u/network-exempt-warehouse?
+                          (snake-hating-map/snake-hating-map {:lib/type :metadata/database, :is-attached-dwh true}))))
+          (is (false? (driver.u/network-exempt-warehouse?
+                       (snake-hating-map/snake-hating-map {:lib/type :metadata/database, :name "ordinary"})))))))
+    (mt/with-premium-features #{}
+      (is (false? (driver.u/network-exempt-warehouse? {:is_attached_dwh true}))))))
+
+(deftest pool-creation-attached-dwh-network-exemption-test
+  (mt/with-premium-features #{:attached-dwh}
+    ;; the exemption requires the :attached-dwh token feature, which an OSS build can never have -- there the
+    ;; attached DWH cannot even be written with these details (covered by the model-level tests)
+    (when config/ee-available?
+      (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "external-only"]
+        (mt/with-temp [:model/Database database {:engine          :postgres
+                                                 :is_attached_dwh true
+                                                 :details         {:host "10.224.7.141", :port 5432, :dbname "dwh"}}]
+          (try
+            (testing "an attached DWH on a private address still gets a connection pool"
+              ;; fetch by id so the database takes the metadata-provider path, which must carry `is-attached-dwh`
+              (is (some? (sql-jdbc.conn/db->pooled-connection-spec (u/the-id database)))))
+            (finally
+              (sql-jdbc.conn/invalidate-pool-for-db! database))))))
+    ;; write the ordinary row under allow-all, the way a formerly-lax instance would have, then flip the policy
+    (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "allow-all"]
+      (mt/with-temp [:model/Database database {:engine  :postgres
+                                               :details {:host "10.224.7.141", :port 5432, :dbname "dwh"}}]
+        (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "external-only"]
+          (testing "an ordinary database with the same details is still refused at pool time"
+            (is (thrown-with-msg?
+                 clojure.lang.ExceptionInfo
+                 #"private or internal network address"
+                 (sql-jdbc.conn/db->pooled-connection-spec (u/the-id database))))))))))
 
 (deftest warehouse-allowed-networks-default-test
   (testing "self-hosted, with nothing configured, all networks are allowed"

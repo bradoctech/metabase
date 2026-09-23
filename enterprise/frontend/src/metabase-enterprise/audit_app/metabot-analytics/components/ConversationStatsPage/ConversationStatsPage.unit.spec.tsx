@@ -36,24 +36,20 @@ import {
 import { ConversationStatsPage } from "./ConversationStatsPage";
 import { buildAuditViewsFixture } from "./audit-views-fixture";
 
-jest.mock(
-  "metabase/metabot/components/MetabotAdmin/MetabotAdminLayout",
-  () => ({
-    MetabotAdminLayout: ({ children }: { children: React.ReactNode }) =>
-      children,
-  }),
-);
-
-type MockVisualizationProps = {
-  rawSeries?: RawSeries | null;
-  handleVisualizationClick?: (clicked: ClickObject | null) => void;
-};
+jest.mock("metabase/admin/ai/MetabotAdminLayout", () => ({
+  MetabotAdminLayout: ({ children }: { children: React.ReactNode }) => children,
+}));
 
 jest.mock("metabase/visualizations/components/Visualization", () => {
+  type StubProps = {
+    rawSeries?: RawSeries | null;
+    handleVisualizationClick?: (clicked: ClickObject | null) => void;
+  };
+
   const StubVisualization = ({
     rawSeries,
     handleVisualizationClick,
-  }: MockVisualizationProps) => {
+  }: StubProps) => {
     const data = rawSeries?.[0]?.data;
     const dimensionIndex =
       data?.cols.findIndex((col) => col.source === "breakout") ?? -1;

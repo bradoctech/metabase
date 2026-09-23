@@ -71,15 +71,8 @@ function getSettingWidget<T, TValue, TProps extends Record<string, unknown>>(
     ...settingDefProps,
     id: settingId,
     value,
-    // fall back to the legacy `section` getter / `hidden` flag still used by
-    // many setting definitions on this release branch
-    section:
-      getSection?.(resolvedObject, computedSettings, extra) ??
-      (settingDef as { section?: string }).section,
-    hidden:
-      getHidden?.(resolvedObject, computedSettings, extra) ??
-      (settingDef as { hidden?: boolean }).hidden ??
-      false,
+    section: getSection?.(resolvedObject, computedSettings, extra),
+    hidden: getHidden?.(resolvedObject, computedSettings, extra) ?? false,
     props:
       getProps?.(
         resolvedObject,

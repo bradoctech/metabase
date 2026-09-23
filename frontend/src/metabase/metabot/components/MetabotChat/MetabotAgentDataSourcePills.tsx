@@ -25,7 +25,6 @@ import {
   Collapse,
   Flex,
   Icon,
-  type IconName,
   Skeleton,
   Text,
   Tooltip,
@@ -36,6 +35,7 @@ import * as Lib from "metabase-lib";
 import Question from "metabase-lib/v1/Question";
 import type {
   DatasetQuery,
+  IconName,
   MetabotCodeEdit,
   MetabotCodeEditorBufferContext,
   MetabotSourceFeedback,
@@ -154,7 +154,7 @@ const SourceItem = ({
         to={to}
         href={to}
       >
-        <Flex direction="column" gap="0.25rem" miw={0} maw="100%">
+        <Flex direction="column" miw={0} maw="100%">
           <Flex gap="sm" align="center" miw={0} maw="100%">
             <Icon
               name={iconName}
@@ -171,7 +171,7 @@ const SourceItem = ({
                 overflow: "hidden",
                 fontSize: "0.75rem",
                 fontWeight: 700,
-                lineHeight: 1,
+                lineHeight: 1.5,
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
               }}
@@ -204,9 +204,9 @@ const SourceItem = ({
                     miw={0}
                     c="text-secondary"
                     style={{
-                      overflowX: "hidden",
+                      overflow: "hidden",
                       fontSize: "0.75rem",
-                      lineHeight: 1,
+                      lineHeight: 1.5,
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
                     }}
@@ -379,7 +379,7 @@ const TableSourceRow = ({
       location={location}
       messageId={messageId}
       source={{ source_id: id, source_type: "table" }}
-      to={Urls.tableRowsQuery(table.db_id, id)}
+      to={Urls.table({ id, name: table.display_name })}
     />
   );
 };
@@ -595,7 +595,7 @@ const NativeSourcesRow = ({
             location={location}
             messageId={messageId}
             source={{ source_id: table.id, source_type: "table" }}
-            to={Urls.tableRowsQuery(databaseId, table.id)}
+            to={Urls.table({ id: table.id, name: label })}
           />
         );
       })}

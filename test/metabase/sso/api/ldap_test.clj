@@ -56,7 +56,7 @@
       (testing "Passing ldap-enabled=false still validates the LDAP settings"
         (mt/user-http-request :crowberto :put 500 "ldap/settings"
                               (assoc (ldap-test-details false) :ldap-password "wrong-password")))
-      (with-redefs [ldap/test-ldap-connection (constantly {:status :SUCCESS})]
+      (mt/with-dynamic-fn-redefs [ldap/test-ldap-connection (constantly {:status :SUCCESS})]
         (testing "LDAP port is saved as default value if passed as an empty string (#18936)"
           (is (true?
                (mt/user-http-request :crowberto :put 200 "ldap/settings"

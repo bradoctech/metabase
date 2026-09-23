@@ -1,5 +1,4 @@
 import { ListViz } from "metabase/list-view/components/ListViz";
-import { registerJsxFormatting } from "metabase/utils/formatting/ui";
 import {
   registerSettingWidgets,
   registerVisualization,

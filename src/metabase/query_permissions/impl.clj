@@ -428,8 +428,6 @@
     (let [table-ids             (t2/select-fn-set :table_id :model/Field :id [:in (set field-ids)])
           table-id->database-id (when (seq table-ids)
                                   (t2/select-pk->fn :db_id :model/Table :id [:in table-ids]))]
-      ;; master batch-primes a table-granular perms cache here; v61 has no such API, so warm the equivalent
-      ;; db-level cache instead. The per-table checks below resolve correctly on cache-miss regardless.
       (perms/prime-db-cache (set (vals table-id->database-id)))
       (doseq [table-id table-ids
               :let     [database-id (table-id->database-id table-id)]]

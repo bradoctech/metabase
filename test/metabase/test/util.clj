@@ -17,6 +17,7 @@
    [mb.hawk.parallel]
    [metabase.analytics.prometheus :as prometheus]
    [metabase.app-db.core :as mdb]
+   [metabase.app-db.setting :as mdb.setting]
    [metabase.app-db.transient-error :as transient-error]
    [metabase.audit-app.core :as audit]
    [metabase.classloader.core :as classloader]
@@ -40,9 +41,11 @@
    [metabase.test.data :as data]
    [metabase.test.fixtures :as fixtures]
    [metabase.test.initialize :as initialize]
+   [metabase.test.util.dynamic-redefs :as dynamic-redefs]
    [metabase.test.util.log]
    [metabase.timeline.models.timeline-event :as timeline-event]
    [metabase.util :as u]
+   [metabase.util.encryption :as encryption]
    [metabase.util.files :as u.files]
    [metabase.util.json :as json]
    [metabase.util.random :as u.random]
@@ -394,7 +397,20 @@
             :last_name (u.random/random-name)
             :email (u.random/random-email)
             :date_joined (t/zoned-date-time)
-            :updated_at (t/zoned-date-time)})})
+            :updated_at (t/zoned-date-time)})
+
+   :model/Workspace
+   (fn [_] (default-timestamped
+            {:name       (u.random/random-name)
+             :creator_id (rasta-id)}))
+
+   :model/WorkspaceDatabase
+   (fn [_] (default-timestamped
+            {:database_id      (data/id)
+             :database_details {}
+             :input_schemas    []
+             :output_namespace ""
+             :status           :unprovisioned}))})
 
 ;; `with-temp` cleanup calls `t2/delete!` directly, which would hit our before-delete guard.
 ;; Bind `*allow-direct-deletion*` so with-temp cleanup works.
@@ -501,21 +517,31 @@
       (list `with-temp-env-var-value! '[a])
       (list `with-temp-env-var-value! '[a b c]))))
 
+(defn- raw-setting
+  "The `setting` row for `setting-k` as it sits in the table, or nil."
+  [setting-k]
+  (t2/select-one [:setting :value :value_with_aad] :key setting-k))
+
 (defn- upsert-raw-setting!
-  [original-value setting-k value]
+  "Write `value` for `setting-k` straight into the table, bypassing the model and so any setter: `value` bare, and
+  `value_with_aad` the way the model stores it, so the app reads the value back. A nil `value` removes the row."
+  [original setting-k value]
   (if (some? value)
-    (if original-value
-      (t2/update! :model/Setting setting-k {:value value})
-      (t2/insert! :model/Setting :key setting-k :value value))
-    (when original-value
-      (t2/delete! :model/Setting :key setting-k)))
+    (let [row {:value          value
+               :value_with_aad (encryption/maybe-encrypt value {:aad (mdb.setting/setting-aad setting-k)})}]
+      (if original
+        (t2/update! :setting :key setting-k row)
+        (t2/insert! :setting (assoc row :key setting-k))))
+    (when original
+      (t2/delete! :setting :key setting-k)))
   (setting.cache/restore-cache!))
 
 (defn- restore-raw-setting!
-  [original-value setting-k]
-  (if original-value
-    (t2/update! :model/Setting setting-k {:value original-value})
-    (t2/delete! :model/Setting :key setting-k))
+  "Put back the row [[raw-setting]] found, byte for byte, or remove the one written over nothing."
+  [original setting-k]
+  (if original
+    (t2/update! :setting :key setting-k original)
+    (t2/delete! :setting :key setting-k))
   (setting.cache/restore-cache!))
 
 (defn do-with-temporary-setting-value!
@@ -544,7 +570,7 @@
     (if (and (not raw-setting?) (setting/env-var-value setting-k))
       (do-with-temp-env-var-value! (setting/setting-env-map-name setting-k) value thunk)
       (let [original-value (if raw-setting?
-                             (t2/select-one-fn :value :model/Setting :key setting-k)
+                             (raw-setting setting-k)
                              (if skip-init?
                                (setting/read-setting setting-k)
                                (setting/get setting-k)))]
@@ -553,7 +579,7 @@
             (if raw-setting?
               (upsert-raw-setting! original-value setting-k value)
               ;; bypass the feature check when setting up mock data
-              (with-redefs [metabase.settings.models.setting/has-feature? (constantly true)]
+              (dynamic-redefs/with-dynamic-fn-redefs [metabase.settings.models.setting/has-feature? (constantly true)]
                 (setting/set! setting-k value :bypass-read-only? true)))
             (catch Throwable e
               (throw (ex-info (str "Error in with-temporary-setting-values: " (ex-message e))
@@ -568,7 +594,7 @@
               (if raw-setting?
                 (restore-raw-setting! original-value setting-k)
                 ;; bypass the feature check when reset settings to the original value
-                (with-redefs [metabase.settings.models.setting/has-feature? (constantly true)]
+                (dynamic-redefs/with-dynamic-fn-redefs [metabase.settings.models.setting/has-feature? (constantly true)]
                   (setting/set! setting-k original-value :bypass-read-only? true)))
               (catch Throwable e
                 (throw (ex-info (str "Error restoring original Setting value: " (ex-message e))
@@ -773,10 +799,10 @@
         (assert (not (qs/started? temp-scheduler))
                 "temp in-memory scheduler already started: did you use it elsewhere without shutting it down?")
         (binding [task.impl/*quartz-scheduler* (atom temp-scheduler)]
-          (with-redefs [qs/initialize (constantly temp-scheduler)
-                        ;; prevent shutting down scheduler during thunk because some custom migration shutdown scheduler
-                        ;; after it's done, but we need the scheduler for testing
-                        qs/shutdown (constantly nil)]
+          (dynamic-redefs/with-dynamic-fn-redefs [qs/initialize (constantly temp-scheduler)
+                                                  ;; prevent shutting down scheduler during thunk because some custom migration shutdown scheduler
+                                                  ;; after it's done, but we need the scheduler for testing
+                                                  qs/shutdown (constantly nil)]
             (thunk)))
         (finally
           (qs/shutdown temp-scheduler))))))
@@ -1051,6 +1077,7 @@
         called-query? (promise)
         pause-query (promise)
         query-thunk (fn []
+                      #_{:clj-kondo/ignore [:deprecated-var]}
                       (data/run-mbql-query checkins
                         {:aggregation [[:count]]}))
         ;; When the query is ran via the datasets endpoint, it will run in a future. That future can be canceled,
@@ -1341,6 +1368,7 @@
          (= (first x) 'values-of))
     (let [[_ table+field] x
           [table field] (str/split (str table+field) #"\.")]
+      #_{:clj-kondo/ignore [:deprecated-var]}
       `(into {} (get-in (data/run-mbql-query ~(symbol table)
                           {:fields [~'$id ~(symbol (str \$ field))]})
                         [:data :rows])))

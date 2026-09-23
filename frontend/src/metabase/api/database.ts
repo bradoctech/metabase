@@ -1,5 +1,11 @@
 import { updateMetadata } from "metabase/redux/metadata";
-import { DatabaseSchema, FieldSchema, TableSchema } from "metabase/schema";
+import {
+  DatabaseSchema,
+  FieldSchema,
+  SchemaSchema,
+  TableSchema,
+} from "metabase/schema";
+import { generateSchemaId } from "metabase-lib/v1/metadata/utils/schema";
 import type {
   AutocompleteRequest,
   AutocompleteSuggestion,
@@ -8,6 +14,7 @@ import type {
   CreateDatabaseRequest,
   Database,
   DatabaseId,
+  DatabaseUsageInfo,
   Field,
   GetDatabaseHealthRequest,
   GetDatabaseHealthResponse,
@@ -45,6 +52,14 @@ import { handleQueryFulfilled } from "./utils/lifecycle";
  */
 export const shouldSchemaBePassedAsQueryParam = (schema: SchemaName) =>
   /[/\\%]/.test(schema);
+
+const toNormalizedSchemas = (dbId: DatabaseId, schemaNames: SchemaName[]) =>
+  schemaNames.map((schemaName) => ({
+    id: generateSchemaId(dbId, schemaName),
+    name: schemaName,
+    database: { id: dbId },
+  }));
+
 export const databaseApi = Api.injectEndpoints({
   endpoints: (builder) => ({
     listDatabases: builder.query<
@@ -100,6 +115,13 @@ export const databaseApi = Api.injectEndpoints({
           dispatch(updateMetadata(data, DatabaseSchema)),
         ),
     }),
+    getDatabaseUsageInfo: builder.query<DatabaseUsageInfo, DatabaseId>({
+      query: (id) => ({
+        method: "GET",
+        url: `/api/database/${id}/usage_info`,
+      }),
+      providesTags: (_response, _error, id) => [idTag("database", id)],
+    }),
     getDatabaseSettingsAvailable: builder.query<
       GetDatabaseSettingsAvailableResponse,
       DatabaseId
@@ -123,6 +145,14 @@ export const databaseApi = Api.injectEndpoints({
         listTag("schema"),
         ...schemas.map((schema) => idTag("schema", schema)),
       ],
+      onQueryStarted: ({ id }, { queryFulfilled, dispatch }) =>
+        handleQueryFulfilled(queryFulfilled, (schemaNames) =>
+          dispatch(
+            updateMetadata(toNormalizedSchemas(id, schemaNames), [
+              SchemaSchema,
+            ]),
+          ),
+        ),
     }),
     listSyncableDatabaseSchemas: builder.query<SchemaName[], DatabaseId>({
       query: (id) => ({
@@ -133,6 +163,14 @@ export const databaseApi = Api.injectEndpoints({
         listTag("schema"),
         ...schemas.map((schema) => idTag("schema", schema)),
       ],
+      onQueryStarted: (id, { queryFulfilled, dispatch }) =>
+        handleQueryFulfilled(queryFulfilled, (schemaNames) =>
+          dispatch(
+            updateMetadata(toNormalizedSchemas(id, schemaNames), [
+              SchemaSchema,
+            ]),
+          ),
+        ),
     }),
     listDatabaseSchemaTables: builder.query<
       Table[],
@@ -327,6 +365,7 @@ export const {
   useGetDatabaseQuery,
   useGetDatabaseHealthQuery,
   useGetDatabaseMetadataQuery,
+  useGetDatabaseUsageInfoQuery,
   useGetDatabaseSettingsAvailableQuery,
   useListDatabaseSchemasQuery,
   useLazyListDatabaseSchemasQuery,

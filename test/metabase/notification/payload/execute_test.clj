@@ -1,4 +1,5 @@
 (ns metabase.notification.payload.execute-test
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.notification.payload.execute-test]}}}}}}
   (:require
    [clojure.test :refer :all]
    [metabase.notification.payload.execute :as notification.payload.execute]
@@ -61,13 +62,14 @@
     (mt/with-temp [:model/Card          {card-id :id} {:dataset_query (mt/mbql-query orders)}
                    :model/Dashboard     {dash-id :id} {}
                    :model/DashboardCard _ {:dashboard_id dash-id :card_id card-id}]
-      (let [row-count (fn [opts]
+      (let [row-count (fn [attached-card-ids]
                         (let [part (first (card-parts (notification.payload.execute/execute-dashboard
-                                                       dash-id (mt/user->id :rasta) [] opts)))]
+                                                       dash-id (mt/user->id :rasta) []
+                                                       {:attached-card-ids attached-card-ids})))]
                           (temp-storage/cleanup! (-> part :result :data :rows))
                           (-> part :result :row_count)))]
         (is (= 2000 (row-count nil)))
-        (is (< 2000 (row-count {:attached-card-ids #{card-id}})))))))
+        (is (< 2000 (row-count #{card-id})))))))
 
 (deftest attached-card-series-uses-display-limit-test
   (testing "additional series are display-only even when the primary card is attached"

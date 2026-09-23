@@ -9,7 +9,6 @@
    [metabase.transforms-rest.api.transform-job]
    [metabase.transforms-rest.api.transform-tag]
    [metabase.transforms.core :as transforms.core]
-   [metabase.transforms.feature-gating :as transforms.gating]
    [metabase.transforms.schema :as transforms.schema]
    [metabase.transforms.util :as transforms.u]
    [metabase.util.i18n :refer [deferred-tru]]
@@ -17,7 +16,9 @@
    [metabase.util.malli.registry :as mr]
    [metabase.util.malli.schema :as ms]
    [ring.util.response :as response]
-   [toucan2.core :as t2]))
+   [toucan2.core :as t2])
+  (:import
+   (java.time OffsetDateTime)))
 
 (comment metabase.transforms-rest.api.transform-job/keep-me
          metabase.transforms-rest.api.transform-tag/keep-me)
@@ -205,7 +206,7 @@
   [_route-params
    query-params :-
    [:map
-    [:sort-column    {:optional true} [:enum "transform-name" "start-time" "end-time" "status" "run-method" "transform-tags"]]
+    [:sort-column    {:optional true} [:enum "transform-name" "start-time" "end-time" "status" "run-method" "transform-tags" "duration"]]
     [:sort-direction {:optional true} [:enum "asc" "desc"]]
     [:transform-ids {:optional true} [:maybe (ms/QueryVectorOf ms/IntGreaterThanOrEqualToZero)]]
     [:statuses {:optional true} [:maybe (ms/QueryVectorOf [:enum "started" "succeeded" "failed" "timeout"])]]
@@ -269,7 +270,10 @@
         run       (api/check-404 (transforms.core/running-run-for-transform-id id))]
     (transforms.core/mark-cancel-started-run! (:id run))
     (when (transforms-base.u/python-transform? transform)
-      (transforms.core/cancel-run! (:id run))))
+      ;; The cancelation row was just inserted with DB `current_timestamp`; `now` is within a
+      ;; few ms of that and fine for the latency histogram, and avoids the perf/complexity cost of
+      ;; getting the exact timestamp back out of the DB.
+      (transforms.core/cancel-run! run (OffsetDateTime/now))))
   nil)
 
 (api.macros/defendpoint :post "/:id/reset-checkpoint" :- :nil
@@ -284,7 +288,7 @@
    The transform must already be fetched and validated."
   [transform]
   (transforms.core/check-feature-enabled! transform)
-  (api/check (not (transforms.gating/transform-locked? transform))
+  (api/check (not (transforms.core/transform-locked? transform))
              [402 {:message    (deferred-tru "Transforms are temporarily locked because the trial quota has been reached.")
                    :error-code "metabase_transforms_locked"}])
   (let [start-promise (promise)]
@@ -309,7 +313,7 @@
   "Run a transform."
   [{:keys [id]} :- [:map
                     [:id ms/PositiveInt]]]
-  (run-transform! (api/write-check :model/Transform id)))
+  (run-transform! (api/read-check :model/Transform id)))
 
 (def ^{:arglists '([request respond raise])} routes
   "`/api/transform` routes."

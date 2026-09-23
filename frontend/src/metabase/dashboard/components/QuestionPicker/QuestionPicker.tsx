@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { t } from "ttag";
-import _ from "underscore";
 
+import { useListCollectionsQuery } from "metabase/api";
+import { ROOT_COLLECTION } from "metabase/collections/constants";
+import getExpandedCollectionsById from "metabase/collections/getExpandedCollectionsById";
 import { isPublicCollection } from "metabase/collections/utils";
 import { Breadcrumbs } from "metabase/common/components/Breadcrumbs";
 import { Input } from "metabase/common/components/Input";
@@ -9,16 +11,16 @@ import { SelectList } from "metabase/common/components/SelectList";
 import type { BaseSelectListItemProps } from "metabase/common/components/SelectList/BaseSelectListItem";
 import { useDebouncedValue } from "metabase/common/hooks/use-debounced-value";
 import { getCollectionBreadCrumbs } from "metabase/common/utils/collections";
-import { getIcon } from "metabase/common/utils/icon";
 import { useDashboardContext } from "metabase/dashboard/context";
 import { getDashboard } from "metabase/dashboard/selectors";
 import { isEmbeddingSdk } from "metabase/embedding-sdk/config";
-import { Collections, ROOT_COLLECTION } from "metabase/entities/collections";
+import { useGetIcon } from "metabase/hooks/use-icon";
 import { PLUGIN_COLLECTIONS } from "metabase/plugins";
-import { connect, useDispatch, useSelector } from "metabase/redux";
+import { useDispatch, useSelector } from "metabase/redux";
 import {
   canUserCreateNativeQueries,
   canUserCreateQueries,
+  getUserPersonalCollectionId,
 } from "metabase/selectors/user";
 import { Button, Flex, Icon } from "metabase/ui";
 import { SEARCH_DEBOUNCE_DURATION } from "metabase/utils/constants";
@@ -34,17 +36,22 @@ import {
   TENANT_SPECIFIC_COLLECTIONS_ROOT_ID,
 } from "./utils/tenant-collection-tree";
 
-interface QuestionPickerInnerProps {
+interface QuestionPickerProps {
   onSelect: BaseSelectListItemProps["onSelect"];
-  collectionsById: Record<CollectionId, Collection>;
-  canReadRootCollection: boolean;
 }
 
-function QuestionPickerInner({
-  onSelect,
-  collectionsById: baseCollectionsById,
-  canReadRootCollection,
-}: QuestionPickerInnerProps) {
+export function QuestionPicker({ onSelect }: QuestionPickerProps) {
+  const { data: allCollectionsList = [] } = useListCollectionsQuery();
+  const userPersonalCollectionId = useSelector(getUserPersonalCollectionId);
+  const baseCollectionsById = useMemo(
+    () =>
+      getExpandedCollectionsById(
+        allCollectionsList,
+        userPersonalCollectionId,
+      ) as Record<CollectionId, Collection>,
+    [allCollectionsList, userPersonalCollectionId],
+  );
+  const getIcon = useGetIcon();
   const dispatch = useDispatch();
   const dashboard = useSelector(getDashboard);
   const dashboardCollection = dashboard?.collection ?? ROOT_COLLECTION;
@@ -55,6 +62,12 @@ function QuestionPickerInner({
   const debouncedSearchText = useDebouncedValue(
     searchText,
     SEARCH_DEBOUNCE_DURATION,
+  );
+
+  // getExpandedCollectionsById always creates a root collection,
+  // but we only want to show it if the user has access to it.
+  const canReadRootCollection = allCollectionsList.some(
+    ({ id }) => id === ROOT_COLLECTION.id,
   );
 
   const collectionsById = useCollectionsWithTenants(
@@ -177,23 +190,3 @@ function QuestionPickerInner({
     </div>
   );
 }
-
-export const QuestionPicker = _.compose(
-  Collections.load({
-    id: () => "root",
-    entityType: "collections",
-    loadingAndErrorWrapper: false,
-  }),
-  Collections.loadList({
-    entityType: "collections",
-    loadingAndErrorWrapper: false,
-  }),
-  connect((state, props: { entity: any /* collection entity instance */ }) => ({
-    collectionsById: (
-      props.entity || Collections
-    ).selectors.getExpandedCollectionsById(state),
-    canReadRootCollection: (Collections.selectors.getList(state) ?? []).some(
-      ({ id }: { id: CollectionId }) => id === ROOT_COLLECTION.id,
-    ),
-  })),
-)(QuestionPickerInner);

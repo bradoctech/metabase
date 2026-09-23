@@ -198,11 +198,13 @@
                        (filter pos-int?)
                        distinct)]
     (when (seq field-ids)
-      ;; Hydrating `:table` matters: `field-is-sandboxed?` falls back to fetching the Table per field
-      ;; without it, which is a query per column.
-      ;; Ordering by `columns` keeps the cap deterministic: the columns that lose their sample values are
-      ;; the ones furthest down the table, not whichever ones the database happened to return last.
-      (let [by-id  (m/index-by :id (t2/hydrate (t2/select :model/Field :id [:in field-ids]) :table))
+      ;; Hydrating `:table` matters for the restricted path: `field-is-sandboxed?` falls back to fetching
+      ;; the Table per field without it, which is a query per column. Nothing on the unrestricted path
+      ;; reads it, so don't pay for it there.
+      ;; Ordering by `columns` keeps the cap predictable within a table, so a column that loses its sample
+      ;; values is one further down. Across tables the order follows the caller's map and isn't sorted.
+      (let [by-id  (m/index-by :id (cond-> (t2/select :model/Field :id [:in field-ids])
+                                     (seq restricted-ids) (t2/hydrate :table)))
             fields (keep by-id field-ids)
             budget (volatile! max-value-fetches)]
         (into {}
@@ -501,8 +503,9 @@
    For fields missing fingerprints or field values, this function will
    trigger on-demand creation by querying the source database.
 
-   Sample values are always fetched under the current user's own role. For a table whose rows are restricted
-   by impersonation or a sandbox, fingerprint statistics are omitted.
+   A table whose rows are restricted for this user by connection impersonation gets no fingerprint
+   statistics, and its sample values are fetched under that user's own role rather than read from the cache
+   everyone shares. Sandboxing is not detected here; see [[row-restricted-table-ids]] for why.
 
    Parameters:
    - database-id: Database containing the tables

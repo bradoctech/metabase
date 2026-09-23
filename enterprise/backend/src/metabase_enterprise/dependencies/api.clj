@@ -408,8 +408,7 @@
                            visibility-type-column (keyword (name table-name) "visibility_type")]
                        [:and
                         [:= entity-type-field (name entity-type)]
-                        [:in entity-id-field
-                         ^:allow-subquery
+                        [:in entity-id-field ^:allow-subquery
                          {:select [:id]
                           :from   [table-name]
                           :where  [:and
@@ -1221,13 +1220,6 @@
                    (not include-personal-collections) (comp (remove in-personal-collection?)))
               (fetch-and-hydrate-nodes nodes-by-type))
         (sort-dependents sort-column sort-direction))))
-
-(api.macros/defendpoint :get "/backfill-status" :- [:map
-                                                    [:complete :boolean]]
-  "Returns whether the dependency backfill has pending work.
-  `complete` is true when there are no stale or outdated entities awaiting processing."
-  [_route-params _query-params]
-  {:complete (not (deps.dependency-status/has-stale-or-outdated?))})
 
 (api.macros/defendpoint :get "/backfill-status" :- [:map
                                                     [:complete :boolean]]
