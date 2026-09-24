@@ -63,14 +63,13 @@
   (is (=? {:lib/type :mbql/query
            :stages   [{:lib/type :mbql.stage/native
                        :template-tags
-                       {"device_category"
-                        {:widget-type  :category
+                       [{:widget-type  :category
                          :id           "e8b0b767-0f02-b640-5de3-128e7f7fd71e"
                          :name         "device_category"
                          :display-name "Device category"
                          :type         :dimension
                          :dimension    [:field {} 298221]
-                         :default      nil}}
+                         :default      nil}]
                        :native   "<<NATIVE QUERY>>"}]
            :database 26}
           (mu/disable-enforcement
@@ -129,10 +128,10 @@
             tag naming, and stale ids are only repaired during serdes import (#77516)"
     (let [tag-name "#999-some_arbitrary-slug"]
       (is (=? {:stages [{:native        (str "SELECT * FROM {{" tag-name "}}")
-                         :template-tags {tag-name {:type         :card
-                                                   :name         tag-name
-                                                   :display-name "Anything At All"
-                                                   :card-id      123}}}]}
+                         :template-tags [{:type         :card
+                                          :name         tag-name
+                                          :display-name "Anything At All"
+                                          :card-id      123}]}]}
               (write-read-query
                (native-card-tag-query tag-name
                                       {:id           "5ebf6c2e-d6e2-449e-97b7-7005047928e5"
@@ -147,8 +146,8 @@
           tag-b "#123-bar"
           sql   (str "SELECT 1 FROM {{" tag-a "}} AS a, {{" tag-b "}} AS b")]
       (is (=? {:stages [{:native        sql
-                         :template-tags {tag-a {:type :card, :name tag-a, :card-id 123}
-                                         tag-b {:type :card, :name tag-b, :card-id 123}}}]}
+                         :template-tags [{:type :card, :name tag-a, :card-id 123}
+                                         {:type :card, :name tag-b, :card-id 123}]}]}
               (write-read-query
                {:database (mt/id)
                 :type     :native

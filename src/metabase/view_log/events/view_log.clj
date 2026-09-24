@@ -51,7 +51,9 @@
         (let [cnt->ids (group-by-frequency ids)
               lock-name (view-count-lock model)]
           (log/debugf "Writing %d items to %s view counts with lock %s" (count ids) model lock-name)
-          (cluster-lock/with-cluster-lock lock-name
+          ;; :retry-transient? — the body is a single idempotent statement, safe to re-run on a
+          ;; multi-master deadlock (e.g. MariaDB Galera, where the cluster lock can't serialize writers).
+          (cluster-lock/with-cluster-lock {:lock lock-name :retry-transient? true}
             ;; Using t2/query instead of t2/update! avoids triggering Toucan2 model hooks,
             ;; specifically search-index enqueues on after-update.
             (t2/query {:update (t2/table-name model)
@@ -61,7 +63,7 @@
                                                                           cnt->ids))]}
                        :where  [:in :id (apply concat (vals cnt->ids))]})))))
     (catch Exception e
-      (log/error e "Failed to increment view counts"))))
+      (log/errorf "Failed to increment view counts: %s" (ex-message e)))))
 
 (def ^:private increment-view-count-interval-seconds 20)
 
@@ -88,7 +90,7 @@
   (try
     (t2/insert! :model/ViewLog views)
     (catch Exception e
-      (log/error e "Failed to record views"))))
+      (log/errorf "Failed to record views: %s" (ex-message e)))))
 
 (defonce ^:private record-view-queue
   (delay (grouper/start!
@@ -135,7 +137,7 @@
       (increment-view-counts! :model/Card object-id)
       (record-views! (generate-view :model :model/Card event))
       (catch Throwable e
-        (log/warnf e "Failed to process view event. %s" topic)))))
+        (log/warnf "Failed to process view event. %s: %s" topic (ex-message e))))))
 
 (derive ::card-query-model-view :metabase/event)
 (derive :event/card-query ::card-query-model-view)
@@ -157,7 +159,7 @@
                                       :user-id   user-id
                                       :context   :question)))
       (catch Throwable e
-        (log/warnf e "Failed to process card query view event. %s" topic)))))
+        (log/warnf "Failed to process card query view event. %s: %s" topic (ex-message e))))))
 
 (derive ::dashboard-queried :metabase/event)
 (derive :event/dashboard-queried ::dashboard-queried)
@@ -174,7 +176,9 @@
       ;; (specifically :hook/search-index after-update). The search index can tolerate staleness on this field: the
       ;; index will catch up on the next re-index cycle or when the dashboard is edited. This matches the pattern used
       ;; in increment-view-counts!*
-      (cluster-lock/with-cluster-lock dashboard-statistics-lock
+      ;; :retry-transient? — the body is a single idempotent statement, safe to re-run on a
+      ;; multi-master deadlock (e.g. MariaDB Galera, where the cluster lock can't serialize writers).
+      (cluster-lock/with-cluster-lock {:lock dashboard-statistics-lock :retry-transient? true}
         (t2/query {:update (t2/table-name :model/Dashboard)
                    :set    {:last_viewed_at (into [:case]
                                                   (mapcat (fn [[id timestamp]]
@@ -183,7 +187,7 @@
                             :updated_at :updated_at}
                    :where  [:in :id (keys dashboard-id->timestamp)]}))
       (catch Exception e
-        (log/error e "Failed to update dashboard last_viewed_at")))))
+        (log/errorf "Failed to update dashboard last_viewed_at: %s" (ex-message e))))))
 
 (def ^:private update-dashboard-last-viewed-at-queue
   (delay (grouper/start!
@@ -204,7 +208,7 @@
   (try
     (update-dashboard-last-viewed-at! object-id)
     (catch Throwable e
-      (log/warnf e "Failed to process dashboard query event. %s" topic))))
+      (log/warnf "Failed to process dashboard query event. %s: %s" topic (ex-message e)))))
 
 (derive ::collection-read-event :metabase/event)
 (derive :event/collection-read ::collection-read-event)
@@ -217,7 +221,7 @@
         generate-view
         record-views!)
     (catch Throwable e
-      (log/warnf e "Failed to process view event. %s" topic))))
+      (log/warnf "Failed to process view event. %s: %s" topic (ex-message e)))))
 
 (derive ::read-permission-failure :metabase/event)
 (derive :event/read-permission-failure ::read-permission-failure)
@@ -233,7 +237,7 @@
           generate-view
           record-views!))
     (catch Throwable e
-      (log/warnf e "Failed to process view event. %s" topic))))
+      (log/warnf "Failed to process view event. %s: %s" topic (ex-message e)))))
 
 (derive ::dashboard-read :metabase/event)
 (derive :event/dashboard-read ::dashboard-read)
@@ -249,7 +253,7 @@
       (increment-view-counts! :model/Dashboard object-id)
       (record-views! (generate-view :model :model/Dashboard event))
       (catch Throwable e
-        (log/warnf e "Failed to process view event. %s" topic)))))
+        (log/warnf "Failed to process view event. %s: %s" topic (ex-message e))))))
 
 (derive ::table-read :metabase/event)
 (derive :event/table-read ::table-read)
@@ -273,4 +277,4 @@
             generate-view
             record-views!))
       (catch Throwable e
-        (log/warnf e "Failed to process view event. %s" topic)))))
+        (log/warnf "Failed to process view event. %s: %s" topic (ex-message e))))))

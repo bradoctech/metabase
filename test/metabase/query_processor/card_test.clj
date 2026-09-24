@@ -210,7 +210,7 @@
 
 (defn- two-field-filter-query
   "A native query with one exact-match Field Filter (`email` / `:text`) and one permissive one
-  (`src` / `:string/contains`), the shape used to reproduce."
+  (`src` / `:string/contains`)."
   []
   (-> (lib/native-query (mt/metadata-provider) "SELECT COUNT(*) FROM PEOPLE WHERE {{email}} AND {{src}}")
       (lib/with-template-tags
@@ -326,6 +326,17 @@
                      clojure.lang.ExceptionInfo
                      #"You do not have permissions to view Card"
                      (mt/rows (process-query-for-card child-card))))))))))))
+
+(deftest ^:parallel archived-source-card-still-queryable-test
+  (testing "a card whose source is an archived card can still be run (#52071)"
+    (mt/with-temp [:model/Card {model-id :id} {:type          :model
+                                               :archived      true
+                                               :dataset_query (lib/query (mt/metadata-provider)
+                                                                         (lib.metadata/table (mt/metadata-provider) (mt/id :venues)))}
+                   :model/Card child-card {:dataset_query (let [mp (mt/metadata-provider)]
+                                                            (lib/query mp (lib.metadata/card mp model-id)))}]
+      (is (=? {:status :completed}
+              (run-query-for-card child-card))))))
 
 (deftest ^:parallel updates-metadata-provider
   (testing "should set the previous results metadata to the store"

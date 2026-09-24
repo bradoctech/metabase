@@ -10,6 +10,7 @@
    [metabase.lib.schema.id :as lib.schema.id]
    [metabase.lib.schema.join :as lib.schema.join]
    [metabase.lib.schema.metadata.fingerprint :as lib.schema.metadata.fingerprint]
+   [metabase.lib.schema.template-tag :as lib.schema.template-tag]
    [metabase.lib.schema.temporal-bucketing :as lib.schema.temporal-bucketing]
    [metabase.util.malli.registry :as mr]
    [metabase.util.performance :refer [empty? get-in]]))
@@ -528,7 +529,7 @@
     ;; columns are not in the first stage anymore! So the sandboxing middleware sets this flag to the
     ;; `:coercion-strategy`, along with `:qp/native-sandbox-column.propagate-coercion? true` (see below). Lib will
     ;; propagate the coercion strategy through *exactly one* stage boundary, so it can get from the SQL first stage to
-    ;; the earliest MBQL stage, where the coercion will get applied correctly. See QUE2-376 or #69867 for more details.
+    ;; the earliest MBQL stage, where the coercion will get applied correctly. See or #69867 for more details.
     [:qp/native-sandbox-column.force-coercion-strategy {:optional true} [:ref ::lib.schema.common/coercion-strategy]]
     ;;
     ;; See above about `:qp/native-sandbox-column.force-coercion-strategy`.
@@ -616,6 +617,9 @@
       {:error/message "If a Card result metadata column has :lib/type it MUST be a valid kebab-cased :metabase.lib.schema.metadata/column"}]]]
    [:legacy
     [:ref :metabase.legacy-mbql.schema/legacy-column-metadata]]])
+
+;;; TODO (Cam 2026-05-26) check whether we can change `::card.query` to point to `:metabase.lib.schema/query` now that
+;;; Cards should always have MBQL 5
 
 (defn- normalize-card-query [query]
   (when query
@@ -767,10 +771,9 @@
 
 (mr/def ::native-query-snippet
   [:map
-   [:lib/type [:= :metadata/native-query-snippet]]
-   [:id       ::lib.schema.id/native-query-snippet]])
-;;; TODO (Cam 8/8/25) -- description, content, archived, collection-id
-
+   [:lib/type      [:= :metadata/native-query-snippet]]
+   [:id            ::lib.schema.id/native-query-snippet]
+   [:template-tags {:optional true} [:maybe [:ref ::lib.schema.template-tag/template-tag-map]]]])
 ;;; TODO (Cam 8/8/25) -- description, content, archived, collection-id
 
 (mr/def ::table
@@ -800,8 +803,8 @@
    ;; Clj mode
    [:dbms-version    {:optional true} [:maybe :map]]
    [:details         {:optional true} :map]
-   [:engine          {:optional true} :keyword]
-   [:features        {:optional true} [:set :keyword]]
+   [:engine          {:optional true} [:keyword {:decode/normalize lib.schema.common/normalize-keyword}]]
+   [:features        {:optional true} [:set [:keyword {:decode/normalize lib.schema.common/normalize-keyword}]]]
    [:is-audit        {:optional true} :boolean]
    [:is-attached-dwh {:optional true} :boolean]
    [:settings        {:optional true} [:maybe :map]]])

@@ -13,6 +13,8 @@
    [metabase.lib.test-metadata :as meta]
    [metabase.lib.test-util :as lib.tu]
    ^{:clj-kondo/ignore [:deprecated-namespace]} [metabase.query-processor.store :as qp.store]
+   [metabase.settings.core :as setting]
+   [metabase.startup.core :as startup]
    [metabase.test :as mt]
    [metabase.test.fixtures :as fixtures]
    [metabase.util :as u]
@@ -453,12 +455,12 @@
               feature (keyword (name (ns-name *ns*)) (mt/random-name))]
           (mt/with-log-messages-for-level [log-messages [metabase.driver.util :error]]
             (is (false? (driver.u/supports? :test-driver feature db)))
-            (is (some (fn [{:keys [level e message]}]
+            (is (some (fn [{:keys [level message]}]
                         (and (= level :error)
-                             (= (ex-message e) "test exception message")
-                             (= message (u/format-color 'red "Failed to check feature '%s' for database '%s'"
+                             (= message (u/format-color 'red "Failed to check feature '%s' for database %s: %s"
                                                         (u/qualified-name feature)
-                                                        (:name db)))))
+                                                        (:id db)
+                                                        "test exception message"))))
                       (log-messages)))))))))
 
 (deftest supports?-failure-test-2
@@ -471,12 +473,12 @@
                         driver/database-supports? (fn [_ _ _] (Thread/sleep 200) true)]
             (mt/with-log-messages-for-level [log-messages [metabase.driver.util :error]]
               (is (false? (driver.u/supports? :test-driver feature db)))
-              (is (some (fn [{:keys [level e message]}]
+              (is (some (fn [{:keys [level message]}]
                           (and (= level :error)
-                               (= (ex-message e) "Timed out after 100.0 ms")
-                               (= message (u/format-color 'red "Failed to check feature '%s' for database '%s'"
+                               (= message (u/format-color 'red "Failed to check feature '%s' for database %s: %s"
                                                           (u/qualified-name feature)
-                                                          (:name db)))))
+                                                          (:id db)
+                                                          "Timed out after 100.0 ms"))))
                         (log-messages)))))
           (testing "we memoize the results for the same database, so we don't log the error again"
             (mt/with-log-messages-for-level [log-messages [metabase.driver.util :error]]
@@ -484,14 +486,44 @@
               (is (= []
                      (log-messages))))))))))
 
+(deftest features-batched-matches-per-feature-test
+  (testing "bounding the whole scan instead of each check does not change which features come back"
+    (let [db (driver.u/ensure-lib-database (mt/db))]
+      (is (= (#'driver.u/features* :h2 db)
+             (#'driver.u/features-batched* :h2 db))))))
+
+(deftest features-batched-falls-back-when-budget-blown-test
+  (testing "a blown batch budget falls back to the per-feature path instead of throwing or truncating"
+    (let [db (driver.u/ensure-lib-database (mt/db))]
+      ;; Each check is slow enough that the whole scan overruns the batch budget, but far short of the
+      ;; per-feature timeout, so the fallback path answers every feature rather than degrading to false.
+      (with-redefs [driver.u/features-timeout-ms (constantly 5)
+                    driver/database-supports? (fn [_ _ _] (Thread/sleep 1) true)]
+        (let [expected (#'driver.u/features* :h2 db)]
+          (is (seq expected) "the fallback has to return a real feature set for this comparison to mean anything")
+          (is (= expected
+                 (#'driver.u/features-batched* :h2 db))))))))
+
 (deftest sqlite-in-available-drivers
   (with-redefs [driver.impl/hierarchy (->  (derive (make-hierarchy) :sqlite :metabase.driver/driver)
                                            (derive :sqlite :metabase.driver.impl/concrete))]
     (testing "includes sqlite in non-hosted environment"
       (is (contains? (driver.u/available-drivers) :sqlite)))
     (mt/with-premium-features #{:hosting}
-      (testing "does not include sqlite in hosted environment"
-        (is (not (contains? (driver.u/available-drivers) :sqlite)))))))
+      (testing "include sqlite in hosted environment"
+        (is (contains? (driver.u/available-drivers) :sqlite))))))
+
+(deftest sqlite-creatable-engine-test
+  (testing "sqlite is always present in the engines info (the FE needs its metadata for the bundled Sample Database)"
+    (testing "and is creatable off hosted Metabase"
+      (mt/with-premium-features #{}
+        (is (true? (get-in (driver.u/available-drivers-info) [:sqlite :creatable?])))))
+    (testing "but is marked not creatable on hosted Metabase, while staying in the map"
+      (mt/with-premium-features #{:hosting}
+        (is (contains? (driver.u/available-drivers-info) :sqlite))
+        (is (false? (get-in (driver.u/available-drivers-info) [:sqlite :creatable?])))
+        (testing "other warehouse engines stay creatable"
+          (is (true? (get-in (driver.u/available-drivers-info) [:postgres :creatable?]))))))))
 
 (deftest ^:parallel process-connection-prop-test
   (testing "process-connection-prop handles different property types"
@@ -708,9 +740,7 @@
                 (ssrf-error #(driver.u/validate-connection-hosts! :postgres details)))
             (str "should be refused: " (pr-str details)))))
     (testing "a driver whose database really is a file, rather than a client with a default host, still has no host"
-      ;; master checks :sqlite here, but on this branch sqlite is still a driver module and not on the classpath of
-      ;; every backend test job; :h2 is the file-backed driver that ships in core here.
-      (is (nil? (driver.u/validate-connection-hosts! :h2 {:db "/tmp/whatever.db"}))))
+      (is (nil? (driver.u/validate-connection-hosts! :sqlite {:db "/tmp/whatever.db"}))))
     (testing "auth-provider URLs are fetched by Metabase itself, so they are checked too"
       (is (=? {:status-code 400}
               (ssrf-error #(driver.u/validate-connection-hosts!
@@ -944,8 +974,39 @@
       (is (= :external-only (driver.settings/warehouse-allowed-networks)))
       (is (=? {:status-code 400}
               (ssrf-error #(driver.u/validate-connection-hosts! :postgres {:host "127.0.0.1"}))))))
-  (testing "an unrecognized policy fails closed at the point of use rather than quietly allowing everything"
+  (testing "an unrecognized policy is refused outright rather than silently leaving the instance on some other
+           policy -- startup reads this Setting, so the instance does not come up at all"
     (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "unknown-policy"]
       (is (thrown-with-msg? clojure.lang.ExceptionInfo
-                            #"Unknown network policy"
-                            (driver.u/validate-connection-hosts! :postgres {:host "127.0.0.1"}))))))
+                            #"Invalid MB_WAREHOUSE_ALLOWED_NETWORKS"
+                            (driver.settings/warehouse-allowed-networks))))))
+
+(deftest warehouse-allowed-networks-is-environment-only-test
+  (testing "the policy is read from the environment only: a value that reached the setting table -- an older
+           version's admin API, a serialization import, a direct write -- is ignored, not trusted"
+    (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks nil]
+      (mt/with-premium-features #{:hosting}
+        (mt/with-temporary-raw-setting-values [warehouse-allowed-networks "allow-all"]
+          (is (= :external-only (driver.settings/warehouse-allowed-networks)))
+          (is (=? {:status-code 400}
+                  (ssrf-error #(driver.u/validate-connection-hosts! :postgres {:host "127.0.0.1"}))))))))
+  (testing "and the environment still wins over a stored value"
+    (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "allow-private"]
+      (mt/with-temporary-raw-setting-values [warehouse-allowed-networks "external-only"]
+        (is (= :allow-private (driver.settings/warehouse-allowed-networks))))))
+  (testing "nothing can write it: it is a read-only Setting"
+    (is (thrown-with-msg? UnsupportedOperationException
+                          #"read-only setting"
+                          (setting/set! :warehouse-allowed-networks :allow-all)))))
+
+(deftest warehouse-allowed-networks-startup-validation-test
+  (testing "a policy the environment names but Metabase does not recognize stops the boot, rather than waiting
+           for the first query to discover it"
+    (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "allow-everything"]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"Invalid MB_WAREHOUSE_ALLOWED_NETWORKS"
+                            (startup/def-startup-validation! ::driver.settings/warehouse-allowed-networks)))))
+  (testing "a policy it does recognize lets the boot continue"
+    (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "allow-private"]
+      (is (= :allow-private
+             (startup/def-startup-validation! ::driver.settings/warehouse-allowed-networks))))))

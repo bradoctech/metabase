@@ -367,6 +367,7 @@
                (map :name (t2/select [:model/Table :name]
                                      :db_id (u/the-id db)
                                      {:order-by [[:id :asc]]}))))))))
+
 (deftest sample-database-tables-data-authority-test
   (testing "Tables from sample databases should be marked as :ingested"
     (mt/with-temp [:model/Database sample-db {:is_sample true}

@@ -73,9 +73,10 @@
          (seq data))
     (str "```json\n" (json/encode data {:pretty true}) "\n```")))
 
-(defn- escape-xml
+(defn escape-xml
   "Escape XML special characters in a string.
-   Only needed for content that bypasses Selmer's auto-escaping (marked with |safe)."
+   Only needed for content that bypasses Selmer's auto-escaping (marked with |safe) or is interpolated
+   into hand-built XML."
   [s]
   (when s
     (-> (str s)
@@ -170,7 +171,7 @@
         (-> (selmer/render template payload)
             str/trim)
         (catch Exception e
-          (log/error e "Error rendering LLM representations template" {:type type})
+          (log/error "Error rendering LLM representations template" {:type type :error (ex-message e)})
           (pr-str payload)))
       (do
         (log/warn "LLM representations template missing" {:template llm-template-name})
@@ -239,33 +240,52 @@
     :collection_description     description
     :collection_authority_level authority_level}))
 
+(defn- drill-in-location-context
+  "The `<pfx>_database_name` / `<pfx>_base_table_fqn` keys a standalone measure/segment drill-in carries so
+  the LLM knows the table to query it against. Omitted when absent, so a nested (definition-only)
+  measure/segment doesn't emit blank location fields."
+  [pfx {:keys [database_name base_table_portable_fk]}]
+  (cond-> {}
+    database_name (assoc (keyword (str pfx "_database_name")) database_name)
+    (vector? base_table_portable_fk)
+    (assoc (keyword (str pfx "_base_table_fqn"))
+           (let [[_db schema table] base_table_portable_fk] (fully-qualified-name schema table)))))
+
 (defn measure->xml
-  "Format a measure for LLM consumption."
+  "Format a measure for LLM consumption.
+   Nested table/model measures carry only definition fields; a standalone drill-in
+   (read_resource) also carries `:database_name` / `:base_table_portable_fk` so the LLM knows the
+   table to query the measure against."
   [{:keys [id name display-name description definition definition-description
-           portable-entity-id portable_entity_id]}]
+           portable-entity-id portable_entity_id] :as m}]
   (render-llm-template
    :measure
-   {:measure_id                 (str id)
-    :measure_name               (or name "")
-    :measure_display_name       (or display-name name "")
-    :measure_description        description
-    :measure_portable_entity_id (or portable-entity-id portable_entity_id)
-    :measure_definition         (repr-data->llm-block definition)
-    :measure_definition_description definition-description}))
+   (merge {:measure_id                 (str id)
+           :measure_name               (or name "")
+           :measure_display_name       (or display-name name "")
+           :measure_description        description
+           :measure_portable_entity_id (or portable-entity-id portable_entity_id)
+           :measure_definition         (repr-data->llm-block definition)
+           :measure_definition_description definition-description}
+          (drill-in-location-context "measure" m))))
 
 (defn segment->xml
-  "Format a segment for LLM consumption."
+  "Format a segment for LLM consumption.
+   Nested table/model segments carry only definition fields; a standalone drill-in
+   (read_resource) also carries `:database_name` / `:base_table_portable_fk` so the LLM knows the
+   table to query the segment against."
   [{:keys [id name display-name description definition definition-description
-           portable-entity-id portable_entity_id]}]
+           portable-entity-id portable_entity_id] :as m}]
   (render-llm-template
    :segment
-   {:segment_id                 (str id)
-    :segment_name               (or name "")
-    :segment_display_name       (or display-name name "")
-    :segment_description        description
-    :segment_portable_entity_id (or portable-entity-id portable_entity_id)
-    :segment_definition         (repr-data->llm-block definition)
-    :segment_definition_description definition-description}))
+   (merge {:segment_id                 (str id)
+           :segment_name               (or name "")
+           :segment_display_name       (or display-name name "")
+           :segment_description        description
+           :segment_portable_entity_id (or portable-entity-id portable_entity_id)
+           :segment_definition         (repr-data->llm-block definition)
+           :segment_definition_description definition-description}
+          (drill-in-location-context "segment" m))))
 
 (def ^:private max-related-table-description-length
   "Cap on a related table's description."
@@ -699,7 +719,7 @@
    gives the LLM the full portable FK `[database_name, schema, table]` it must put in
    `source-table:` when using `[metric, {}, <portable_entity_id>]` as an aggregation —
    without a separate `read_resource` round-trip."
-  [{:keys [id type name description verified collection
+  [{:keys [id type name description verified official curated data_authority data_layer collection
            database_id database_name database_engine database_schema portable_entity_id
            base_table_portable_fk]}]
   (let [fqn (cond
@@ -725,6 +745,13 @@
       :search_name name
       :search_has_verified (some? verified)
       :search_verified verified
+      :search_has_official (some? official)
+      :search_official official
+      :search_has_curated (some? curated)
+      :search_curated curated
+      :search_data_layer (some-> data_layer clojure.core/name)
+      :search_data_authority (when (and data_authority (not= "unconfigured" (clojure.core/name data_authority)))
+                               (clojure.core/name data_authority))
       :search_description description
       :search_collection_name (:name collection)
       :search_database_id (when database_id (str database_id))
@@ -825,6 +852,8 @@
 (def formatters
   "XML formatters for different entity types"
   {:metric     metric->xml
+   :measure    measure->xml
+   :segment    segment->xml
    :table      table->xml
    :model      model->xml
    :question   question->xml
@@ -875,22 +904,25 @@
      {:list-type :databases     ; keyword, becomes the type attribute
       :items     [{:type \"database\" :id 1 :name \"Sample\" :uri \"...\" :description \"...\"} ...]
       :total     5
-      :truncated false}
+      :page      1
+      :pages     1}
 
    Output shape:
-     <list type=\"databases\" total=\"5\" truncated=\"false\">
+     <list type=\"databases\" total=\"5\" page=\"1\" pages=\"1\" showing=\"5\" truncated=\"false\">
        <item type=\"database\" id=\"1\" name=\"Sample\" uri=\"metabase://database/1\">Description</item>
        ...
      </list>"
-  [{:keys [list-type items total truncated]}]
+  [{:keys [list-type items total page pages]}]
   (let [type-attr (clojure.core/name (or list-type :items))
         item-xml  (str/join "\n" (map list-item->xml items))
         showing   (count items)
+        truncated (< page pages)
         note      (when truncated
-                    (str "<truncation-note>Showing " showing " of " total ". "
-                         "More items exist — read individual items via their URIs above "
-                         "or refine via search.</truncation-note>"))]
+                    (str "<truncation-note>Page " page " of " pages " (" showing " of " total " items). "
+                         "Append ?page=" (inc page) " to the URI to fetch the next page.</truncation-note>"))]
     (str "<list type=\"" type-attr "\" total=\"" total
+         "\" page=\"" (or page 1)
+         "\" pages=\"" (or pages 1)
          "\" showing=\"" showing
          "\" truncated=\"" (boolean truncated) "\">\n"
          (when (seq items) (str item-xml "\n"))

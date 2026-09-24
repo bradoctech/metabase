@@ -7,7 +7,7 @@
   patch up the sort of shape drift that LLMs routinely produce:
 
     * missing `{}` options on clauses (LLMs forget to emit empty maps);
-    * missing `\"lib/type\"` marker on stages and on the top-level query;
+    * missing `\"lib/type\"` marker on stages, joins, and the top-level query;
     * stage / clause shape normalisations covering common LLM-authored variants
       (see the per-pass docstrings below).
 
@@ -338,6 +338,51 @@
    form))
 
 ;;; ============================================================
+;;; Pass 1.815 -- drop unsupported `get-day-of-week` week-mode arguments.
+;;;
+;;; `get-day-of-week` accepts a positional week-mode (`["get-day-of-week" {} <field> <mode>]`).
+;;; The `::week-mode` schema allows `:iso`, `:us`, and `:instance` (shared with `get-week`), but
+;;; only the no-mode (default) and `:iso` forms actually have a lowering in
+;;; `metabase.lib.filter.desugar` - `:us` / `:instance` desugar to a **nil** temporal-extract unit
+;;; and blow up with an opaque 500 at SQL-compilation time (observed: an LLM emitting
+;;; `["get-day-of-week" {} <field> "instance"]` for "day of week on weekends").
+;;;
+;;; The default (no-mode) `get-day-of-week` already extracts the day-of-week relative to the
+;;; instance's start-of-week setting. For `:instance` that is an exact equivalence - default *is*
+;;; the instance semantics. For `:us` it is a best-effort substitution, NOT an equivalence: `:us`
+;;; would fix the week to start on Sunday, whereas the default honours the instance's start-of-week
+;;; setting, so the two diverge whenever that setting isn't Sunday. We accept the substitution
+;;; anyway because `get-day-of-week` has no `:us` lowering at all (unlike `get-week`), so the only
+;;; alternative is the opaque 500. Dropping to the default keeps the query running and close to the
+;;; model's intent. `:iso` and the bare (no-mode) forms are left untouched.
+;;;
+;;; Runs after `ensure-clause-options*`, so the options map is already at position 1 and the mode,
+;;; when present, is the single trailing arg at position 3. Idempotent: once the mode is dropped
+;;; the clause has arity 3 and the predicate no longer fires.
+;;; ============================================================
+
+(defn- get-day-of-week-clause-with-mode?
+  "True when `node` is `[\"get-day-of-week\" <opts-map> <field> <mode>]` (arity 4) whose mode is an
+  unsupported (non-`iso`) string. `nil`/absent mode (arity 3) and `iso` are left alone."
+  [node]
+  (and (vector? node)
+       (= 4 (count node))
+       (= "get-day-of-week" (nth node 0))
+       (map? (nth node 1))
+       (let [mode (nth node 3)]
+         (and (string? mode)
+              (not= "iso" (u/lower-case-en (str/trim mode)))))))
+
+(defn- drop-unsupported-day-of-week-mode*
+  [form]
+  (walk/postwalk
+   (fn [node]
+     (if (get-day-of-week-clause-with-mode? node)
+       (subvec node 0 3)
+       node))
+   form))
+
+;;; ============================================================
 ;;; Pass 1.85 -- canonicalise order-by direction aliases.
 ;;;
 ;;; The lib schema accepts only `[asc, {}, <ref>]` and `[desc, {}, <ref>]` as order-by
@@ -386,6 +431,27 @@
    (fn [node]
      (if (direction-alias-clause? node)
        (assoc node 0 (get direction-aliases (u/lower-case-en (nth node 0))))
+       node))
+   form))
+
+;;; ============================================================
+;;; Pass 1.87 -- rewrite known misspelled `lib/type` markers to their canonical value.
+;;;
+;;; Pass 2's `infer-*` helpers only FILL a missing marker; they never rewrite a present one.
+;;; This pass handles the present-but-wrong case via a small alias table, exactly like the
+;;; `rewrite-operator-name-aliases*` / `rewrite-temporal-bucket-aliases*` passes.
+;;; ============================================================
+
+(def ^:private lib-type-aliases
+  "Known LLM misspellings of a `lib/type` marker -> its canonical value."
+  {"mbql.join/join" "mbql/join"})
+
+(defn- rewrite-lib-type-aliases*
+  [form]
+  (walk/postwalk
+   (fn [node]
+     (if-let [canonical (and (map? node) (lib-type-aliases (get node "lib/type")))]
+       (assoc node "lib/type" canonical)
        node))
    form))
 
@@ -486,6 +552,53 @@
   (walk/postwalk
    (fn [node]
      (if (needs-trailing-options-merge? node)
+       (merge-trailing-options node)
+       node))
+   form))
+
+;;; ============================================================
+;;; Pass 1.89 -- merge a trailing options-map into position-1 on N-ary string-search filters
+;;; (`contains` / `does-not-contain` / `starts-with` / `ends-with`).
+;;;
+;;; These four string filters are N-ary in MBQL (`[op opts field val1 val2 …]`, at least two
+;;; string args) and carry their `case-sensitive` flag in the position-1 options map (see
+;;; `metabase.lib.schema.filter/string-filter-options`). Because they're variadic, the
+;;; fixed-arity [[merge-trailing-options*]] pass deliberately skips them -- there, a trailing
+;;; map could be a legitimate arg. LLMs nonetheless append the case-sensitivity options as a
+;;; trailing element, e.g.
+;;;
+;;;   ["contains" {} <field> "@gmail.com" {"case-sensitive" false}]
+;;;
+;;; A string-search value is always a string, never a map, so a trailing map is unambiguously
+;;; misplaced options. We merge it into position-1 (trailing keys win) and drop it. Left
+;;; unrepaired, `lib.normalize` cannot normalise the clause and the query explodes downstream
+;;; with a missing-`lib/uuid` "Invalid output" error.
+;;;
+;;; Runs after [[ensure-clause-options*]] so position 1 is already a map. Idempotent: the
+;;; repaired clause's last element is a string arg, so the predicate fails on a second pass.
+;;; ============================================================
+
+(def ^:private string-search-filter-heads
+  "N-ary string-search filter heads whose options (e.g. `case-sensitive`) belong in the
+  position-1 options map. See `metabase.lib.schema.filter`."
+  #{"contains" "does-not-contain" "starts-with" "ends-with"})
+
+(defn- needs-string-filter-options-merge?
+  "True when `node` is an N-ary string-search filter whose last element is a misplaced trailing
+  options map (the args before it are string values, never maps). See the pass docstring above."
+  [node]
+  (and (clause-like? node)
+       (contains? string-search-filter-heads (nth node 0))
+       ;; head + opts + field + >=1 value + trailing options-map
+       (>= (count node) 5)
+       (map? (nth node 1))
+       (map? (peek node))))
+
+(defn- merge-string-filter-trailing-options*
+  [form]
+  (walk/postwalk
+   (fn [node]
+     (if (needs-string-filter-options-merge? node)
        (merge-trailing-options node)
        node))
    form))
@@ -764,7 +877,11 @@
   (let [head (u/lower-case-en (nth node 0))
         x    (nth node 2)]
     (case head
-      "true"  x
+      ;; Always emit a vector so we don't expose a bare scalar (`["true" {} x]` -> `x`) that a
+      ;; sole-element parent would turn into an un-optioned clause `[x]`, which a later `repair`
+      ;; pass would then "fix" to `[x {}]` - breaking idempotency. A wrapped clause is returned
+      ;; as-is; a wrapped scalar becomes a clause with an empty options map.
+      "true"  (if (vector? x) x [x {}])
       "false" ["not" {} x])))
 
 (defn- unwrap-boolean-wrappers*
@@ -1171,13 +1288,26 @@
        (contains? m "database")
        (contains? m "stages")))
 
+(defn- join-like-map?
+  "A map that looks like an explicit join: it carries join-only keys (`conditions`, or
+  `alias`+`stages`) that never appear on a stage or top-level query. We key on these rather
+  than on `\"fields\"` (which a join shares with a stage) so a join is not mistaken for a
+  stage by [[stage-like-map?]]."
+  [m]
+  (and (map? m)
+       (or (contains? m "conditions")
+           (and (contains? m "alias")
+                (contains? m "stages")))))
+
 (defn- stage-like-map?
   "A map that looks like an MBQL stage: has `\"source-table\"`, `\"source-card\"`, or any of the
   stage-body keys (`filters`, `aggregation`, `breakout`, `order-by`, `fields`, `joins`,
-  `expressions`, `limit`). Not a top-level query."
+  `expressions`, `limit`). Not a top-level query and not an explicit join (a join can carry
+  `\"fields\"`, so we exclude it explicitly)."
   [m]
   (and (map? m)
        (not (top-level-query-map? m))
+       (not (join-like-map? m))
        (boolean
         (some #(contains? m %)
               ["source-table" "source-card" "filters" "aggregation"
@@ -1186,6 +1316,11 @@
 (defn- infer-query-lib-type [m]
   (if (and (top-level-query-map? m) (not (contains? m "lib/type")))
     (assoc m "lib/type" "mbql/query")
+    m))
+
+(defn- infer-join-lib-type [m]
+  (if (and (join-like-map? m) (not (contains? m "lib/type")))
+    (assoc m "lib/type" "mbql/join")
     m))
 
 (defn- infer-stage-lib-type [m]
@@ -1197,7 +1332,7 @@
   (walk/postwalk
    (fn [node]
      (if (map? node)
-       (-> node infer-query-lib-type infer-stage-lib-type)
+       (-> node infer-query-lib-type infer-join-lib-type infer-stage-lib-type)
        node))
    form))
 
@@ -2127,8 +2262,8 @@
           cols          (lib/returned-columns lib-q)]
       (column-descriptors cols))
     (catch Exception e
-      (log/debugf e "[repr-repair] mini-resolve of stages[0..%d] failed; skipping cross-stage type inference for stage %d"
-                  (dec stage-idx) stage-idx)
+      (log/debugf "[repr-repair] mini-resolve of stages[0..%d] failed; skipping cross-stage type inference for stage %d: %s"
+                  (dec stage-idx) stage-idx (ex-message e))
       nil)))
 
 (defn- strip-surrounding-double-quotes
@@ -2250,8 +2385,8 @@
               cols       (lib/returned-columns lib-q)]
           (column-descriptors cols))
         (catch Exception e
-          (log/debugf e "[repr-repair] source-card resolve of stage %d failed; skipping field-type inference"
-                      stage-idx)
+          (log/debugf "[repr-repair] source-card resolve of stage %d failed; skipping field-type inference: %s"
+                      stage-idx (ex-message e))
           nil)))))
 
 (defn- infer-source-card-field-types*
@@ -2577,8 +2712,11 @@
       dequote-field-targets*
       rewrite-operator-name-aliases*
       rewrite-temporal-bucket-aliases*
+      drop-unsupported-day-of-week-mode*
       rewrite-direction-aliases*
+      rewrite-lib-type-aliases*
       merge-trailing-options*
+      merge-string-filter-trailing-options*
       wrap-iso-date-bounds*
       wrap-now-literals*
       swap-between-bounds*
@@ -2604,9 +2742,11 @@
     1.75. strip stray surrounding double-quotes from the string segments of `field` clauses'
        portable-FK vector targets, e.g. `\"col\"` → `col` (cross-stage string targets are left
        to the resolution-aware cross-stage matching in pass 5);
+    1.87. rewrite a known-misspelled `\"lib/type\"` marker to its canonical value (e.g. the
+       join slip `\"mbql.join/join\"` → `\"mbql/join\"`);
     1.88. merge a trailing extra options-map back into position-1 options on fixed-arity
        tuple clauses (e.g. `[\"time-interval\" {} <expr> -1 \"month\" {\"include-current\" true}]`);
-    2. fill in missing `\"lib/type\"` markers on the query and stages;
+    2. fill in missing `\"lib/type\"` markers on the query, joins, and stages;
     3. rewrite inline aggregation expressions in `order-by` to aggregation references when
        they match an aggregation in the same stage's `aggregation:` list (synthesising the
        referenced aggregation's `lib/uuid` if needed);

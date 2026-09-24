@@ -84,7 +84,7 @@
     (fn [e]
       (when strict?
         (throw e))
-      (log/errorf e "Error normalizing query %s" (pr-str query))
+      (log/errorf "Error normalizing query: %s" (ex-message e))
       {}))))
 
 (defn- transform-query-in [query]
@@ -109,7 +109,7 @@
              normalize-query
              lib/prepare-after-deserialization)))
      (fn [e]
-       (log/errorf e "Error deserializing dataset_query from app DB: %s" (ex-message e))
+       (log/errorf "Error deserializing dataset_query from app DB: %s" (ex-message e))
        {}))))
 
 (def transform-query

@@ -254,20 +254,6 @@
                    (tru "Tables can only be published to Library/Data collections."))
     (api/check-403 (every? mi/can-query? tables))))
 
-(defn- check-can-publish-tables-to-collection!
-  "Check that the current user may publish `tables` into the Collection with `collection-id`.
-
-  Publishing a Table is what makes it queryable by everyone who can read that Collection, so it is held to the same
-  bar as `POST /api/ee/data-studio/table/publish-tables`: the caller is a data analyst, the destination is a
-  Library/Data Collection, and they can already query every Table involved. Permission to edit a Table's metadata is
-  not permission to hand out access to its data."
-  [tables collection-id]
-  (api/check-data-analyst)
-  (let [collection (api/check-404 (t2/select-one :model/Collection :id collection-id))]
-    (api/check-400 (= (:type collection) collections/library-data-collection-type)
-                   (tru "Tables can only be published to Library/Data collections."))
-    (api/check-403 (every? mi/can-query? tables))))
-
 (defn- update-tables!
   [ids {:keys [collection_id visibility_type] :as body}]
   (let [existing-tables (t2/select :model/Table :id [:in ids])]

@@ -346,6 +346,28 @@
                          :fields      (symbol "nil #_\"key is not present.\"")}]}
               (lib.drill-thru/drill-thru query drill))))))
 
+(deftest ^:parallel chart-other-slice-click-test
+  (testing "chart clicks with grouped breakout values use an in filter (#5334)"
+    (let [query    (-> (lib/query meta/metadata-provider (meta/table-metadata :orders))
+                       (lib/aggregate (lib/count))
+                       (lib/breakout (meta/field-metadata :products :category)))
+          cols     (lib/returned-columns query)
+          category (lib.tu.notebook/find-col-with-spec query cols {} {:display-name "Category"})
+          context  {:column     nil
+                    :column-ref nil
+                    :value      nil
+                    :dimensions [{:column     category
+                                  :column-ref (lib/ref category)
+                                  :value      ["Gadget" "Doohickey"]}]}
+          drill    (m/find-first #(= (:type %) :drill-thru/underlying-records)
+                                 (lib.drill-thru/available-drill-thrus query context))]
+      (is (=? {:lib/type :mbql/query
+               :stages [{:filters     [[:in {} [:field {} (meta/id :products :category)] "Gadget" "Doohickey"]]
+                         :aggregation (symbol "nil #_\"key is not present.\"")
+                         :breakout    (symbol "nil #_\"key is not present.\"")
+                         :fields      (symbol "nil #_\"key is not present.\"")}]}
+              (lib.drill-thru/drill-thru query drill))))))
+
 (deftest ^:parallel preserve-temporal-bucket-test
   (testing "preserve the temporal bucket on a breakout column in the previous stage (#13504 #36582)"
     (let [base-query     (-> (lib/query meta/metadata-provider (meta/table-metadata :orders))
@@ -575,6 +597,43 @@
                   lib.join/joins
                   first
                   lib.join/join-fields))))))
+
+(deftest ^:parallel preserve-column-selection-after-drill-thru-test
+  (testing "underlying records should keep the join's column selection (#69105)"
+    (let [query        (-> (lib/query meta/metadata-provider (meta/table-metadata :orders))
+                           (lib/join (-> (lib/join-clause (meta/table-metadata :products))
+                                         (lib/with-join-fields [(meta/field-metadata :products :id)
+                                                                (meta/field-metadata :products :category)])))
+                           (lib/aggregate (lib/count)))
+          query        (lib/breakout query (m/find-first #(= (:name %) "CATEGORY")
+                                                         (lib/breakoutable-columns query)))
+          count-col    (m/find-first #(= (:name %) "count")
+                                     (lib/returned-columns query))
+          category-col (m/find-first #(= (:name %) "CATEGORY")
+                                     (lib/returned-columns query))
+          context      {:column     count-col
+                        :column-ref (lib/ref count-col)
+                        :value      4939
+                        :row        [{:column     category-col
+                                      :column-ref (lib/ref category-col)
+                                      :value      "Gadget"}
+                                     {:column     count-col
+                                      :column-ref (lib/ref count-col)
+                                      :value      4939}]
+                        :dimensions [{:column     category-col
+                                      :column-ref (lib/ref category-col)
+                                      :value      "Gadget"}]}
+          drill        (m/find-first #(= (:type %) :drill-thru/underlying-records)
+                                     (lib/available-drill-thrus query context))
+          drilled      (lib/drill-thru query drill)]
+      (is (=? [[:field {} (meta/id :products :id)]
+               [:field {} (meta/id :products :category)]]
+              (-> drilled lib.join/joins first lib.join/join-fields)))
+      (is (= #{(meta/id :products :id) (meta/id :products :category)}
+             (into #{}
+                   (comp (filter #(= (:table-id %) (meta/id :products)))
+                         (map :id))
+                   (lib/returned-columns drilled)))))))
 
 (deftest ^:parallel breakout-by-expression-test
   (testing "underlying records for a query with a breakout on an expression should produce a correct ref (#59005)"
@@ -973,3 +1032,37 @@
                          :breakout     (symbol "nil #_\"key is not present.\"")
                          :fields       (symbol "nil #_\"key is not present.\"")}]}
               result)))))
+
+(deftest ^:parallel native-card-day-breakout-drill-test
+  ;; The day bucket produces a single-day `:between` (identical bounds) - not a multi-day range - which the
+  ;; filters panel renders as "CREATED_AT is Oct 11, 2026". This is the regression #54108 guarded.
+  (testing "underlying-records drill on a day-bucketed breakout over a native card keeps the model as
+            source-card and filters the single clicked day (#54108)"
+    (let [mp         (lib.tu/metadata-provider-with-mock-cards)
+          card       (:orders/native (lib.tu/mock-cards))
+          query      (as-> (lib/query mp card) q
+                       (lib/aggregate q (lib/count))
+                       (lib/breakout q (lib/with-temporal-bucket
+                                         (m/find-first #(= (:name %) "CREATED_AT")
+                                                       (lib/breakoutable-columns q))
+                                         :day)))
+          cols       (lib/returned-columns query)
+          count-col  (m/find-first #(= (:name %) "count") cols)
+          _          (is (some? count-col))
+          created-at (m/find-first #(= (:name %) "CREATED_AT") cols)
+          _          (is (some? created-at))
+          context    {:column     count-col
+                      :column-ref (lib/ref count-col)
+                      :value      6
+                      :dimensions [{:column     created-at
+                                    :column-ref (lib/ref created-at)
+                                    :value      "2026-10-11T00:00:00Z"}]}
+          drill      (m/find-first #(= (:type %) :drill-thru/underlying-records)
+                                   (lib/available-drill-thrus query context))]
+      (is (some? drill))
+      (is (=? [{:source-card (:id card)
+                :filters     [[:between {}
+                               [:field {:temporal-unit :day} "CREATED_AT"]
+                               "2026-10-11"
+                               "2026-10-11"]]}]
+              (:stages (lib/drill-thru query drill)))))))

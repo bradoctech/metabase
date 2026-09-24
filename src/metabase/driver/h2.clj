@@ -32,24 +32,35 @@
    [metabase.util.malli :as mu]
    [metabase.util.performance :as perf :refer [every? some]])
   (:import
-   (java.sql Clob Connection ResultSet ResultSetMetaData SQLException Statement Types)
+   (java.sql Clob Connection ResultSet ResultSetMetaData SQLException Statement)
    (java.time OffsetTime)
+   (org.h2.api JavaObjectSerializer)
    (org.h2.command CommandInterface Parser)
    (org.h2.engine SessionLocal)
-   (org.h2.util StringUtils)))
+   (org.h2.util JdbcUtils StringUtils)))
 
 (set! *warn-on-reflection* true)
 
 ;; method impls live in this namespace
 (comment h2.actions/keep-me)
 
-(driver/register! :h2, :parent #{:sql-jdbc ::like-escape-char-built-in/like-escape-char-built-in})
+(driver/register! :h2, :parent #{:sql-jdbc ::like-escape-char-built-in/like-escape-char-built-in :sql-mbql5})
 
-;; h2 can be used to generate mbql5 natively, but this is not the default yet.
-;; we need to gather more data from the experiment (see query-processor/mbql->honeysql)
-;; before we can switch this over. once that happens, make regular :h2 have
-;; :sql-mbql5 as a parent and move the :h2-mbql5 methods below to just :h2.
-(driver/register! :h2-mbql5, :parent #{:h2 :sql-mbql5})
+;; H2 materializes a JAVA_OBJECT column value by deserializing its bytes with an ObjectInputStream. That
+;; can happen anywhere a JAVA_OBJECT appears in a result — a top-level column, an ARRAY element, a nested
+;; row — not just where a column's declared type is JAVA_OBJECT. Metabase never reads Java objects out of
+;; query results, so we register the JavaObjectSerializer H2 routes all such deserialization through and
+;; refuse it at that single point, covering every position uniformly. (`read-column-thunk :h2` below also
+;; rejects a top-level JAVA_OBJECT column, for a clearer error on the common case.)
+(def ^:private java-object-serializer
+  (reify JavaObjectSerializer
+    (serialize [_ _obj]
+      (throw (ex-info "Reading and writing Java objects is not supported for H2." {})))
+    (deserialize [_ _bytes]
+      (throw (ex-info "Reading Java objects is not supported for H2." {})))))
+
+(when-not *compile-files*
+  (set! (. JdbcUtils serializer) java-object-serializer))
 
 (defmethod driver/connection-hosts :h2
   [_driver {:keys [db]}]
@@ -105,12 +116,8 @@
     supported?))
 
 (defmethod sql.qp/->honeysql [:h2 :regex-match-first]
-  [driver [_ arg pattern]]
-  [:regexp_substr (sql.qp/->honeysql driver arg) (sql.qp/->honeysql driver pattern)])
-
-(defmethod sql.qp/->honeysql [:h2-mbql5 :regex-match-first]
   [driver [_ _opts arg pattern]]
-  ((get-method sql.qp/->honeysql [:h2 :regex-match-first]) driver [:regex-match-first arg pattern]))
+  [:regexp_substr (sql.qp/->honeysql driver arg) (sql.qp/->honeysql driver pattern)])
 
 (defmethod driver/connection-properties :h2
   [_]
@@ -378,10 +385,6 @@
   [driver hsql-form amount unit]
   (h2x/add-interval-honeysql-form driver hsql-form amount unit))
 
-(defmethod sql.qp/add-interval-honeysql-form :h2-mbql5
-  [driver hsql-form amount unit]
-  (h2x/add-interval-honeysql-form driver hsql-form amount unit))
-
 (defmethod driver/humanize-connection-error-message :h2
   [_ messages]
   (let [message (first messages)]
@@ -408,10 +411,6 @@
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
 (defmethod sql.qp/current-datetime-honeysql-form :h2
-  [driver]
-  (h2x/current-datetime-honeysql-form driver))
-
-(defmethod sql.qp/current-datetime-honeysql-form :h2-mbql5
   [driver]
   (h2x/current-datetime-honeysql-form driver))
 
@@ -485,15 +484,11 @@
 (defmethod sql.qp/date [:h2 :week-of-year-iso] [_ _ expr] (extract :iso_week expr))
 
 (defmethod sql.qp/->honeysql [:h2 :log]
-  [driver [_ field]]
+  [driver [_ _opts field]]
   [:log10 (sql.qp/->honeysql driver field)])
 
-(defmethod sql.qp/->honeysql [:h2-mbql5 :log]
-  [driver [_ _opts field]]
-  ((get-method sql.qp/->honeysql [:h2 :log]) driver [:log field]))
-
 (defmethod sql.qp/->honeysql [:h2 ::sql.qp/expression-literal-text-value]
-  [driver [_ value]]
+  [driver [_ _opts value]]
   ;; A literal text value gets compiled to a parameter placeholder like "?". H2 attempts to compile the prepared
   ;; statement immediately, presumably before the types of the params are known, and sometimes raises an "Unknown
   ;; data type" error if it can't deduce the type. The recommended workaround is to insert an explicit CAST.
@@ -502,10 +497,6 @@
   ;; https://github.com/h2database/h2database/issues/1383
   (->> (sql.qp/->honeysql driver value)
        (h2x/cast :text)))
-
-(defmethod sql.qp/->honeysql [:h2-mbql5 ::sql.qp/expression-literal-text-value]
-  [driver [_ _opts value]]
-  ((get-method sql.qp/->honeysql [:h2 ::sql.qp/expression-literal-text-value]) driver [::sql.qp/expression-literal-text-value value]))
 
 (defn- datediff
   "Like H2's `datediff` function but accounts for timestamps with time zones."
@@ -652,22 +643,17 @@
        (.setReadOnly conn (not write?)))
      (f conn))))
 
-;; de-CLOB any CLOB values that come back
+;; de-CLOB any CLOB values that come back. (A JAVA_OBJECT value is refused during reads by the
+;; JavaObjectSerializer registered above, so it needs no handling here.)
 (defmethod sql-jdbc.execute/read-column-thunk :h2
   [_ ^ResultSet rs ^ResultSetMetaData rsmeta ^Integer i]
-  (let [col-type (.getColumnType rsmeta i)]
-    (when (= col-type Types/JAVA_OBJECT)
-      (throw (ex-info "Unable to parse jdbc type"
-                      {:column-index i
-                       :column-name  (.getColumnName rsmeta i)
-                       :column-type  col-type})))
-    (let [classname (some-> (.getColumnClassName rsmeta i)
-                            (Class/forName true (driver-api/the-classloader)))]
-      (if (isa? classname Clob)
-        (fn []
-          (driver-api/clob->str (.getObject rs i)))
-        (fn []
-          (.getObject rs i))))))
+  (let [classname (some-> (.getColumnClassName rsmeta i)
+                          (Class/forName true (driver-api/the-classloader)))]
+    (if (isa? classname Clob)
+      (fn []
+        (driver-api/clob->str (.getObject rs i)))
+      (fn []
+        (.getObject rs i)))))
 
 (defmethod sql-jdbc.execute/set-parameter [:h2 OffsetTime]
   [driver prepared-statement i t]

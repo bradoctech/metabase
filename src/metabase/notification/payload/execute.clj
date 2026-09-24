@@ -84,10 +84,12 @@
                   (format "\n%s" description)))
      :type :text}))
 
-(defn- dashcard-link-card->part
-  "Convert a dashcard that is a link card to pulse part.
+(defn dashcard-link-card->part
+  "Convert a dashcard that is a link card into a `:text` part (markdown `### [name](url)`), or nil
+  if it links to an entity the current user can't read. Used by both the email/notification
+  pipeline and the backend PDF renderer.
 
-  This function should be executed under pulse's creator permissions."
+  This function should be executed under pulse's creator permissions (`with-current-user`)."
   [dashcard]
   (assert api/*current-user-id* "Makes sure you wrapped this with a `with-current-user`.")
   ;; Degrade a single unrenderable link card to a missing part instead of aborting the whole dashboard's
@@ -182,28 +184,28 @@
 (defn execute-dashboard-subscription-card
   "Returns subscription result for a card.
 
-  `spill-budget` is the shared [[metabase.notification.payload.temp-storage/ResidentBudget]] for the whole notification,
-  so memory held by sibling cards influences when this card spills to disk. When omitted (e.g. executing a card in
-  isolation), a private budget is used so only the per-card spill limit applies.
-
-  `attached?` indicates whether this card's results are exported as a file attachment. Attached cards run to the
-  attachment row limit; body-only cards get the interactive display limits since only a preview is rendered.
+  Options:
+  - `:spill-budget` the shared [[metabase.notification.payload.temp-storage/ResidentBudget]] for the whole
+    notification, so memory held by sibling cards influences when this card spills to disk. When omitted (e.g.
+    executing a card in isolation), a private budget is used so only the per-card spill limit applies.
+  - `:attached?` whether this card's results are exported as a file attachment. Attached cards run to the
+    attachment row limit; body-only cards get the interactive display limits since only a preview is rendered.
 
   This function should be executed under pulse's creator permissions."
   ([dashcard parameters]
-   (execute-dashboard-subscription-card dashcard parameters (new-spill-budget) false))
-  ([dashcard parameters spill-budget]
-   (execute-dashboard-subscription-card dashcard parameters spill-budget false))
-  ([{:keys [card_id dashboard_id] :as dashcard} parameters spill-budget attached?]
+   (execute-dashboard-subscription-card dashcard parameters nil))
+  ([{:keys [card_id dashboard_id] :as dashcard} parameters
+    {:keys [spill-budget attached?]
+     :or   {spill-budget (new-spill-budget)}}]
    (log/with-context {:card_id card_id}
      (try
        (when-let [card (t2/select-one :model/Card :id card_id :archived false)]
          (let [dashboard      (t2/select-one :model/Dashboard :id dashboard_id)
                multi-cards    (dashboard-card/dashcard->multi-cards dashcard)
                result-fn      (fn [card-id]
-                                (let [card             (if (= card-id (:id card))
-                                                         card
-                                                         (t2/select-one :model/Card :id card-id))
+                                (let [card (if (= card-id (:id card))
+                                             card
+                                             (t2/select-one :model/Card :id card-id))
                                       attached-result? (and attached? (= card-id card_id))]
                                   {:card     card
                                    :dashcard dashcard
@@ -246,24 +248,24 @@
                           (is-card-empty? (assoc card :result (:result result))))
              (update result :dashcard assoc :series-results series-results))))
        (catch Throwable e
-         (log/warnf e "Error running query for Card %s" (:card_id dashcard)))))))
+         (log/warnf "Error running query for Card %s: %s" (:card_id dashcard) (ex-message e)))))))
 
 (defn- dashcard->part
   "Given a dashcard returns its part based on its type.
 
-  `spill-budget` is the notification-wide [[metabase.notification.payload.temp-storage/ResidentBudget]] shared across
-  all dashcards.
+  `opts` are the [[execute-dashboard]] options, shared across all dashcards.
 
   The result will follow the pulse's creator permissions."
-  [dashcard parameters spill-budget attached-card-ids]
+  [dashcard parameters {:keys [spill-budget attached-card-ids]}]
   (assert api/*current-user-id* "Makes sure you wrapped this with a `with-current-user`.")
   (cond
     (:card_id dashcard)
     (log/with-context {:card_id (:card_id dashcard)}
       (let [parameters (merge-default-values parameters)]
         ;; Streaming to disk is now handled by the query processor rff
-        (-> (execute-dashboard-subscription-card dashcard parameters spill-budget
-                                                 (contains? attached-card-ids (:card_id dashcard)))
+        (-> (execute-dashboard-subscription-card dashcard parameters
+                                                 {:spill-budget spill-budget
+                                                  :attached?    (contains? attached-card-ids (:card_id dashcard))})
             (m/update-existing :dashcard resolve-inline-parameters parameters))))
 
     (virtual-card-of-type? dashcard "iframe")
@@ -296,12 +298,12 @@
               (assoc :type :text)))))
 
 (defn- dashcards->part
-  "Render `dashcards` to parts, sharing `spill-budget` across them so memory held by earlier cards can push later (large)
-  cards to spill to disk instead of collectively exhausting heap. The budget is created once per dashboard (spanning all
-  tabs) by the caller, not here, so a multi-tab dashboard shares a single budget."
-  [dashcards parameters spill-budget attached-card-ids]
+  "Render `dashcards` to parts, sharing the `:spill-budget` in `opts` across them so memory held by earlier cards can
+  push later (large) cards to spill to disk instead of collectively exhausting heap. The budget is created once per
+  dashboard (spanning all tabs) by the caller, not here, so a multi-tab dashboard shares a single budget."
+  [dashcards parameters opts]
   (let [ordered-dashcards (sort dashboard-card/dashcard-comparator dashcards)]
-    (doall (keep #(dashcard->part % parameters spill-budget attached-card-ids) ordered-dashcards))))
+    (doall (keep #(dashcard->part % parameters opts) ordered-dashcards))))
 
 (mr/def ::Part
   "Part."
@@ -334,9 +336,11 @@
    (execute-dashboard dashboard-id user-id parameters nil))
   ([dashboard-id user-id parameters {:keys [spill-budget only-card-ids attached-card-ids]
                                      :or   {spill-budget (new-spill-budget)}}]
-   (let [keep-dashcards (fn [dashcards]
-                          (cond->> dashcards
-                            only-card-ids (filter #(contains? only-card-ids (:card_id %)))))]
+   (let [opts            {:spill-budget      spill-budget
+                          :attached-card-ids attached-card-ids}
+         keep-dashcards  (fn [dashcards]
+                           (cond->> dashcards
+                             only-card-ids (filter #(contains? only-card-ids (:card_id %)))))]
      (request/with-current-user user-id
        (if (render-tabs? dashboard-id)
          (let [tabs               (t2/hydrate (t2/select :model/DashboardTab :dashboard_id dashboard-id) :tab-cards)
@@ -346,14 +350,14 @@
                should-render-tab? (< 1 (count tabs-with-cards))]
            (doall (flatten (for [{:keys [cards] :as tab} tabs-with-cards]
                              (do
-                               (log/debugf "Rendering tab %s with %d cards" (:name tab) (count cards))
+                               (log/debugf "Rendering tab %s with %d cards" (:id tab) (count cards))
                                (concat
                                 (when should-render-tab?
                                   [(tab->part tab)])
-                                (dashcards->part cards parameters spill-budget attached-card-ids)))))))
+                                (dashcards->part cards parameters opts)))))))
          (let [dashcards (keep-dashcards (t2/select :model/DashboardCard :dashboard_id dashboard-id))]
            (log/debugf "Rendering dashboard with %d cards" (count dashcards))
-           (dashcards->part dashcards parameters spill-budget attached-card-ids)))))))
+           (dashcards->part dashcards parameters opts)))))))
 
 (mu/defn execute-card :- [:maybe ::Part]
   "Returns the result for a card."

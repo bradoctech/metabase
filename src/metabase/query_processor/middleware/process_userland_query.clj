@@ -58,7 +58,7 @@
       (try
         (query/save-queries-and-update-average-execution-times! entries)
         (catch Throwable e
-          (log/error e "Error updating query average execution times"))))
+          (log/errorf "Error updating query average execution times: %s" (ex-message e)))))
     (try
       (let [{with-context true, no-context false} (group-by (comp some? :context) query-executions)]
         (when (seq no-context)
@@ -66,7 +66,7 @@
         (when (seq with-context)
           (t2/insert! :model/QueryExecution (map #(dissoc % :json_query) with-context))))
       (catch Throwable e
-        (log/error e "Error saving query execution info")))))
+        (log/errorf "Error saving query execution info: %s" (ex-message e))))))
 
 (defonce ^:private save-execution-metadata-queue
   (delay (grouper/start!
@@ -107,7 +107,7 @@
   (try
     (save-execution-metadata! (assoc query-execution :error (str message)))
     (catch Throwable e
-      (log/errorf e "Unexpected error saving failed query execution: %s" (ex-message e)))))
+      (log/errorf "Unexpected error saving failed query execution: %s" (ex-message e)))))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                                   Middleware                                                   |
@@ -154,7 +154,9 @@
   postprocessing middleware (`is_impersonated`, `is_db_routed`, the routed `database_id`) are NOT computed here —
   they're added later by [[enrich-with-execution-context]] from inside the postprocessing rff, where the bindings
   are still in effect. See PR #71386 — reading those values from the query map at the top of the around middleware
-  was a timing bug because pre-processing hadn't yet run."
+  was a timing bug because pre-processing hadn't yet run.
+
+  Mirrored by `execution-row` in `metabase.actions.audit`; keep the two in step."
   {:arglists '([query])}
   [{{:keys       [executed-by query-hash context action-id card-id dashboard-id transform-id lens-id lens-params pulse-id]
      :pivot/keys [original-query]} :info
@@ -228,6 +230,18 @@
     (when *execution-context-ref*
       (reset! *execution-context-ref* (snapshot-execution-context)))
     (qp query rff)))
+
+(defn do-with-captured-execution-context
+  "Run `f` with [[*execution-context-ref*]] bound, then hand `on-snapshot` whatever
+  [[capture-execution-context-middleware]] recorded (nil if it never ran), whether `f` returned or threw. For QP
+  entry points that write their own execution row, such as the writeback QP."
+  [f on-snapshot]
+  (let [context-ref (atom nil)]
+    (try
+      (binding [*execution-context-ref* context-ref]
+        (f))
+      (finally
+        (on-snapshot @context-ref)))))
 
 (defn- enrich-with-execution-context
   "Merges the snapshotted execution context (from [[*execution-context-ref*]]) into `execution-info`. Always

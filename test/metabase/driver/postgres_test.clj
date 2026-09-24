@@ -32,6 +32,7 @@
    [metabase.driver.sql.query-processor :as sql.qp]
    [metabase.driver.sql.query-processor-test-util :as sql.qp-test-util]
    [metabase.driver.sql.util :as sql.u]
+   [metabase.lib-be.metadata.jvm :as lib.metadata.jvm]
    [metabase.lib.convert :as lib.convert]
    [metabase.lib.core :as lib]
    [metabase.lib.metadata :as lib.metadata]
@@ -53,8 +54,6 @@
    [metabase.sync.sync-metadata.tables :as sync-tables]
    [metabase.sync.util :as sync-util]
    [metabase.test :as mt]
-   [metabase.test.data.datasets :as mtd]
-   [metabase.test.data.env :as tx.env]
    [metabase.test.data.interface :as tx]
    [metabase.util :as u]
    [metabase.util.honey-sql-2 :as h2x]
@@ -70,18 +69,6 @@
 
 (set! *warn-on-reflection* true)
 
-;; TODO: once h2-mbql5 is on master, share code with that
-(defn- test-driver [driver thunk]
-  (when (contains? (tx.env/test-drivers) driver)
-    (testing (str "\n" driver "\n")
-      (driver/with-driver (tx/the-driver-with-test-extensions driver)
-        (thunk))
-      ;; the above is the original definition of test-driver, but we add in
-      ;; this clause to avoid having to rewrite all the tests below twice:
-      (when (= driver :postgres)
-        (driver/with-driver (tx/the-driver-with-test-extensions :postgres-mbql5)
-          (thunk))))))
-
 (use-fixtures :each (fn [thunk]
                       ;; 1. If sync fails when loading a test dataset, don't swallow the error; throw an Exception so we
                       ;;    can debug it. This is much less confusing when trying to fix broken tests.
@@ -89,21 +76,7 @@
                       ;; 2. Make sure we're in Honey SQL 2 mode for all the little SQL snippets we're compiling in these
                       ;;    tests.
                       (binding [sync-util/*log-exceptions-and-continue?* false]
-                        ;; NB: because of test parallelism, this *will* affect other non-pg
-                        ;; tests, but the check above in the test-driver function will
-                        ;; prevent it from actually doing anything different in those tests.
-                        ;;
-                        ;; The linter (`:metabase/validate-deftest`) flags `with-redefs` inside a
-                        ;; `use-fixtures` body because it isn't parallel-safe -- the root var is
-                        ;; mutated globally across threads. We accept the hazard here for the
-                        ;; duration of the `:postgres-mbql5` equivalence experiment: this fixture
-                        ;; reruns every `:postgres` test under the `:postgres-mbql5` dispatch so
-                        ;; we can confirm behavioral parity. Once the experiment concludes and
-                        ;; `:postgres-mbql5` becomes `:postgres`, this entire `with-redefs` goes
-                        ;; away (see Phil's note in #ee-querying-platform 2026-05-21).
-                        #_{:clj-kondo/ignore [:metabase/validate-deftest]}
-                        (with-redefs [mtd/-test-driver test-driver]
-                          (mt/with-test-user :rasta (thunk))))))
+                        (mt/with-test-user :rasta (thunk)))))
 
 (deftest ^:parallel extract-test
   (is (= ["extract(month from NOW())"]
@@ -130,7 +103,7 @@
            ")"]
           "2021-10-03T09:00:00"
           "2021-10-03T09:00:00"]
-         (as-> [:datetime-diff "2021-10-03T09:00:00" "2021-10-03T09:00:00" :year] <>
+         (as-> [:datetime-diff {} "2021-10-03T09:00:00" "2021-10-03T09:00:00" :year] <>
            (sql.qp/->honeysql :postgres <>)
            (sql.qp/format-honeysql :postgres <>)
            (update (vec <>) 0 #(str/split-lines (driver/prettify-native-form :postgres %)))))))
@@ -509,7 +482,7 @@
 
 (defn- ^:private maybe-convert-and-compile [driver query]
   (cond-> query
-    (= driver :postgres-mbql5) (lib.convert/->mbql5)
+    (= driver :postgres) (lib.convert/->mbql5)
     :always qp.compile/compile))
 
 (defn- ^:private json-alias-mock-metadata-provider [driver]
@@ -627,9 +600,7 @@
                   "      \"json_alias_test\""
                   "    ORDER BY"
                   "      \"json_alias_test\" ASC"
-                  "  ) AS \"__mb_source\""
-                  "LIMIT"
-                  "  1048575"]
+                  "  ) AS \"__mb_source\""]
                  (str/split-lines (driver/prettify-native-form :postgres (:query nested))))))))))
 
 ;;; Postgres `:contains`/`:starts-with`/`:ends-with` must produce SQL that the PostgreSQL JDBC
@@ -1114,6 +1085,37 @@
                                    :limit        10}})
                       :data
                       (select-keys [:rows :native_form]))))))))))
+
+(deftest enum-field-filter-test
+  (mt/test-driver :postgres
+    (do-with-enums-db!
+     (fn [db]
+       (let [mp            (lib.metadata.jvm/application-database-metadata-provider (u/the-id db))
+             table-id      (t2/select-one-pk :model/Table :db_id (u/the-id db) :name "birds")
+             type-field-id (t2/select-one-pk :model/Field :table_id table-id :name "type")
+             type-field    (lib.metadata/field mp type-field-id)]
+         (testing "an MBQL string/= param on a postgres enum column filters correctly (#40396)"
+           (is (= [["Rasta" "good bird" "sad bird" "toucan"]]
+                  (mt/rows
+                   (qp/process-query
+                    (assoc (lib/query mp (lib.metadata/table mp table-id))
+                           :parameters [{:type   :string/=
+                                         :target [:dimension (lib.convert/->legacy-MBQL (lib/ref type-field))]
+                                         :value  ["toucan"]}]))))))
+         (testing "a native field filter over a postgres enum column filters correctly (#63537)"
+           (is (= [["Rasta" "good bird" "sad bird" "toucan"]]
+                  (mt/rows
+                   (qp/process-query
+                    (assoc (-> (lib/native-query mp "SELECT * FROM birds WHERE {{type}}")
+                               (lib/with-template-tags
+                                 {"type" {:name         "type"
+                                          :display-name "Type"
+                                          :type         :dimension
+                                          :dimension    (lib/ref type-field)
+                                          :widget-type  :string/=}}))
+                           :parameters [{:type   :string/=
+                                         :target [:dimension [:template-tag "type"]]
+                                         :value  ["toucan"]}])))))))))))
 
 (deftest enums-test-3
   (mt/test-driver :postgres
@@ -2355,7 +2357,7 @@
   (mt/test-driver :postgres
     (letfn [(catch-exceptions [run]
               (let [query    (cond-> {:type :query, :database 1}
-                               (= driver/*driver* :postgres-mbql5) (lib.convert/->mbql5))
+                               (= driver/*driver* :postgres) (lib.convert/->mbql5))
                     metadata {}
                     rows     []
                     qp       (fn [query rff]
@@ -2476,32 +2478,28 @@
 
 (deftest set-network-timeout-test
   (mt/test-driver :postgres
-    (let [db-name (u/lower-case-en (format "network-timeout-%s-%s" (name driver/*driver*) (mt/random-name)))
-          spec    (sql-jdbc.conn/connection-details->spec
-                   driver/*driver*
-                   (mt/dbdef->connection-details driver/*driver* :db {:database-name db-name}))]
-      (tx/with-temp-database! driver/*driver* db-name
-        ;; Use a raw spec against a unique DB; the shared test-data DB can be created/dropped by concurrent
-        ;; :postgres and :postgres-mbql5 test setup.
-        (letfn [(run-pg-sleep []
-                  (sql-jdbc.execute/do-with-connection-with-options
-                   driver/*driver* spec nil
-                   (fn [^Connection conn]
-                     (with-open [stmt (.createStatement conn)]
-                       (.execute stmt "SELECT pg_sleep(6)")))))]
-          (testing "network hangs are interrupted after *network-timeout-ms*"
-            (binding [driver.settings/*network-timeout-ms* 3000]
-              (is (thrown-with-msg?
-                   org.postgresql.util.PSQLException
-                   #"An I/O error occurred while sending to the backend"
-                   (try
-                     (run-pg-sleep)
-                     (catch Exception e
-                       (is (true? (some #(instance? java.net.SocketTimeoutException %)
-                                        (u/full-exception-chain e))))
-                       (throw e)))))))
-          (testing "network hangs are not interrupted before *network-timeout-ms*"
-            (is (true? (run-pg-sleep)))))))))
+    (testing "network hangs are interrupted after *network-timeout-ms*"
+      (binding [driver.settings/*network-timeout-ms* 3000]
+        (is (thrown-with-msg?
+             org.postgresql.util.PSQLException
+             #"An I/O error occurred while sending to the backend"
+             (try
+               (sql-jdbc.execute/do-with-connection-with-options
+                driver/*driver* (mt/id) nil
+                (fn [^Connection conn]
+                  (with-open [stmt (.createStatement conn)]
+                    (.execute stmt "SELECT pg_sleep(6)"))))
+               (catch Exception e
+                 (is (true? (some #(instance? java.net.SocketTimeoutException %)
+                                  (u/full-exception-chain e))))
+                 (throw e)))))))
+    (testing "network hangs are not interrupted before *network-timeout-ms*"
+      (is (true?
+           (sql-jdbc.execute/do-with-connection-with-options
+            driver/*driver* (mt/id) nil
+            (fn [^Connection conn]
+              (with-open [stmt (.createStatement conn)]
+                (.execute stmt "SELECT pg_sleep(6)")))))))))
 
 (deftest ^:parallel parse-final-identifier-test
   (mt/test-driver :postgres
@@ -2655,6 +2653,66 @@
                                      [(format "GRANT %s TO %s" qowner qrole)])
                       (is (nil? (postgres/assert-can-alter-default-privileges! user-spec schema))))))))))))))
 
+(deftest ^:synchronized workspace-destroy-survives-foreign-grantor-default-priv-test
+  ;; PostgreSQL counterpart to Redshift's GHY-3709 destroy fix. The Redshift
+  ;; driver had to grow explicit `pg_default_acl` discovery + per-grantor
+  ;; REVOKEs because Redshift's `DROP OWNED BY` semantics differ from PG. PG's
+  ;; destroy issues `DROP OWNED BY <iso-user>` which removes default-priv ACL
+  ;; entries where the iso-user appears as a grantee, regardless of who granted
+  ;; them. This test pins that contract: seed a foreign-grantor default-priv
+  ;; row targeting the iso-user and confirm `destroy-workspace-isolation!`
+  ;; still cleans up without raising "user cannot be dropped because some
+  ;; objects depend on it".
+  (mt/test-driver :postgres
+    (testing "destroy succeeds when a non-current_user grantor seeded a default-priv targeting the iso-user"
+      (mt/with-empty-db
+        (let [admin-spec (sql-jdbc.conn/db->pooled-connection-spec (mt/db))
+              grantor    "ws_destroy_foreign_grantor"
+              schema     "ws_destroy_foreign_schema"
+              qgrantor   (sql.u/quote-name :postgres :field grantor)
+              qschema    (sql.u/quote-name :postgres :schema schema)
+              workspace  {:id   (rand-int Integer/MAX_VALUE)
+                          :name "wsd-foreign-destroy"}]
+          (with-drop-role! admin-spec grantor
+            (with-drop-schema! admin-spec schema
+              (jdbc/execute! admin-spec
+                             [(format (str "CREATE ROLE %s WITH LOGIN PASSWORD 'pwd'; "
+                                           "GRANT %s TO CURRENT_USER; "
+                                           "CREATE SCHEMA %s AUTHORIZATION %s;")
+                                      qgrantor qgrantor qschema qgrantor)])
+              (let [init-result   (driver/init-workspace-isolation! :postgres (mt/db) workspace)
+                    iso-user      (-> init-result :database_details :user)
+                    qiso          (sql.u/quote-name :postgres :field iso-user)
+                    workspace+det (merge workspace init-result)]
+                (try
+                  ;; Seed the foreign-grantor default-priv: set the grantor role and
+                  ;; issue ALTER DEFAULT PRIVILEGES so the resulting pg_default_acl
+                  ;; row is owned by the grantor, not by current_user.
+                  (jdbc/execute! admin-spec
+                                 [(format (str "SET ROLE %s; "
+                                               "ALTER DEFAULT PRIVILEGES IN SCHEMA %s "
+                                               "GRANT SELECT ON TABLES TO %s; "
+                                               "RESET ROLE;")
+                                          qgrantor qschema qiso)])
+                  (testing "destroy completes without error"
+                    (is (some? (driver/destroy-workspace-isolation! :postgres (mt/db) workspace+det))))
+                  (testing "the iso-user has been dropped"
+                    (is (empty? (jdbc/query admin-spec
+                                            ["SELECT 1 FROM pg_roles WHERE rolname = ?" iso-user]))))
+                  (finally
+                    ;; If destroy raised, the iso-user may still exist -- clean up so the
+                    ;; with-drop-role!/with-drop-schema! frames don't fail on the schema.
+                    ;; Log instead of swallowing so CI surfaces orphan-role accumulation
+                    ;; rather than masking it behind a failed schema drop downstream.
+                    (try (jdbc/execute! admin-spec
+                                        [(format "DROP OWNED BY %s CASCADE" qiso)])
+                         (catch Throwable t
+                           (log/warnf t "Test cleanup: DROP OWNED BY %s failed" qiso)))
+                    (try (jdbc/execute! admin-spec
+                                        [(format "DROP USER IF EXISTS %s" qiso)])
+                         (catch Throwable t
+                           (log/warnf t "Test cleanup: DROP USER %s failed" qiso)))))))))))))
+
 (deftest ^:synchronized reducible-query-streams-large-result-set-test
   (testing "reducible-query streams large result sets via a server-side cursor (autoCommit=false)"
     (mt/test-driver :postgres
@@ -2682,12 +2740,10 @@
         (is (thrown-with-msg?
              clojure.lang.ExceptionInfo
              #"\QUnexpected collection in a :value clause\E"
-             ;; v62: plain :postgres still takes legacy `[:value <value> <opts>]`; the MBQL 5 clause shape goes
-             ;; through the :postgres-mbql5 shadow driver, which forwards to the guarded :postgres method.
-             (sql.qp/->honeysql :postgres-mbql5 [:value {:base-type base-type, :database-type "my_enum"} value]))))))
+             (sql.qp/->honeysql :postgres [:value {:base-type base-type, :database-type "my_enum"} value]))))))
   (testing "ordinary literals still compile"
     (is (= (h2x/cast :inet "1.2.3.4")
-           (sql.qp/->honeysql :postgres-mbql5 [:value {:base-type :type/IPAddress} "1.2.3.4"])))))
+           (sql.qp/->honeysql :postgres [:value {:base-type :type/IPAddress} "1.2.3.4"])))))
 
 (deftest ^:parallel regex-match-first-pattern-raw-guard-test
   (testing "the :postgres [:regex-match-first] pattern must be compiled through ->honeysql, not spliced raw"
@@ -2698,10 +2754,7 @@
       (testing (pr-str pattern)
         (is (thrown?
              clojure.lang.ExceptionInfo
-             (sql.qp/->honeysql :postgres [:regex-match-first 1 pattern])))
-        (is (thrown?
-             clojure.lang.ExceptionInfo
-             (sql.qp/->honeysql :postgres-mbql5 [:regex-match-first {} 1 pattern]))))))
+             (sql.qp/->honeysql :postgres [:regex-match-first {} 1 pattern]))))))
   (testing "ordinary string patterns still compile"
     (is (= [::postgres/regex-match-first [:inline 1] "^Taylor's"]
-           (sql.qp/->honeysql :postgres-mbql5 [:regex-match-first {} 1 "^Taylor's"])))))
+           (sql.qp/->honeysql :postgres [:regex-match-first {} 1 "^Taylor's"])))))

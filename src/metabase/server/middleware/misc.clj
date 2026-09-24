@@ -6,7 +6,6 @@
    [metabase.config.core :as config]
    [metabase.request.core :as request]
    [metabase.server.streaming-response]
-   [metabase.setup.core :as setup]
    [metabase.system.core :as system]
    [metabase.util :as u]
    [metabase.util.log :as log])
@@ -54,12 +53,12 @@
 
 ;;; ------------------------------------------------ SETTING SITE-URL ------------------------------------------------
 
-;; It's important for us to know what the site URL is for things like returning links, etc. this is stored in the
-;; `site-url` Setting; we can set it automatically by looking at the `Origin`, `X-Forwarded-Host`, or `Host` headers
-;; sent with a request.
+;; It's important for us to know what the site URL is for things like returning links, etc. This is stored in the
+;; `site-url` Setting; when it isn't set explicitly (`MB_SITE_URL`) we can derive it by looking at the `Origin`,
+;; `X-Forwarded-Host`, or `Host` headers of a request.
 ;;
-;; Effectively the very first API request that gets sent to us (usually some sort of setup request) ends up setting
-;; the (initial) value of `site-url`
+;; Derivation only happens on a request made by an authenticated superuser (`:is-superuser?`), so it's the admin's
+;; own first post-setup request that seeds `site-url`
 (defn- forwarded-scheme
   "The scheme a TLS-terminating proxy used to reach us, inferred from the same forwarded headers as [[u/https?]]."
   [{:strs [x-forwarded-proto x-forwarded-protocol x-url-scheme x-forwarded-ssl front-end-https]}]
@@ -77,16 +76,12 @@
   (let [{:strs [origin x-forwarded-host host user-agent]} headers]
     (when (and (mdb/db-is-set-up?)
                (not (system/site-url))
-               ;; Only derive from headers when the request can't be forged by an attacker: before setup, or from an
-               ;; admin. `has-user-setup` alone would never let a headlessly-provisioned instance (config-from-file
-               ;; `users:`) derive it at all, since those have users from their first request.
-               (or (not (setup/has-user-setup))
-                   superuser?)
+               superuser?
                (not (#{"/api/health" "/livez" "/readyz"} uri))
                (or (nil? user-agent) ((complement str/includes?) user-agent "HealthChecker")))
       ;; `origin` already carries a scheme; the `*-host` headers normally don't, so prepend the scheme the proxy
       ;; terminated TLS with -- otherwise `normalize-site-url` defaults to `http://` and a TLS-terminating proxy ends
-      ;; up advertising `http://` auth/discovery URLs over an `https` origin, breaking MCP OAuth (BOT-1617). Only
+      ;; up advertising `http://` auth/discovery URLs over an `https` origin, breaking MCP OAuth. Only
       ;; prepend when the host is scheme-less; a scheme-bearing host passes through untouched.
       (when-let [site-url (or origin
                               (when-let [host (or x-forwarded-host host)]
@@ -98,10 +93,11 @@
         (try
           (system/site-url! site-url)
           (catch Throwable e
-            (log/warn e "Failed to set site-url")))))))
+            (log/warnf "Failed to set site-url: %s" (ex-message e))))))))
 
 (defn maybe-set-site-url
-  "Middleware to set the `site-url` setting from request headers while it is still unset."
+  "Middleware that derives the `site-url` setting from a request's headers, but only when the request is made by an
+  authenticated superuser and `site-url` isn't already set."
   [handler]
   (fn [request respond raise]
     (maybe-set-site-url* request)

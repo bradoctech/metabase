@@ -116,9 +116,6 @@
                                           filter-stage-added?))
                                     lib/append-stage)
           query                   (-> query
-                                      ;; The userland caller's :constraints/:middleware carry the row-limit cap;
-                                      ;; wipe whatever the stored Card query carries so it cannot defeat that cap
-                                      ;; (e.g. a stored :middleware {:disable-max-results? true}).
                                       (dissoc :constraints :middleware)
                                       (m/assoc-some :constraints (not-empty constraints)
                                                     :parameters  (not-empty (cond-> parameters
@@ -399,8 +396,7 @@
                              :metadata/own-model-query? true))]
     (when (seq parameters)
       (validate-card-parameters card-id (:dataset_query card) (lib/normalize ::lib.schema.parameter/parameters parameters)))
-    (log/tracef "Running query for Card %d (dashcard %s):\n%s" card-id dashcard-id
-                (u/pprint-to-str query))
+    (log/tracef "Running query for Card %d (dashcard %s)" card-id dashcard-id)
     (binding [qp.perms/*card-id* card-id]
       (when-let [context (card-read-context info)]
         (events/publish-event! :event/card-read {:object-id card-id

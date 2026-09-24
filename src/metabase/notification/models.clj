@@ -584,8 +584,10 @@
   [_ notification]
   (or (mi/superuser?)
       (and (current-user-can-read-payload? notification)
-           ;; if advanced-permissions is enabled, we require users to have subscription permissions
-           (or (not (premium-features/has-feature? :advanced-permissions))
+           ;; if advanced-permissions is enabled, we require users to have subscription permissions.
+           ;; Not a bare `has-feature?`: that ignores whether EE code is present, so an OSS jar with a
+           ;; stale paid token would demand a permission it can never grant.
+           (or (not (premium-features/enable-advanced-permissions?))
                (perms/current-user-has-application-permissions? :subscription)))))
 
 (defmethod mi/can-update? :model/Notification
@@ -601,7 +603,7 @@
      ;; if advanced-permissions is enabled, we require users to have subscription permissions
      ;; and is the owner of the notification and can read the payload
      (or
-      (not (premium-features/has-feature? :advanced-permissions))
+      (not (premium-features/enable-advanced-permissions?))
       (perms/current-user-has-application-permissions? :subscription))
      (current-user-can-read-payload? instance)
      (current-user-can-read-payload? (merge instance changes))))))
@@ -614,7 +616,7 @@
     (and
      (current-user-is-creator? notification)
      (or
-      (not (premium-features/has-feature? :advanced-permissions))
+      (not (premium-features/enable-advanced-permissions?))
       (perms/current-user-has-application-permissions? :subscription))
      (current-user-can-read-payload? notification))))
   ([_model pk]
@@ -627,21 +629,22 @@
 (defn hydrated-notification-schema
   "Schema for a notification hydrated with its creator, subscriptions and handlers, where each handler matches
   `handler-schema`. Callers supply the handler schema because API input accepts a narrower set of templates than what
-  we hand back out. `:update-input? true` keeps only the entries `notification-update-spec` uses.
+  we hand back out.
 
-  `{:with-id? false}` builds the create-request variant, which carries no `:id` at any level."
+  `{:with-id? false}` builds the create-request variant, which carries no `:id` at any level.
+  `:update-input? true` keeps only the entries `notification-update-spec` uses."
   ([handler-schema]
    (hydrated-notification-schema handler-schema {:with-id? true}))
   ([handler-schema {:keys [with-id? update-input?] :as opts}]
    (let [entries (into (notification-entries opts)
-                       [;; the hydrated User, echoed back by clients on update; `:creator_id` is what gets read
-                        [:creator       {:optional true} [:maybe ms/Map]]
-                        [:creator_id    {:optional true} [:maybe int?]]
-                        [:payload_id    {:optional true} [:maybe int?]]
-                        [:subscriptions {:optional true} [:sequential [:ref (if with-id?
-                                                                              ::NotificationSubscription
-                                                                              ::CreateNotificationSubscriptionParams)]]]
-                        [:handlers      {:optional true} [:sequential handler-schema]]])
+                       (cond->> [;; the hydrated User, echoed back by clients on update; `:creator_id` is what gets read
+                                 [:creator       {:optional true} [:maybe ms/Map]]
+                                 [:creator_id    {:optional true} [:maybe int?]]
+                                 [:subscriptions {:optional true} [:sequential [:ref (if with-id?
+                                                                                       ::NotificationSubscription
+                                                                                       ::CreateNotificationSubscriptionParams)]]]
+                                 [:handlers      {:optional true} [:sequential handler-schema]]]
+                         with-id? (into [[:payload_id {:optional true} [:maybe int?]]])))
          entries (cond-> entries
                    update-input? (update-input-entries notification-update-spec))]
      [:merge

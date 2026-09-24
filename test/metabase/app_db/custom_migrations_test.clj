@@ -1,4 +1,4 @@
-(ns metabase.app-db.custom-migrations-test
+(ns ^:mb/app-db-migrations-test metabase.app-db.custom-migrations-test
   "Tests to make sure the custom migrations work as expected.
 
   As of #52254, any tests marked `^:mb/old-migrations-test` are only run on pushes to `master` or `release-`
@@ -1130,11 +1130,11 @@
                   (testing "the persist-models-enabled is assoced back to options"
                     (is (= {:options  "{\"persist-models-enabled\":true}"
                             :settings {:database-enable-actions true}}
-                           (t2/select-one [:model/Database :settings :options] success-id)))
+                           (t2/select-one [:model/Database :settings :options] success-id))))
+                  (testing "if settings doesn't have :persist-models-enabled, then options is empty map"
                     (is (= {:options  nil
                             :settings {:database-enable-actions true}}
-                           (t2/select-one [:model/Database :settings :options] empty-options-id))))
-                  (testing "if settings doesn't have :persist-models-enabled, then options is empty map"))))))]
+                           (t2/select-one [:model/Database :settings :options] empty-options-id)))))))))]
     (do-test false)
     (encryption-test/with-secret-key "dont-tell-anyone-about-this"
       (do-test true))))
@@ -1690,30 +1690,30 @@
           (is (not (contains? model-revision-object "type"))))))))
 
 (deftest ^:mb/old-migrations-test card-revision-add-type-null-character-test
-  (testing "CardRevisionAddType migration works even if there's a null character in revision.object (metabase#40835)")
-  (impl/test-migrations "v49.2024-01-22T11:52:00" [migrate!]
-    (let [user-id          (:id (new-instance-with-default :core_user))
-          db-id            (:id (new-instance-with-default :metabase_database))
-          card             (new-instance-with-default :report_card {:dataset false :creator_id user-id :database_id db-id})
-          viz-settings     "{\"table.pivot_column\":\"\u0000..\\u0000\"}" ; note the escaped and unescaped null characters
-          card-revision-id (:id (new-instance-with-default :revision
-                                                           {:object    (json/encode
-                                                                        (assoc (dissoc card :type)
-                                                                               :visualization_settings viz-settings))
-                                                            :model     "Card"
-                                                            :model_id  (:id card)
-                                                            :user_id   user-id}))]
-      (testing "sanity check revision object"
-        (let [card-revision-object (t2/select-one-fn (comp json/decode :object) :revision card-revision-id)]
-          (testing "doesn't have type"
-            (is (not (contains? card-revision-object "type"))))))
-      (testing "after migration card revisions should have type"
-        (migrate!)
-        (let [card-revision-object  (t2/select-one-fn (comp json/decode :object) :revision card-revision-id)]
-          (is (= "question" (get card-revision-object "type")))
-          (testing "original visualization_settings should be preserved"
-            (is (= viz-settings
-                   (get card-revision-object "visualization_settings")))))))))
+  (testing "CardRevisionAddType migration works even if there's a null character in revision.object (metabase#40835)"
+    (impl/test-migrations "v49.2024-01-22T11:52:00" [migrate!]
+      (let [user-id          (:id (new-instance-with-default :core_user))
+            db-id            (:id (new-instance-with-default :metabase_database))
+            card             (new-instance-with-default :report_card {:dataset false :creator_id user-id :database_id db-id})
+            viz-settings     "{\"table.pivot_column\":\"\u0000..\\u0000\"}" ; note the escaped and unescaped null characters
+            card-revision-id (:id (new-instance-with-default :revision
+                                                             {:object   (json/encode
+                                                                         (assoc (dissoc card :type)
+                                                                                :visualization_settings viz-settings))
+                                                              :model    "Card"
+                                                              :model_id (:id card)
+                                                              :user_id  user-id}))]
+        (testing "sanity check revision object"
+          (let [card-revision-object (t2/select-one-fn (comp json/decode :object) :revision card-revision-id)]
+            (testing "doesn't have type"
+              (is (not (contains? card-revision-object "type"))))))
+        (testing "after migration card revisions should have type"
+          (migrate!)
+          (let [card-revision-object (t2/select-one-fn (comp json/decode :object) :revision card-revision-id)]
+            (is (= "question" (get card-revision-object "type")))
+            (testing "original visualization_settings should be preserved"
+              (is (= viz-settings
+                     (get card-revision-object "visualization_settings"))))))))))
 
 (deftest ^:mb/old-migrations-test delete-scan-field-values-trigger-test
   (testing "We should delete the triggers for DBs that are configured not to scan their field values\n"
@@ -2962,97 +2962,39 @@
         (testing "Native transform strategy is stripped (can't resolve source table)"
           (is (not (contains? (get-source native-id) :source-incremental-strategy))))))))
 
-(deftest unify-source-tables-format-test
-  (testing "v60.2026-03-03T12:00:00: convert source-tables from map to vec format"
-    (impl/test-migrations ["v60.2026-03-03T12:00:00"] [migrate!]
-      (let [user-id     (:id (new-instance-with-default :core_user))
-            db-id       (:id (new-instance-with-default :metabase_database))
-            ;; source-tables as map with int values (FE format)
-            int-source  (json/encode {:type "python" :body "x=1" :source-database db-id
-                                      :source-tables {"orders" 42 "products" 99}})
-            ;; source-tables as map with ref values (normalized format)
-            ref-source  (json/encode {:type "python" :body "x=1" :source-database db-id
-                                      :source-tables {"input" {"database_id" db-id "schema" "public"
-                                                               "table" "my_table" "table_id" 7}}})
-            ;; query transform (no source-tables) — should be untouched
-            query-source (json/encode {:type "query" :query {:database db-id}})
-            target       (json/encode {:type "table" :schema "public" :name "out"})
-            insert-transform!
-            (fn [source]
-              (t2/insert-returning-pk!
-               :transform {:name               (mt/random-name)
-                           :source             source
-                           :target             target
-                           :source_type        "python"
-                           :source_database_id db-id
-                           :created_at         :%now
-                           :updated_at         :%now}))
-            int-id   (insert-transform! int-source)
-            ref-id   (insert-transform! ref-source)
-            query-id (insert-transform! query-source)
-            ;; Also test workspace_transform
-            ws-id    (:id (t2/insert-returning-instance!
-                           :workspace {:name       "test-ws"
-                                       :creator_id user-id
-                                       :created_at :%now
-                                       :updated_at :%now}))
-            _        (t2/insert! :workspace_transform
-                                 {:ref_id       (str (random-uuid))
-                                  :workspace_id ws-id
-                                  :name         "ws-transform"
-                                  :source       int-source
-                                  :target       target
-                                  :created_at   :%now
-                                  :updated_at   :%now})
-            get-source-tables (fn [table-name pk-map]
-                                (let [where (into [:and] (map (fn [[k v]] [:= k v]) pk-map))
-                                      row   (first (t2/query {:select [:source] :from [table-name] :where where}))]
-                                  (get (json/decode (:source row)) "source-tables")))]
-        (testing "Before migration, source-tables are maps"
-          (is (map? (get-source-tables :transform {:id int-id})))
-          (is (map? (get-source-tables :transform {:id ref-id}))))
-
-        (migrate!)
-
-        (testing "After migration, int-value maps become vec of entries"
-          (let [st (get-source-tables :transform {:id int-id})]
-            (is (sequential? st))
-            (is (= 2 (count st)))
-            (is (= #{"orders" "products"} (set (map #(get % "alias") st))))
-            (is (= #{42 99} (set (map #(get % "table_id") st))))))
-
-        (testing "After migration, ref-value maps become vec of entries with alias"
-          (let [st (get-source-tables :transform {:id ref-id})]
-            (is (sequential? st))
-            (is (= "input" (get (first st) "alias")))
-            (is (= 7 (get (first st) "table_id")))))
-
-        (testing "Query transforms are untouched"
-          (is (nil? (get-source-tables :transform {:id query-id}))))
-
-        (testing "workspace_transform is also migrated"
-          (let [ws-rows (t2/query {:select [:source] :from [:workspace_transform] :where [:= :workspace_id ws-id]})
-                st      (get (json/decode (:source (first ws-rows))) "source-tables")]
-            (is (sequential? st))
-            (is (= 2 (count st)))))
-
-        (testing "Rollback converts vec back to map"
-          (migrate! :down 59)
-          (let [st (get-source-tables :transform {:id int-id})]
-            (is (map? st))
-            (is (= 42 (get st "orders")))
-            (is (= 99 (get st "products")))))))))
+(deftest backfill-mfa-confirmed-at-test
+  (testing "v59.2026-07-10T22:29:17: confirmed_at is lifted out of the credentials JSON into the column"
+    (mt/with-empty-h2-app-db!
+      (encryption-test/with-secret-key "backfill-mfa-test-key-1234"
+        (impl/test-migrations ["v59.2026-07-10T22:29:17"] [migrate!]
+          (let [confirmed-at "2026-07-01T12:00:00Z"
+                insert-identity!
+                (fn [user-id credentials-str]
+                  (t2/insert-returning-pk! :auth_identity {:user_id     user-id
+                                                           :provider    "totp"
+                                                           :credentials credentials-str
+                                                           :created_at  :%now
+                                                           :updated_at  :%now}))
+                enc-confirmed   (insert-identity! (:id (new-instance-with-default :core_user))
+                                                  (encryption/maybe-encrypt
+                                                   (json/encode {:secret "s1" :confirmed_at confirmed-at})))
+                plain-confirmed (insert-identity! (:id (new-instance-with-default :core_user))
+                                                  (json/encode {:secret "s2" :confirmed_at confirmed-at}))
+                pending         (insert-identity! (:id (new-instance-with-default :core_user))
+                                                  (encryption/maybe-encrypt
+                                                   (json/encode {:secret "s3"})))]
+            (migrate!)
+            (testing "encrypted confirmed row gets the column"
+              (is (some? (t2/select-one-fn :confirmed_at :auth_identity :id enc-confirmed))))
+            (testing "legacy plaintext confirmed row gets the column"
+              (is (some? (t2/select-one-fn :confirmed_at :auth_identity :id plain-confirmed))))
+            (testing "pending (unconfirmed) enrollment stays null"
+              (is (nil? (t2/select-one-fn :confirmed_at :auth_identity :id pending))))))))))
 
 (deftest backfill-transform-target-tables-test
-  (testing "v60.2026-03-07T00:00:04 : backfill transform target tables and invalidate workspace caches"
+  (testing "v60.2026-03-07T00:00:04 : backfill transform target tables"
     (impl/test-migrations ["v60.2026-03-07T00:00:04"] [migrate!]
-      (let [user-id   (:id (new-instance-with-default :core_user))
-            db-id     (:id (new-instance-with-default :metabase_database))
-            ws-id     (:id (t2/insert-returning-instance!
-                            :workspace {:name       "test-ws"
-                                        :creator_id user-id
-                                        :created_at :%now
-                                        :updated_at :%now}))
+      (let [db-id     (:id (new-instance-with-default :metabase_database))
             source    (json/encode {:type "query" :query {:database db-id}})
             ;; -- Transform with a target that has no existing metabase_table → should create provisional row --
             _         (t2/insert-returning-pk!
@@ -3063,19 +3005,7 @@
                                    :source_database_id db-id
                                    :target_db_id       db-id
                                    :created_at         :%now
-                                   :updated_at         :%now})
-            ;; -- workspace_transform to verify analysis_version bump --
-            _         (t2/insert! :workspace_transform
-                                  {:ref_id       (str (random-uuid))
-                                   :workspace_id ws-id
-                                   :name         "ws-tx"
-                                   :source       source
-                                   :target       (json/encode {:type "table" :schema "public" :name "orders"})
-                                   :created_at   :%now
-                                   :updated_at   :%now})]
-        (testing "Before migration"
-          (is (= 1 (:graph_version (t2/select-one :workspace :id ws-id))))
-          (is (= 1 (:analysis_version (first (t2/select :workspace_transform :workspace_id ws-id))))))
+                                   :updated_at         :%now})]
         (migrate!)
         (testing "Provisional metabase_table created for transform target"
           (let [provisional (first (t2/query {:select [:active :transform_target :data_source :data_authority :display_name]
@@ -3089,7 +3019,4 @@
             (is (true? (:transform_target provisional)))
             (is (= "metabase-transform" (:data_source provisional)))
             (is (= "computed" (:data_authority provisional)))
-            (is (= "New Target Table" (:display_name provisional)))))
-        (testing "Workspace caches invalidated"
-          (is (= 2 (:graph_version (t2/select-one :workspace :id ws-id))))
-          (is (= 2 (:analysis_version (first (t2/select :workspace_transform :workspace_id ws-id))))))))))
+            (is (= "New Target Table" (:display_name provisional)))))))))

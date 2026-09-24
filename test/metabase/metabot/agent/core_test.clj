@@ -166,7 +166,8 @@
                                                                :id        "t1"
                                                                :function  "create_sql_query"
                                                                :arguments {:database_id database-id
-                                                                           :sql_query   "SELECT 1"}}])
+                                                                           :sql_query   "SELECT 1"
+                                                                           :title       "Results"}}])
                                                             (mut/mock-llm-response [{:type :text :text "Sorry."}])))]
         (let [parts (into [] (agent/run-agent-loop
                               {:messages   [{:role :user :content "Query that database"}]
@@ -376,6 +377,7 @@
           memory {:state {:queries {} :charts {}}}
           updated (#'agent/extract-charts memory parts)]
       (is (= {:chart_id "c-456"
+              :query_id "q-123"
               :queries [query]
               :visualization_settings {:chart_type :bar}} (get-in (memory/get-state updated) [:charts "c-456"])))))
   (testing "ignores parts without chart-id"
@@ -456,6 +458,7 @@
                    :function  "construct_notebook_query"
                    :arguments {:reasoning     "User wants to see orders"
                                :query         external-query
+                               :title         "First 10 orders"
                                :visualization {:chart_type "table"}}}
                   {:type :usage :usage {:promptTokens 200 :completionTokens 30} :model "test" :id "msg-2"}]
                  ;; Iteration 3: Final text response

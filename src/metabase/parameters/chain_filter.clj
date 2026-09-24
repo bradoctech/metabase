@@ -74,12 +74,12 @@
    [metabase.lib.schema.id :as lib.schema.id]
    [metabase.lib.schema.metadata :as lib.schema.metadata]
    [metabase.lib.types.isa :as lib.types.isa]
+   [metabase.lib.util :as lib.util]
    [metabase.parameters.chain-filter.dedupe-joins :as dedupe]
    [metabase.parameters.field-values :as params.field-values]
    [metabase.parameters.params :as params]
    [metabase.parameters.schema :as parameters.schema]
    [metabase.query-processor :as qp]
-   [metabase.query-processor.compile :as qp.compile]
    [metabase.query-processor.middleware.permissions :as qp.perms]
    [metabase.query-processor.parameters.dates :as params.dates]
    [metabase.query-processor.preprocess :as qp.preprocess]
@@ -137,7 +137,7 @@
                          (try
                            (params.dates/date-string->filter value field-id)
                            (catch Throwable e
-                             (log/error e "Error creating filter for date string")
+                             (log/errorf "Error creating filter for date string: %s" (ex-message e))
                              nil))
                          ;; we don't want to skip our value, even if its nil
                          (let [values (if (nil? value) [nil] (u/one-or-many value))]
@@ -146,12 +146,12 @@
                             :options  options
                             :args     (cons field values)}))]
     (when filter-op
-      (log/tracef "Adding filter clause: %s" (pr-str filter-op)))
+      (log/tracef "Adding filter clause with operator %s" (pr-str (:operator filter-op))))
     (cond-> query
       filter-op (lib/filter filter-op))))
 
 (defn- name-for-logging [model id]
-  (format "%s %d %s" (name model) id (u/format-color 'blue (pr-str (t2/select-one-fn :name model :id id)))))
+  (format "%s %d" (name model) id))
 
 (defn- format-join-for-logging [join]
   (format "%s %s -> %s %s"
@@ -182,10 +182,9 @@
          (if (or (= field-table-id source-table-id)
                  (contains? joined-table-ids field-table-id))
            (do
-             (log/tracef "Added filter clause for %s %s with constraint %s"
+             (log/tracef "Added filter clause for %s %s"
                          (name-for-logging :model/Table field-table-id)
-                         (name-for-logging :model/Field field-id)
-                         (pr-str constraint))
+                         (name-for-logging :model/Field field-id))
              (add-filter query source-table-id id->field constraint))
            (do
              (log/tracef "Not adding filter clause for %s %s because we did not join against its Table"
@@ -219,7 +218,11 @@
                                      :fk-field.active]
                          :order-by [[:fk-field.id :desc]
                                     [:pk-field.id :desc]]})
-        joins (for [{:keys [t1 f1 t2 f2]} rows]
+        ;; The `:fk-table.active` / `:pk-field.active` LEFT JOIN clauses null out the target endpoint
+        ;; when the FK-owning table or FK target field is inactive; drop those rows so no nil-keyed
+        ;; entries leak into the join graph. Regression for #80557.
+        joins (for [{:keys [t1 f1 t2 f2]} rows
+                    :when (and t1 f1 t2 f2)]
                 {:lhs {:table t1, :field f1}
                  :rhs {:table t2, :field f2}})
         reversed (map (fn [{:keys [lhs rhs]}]
@@ -261,7 +264,7 @@
            seen  #{start}]
       (let [path (peek paths)
             node (peek path)]
-        (cond (nil? node)
+        (cond (nil? path)
               nil
               ;; found a path, bfs finds shortest first
               (= node end)
@@ -401,11 +404,37 @@
                                                          (lib/with-join-alias (joined-table-alias lhs-table-id)))
                                                        (-> rhs-field
                                                            (lib/with-join-alias (joined-table-alias rhs-table-id))))]))]
-         (log/tracef "Adding join against %s\n%s"
-                     (name-for-logging :model/Table rhs-table-id) (u/cprint-to-str join))
+         (log/tracef "Adding join against %s"
+                     (name-for-logging :model/Table rhs-table-id))
          (lib/join query join)))
      query
      joins)))
+
+(mu/defn- tighten-join-projections :- ::lib.schema/query
+  "Narrow each join's inner-stage `:fields` to exactly the field-ids `query` references whose `:table-id` matches the
+  join's source table.
+
+  Assumes no two joins in stage 0 target the same `:table-id` (true for chain-filter's `joined-table-alias`
+  convention). If that ever breaks, both joins get the union of fields — still correct, only over-projection."
+  [query :- ::lib.schema/query]
+  (if (empty? (lib/joins query))
+    query
+    ;; Bucket by `:table-id`, not by join alias: aliases are stage-scoped and the same string can recur in nested
+    ;; scopes referring to different things. Table-id is the field's natural grain.
+    (let [field-ids   (lib/all-field-ids query)
+          cols        (lib.metadata/bulk-metadata query :metadata/column field-ids)
+          cols-by-tid (group-by :table-id cols)]
+      (lib.util/update-query-stage
+       query 0
+       update :joins
+       (fn [the-joins]
+         (mapv (fn [a-join]
+                 (let [thing (lib/joined-thing query a-join)
+                       tid   (when (= :metadata/table (:lib/type thing))
+                               (:id thing))]
+                   (cond-> a-join
+                     tid (lib/with-join-source-fields (get cols-by-tid tid)))))
+               the-joins))))))
 
 (mr/def ::options
   ;; if original-field-id is specified, we'll include this in the results. For Field->Field remapping.
@@ -421,7 +450,7 @@
   [field-id                          :- ::lib.schema.id/field
    constraints                       :- [:maybe ::constraints]
    {:keys [original-field-id limit]} :- [:maybe ::options]]
-  (log/tracef "Chain filter %s with constraints %s" (name-for-logging :model/Field field-id) (u/cprint-to-str constraints))
+  (log/tracef "Chain filter %s with %d constraint(s)" (name-for-logging :model/Field field-id) (count constraints))
   ;; `field-id->database-id` is the one place we still bootstrap from a raw field-id: we need the Database before we
   ;; can build a (per-Database) metadata provider. Every other table-id/db-id below comes from `mp`.
   (let [database-id       (field/field-id->database-id field-id)
@@ -454,7 +483,7 @@
                   (name-for-logging :model/Field original-field-id)))
     (when (seq joins)
       (log/tracef "Generating joins and filters for source %s with joins info\n%s"
-                  (name-for-logging :model/Table source-table-id) (u/cprint-to-str joins)))
+                  (name-for-logging :model/Table source-table-id) (pr-str joins)))
     (-> (lib/query mp (lib.metadata/table mp source-table-id))
         ;; return the lesser of limit (if set) or max results
         (lib/limit ((fnil min Integer/MAX_VALUE) limit max-results))
@@ -479,7 +508,11 @@
                                 (lib/order-by field))
                 (not original-field) (lib/breakout field))
         (add-filters source-table-id joined-table-ids constraints)
-        schema.metadata-queries/add-required-filters-if-needed)))
+        schema.metadata-queries/add-required-filters-if-needed
+        ;; Runs LAST so it picks up joined-table field refs injected by middleware above (e.g. BigQuery partition
+        ;; filters). Without an explicit projection here the join's inner stage gets expanded to every column on the
+        ;; joined Table by add-implicit-clauses, OOM'ing on wide fact tables.
+        tighten-join-projections)))
 
 ;;; ------------------------ Chain filter (powers GET /api/dashboard/:id/params/:key/values) -------------------------
 
@@ -489,17 +522,11 @@
    constraints :- [:maybe ::constraints]
    options     :- [:maybe ::options]]
   (let [mbql-query (chain-filter-mbql-query field-id constraints options)]
-    (log/debugf "Chain filter MBQL query:\n%s" (u/cprint-to-str mbql-query))
     (try
       (let [query-limit (lib/current-limit mbql-query)
             ;; FIXME: this can OOM for text column if each value are too large. See #46411
             ;; Consider using the [[field-values/distinct-text-field-rff] rff]
             values      (qp/process-query mbql-query (constantly conj))]
-        (try ; Feature issue #46888: log chain filter query.
-          (log/debugf "Chain filter native query: `%s`."
-                      (:query (qp.compile/compile mbql-query)))
-          (catch Throwable _
-            (log/error "Chain filter log failed!")))
         {:values          values
          ;; It's unlikely that we don't have a query-limit, but better safe than sorry and default it true
          ;; so that calling chain-filter-search on the same field will search from DB.

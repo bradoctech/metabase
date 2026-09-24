@@ -371,17 +371,22 @@
   "Convenience function for inviting a new `User` and sending them a welcome email.
   This function will create the user, which will trigger the built-in system event
   notification to send an invite via email."
-  [new-user :- users.schema/NewUser invitor :- Invitor setup? :- :boolean]
-  ;; create the new user
-  (u/prog1 (t2/insert-returning-instance! :model/User new-user)
-    ;; TODO make sure the email being sent synchronously.
-    (events/publish-event! :event/user-invited
-                           {:object
-                            (assoc <>
-                                   :is_from_setup setup?
-                                   :invite_method "email"
-                                   :sso_source    (:sso_source new-user))
-                            :details {:invitor (select-keys invitor [:email :first_name])}})))
+  ([new-user invitor setup?]
+   (create-and-invite-user! new-user invitor setup? nil))
+  ([new-user      :- users.schema/NewUser
+    invitor       :- Invitor
+    setup?        :- :boolean
+    invite-target :- [:maybe users.schema/InviteTarget]]
+   ;; create the new user
+   (u/prog1 (t2/insert-returning-instance! :model/User new-user)
+     (events/publish-event! :event/user-invited
+                            {:object
+                             (cond-> (assoc <>
+                                            :is_from_setup setup?
+                                            :invite_method "email"
+                                            :sso_source    (:sso_source new-user))
+                               invite-target (assoc :invite_target invite-target))
+                             :details {:invitor (select-keys invitor [:email :first_name])}}))))
 
 ;;; TODO -- this should probably be moved into [[metabase.sso.google]]
 (mu/defn create-new-google-auth-user!
@@ -445,6 +450,19 @@
    [:like :%lower.last_name  (wildcard-query query)]
    [:like :%lower.email      (wildcard-query query)]])
 
+(defn- table-metadata-perms-exist-clause
+  "EXISTS clause, correlated to :core_user.id, testing whether the user is in a group that grants
+  manage-table-metadata."
+  []
+  [:exists ^:allow-subquery
+   {:select [1]
+    :from   [[:permissions_group_membership :pgm]]
+    :join   [[:data_permissions :p] [:= :p.group_id :pgm.group_id]]
+    :where  [:and
+             [:= :pgm.user_id :core_user.id]
+             [:= :p.perm_type "perms/manage-table-metadata"]
+             [:= :p.perm_value "yes"]]}])
+
 (defn same-groups-user-ids
   "Return a list of all user-ids in the same group with the user with id `user-id`.
   Ignore the All-user groups."
@@ -486,25 +504,11 @@
                                                                  [:or
                                                                   :core_user.is_data_analyst
                                                                   :core_user.is_superuser
-                                                                  [:in :core_user.id
-                                                                   ^:allow-subquery
-                                                                   {:select-distinct [:pgm.user_id]
-                                                                    :from [[:permissions_group_membership :pgm]]
-                                                                    :join [[:data_permissions :p] [:= :p.group_id :pgm.group_id]]
-                                                                    :where [:and
-                                                                            [:= :p.perm_type "perms/manage-table-metadata"]
-                                                                            [:= :p.perm_value "yes"]]}]]
+                                                                  (table-metadata-perms-exist-clause)]
                                                                  [:and
                                                                   [:not :core_user.is_data_analyst]
                                                                   [:not :core_user.is_superuser]
-                                                                  [:not-in :core_user.id
-                                                                   ^:allow-subquery
-                                                                   {:select-distinct [:pgm.user_id]
-                                                                    :from [[:permissions_group_membership :pgm]]
-                                                                    :join [[:data_permissions :p] [:= :p.group_id :pgm.group_id]]
-                                                                    :where [:and
-                                                                            [:= :p.perm_type "perms/manage-table-metadata"]
-                                                                            [:= :p.perm_value "yes"]]}]]))
+                                                                  [:not (table-metadata-perms-exist-clause)]]))
     (some? group-ids)                       (sql.helpers/right-join
                                              :permissions_group_membership
                                              [:= :core_user.id :permissions_group_membership.user_id])

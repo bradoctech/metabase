@@ -134,6 +134,7 @@
    {{:keys [was-pivot] :as query} :query
     format-rows                   :format_rows
     pivot-results                 :pivot_results
+    csv-include-bom               :csv_include_bom
     visualization-settings        :visualization_settings}
    ;; Support JSON-encoded query and viz settings for backwards compatibility for when downloads used to be triggered by
    ;; `<form>` submissions... see https://metaboat.slack.com/archives/C010L1Z4F9S/p1738003606875659
@@ -149,7 +150,8 @@
                                                               (cond-> x
                                                                 (string? x) (json/decode viz-setting-key-fn)))}]]
        [:format_rows            {:default false} ms/BooleanValue]
-       [:pivot_results          {:default false} ms/BooleanValue]]]
+       [:pivot_results          {:default false} ms/BooleanValue]
+       [:csv_include_bom         {:default false} ms/BooleanValue]]]
   (let [viz-settings                  (-> visualization-settings
                                           mi/normalize-visualization-settings
                                           mb.viz/norm->db)
@@ -160,6 +162,7 @@
                                                                    (select-keys [:ignore-cached-results?])
                                                                    (assoc :format-rows?           (or format-rows false)
                                                                           :pivot?                 (or pivot-results false)
+                                                                          :csv-include-bom?       (if (some? csv-include-bom) csv-include-bom false)
                                                                           :process-viz-settings?  true
                                                                           :skip-results-metadata? true))))]
     (run-streaming-query
@@ -230,8 +233,9 @@
               (let [compiled (qp.compile/compile-preprocessed preprocessed)
                     driver (driver.u/database->driver database)]
                 ;; Return only the compiled query and its params, not the internal keys the compiler carries
-                ;; through (e.g. :lib/type, :query-permissions/referenced-card-ids).
-                (-> (select-keys compiled [:query :params])
+                ;; through (e.g. :lib/type, :query-permissions/referenced-card-ids). `:collection` is kept so
+                ;; the frontend can pre-select the source table when converting a MongoDB question to native.
+                (-> (select-keys compiled [:query :params :collection])
                     (cond-> pretty (update :query #(driver/prettify-native-form driver %))))))))))))
 
 (api.macros/defendpoint :post "/pivot"

@@ -71,7 +71,6 @@
                               :connection-impersonation               true
                               :connection-impersonation-requires-role true
                               :describe-fields                        true
-                              :describe-fks                           true
                               :convert-timezone                       true
                               :datetime-diff                          true
                               :full-join                              false
@@ -129,13 +128,6 @@
   [_driver database]
   (:db (:details database)))
 
-;; This is a bit of a lie since the JSON type was introduced for MySQL since 5.7.8.
-;; And MariaDB doesn't have the JSON type at all, though `JSON` was introduced as an alias for LONGTEXT in 10.2.7.
-;; But since JSON unfolding will only apply columns with JSON types, this won't cause any problems during sync.
-(defmethod driver/database-supports? [:mysql :nested-field-columns]
-  [_driver _feat db]
-  (driver.common/json-unfolding-default db))
-
 (doseq [feature [:actions :actions/custom :actions/data-editing]]
   (defmethod driver/database-supports? [:mysql feature]
     [driver _feat _db]
@@ -173,6 +165,11 @@
   "Returns true if the database is MariaDB."
   [conn :- (lib.schema.common/instance-of-class Connection)]
   (= (connection-flavor conn) "MariaDB"))
+
+;; MariaDB doesn't have the JSON type at all, though `JSON` was introduced as an alias for LONGTEXT in 10.2.7.
+(defmethod driver/database-supports? [:mysql :nested-field-columns]
+  [_driver _feat db]
+  (and (driver.common/json-unfolding-default db) (not (mariadb? db))))
 
 (defmethod driver/database-supports? [:mysql :table-privileges]
   [_driver _feat _db]
@@ -224,7 +221,7 @@
                                "All Metabase features may not work properly when using an unsupported version."
                                "\n********************************************************************************\n"))))))))
 
-(def ^:private disallowed-additional-opts #"(?:allowLoadLocalInfile|allowLoadLocalInfileInPath|allowUrlInLocalInfile|autoDeserialize|serverRSAPublicKeyFile)")
+(def ^:private disallowed-additional-opts #"(?:allowLocalInfile|allowLoadLocalInfile|allowLoadLocalInfileInPath|allowUrlInLocalInfile|autoDeserialize|serverRSAPublicKeyFile)")
 
 (defmethod driver/validate-db-details! :mysql
   [_driver details]
@@ -459,6 +456,12 @@
 (defmethod sql.qp/->honeysql [:mysql :text]
   [driver [_ value]]
   (h2x/maybe-cast "CHAR" (sql.qp/->honeysql driver value)))
+
+;; MySQL/MariaDB `CAST` does not accept `TEXT` as a target type — the string cast target is
+;; `CHAR`.
+(defmethod sql.qp/->honeysql [:mysql ::sql.qp/cast-to-text]
+  [driver [_ expr]]
+  (sql.qp/->honeysql driver [::sql.qp/cast expr "char"]))
 
 (defmethod sql.qp/->honeysql [:mysql :regex-match-first]
   [driver [_ arg pattern]]
@@ -736,6 +739,14 @@
         (set-prog-nm-fn))
       (set-prog-nm-fn)))) ; additional-options did not contain connectionAttributes at all; set it
 
+(defn- set-local-infile
+  "Pin `allowLocalInfile` to `allowed?` on `spec`'s connection string.
+
+  Appending is what makes this stick: the driver lets URL parameters override connection `Properties`, and lets a later
+  duplicate parameter override an earlier one, so this only wins if it comes after `:additional-options`."
+  [spec allowed?]
+  (sql-jdbc.common/handle-additional-options spec {:additional-options (str "allowLocalInfile=" allowed?)}))
+
 (defmethod sql-jdbc.conn/connection-details->spec :mysql
   [_ {ssl? :ssl, :keys [additional-options ssl-cert auth-provider], :as details}]
   ;; In versions older than 0.32.0 the MySQL driver did not correctly save `ssl?` connection status. Users worked
@@ -775,7 +786,8 @@
                          (dissoc :ssl)))]
        (-> (driver-api/spec :mysql details)
            (maybe-add-program-name-option addl-opts-map)
-           (sql-jdbc.common/handle-additional-options details))))))
+           (sql-jdbc.common/handle-additional-options details)
+           (set-local-infile false))))))
 
 (defmethod sql-jdbc.sync/active-tables :mysql
   [& args]
@@ -1053,12 +1065,14 @@
           (with-open [^java.io.Writer writer (jio/writer file-path)]
             (doseq [value (interpose \newline tsvs)]
               (.write writer (str value))))
-          (sql-jdbc.execute/do-with-connection-with-options
-           driver
-           db-id
-           nil
-           (fn [conn]
-             (jdbc/execute! {:connection conn} sql))))
+          ;; Bulk-loading needs a connection that will service `LOAD DATA LOCAL INFILE`, which the pooled connections
+          ;; refuse (see [[set-local-infile]]), so open a dedicated unpooled one for this statement. That is safe here
+          ;; where it is not for user-supplied SQL: the driver only sends the server the file named in the statement,
+          ;; and this statement names the temp file we just wrote.
+          (driver-api/with-metadata-provider db-id
+            (let [details (driver.conn/effective-details (driver-api/database (driver-api/metadata-provider)))]
+              (sql-jdbc.conn/with-connection-spec-for-testing-connection [spec [driver details]]
+                (jdbc/execute! (set-local-infile spec true) sql)))))
         (finally
           (.delete temp-file))))))
 
@@ -1349,8 +1363,14 @@
           (doseq [sql [;; Create the isolated database
                        (format "CREATE DATABASE IF NOT EXISTS %s" quoted-db)
                        user-sql
-                       ;; Grant all privileges on the isolated database
-                       (format "GRANT ALL PRIVILEGES ON %s.* TO %s@'%%'" quoted-db quoted-user)]]
+                       ;; Least-privilege grant on the workspace's own DB (vs. ALL PRIVILEGES,
+                       ;; dropping GRANT OPTION, CREATE VIEW/ROUTINE, TRIGGER, etc.):
+                       ;;   SELECT, INSERT, UPDATE, DELETE - full DML on its own tables
+                       ;;   CREATE - transform target / CTAS
+                       ;;   DROP   - swap/cleanup
+                       ;;   ALTER  - required (with DROP/CREATE) for RENAME TABLE swaps
+                       (format "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER ON %s.* TO %s@'%%'"
+                               quoted-db quoted-user)]]
             (.addBatch ^Statement stmt ^String sql))
           (try
             (.executeBatch ^Statement stmt)

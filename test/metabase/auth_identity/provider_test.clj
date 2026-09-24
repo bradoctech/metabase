@@ -299,7 +299,9 @@
    :token_exchange     false})
 
 (deftest login!-ignores-caller-supplied-user-id-on-failed-authenticate-test
-  (testing "a caller-injected :user-id does not survive a failed authenticate"
+  (testing (str "A caller-injected :user-id must not survive a failed authenticate. `authenticate` is the sole "
+                "authority for identity; merging the caller's map underneath its result let a failed login "
+                "name an arbitrary account and mint a real session for it.")
     (mt/with-temp [:model/User {user-id :id} {:is_active true}]
       (let [result (provider/login! :provider/test-forgery-failure
                                     {:token "garbage"
@@ -329,8 +331,9 @@
         (is (zero? (t2/count :model/Session :user_id user-id)))))))
 
 (deftest login!-does-not-create-session-for-redirect-test
-  ;; `:success?` is `:redirect` while an OAuth/OIDC flow is being initiated — truthy, but not a login.
-  (testing "a :redirect result mints no session"
+  (testing (str "Session creation is gated on `(true? :success?)`, not truthiness: :redirect is a legitimate "
+                "success state for OAuth/OIDC flow initiation and must not mint a session even when a user "
+                "was resolved.")
     (mt/with-temp [:model/User {user-id :id} {:is_active true}]
       (let [result (provider/login! :provider/test-forgery-redirect
                                     {:token (str user-id)
@@ -339,6 +342,18 @@
         (is (nil? (:session result)))
         (is (zero? (t2/count :model/Session :user_id user-id))
             "flow initiation must not write a session row")))))
+
+(deftest login!-mfa-pending-suppresses-session-test
+  (testing "An MFA-pending login must not mint a session even though authenticate succeeded"
+    (mt/with-temp [:model/User {user-id :id} {:is_active true}]
+      (with-redefs [provider/apply-mfa-gate (fn [_provider result] (assoc result :mfa/pending? true))]
+        (let [result (provider/login! :provider/test-forgery-success
+                                      {:token (str user-id)
+                                       :device-info test-device-info})]
+          (is (true? (:mfa/pending? result)))
+          (is (nil? (:session result)))
+          (is (zero? (t2/count :model/Session :user_id user-id))
+              "the second factor is not complete, so no session row may exist"))))))
 
 (deftest login!-still-creates-session-for-genuine-success-test
   (testing "Regression guard: a genuinely successful authenticate still mints a session"
@@ -352,9 +367,11 @@
         (is (= 1 (t2/count :model/Session :user_id user-id)))))))
 
 (deftest login!-caller-user-id-cannot-override-authenticated-identity-test
-  ;; The SSO shape is where the dissoc earns its keep: authenticate returns no :user-id, so a caller's
-  ;; survives the merge, and resolution reads :user-id before the :user-data email branch.
-  (testing "a caller-injected :user-id does not override the identity authenticate resolved"
+  (testing (str "On a successful auth by an SSO-shaped provider, a caller-injected :user-id must not override "
+                "the resolved identity. Merge order alone does not protect this shape: authenticate supplies "
+                "no :user-id, so the caller's survives, and resolution reads :user-id before the email branch. "
+                "Dropping caller-owned keys is what removes it, and that is what this shape tests beyond the "
+                "(true? :success?) gate.")
     (mt/with-temp [:model/User {real-id :id, real-email :email} {:is_active true}
                    :model/User {other-id :id}                    {:is_active true, :is_superuser true}]
       (let [result (provider/login! :provider/test-forgery-sso
@@ -368,7 +385,9 @@
             "no session for the injected (superuser) target")))))
 
 (deftest login!-nonscalar-user-id-cannot-reach-query-sink-test
-  (testing "a non-scalar :user-id resolves no user instead of reaching the query"
+  (testing (str "A non-scalar :user-id must never reach `t2/select-one … :id user-id`. Resolution is "
+                "`pos-int?`-gated, so a `{:raw ...}` id resolves no user rather than reaching the query, "
+                "even when a provider's authenticate is the thing that produced it.")
     (mt/with-temp [:model/User {user-id :id} {:is_active true}]
       (let [result (provider/login! :provider/test-forgery-nonscalar-id
                                     {:token       "1) OR (1=1) --"
@@ -388,10 +407,11 @@
   {:success? true :user-id (parse-long token)})
 
 (deftest login!-preserves-caller-supplied-oidc-provider-key-test
-  ;; The OIDC integration assocs this onto the request and `authenticate` only reads it, so nothing puts
-  ;; it back. `login! :after` reads it off the result to drive group sync — denylisting it would silently
-  ;; disable that, so it must stay off `authenticate-owned-keys`.
-  (testing "a caller-supplied :oidc-provider-key survives to the result"
+  (testing (str "A caller-supplied :oidc-provider-key must survive the pipeline to the result. The OIDC "
+                "integration assocs it onto the request and `authenticate` only reads it, so nothing puts it "
+                "back; `login! :after` then reads it off the result to find the provider config and drive "
+                "group sync. Adding it to authenticate-owned-keys would leave it absent, and group sync would "
+                "stop with no error, no failed login, and no groups.")
     (mt/with-temp [:model/User {user-id :id} {:is_active true}]
       (let [result (provider/login! :provider/test-oidc-shaped-passthrough
                                     {:token             (str user-id)

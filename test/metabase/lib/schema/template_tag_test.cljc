@@ -62,18 +62,6 @@
                                         1]
                          :widget-type  :string/contains}))))
 
-(deftest ^:parallel normalize-v63-template-tags-list-to-map-test
-  (testing "names in the map values need to match keys in the map"
-    (is (= {"time-unit" {:name         "time-unit"
-                         :display-name "id"
-                         :type         :temporal-unit
-                         :dimension    [:field {:lib/uuid "00000000-0000-0000-0000-000000000000"} 1]}}
-           (lib/normalize ::lib.schema.template-tag/template-tag-map
-                          [{:name         "time-unit"
-                            :display-name "id"
-                            :type         :temporal-unit
-                            :dimension    [:field {:lib/uuid "00000000-0000-0000-0000-000000000000"} 1]}])))))
-
 (deftest ^:parallel raw-value-default-test
   (let [tag (fn [default] {:name "x", :display-name "X", :type :text, :default default})]
     (testing "a raw-value template tag :default holds a parameter value"
@@ -91,3 +79,15 @@
     (testing "a source-filter :value is not a map"
       (are [value] (not (mr/validate ::lib.schema.template-tag/source-filter (flt value)))
         {:a 1} {}))))
+
+(deftest ^:parallel normalize-template-tags-map-to-list-test
+  (testing "names in the map values need to match keys in the map"
+    (is (=? [{:name         "time-unit"
+              :display-name "id"
+              :type         :temporal-unit
+              :dimension    [:field {:lib/uuid string?} 1]}]
+            (lib/normalize ::lib.schema.template-tag/template-tags
+                           {"time-unit" {:name         "id"
+                                         :display-name "id"
+                                         :type         :temporal-unit
+                                         :dimension    [:field 1]}})))))

@@ -1,5 +1,6 @@
 (ns metabase.search.settings
   (:require
+   [metabase.app-db.core :as mdb]
    [metabase.appearance.core :as appearance]
    [metabase.settings.core :as setting :refer [defsetting]]
    [metabase.util.i18n :as i18n]
@@ -37,17 +38,18 @@
   :encryption :no
   :default    nil
   :type       :csv
-  ;; Off the transaction's thread via a future: the trigger only schedules a quartz job, which runs well
-  ;; after commit. The indexer's periodic self-heal converges any activation this future's snapshot races.
+  ;; Post-commit + future: the trigger check must observe the final committed settings state (a surrounding
+  ;; set-many! may include the setting that makes the engine supported) and stay off the transaction's thread.
   :setter     (fn [new-value]
                 (let [before (set ((requiring-resolve 'metabase.search.engine/active-engines)))
                       result (setting/set-value-of-type! :csv :additional-search-engines new-value)]
-                  (future
-                    (try
-                      ((requiring-resolve 'metabase.search.task.search-index/trigger-init-for-newly-active-engines!)
-                       before)
-                      (catch Throwable t
-                        (log/error t "Failed to trigger search index init for newly active engines"))))
+                  (mdb/do-after-commit
+                   #(future
+                      (try
+                        ((requiring-resolve 'metabase.search.task.search-index/trigger-init-for-newly-active-engines!)
+                         before)
+                        (catch Throwable t
+                          (log/errorf "Failed to trigger search index init for newly active engines: %s" (ex-message t))))))
                   result))
   :doc        false)
 

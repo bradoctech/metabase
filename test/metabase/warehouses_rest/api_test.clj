@@ -15,6 +15,8 @@
    [metabase.driver.settings :as driver.settings]
    [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
    [metabase.driver.util :as driver.u]
+   [metabase.lib.core :as lib]
+   [metabase.lib.metadata :as lib.metadata]
    [metabase.lib.schema.id :as lib.schema.id]
    [metabase.permissions.models.data-permissions :as data-perms]
    [metabase.permissions.models.permissions :as perms]
@@ -35,7 +37,6 @@
    [metabase.test.data.users :as test.users]
    [metabase.test.fixtures :as fixtures]
    [metabase.test.http-client :as client]
-   [metabase.test.util :as tu]
    [metabase.util :as u]
    [metabase.util.cron :as u.cron]
    [metabase.util.i18n :refer [deferred-tru]]
@@ -684,6 +685,40 @@
                               {:details {:db "new"}}))
       (is (true? (t2/select-one-fn :is_stub :model/Database :id db-id))))))
 
+(deftest reject-sample-database-edit-test
+  (testing "PUT /api/database/:id rejects any edit to the sample database with a sample-specific message"
+    (mt/with-temp [:model/Database {db-id :id} {:engine    ::test-driver
+                                                :is_sample true
+                                                :name      "Sample Database"}]
+      (is (re-find #"sample database cannot be edited"
+                   (mt/user-http-request :crowberto :put 400 (format "database/%d" db-id)
+                                         {:name "New Name"})))
+      (testing "the row is unchanged"
+        (is (= "Sample Database" (t2/select-one-fn :name :model/Database :id db-id))))
+      (testing "the guard is lifted when test endpoints are enabled (e2e tests edit the sample database)"
+        (mt/with-temp-env-var-value! [mb-enable-test-endpoints "true"]
+          (mt/user-http-request :crowberto :put 200 (format "database/%d" db-id)
+                                {:name "New Name"})
+          (is (= "New Name" (t2/select-one-fn :name :model/Database :id db-id))))))))
+
+(deftest database-modifiability-flags-test
+  (testing "GET /api/database/:id returns the is_sample and is_attached_dwh flags the admin UI uses to disable editing"
+    (testing "sample database"
+      (mt/with-temp [:model/Database {db-id :id} {:engine ::test-driver, :is_sample true}]
+        (let [db (mt/user-http-request :crowberto :get 200 (format "database/%d" db-id))]
+          (is (true? (:is_sample db)))
+          (is (false? (:is_attached_dwh db))))))
+    (testing "attached DWH"
+      (mt/with-temp [:model/Database {db-id :id} {:engine ::test-driver, :is_attached_dwh true}]
+        (let [db (mt/user-http-request :crowberto :get 200 (format "database/%d" db-id))]
+          (is (true? (:is_attached_dwh db)))
+          (is (false? (:is_sample db))))))
+    (testing "ordinary database is editable (both flags false)"
+      (mt/with-temp [:model/Database {db-id :id} {:engine ::test-driver}]
+        (let [db (mt/user-http-request :crowberto :get 200 (format "database/%d" db-id))]
+          (is (false? (:is_sample db)))
+          (is (false? (:is_attached_dwh db))))))))
+
 (deftest update-database-provider-name-test
   (testing "PUT /api/database/:id"
     (testing "should be able to set and unset `provider_name`"
@@ -965,11 +1000,10 @@
                    :model/Table table {:db_id db-id}
                    :model/Field _ {:table_id (u/the-id table)}]
       (testing "GET /api/database/:id/metadata?skip_fields=true"
-        (let [fields (->> (mt/user-http-request :rasta :get 200 (format "database/%d/metadata?skip_fields=true" db-id))
-                          :tables
-                          first
-                          :fields)]
-          (is (= () fields)))))))
+        (let [table (->> (mt/user-http-request :rasta :get 200 (format "database/%d/metadata?skip_fields=true" db-id))
+                         :tables
+                         first)]
+          (is (not (contains? table :fields))))))))
 
 (deftest ^:parallel autocomplete-suggestions-test
   (let [prefix-fn (fn [db-id prefix]
@@ -1209,10 +1243,50 @@
            (mt/user-http-request :lucky :get 200 "database?saved=true"))))))
 
 (deftest databases-list-include-saved-questions-test-3
-  (testing "GET /api/database?saved=true"
-    (testing "Omit virtual DB if nested queries are disabled"
-      (tu/with-temporary-setting-values [enable-nested-queries false]
-        (is (every? some? (:data (mt/user-http-request :lucky :get 200 "database?saved=true"))))))))
+  (testing "GET /api/database?saved=true -- Omit virtual DB if nested queries are disabled (#19341)"
+    (mt/with-temp [:model/Card _ (assoc (card-with-native-query "Some Card")
+                                        :result_metadata [{:name         "col_name"
+                                                           :display_name "Col Name"
+                                                           :base_type    :type/Text}])]
+      (testing "sanity check: the virtual DB is present when nested queries are enabled"
+        (is (some :is_saved_questions
+                  (:data (mt/user-http-request :lucky :get 200 "database?saved=true")))))
+      (testing "the virtual DB is omitted entirely when nested queries are disabled"
+        (mt/with-temp-env-var-value! ["MB_ENABLE_NESTED_QUERIES" "false"]
+          (is (not-any? :is_saved_questions
+                        (:data (mt/user-http-request :lucky :get 200 "database?saved=true")))))))))
+
+(deftest databases-list-saved-questions-call-count-test
+  (testing "GET /api/database?saved=true&include=tables app-DB call count should not scale with the number of Cards"
+    (mt/with-model-cleanup [:model/Card]
+      (letfn [(insert-cards! [n]
+                (dotimes [_ n]
+                  (t2/insert! :model/Card
+                              (assoc (card-with-native-query (mt/random-name))
+                                     :creator_id             (mt/user->id :crowberto)
+                                     :display                :table
+                                     :visualization_settings {}
+                                     ;; a column with a real Field :id exercises the per-card Field
+                                     ;; fetch + hydration path
+                                     :result_metadata        [{:id           (mt/id :venues :name)
+                                                               :name         "NAME"
+                                                               :display_name "Name"
+                                                               :base_type    :type/Text}]))))
+              (warm-call-count! []
+                ;; first request pays one-time priming; measure the second
+                (mt/user-http-request :crowberto :get 200 "database?saved=true&include=tables")
+                (t2/with-call-count [call-count]
+                  (mt/user-http-request :crowberto :get 200 "database?saved=true&include=tables")
+                  (call-count)))]
+        (insert-cards! 2)
+        (let [calls-with-2  (warm-call-count!)
+              _             (insert-cards! 16)
+              calls-with-18 (warm-call-count!)]
+          ;; [[mi/do-after-select]] re-runs each Card row through toucan2's identity-query, which
+          ;; `with-call-count` counts even though it never hits the DB — so growth of 1 per Card is
+          ;; expected and allowed. The slack of 6 stays well under the pre-batching behavior of one
+          ;; real `metabase_database` select per additional Card on top of that (#78919).
+          (is (<= calls-with-18 (+ calls-with-2 16 6))))))))
 
 (deftest fetch-databases-with-invalid-driver-test
   (testing "GET /api/database"
@@ -1877,7 +1951,7 @@
           (is (= [true] @ssl-values)))))))
 
 (deftest no-ssrf-via-database-add-test
-  (testing "endpoints that test connection details cannot be used to probe the internal network (SEC-556)"
+  (testing "endpoints that test connection details cannot be used to probe the internal network"
     (mt/with-temp-env-var-value! [mb-warehouse-allowed-networks "external-only"]
       (let [private-details {:host "10.224.7.141" :port 5432 :dbname "postgres" :user "postgres"}]
         (testing "POST /api/database"
@@ -2232,8 +2306,9 @@
                  (mt/user-http-request :lucky :get 404 url :schema "no such schema"))))
         (testing "the route-param form of such names is rejected at the HTTP layer, which is why the query
                  param exists; if this assertion fails, the query-param workaround may be obsolete (#77353)"
-          ;; the expected 400 status is asserted inside the client
-          (mt/user-real-request :lucky :get 400 (str url "public%2Ftransactions")))))))
+          (is (= 400 (:status (mt/user-real-request-full-response
+                               :lucky :get 400
+                               (str url "public%2Ftransactions"))))))))))
 
 (deftest ^:parallel get-schema-tables-publishing-test
   (testing "GET /api/database/:id/schema/:schema"
@@ -2610,10 +2685,11 @@
         (testing "does not includes undefined keys by default"
           (is (not (contains? (:settings (mt/user-http-request :crowberto :get 200 (str "database/" db-id)))
                               :undefined-setting))))
-        (is (re-find #"Error checking the readability of :undefined-setting setting."
-                     (-> (messages)
-                         first
-                         :message)))))))
+        (is (= (str "Error checking the readability of :undefined-setting setting. The setting will be hidden in API response."
+                    " Error: Unknown setting: :undefined-setting")
+               (-> (messages)
+                   first
+                   :message)))))))
 
 (deftest autocomplete-suggestions-do-not-include-dashboard-cards
   (testing "GET /api/database/:id/card_autocomplete_suggestions"
@@ -3215,3 +3291,90 @@
                  (mt/user-http-request :crowberto :put 400 (format "database/%d" router-id)
                                        {:admin_details {:host             "admin-host"
                                                         :admin-connection true}}))))))))
+
+(deftest databases-list-can-upload-respects-view-data-test
+  (testing "GET /api/database/:id can_upload reflects the user's view-data permission, not just uploads_enabled"
+    (mt/with-temp [:model/Database {db-id :id} {:engine              :postgres
+                                                :uploads_enabled     true
+                                                :uploads_schema_name "public"}]
+      (mt/with-no-data-perms-for-all-users!
+        (data-perms/set-database-permission! (perms-group/all-users) db-id :perms/manage-database :yes)
+        (testing "view-data blocked => can_upload is false"
+          (data-perms/set-database-permission! (perms-group/all-users) db-id :perms/view-data :blocked)
+          (is (false? (:can_upload (mt/user-http-request :rasta :get 200 (str "database/" db-id))))))
+        (testing "unrestricted view-data + query-builder create-queries => can_upload is true"
+          (data-perms/set-database-permission! (perms-group/all-users) db-id :perms/view-data :unrestricted)
+          (data-perms/set-database-permission! (perms-group/all-users) db-id :perms/create-queries :query-builder)
+          (is (true? (:can_upload (mt/user-http-request :rasta :get 200 (str "database/" db-id))))))))))
+
+(deftest native-permissions-value-test
+  (testing "GET /api/database :native_permissions is :write only when create-queries is :query-builder-and-native (#39053)"
+    (mt/with-temp [:model/Database {db-id :id} {}]
+      (letfn [(native-perms []
+                (->> (mt/user-http-request :rasta :get 200 "database")
+                     :data
+                     (m/find-first (comp #{db-id} :id))
+                     :native_permissions
+                     keyword))]
+        (mt/with-no-data-perms-for-all-users!
+          (data-perms/set-database-permission! (perms-group/all-users) db-id :perms/create-queries :query-builder)
+          (is (= :none (native-perms)))
+          (data-perms/set-database-permission! (perms-group/all-users) db-id :perms/create-queries :query-builder-and-native)
+          (is (= :write (native-perms)))
+          (testing "revoking native access reverts :native_permissions to :none"
+            (data-perms/set-database-permission! (perms-group/all-users) db-id :perms/create-queries :query-builder)
+            (is (= :none (native-perms)))))))))
+
+(deftest idfields-excludes-model-cards-test
+  (testing "GET /api/database/:id/idfields only returns real table/field pairs, never model Cards (#31663)"
+    (let [mp (mt/metadata-provider)]
+      (mt/with-temp [:model/Card _ {:type          :model
+                                    :name          "Orders Model"
+                                    :dataset_query (lib/query mp (lib.metadata/table mp (mt/id :orders)))}]
+        (let [rows (mt/user-http-request :crowberto :get 200 (format "database/%d/idfields" (mt/id)))]
+          (is (seq rows))
+          (is (every? #(t2/exists? :model/Table :id (:table_id %)) rows))
+          (is (every? #(t2/exists? :model/Field :id (:id %)) rows)))))))
+
+(deftest get-schema-tables-include-measures-test
+  (let [mp          (mt/metadata-provider)
+        schema      (t2/select-one-fn :schema :model/Table :id (mt/id :orders))
+        orders-name (t2/select-one-fn :name :model/Table :id (mt/id :orders))
+        people-name (t2/select-one-fn :name :model/Table :id (mt/id :people))]
+    (testing "GET /api/database/:id/schema/:schema?include_measures=true hydrates :measures per table"
+      (mt/with-temp [:model/Measure _ {:table_id   (mt/id :orders)
+                                       :name       "Some measure"
+                                       :creator_id (mt/user->id :crowberto)
+                                       :definition (-> (lib/query mp (lib.metadata/table mp (mt/id :orders)))
+                                                       (lib/aggregate (lib/count)))}]
+        (let [tables  (mt/user-http-request :crowberto :get 200
+                                            (format "database/%d/schema/%s" (mt/id) schema)
+                                            :include_measures true)
+              by-name (into {} (map (juxt :name identity)) tables)]
+          (is (seq (:measures (get by-name orders-name))))
+          (is (= [] (:measures (get by-name people-name)))))))
+    (testing "measures key is omitted when include_measures is not passed"
+      (let [tables (mt/user-http-request :crowberto :get 200
+                                         (format "database/%d/schema/%s" (mt/id) schema))]
+        (is (not (contains? (first tables) :measures)))))))
+
+(deftest delete-database-cascades-to-content-test
+  (testing "DELETE /api/database/:id removes the database's dependent Cards and Segments"
+    (mt/with-temp [:model/Database {db-id :id} {}
+                   :model/Table    {t :id}     {:db_id db-id}
+                   :model/Card     {c :id}     {:database_id db-id :table_id t}
+                   :model/Segment  {s :id}     {:table_id t}]
+      (mt/user-http-request :crowberto :delete 204 (format "database/%d" db-id))
+      (is (not (t2/exists? :model/Database :id db-id)))
+      (is (not (t2/exists? :model/Card :id c)))
+      (is (not (t2/exists? :model/Segment :id s))))))
+
+(deftest restore-sample-database-endpoint-test
+  (testing "POST /api/database/sample_database"
+    (testing "requires a superuser"
+      (is (= "You don't have permissions to do that."
+             (mt/user-http-request :rasta :post 403 "database/sample_database"))))
+    (testing "restores and returns the sample database"
+      (mt/with-model-cleanup [:model/Database]
+        (is (=? {:is_sample true}
+                (mt/user-http-request :crowberto :post 200 "database/sample_database")))))))

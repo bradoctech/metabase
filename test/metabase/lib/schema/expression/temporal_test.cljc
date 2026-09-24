@@ -104,13 +104,13 @@
             anywhere in it) must be rejected -- only a string that IS entirely a valid zone-offset (or
             a real ZoneId) may pass."
     (are [hostile-tz] (some? (mr/explain ::temporal/timezone-id hostile-tz))
-      "Z' UNION SELECT 1"
-      "Z\\' AT TIME ZONE 'UTC"                    ; PoC combined with the compiler-level breakout payload
+      "Z' UNION SELECT 1"                         ; Z substring, then unrelated text
+      "Z\\' AT TIME ZONE 'UTC"                    ; Z substring, then unrelated text
       "garbage-before-Z"                          ; Z substring, not at either end
       "prefix Z suffix"                           ; Z substring surrounded by unrelated text
       "garbage-before-+05:30-garbage-after"       ; offset substring embedded in garbage
-      "'; DROP TABLE users; --Z"                  ; classic SQLi shape that happens to contain a Z
-      "+05:30 OR 1=1"                             ; offset substring followed by a tautology
+      "'; DROP TABLE users; --Z"                  ; Z substring surrounded by unrelated text
+      "+05:30 OR 1=1"                             ; offset substring followed by unrelated text
       "not-a-real-zone-but-has-a-Z-in-it")))      ; the minimal, most general case: any bare non-zone string with a Z
 
 (deftest ^:parallel convert-timezone-test

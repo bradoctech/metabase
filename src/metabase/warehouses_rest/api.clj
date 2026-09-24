@@ -78,6 +78,7 @@
                               :visibility_type nil
                               {:order-by [[:%lower.schema :asc]
                                           [:%lower.display_name :asc]]})
+        _ (perms/prime-table-perms-cache {:db-ids (into #{} (map :id) dbs)})
         filtered-tables (cond->> (filter mi/can-read? all-tables)
                           can-query?          (filter mi/can-query?)
                           can-write-metadata? (filter mi/can-write?))
@@ -105,6 +106,7 @@
                          (fn [m {:keys [db_id schema]}]
                            (update m db_id (fnil conj []) schema))
                          {} rows)]
+      (perms/prime-schema-perms-cache {:db-ids db-ids})
       (for [db dbs]
         (let [db-id       (:id db)
               raw-schemas (get schemas-by-db db-id [])
@@ -129,12 +131,11 @@
   native queries, but not to create new ones. With the advent of what is currently being called 'Space-Age
   Permissions', all Cards' permissions are based on their parent Collection, removing the need for native read perms."
   [dbs :- [:maybe [:sequential :map]]]
-  (perms/prime-db-cache (map :id dbs))
   (for [db dbs]
     (assoc db
            :native_permissions
            (if (= :query-builder-and-native
-                  (perms/full-db-permission-for-user
+                  (perms/full-database-permission-for-user
                    api/*current-user-id*
                    :perms/create-queries
                    (u/the-id db)))
@@ -201,13 +202,14 @@
                 (card-has-ambiguous-columns? card)))))
 
 (defn- ids-of-dbs-that-support-source-queries []
-  (set (filter (fn [db-id]
-                 (try
-                   (when-let [db (t2/select-one :model/Database :id db-id)]
-                     (driver.u/supports? (driver.u/database->driver db) :nested-queries db))
-                   (catch Throwable e
-                     (log/error e "Error determining whether Database supports nested queries"))))
-               (t2/select-pks-set :model/Database))))
+  ;; the nested-queries check only reads the engine — don't realize full rows (decrypted :details etc.) for it
+  (set (keep (fn [db]
+               (try
+                 (when (driver.u/supports? (driver.u/database->driver db) :nested-queries db)
+                   (:id db))
+                 (catch Throwable e
+                   (log/errorf "Error determining whether Database supports nested queries: %s" (ex-message e)))))
+             (t2/select [:model/Database :id :engine]))))
 
 (mu/defn- source-query-cards
   "Fetch the Cards that can be used as source queries (e.g. presented as virtual tables)."
@@ -254,8 +256,8 @@
    Builder.)"
   [card-type :- ::queries.schema/card-type
    & {:keys [include-fields?]}]
-  (for [card (source-query-cards card-type)]
-    (schema.table/card->virtual-table card :include-fields? include-fields?)))
+  (schema.table/cards->virtual-tables (source-query-cards card-type)
+                                      :include-fields? include-fields?))
 
 (mu/defn- saved-cards-virtual-db-metadata
   [card-type :- ::queries.schema/card-type
@@ -349,7 +351,9 @@
                                          (:clause (mi/visible-filter-clause :model/Database :id user-info {:perms/manage-table-metadata :yes}))]]
                        base-where)
         dbs (t2/select :model/Database {:order-by [:%lower.name :%lower.engine]
-                                        :where where-clause})]
+                                        :where where-clause})
+        ;; everything below walks the list one database at a time
+        _   (perms/prime-database-perms-cache {:db-ids (into #{} (map :id) dbs)})]
     (cond-> (-> dbs add-native-perms-info add-transforms-perms-info)
       include-tables?              (add-tables :can-query? can-query? :can-write-metadata? can-write-metadata?)
       include-schemas?             add-schemas
@@ -636,7 +640,7 @@
                 (if skip-fields?
                   [:tables :segments :metrics]
                   [:tables [:fields :has_field_values [:target :has_field_values]] :segments :metrics])))
-        _ (perms/prime-db-cache [id])
+        _ (perms/prime-table-perms-cache {:db-ids #{id}})
         db (if include-editable-data-model?
              ;; We need to check data model perms after hydrating tables, since this will also filter out tables for
              ;; which the *current-user* does not have data model perms
@@ -653,7 +657,7 @@
                           (fn [tables]
                             (->> tables
                                  (remove :visibility_type)
-                                 (map #(update % :fields filter-sensitive-fields))))))
+                                 (map #(m/update-existing % :fields filter-sensitive-fields))))))
         (update :tables (fn [tables]
                           (if-not include-editable-data-model?
                             ;; If we're filtering by data model perms, table perm checks were already done by
@@ -835,7 +839,7 @@
                 substring (autocomplete-suggestions id (h2x/like-substring substring))
                 prefix    (autocomplete-suggestions id (h2x/like-prefix prefix)))}
     (catch Throwable e
-      (log/warnf e "Error with autocomplete: %s" (ex-message e)))))
+      (log/warnf "Error with autocomplete: %s" (ex-message e)))))
 
 ;; TODO (Cam 10/28/25) -- fix this endpoint route to use kebab-case for consistency with the rest of our REST API
 ;;
@@ -862,7 +866,7 @@
          (filter mi/can-read?)
          (map #(select-keys % [:id :name :type :collection_name])))
     (catch Throwable e
-      (log/warnf e "Error with autocomplete: %s" (ex-message e)))))
+      (log/warnf "Error with autocomplete: %s" (ex-message e)))))
 
 ;;; ------------------------------------------ GET /api/database/:id/fields ------------------------------------------
 
@@ -875,6 +879,7 @@
   [{:keys [id]} :- [:map
                     [:id ms/PositiveInt]]]
   (warehouses/get-database id)
+  (perms/prime-table-perms-cache {:db-ids #{id}})
   (let [fields (filter mi/can-read? (-> (t2/select [:model/Field :id :name :display_name :table_id :base_type :semantic_type]
                                                    :table_id        [:in (t2/select-fn-set :id :model/Table, :db_id id)]
                                                    :visibility_type [:not-in ["sensitive" "retired"]])
@@ -1125,6 +1130,12 @@
     (throw (ex-info (tru "admin-connection must not be set in details")
                     {:status-code 400})))
   (let [existing-database               (api/write-check (t2/select-one :model/Database :id id))
+        ;; e2e tests run against the H2 sample database and need to toggle its settings (actions,
+        ;; table editing), so the guard is lifted when test endpoints are enabled
+        _                               (when (and (:is_sample existing-database)
+                                                   (not (config/config-bool :mb-enable-test-endpoints)))
+                                          (throw (ex-info (tru "The sample database cannot be edited.")
+                                                          {:status-code 400})))
         _                               (when write_data_details
                                           (validate-write-data-details! existing-database write_data_details))
         _                               (when admin_details
@@ -1282,7 +1293,8 @@
     (if-let [ex (try
                   ;; it's okay to allow testing H2 connections during sync. We only want to disallow you from testing them for the
                   ;; purposes of creating a new H2 database.
-                  (binding [driver.settings/*allow-testing-h2-connections* true]
+                  (binding [driver.settings/*allow-testing-h2-connections* true
+                            driver.settings/*allow-testing-sqlite-connections* true]
                     (driver.u/can-connect-with-details? (:engine db) (driver.conn/default-details db) :throw-exceptions))
                   nil
                   (catch Throwable e
@@ -1446,6 +1458,7 @@
         filter-schemas-by-tables (fn [schemas]
                                    (if (or can-query? can-write-metadata?)
                                      (let [tables (t2/select :model/Table :db_id id :active true)
+                                           _ (perms/prime-table-perms-cache {:db-ids #{id}})
                                            filtered-tables (cond->> tables
                                                              can-query?          (filter mi/can-query?)
                                                              can-write-metadata? (filter mi/can-write?))
@@ -1540,6 +1553,7 @@
                                        :active true
                                        :visibility_type nil
                                        {:order-by [[:display_name :asc]]}))
+         _                (perms/prime-table-perms-cache {:db-ids #{db-id}})
          filtered-tables  (cond->> (if include-editable-data-model?
                                      (if-let [f (when config/ee-available?
                                                   (classloader/require 'metabase-enterprise.advanced-permissions.common)
@@ -1659,7 +1673,8 @@
         connection-details            (driver.conn/details-for-exact-type database connection-type)]
     (api/check-400 connection-details (tru "No {0} connection configured for this database" (name connection-type)))
     ;; we only want to prevent creating new H2 databases. Testing the existing database is fine.
-    (binding [driver.settings/*allow-testing-h2-connections* true]
+    (binding [driver.settings/*allow-testing-h2-connections* true
+              driver.settings/*allow-testing-sqlite-connections* true]
       (if-let [err-map (warehouses/test-database-connection engine connection-details)]
         (merge err-map {:status "error"})
         {:status "ok"}))))

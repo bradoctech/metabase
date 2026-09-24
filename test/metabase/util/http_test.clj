@@ -4,6 +4,7 @@
    [metabase.util.http :as http])
   (:import
    (clojure.lang ExceptionInfo)
+   (java.io ByteArrayInputStream)
    (java.net InetAddress)))
 
 (set! *warn-on-reflection* true)
@@ -104,6 +105,55 @@
     (doseq [host ["8.8.8.8" "1.1.1.1" "2606:4700:4700::1111" "[2606:4700:4700::1111]"]]
       (is (true? (http/host-allowed-for-network-policy? :external-only host)) host))))
 
+;; --------------------------------------------------------------------------------------------
+;; SSRF-hardened fetch ([[metabase.util.http/fetch-bytes]] and its helpers). Everything below is
+;; intentionally network-free -- the URL/address predicates are pure, the DNS resolver is exercised
+;; against `localhost` (resolves to loopback without network IO), and `fetch-bytes` is only checked
+;; on URLs that short-circuit at the validation gate before any request is made.
+;; --------------------------------------------------------------------------------------------
+
+(def ^:private allowed-urls
+  ["https://example.com/a.png"
+   "https://sub.example.co.uk/path/to/img.jpg?x=1&y=2"
+   "https://example.com:8443/a.png"                 ; non-default https port is fine
+   "HTTPS://Example.COM/a.png"                       ; scheme/host are case-insensitive
+   "https://xn--80ak6aa92e.com/a.png"])              ; punycode IDN host
+
+(def ^:private blocked-urls
+  ["http://example.com/a.png"                        ; not https
+   "ftp://example.com/a.png"                          ; not https
+   "file:///etc/passwd"                               ; not https
+   "javascript:alert(1)"                              ; not https / malformed
+   "https://169.254.169.254/latest/meta-data/"        ; link-local IP literal (AWS/GCP IMDS)
+   "https://10.0.0.5/x.png"                           ; RFC1918 IP literal
+   "https://192.168.1.1/x.png"
+   "https://172.16.0.1/x.png"
+   "https://127.0.0.1/x.png"                          ; loopback IP literal
+   "https://[::1]/x.png"                              ; IPv6 loopback literal
+   "https://[fe80::1]/x.png"                          ; IPv6 link-local literal
+   "https://2130706433/x.png"                         ; decimal form of 127.0.0.1
+   "https://0177.0.0.1/x.png"                         ; octal-ish IP form
+   "https://localhost/x.png"                          ; localhost
+   "https://LOCALHOST/x.png"
+   "https://foo.localhost/x.png"                      ; .localhost suffix
+   "https://svc.internal/x.png"                       ; .internal suffix
+   "https://host.local/x.png"                         ; .local suffix
+   "https://box.lan/x.png"                            ; .lan suffix
+   "https://metadata.google.internal/x.png"           ; GCP metadata host
+   "https://metadata/x.png"
+   "https://user:pass@example.com/x.png"              ; userinfo (credential smuggling)
+   "https:///x.png"                                   ; no host
+   "not a url"
+   ""])
+
+(deftest ^:parallel safe-url?-test
+  (testing "allowed URLs"
+    (doseq [url allowed-urls]
+      (is (true? (boolean (http/safe-url? url))) (str "should be allowed: " url))))
+  (testing "blocked URLs (SSRF / non-https / bad host)"
+    (doseq [url blocked-urls]
+      (is (false? (boolean (http/safe-url? url))) (str "should be blocked: " url)))))
+
 (def ^:private public-ips
   ["8.8.8.8"
    "1.1.1.1"
@@ -164,3 +214,53 @@
   (testing "an unknown policy throws rather than silently allowing"
     (is (thrown? ExceptionInfo
                  (http/address-allowed-for-network-policy? :allow-everything (InetAddress/getByName "127.0.0.1"))))))
+
+(deftest ^:parallel ssrf-safe-dns-resolver-test
+  (testing "the validating resolver throws when a host resolves to a non-public address"
+    ;; `localhost` resolves to loopback (no network needed) -> must be refused
+    (is (thrown? ExceptionInfo
+                 (.resolve ^org.apache.http.conn.DnsResolver @#'http/ssrf-safe-dns-resolver "localhost")))))
+
+(deftest ^:parallel fetch-bytes-blocks-without-network-test
+  (testing "blocked URLs return nil at the validation gate, never reaching the network"
+    (doseq [url ["https://169.254.169.254/latest/meta-data/"
+                 "http://example.com/x.png"
+                 "https://10.0.0.1/x.png"
+                 "https://localhost/x.png"
+                 "https://metadata.google.internal/x.png"]]
+      (is (nil? (http/fetch-bytes url)) (str "should not fetch: " url)))))
+
+(deftest ^:parallel read-bounded-test
+  (testing "reads the whole stream when under the cap"
+    (is (= "hello" (String. ^bytes (#'http/read-bounded (ByteArrayInputStream. (.getBytes "hello")) 100)))))
+  (testing "reads exactly up to the cap (inclusive)"
+    (is (= 5 (count (#'http/read-bounded (ByteArrayInputStream. (.getBytes "12345")) 5)))))
+  (testing "returns nil when the stream exceeds the cap"
+    (is (nil? (#'http/read-bounded (ByteArrayInputStream. (.getBytes "0123456789")) 5)))))
+
+(deftest ^:parallel env-network-policy-test
+  (testing "an unset environment variable names no policy, so the caller supplies its own default"
+    (doseq [raw [nil "" "   "]]
+      (is (nil? (http/env-network-policy "MB_TEST_ALLOWED_NETWORKS" raw)) (pr-str raw))))
+  (testing "a known policy is read as written"
+    (doseq [[raw expected] {"external-only"  :external-only
+                            "allow-private"  :allow-private
+                            "allow-all"      :allow-all
+                            "ALLOW-PRIVATE"  :allow-private
+                            "  allow-all  "  :allow-all}]
+      (is (= expected (http/env-network-policy "MB_TEST_ALLOWED_NETWORKS" raw)) raw)))
+  (testing "a value that is not a policy throws, naming the variable and what it accepts: nothing else validates
+           what is in the environment, and running on a policy nobody chose is not an option"
+    (doseq [raw ["allow-everything" "externl-only" "true" ":allow-all" "allow_all"
+                 ;; a policy of the address checker, but not one a deployment may ask for
+                 "loopback-and-private"]]
+      (is (thrown-with-msg? ExceptionInfo
+                            #"Invalid MB_TEST_ALLOWED_NETWORKS: .* Expected one of external-only, allow-private, allow-all\."
+                            (http/env-network-policy "MB_TEST_ALLOWED_NETWORKS" raw))
+          raw)))
+  (testing "the thrown data names the variable, the value and what was expected"
+    (is (= {:env-var  "MB_TEST_ALLOWED_NETWORKS"
+            :value    "allow-everything"
+            :expected [:external-only :allow-private :allow-all]}
+           (try (http/env-network-policy "MB_TEST_ALLOWED_NETWORKS" "allow-everything")
+                (catch ExceptionInfo e (ex-data e)))))))

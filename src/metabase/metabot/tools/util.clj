@@ -199,52 +199,91 @@
   "Return the metric and model cards in metabot scope visible to the current user.
 
   Takes a metabot-id and returns all metric and model cards in that metabot's collection
-  and its subcollections. If the metabot has use_verified_content enabled, only verified
-  content is returned.
+  and its subcollections. If the metabot has use_verified_content enabled, only verified-or-curated
+  content is returned — verified, official-collection, or library-published cards.
 
   Ignores analytics content."
   [metabot-id & {:keys [limit] :as _opts}]
   (let [metabot (t2/select-one :model/Metabot :id metabot-id)
         metabot-collection-id (:collection_id metabot)
         use-verified-content? (:use_verified_content metabot)
+        verified? (premium-features/has-feature? :content-verification)
+        official? (premium-features/has-feature? :official-collections)
+        library?  (premium-features/has-feature? :library)
+        ;; ids of collections under a Library-type root; their metrics/models are library-published content
+        library-coll-ids (when library?
+                           (let [roots (t2/select :model/Collection
+                                                  :type [:in (mapv name collection/library-collection-types)]
+                                                  :location "/")]
+                             (into (set (map :id roots)) (mapcat collection/descendant-ids roots))))
+        ;; Mirror collections.curation/curated? for card scope: verified, official-collection, or
+        ;; library-published (under a Library root). Each disjunct is gated on its feature.
+        curated-conds (cond-> []
+                        verified? (conj [:= :mr.status "verified"])
+                        official? (conj [:= :collection.authority_level "official"])
+                        (seq library-coll-ids) (conj [:in :report_card.collection_id (vec library-coll-ids)]))
+        ;; Columns are qualified with report_card because the official-collections branch joins
+        ;; `collection`, which shares column names (type, archived, id) — unqualified refs would be ambiguous.
         collection-filter (if metabot-collection-id
                             (let [collection (t2/select-one :model/Collection :id metabot-collection-id)
                                   collection-ids (conj (collection/descendant-ids collection) metabot-collection-id)]
-                              [:in :collection_id collection-ids])
+                              [:in :report_card.collection_id collection-ids])
                             [:and true])
         base-query {:select [:report_card.*]
                     :from   [[:report_card]]
                     :where [:and
                             [:!= :report_card.database_id audit-app/audit-db-id]
                             collection-filter
-                            [:in :type ["metric" "model"]]
-                            [:= :archived false]
+                            [:in :report_card.type ["metric" "model"]]
+                            [:= :report_card.archived false]
                             (when api/*current-user-id*
-                              (collection/visible-collection-filter-clause :collection_id))]}]
+                              (collection/visible-collection-filter-clause :report_card.collection_id))]}]
     (cond-> base-query
-      ;; Prioritize verified content.
-      (premium-features/has-feature? :content-verification)
-      (assoc
-       :left-join [[:moderation_review :mr] [:and
-                                             [:= :mr.moderated_item_id :report_card.id]
-                                             [:= :mr.moderated_item_type "card"]
-                                             [:= :mr.most_recent true]]]
-       :order-by [[[:case [:= :mr.status "verified"] [:inline 0]
-                    :else [:inline 1]]
-                   :asc]])
+      verified?
+      (update :left-join (fnil into []) [[:moderation_review :mr] [:and
+                                                                   [:= :mr.moderated_item_id :report_card.id]
+                                                                   [:= :mr.moderated_item_type "card"]
+                                                                   [:= :mr.most_recent true]]])
 
-      ;; Filter verified items only when that's desired.
-      (and (premium-features/has-feature? :content-verification)
-           use-verified-content?)
-      (update :where conj [:= :mr.status "verified"])
+      official?
+      (update :left-join (fnil into []) [[:collection :collection]
+                                         [:= :collection.id :report_card.collection_id]])
+
+      ;; Prioritize curated content.
+      (seq curated-conds)
+      (assoc :order-by [[[:case (into [:or] curated-conds) [:inline 0] :else [:inline 1]] :asc]])
+
+      ;; Restrict to curated content only when that's desired.
+      (and use-verified-content? (seq curated-conds))
+      (update :where conj (into [:or] curated-conds))
+
+      ;; Setting on but no curation features active → nothing is curated, so return nothing rather than
+      ;; falling through unfiltered to uncurated cards.
+      (and use-verified-content? (empty? curated-conds))
+      (update :where conj [:= [:inline 1] [:inline 0]])
 
       (integer? limit)
       (assoc :limit limit))))
 
+(defn- destination-db-ids
+  "Returns the subset of `db-ids` that back a destination (routed) database -- routing internals
+  reachable only through their router database (see
+  [[metabase.metabot.tools.resources/check-resource-database]])."
+  [db-ids]
+  (when (seq db-ids)
+    (t2/select-fn-set :id :model/Database :id [:in db-ids] :router_database_id [:not= nil])))
+
 (defn get-metrics-and-models
   "Retrieve the metric and model cards for the Metabot instance with ID `metabot-id` from the app DB.
 
-  Only cards visible to the current user are returned."
+  Only cards visible to the current user are returned, excluding those backed by a destination
+  (routed) database (see [[destination-db-ids]])."
   [metabot-id & {:as opts}]
-  (t2/select :model/Card (-> (metabot-metrics-and-models-query metabot-id opts)
-                             (update :order-by (fnil conj []) [:id]))))
+  (let [cards (t2/select :model/Card (-> (metabot-metrics-and-models-query metabot-id opts)
+                                         ;; qualified: the official-collections branch joins `collection`,
+                                         ;; which also has `id`
+                                         (update :order-by (fnil conj []) [:report_card.id])))
+        destination-ids (destination-db-ids (into #{} (keep :database_id) cards))]
+    (if (seq destination-ids)
+      (remove #(contains? destination-ids (:database_id %)) cards)
+      cards)))

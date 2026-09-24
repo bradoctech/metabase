@@ -46,15 +46,15 @@
 
 ;;; ------------------------------------------------- Transform Type Predicates -------------------------------------------------
 
-(defn transform-type
-  "Get the type of a transform"
-  [transform]
-  (-> transform :source :type keyword))
+(defn- type-is?
+  "True if `m`'s keywordized `:type` equals `t`."
+  [m t]
+  (= t (keyword (:type m))))
 
 (defn query-transform?
   "Check if this is a query transform: native query / mbql query."
   [transform]
-  (= :query (transform-type transform)))
+  (type-is? (:source transform) :query))
 
 (defn native-query-transform?
   "Check if this is a native query transform.
@@ -67,14 +67,67 @@
 (defn python-transform?
   "Check if this is a Python transform."
   [transform]
-  (= :python (transform-type transform)))
+  (type-is? (:source transform) :python))
+
+(defn incremental-target?
+  "True if `transform` writes to an incremental table."
+  [transform]
+  (type-is? (:target transform) :table-incremental))
+
+(defn merge-target?
+  "True if `transform`'s target uses the merge strategy."
+  [transform]
+  (type-is? (get-in transform [:target :target-incremental-strategy]) :merge))
+
+(defn checkpoint-source?
+  "True if `transform`'s source uses the checkpoint strategy."
+  [transform]
+  (type-is? (get-in transform [:source :source-incremental-strategy]) :checkpoint))
 
 (defn transform-source-database
   "Get the source database from a transform"
   [transform]
-  (case (transform-type transform)
-    :query (-> transform :source :query :database)
-    :python (-> transform :source :source-database)))
+  (cond
+    (query-transform? transform)  (-> transform :source :query :database)
+    (python-transform? transform) (-> transform :source :source-database)))
+
+(defn full-incremental-run?
+  "True when an incremental transform should drop-and-recreate the target rather than append.
+  Fires whenever `last_checkpoint_value` is nil — covers the literal first run, and any run after the
+  `:model/Transform` before-update hook clears the watermark on a `checkpoint-filter-field-id`
+  change. Stays true across failed attempts since the predicate only inspects
+  `:last_checkpoint_value`."
+  [transform]
+  (and (incremental-target? transform)
+       (nil? (:last_checkpoint_value transform))))
+
+;;; ------------------------------------------------- Table Template Tags -------------------------------------------------
+
+(defn table-template-tag-name
+  "Return the name (key) of the table template tag in `query` that refers to `table-id`, or nil.
+
+  This is the table variable the incremental range filter is injected into (see
+  `inject-filters-into-table-tag`). When `table-id` is nil, any table template tag qualifies."
+  [query table-id]
+  (some (fn [{tag-name :name, :as tag}]
+          (when (and (#{:table "table"} (:type tag))
+                     (or (nil? table-id) (= table-id (:table-id tag))))
+            tag-name))
+        (lib/template-tags query)))
+
+(defn incremental-table-tag-name
+  "Return the name of the table template tag the incremental range filter targets in `transform`, or
+  nil when the source query has no suitable table variable.
+
+  The range filter is injected into the table variable referring to the checkpoint field's table
+  (see `inject-filters-into-table-tag`); when no checkpoint field has been selected yet, any table
+  variable qualifies. A nil result for a table-incremental native transform is a broken state — there
+  is no table variable to filter on. This can happen when the SQL is edited to drop the table tag
+  after the transform was made incremental."
+  [{:keys [source]}]
+  (let [field-id (get-in source [:source-incremental-strategy :checkpoint-filter-field-id])
+        table-id (when field-id (t2/select-one-fn :table_id :model/Field field-id))]
+    (table-template-tag-name (:query source) table-id)))
 
 ;;; ------------------------------------------------- Transform Normalization -------------------------------------------------
 
@@ -83,7 +136,7 @@
   This should be called on transforms before processing them to ensure queries are in the expected format."
   [transform]
   (if (and (map? transform)
-           (= (:type transform) "transform")
+           (type-is? transform :transform)
            (get-in transform [:source :query]))
     (update-in transform [:source :query] lib-be/normalize-query)
     transform))
@@ -93,13 +146,13 @@
   Throws if the source type cannot be detected.
   Note: The transform should be normalized (via `normalize-transform`) before calling this function."
   [source]
-  (case (keyword (:type source))
-    :python :python
-    :query  (if (lib/native-only-query? (:query source))
-              :native
-              :mbql)
-    (throw (ex-info (str "Unknown transform source type: " (:type source))
-                    {:source source}))))
+  (cond
+    (type-is? source :python) :python
+    (type-is? source :query)  (if (lib/native-only-query? (:query source))
+                                :native
+                                :mbql)
+    :else (throw (ex-info (str "Unknown transform source type: " (:type source))
+                          {:source source}))))
 
 ;;; ------------------------------------------------- Feature Checks -------------------------------------------------
 
@@ -171,16 +224,6 @@
   [base-type]
   (or (isa? base-type :type/Temporal)
       (isa? base-type :type/Number)))
-
-(defn full-incremental-run?
-  "True when an incremental transform should drop-and-recreate the target rather than append.
-  Fires whenever `last_checkpoint_value` is nil — covers the literal first run, and any run after the
-  `:model/Transform` before-update hook clears the watermark on a `checkpoint-filter-field-id`
-  change. Stays true across failed attempts since the predicate only inspects
-  `:last_checkpoint_value`."
-  [{:keys [target last_checkpoint_value]}]
-  (and (= :table-incremental (keyword (:type target)))
-       (nil? last_checkpoint_value)))
 
 (defn- encode-checkpoint-value [v]
   (if (number? v)
@@ -262,22 +305,23 @@
   [query source-range-params]
   (let [{:keys [checkpoint-filter-field-id lo hi column]} source-range-params
         table-id  (:table-id column)
-        tags      (lib/template-tags query)
-        tag-name  (some (fn [[k v]]
-                          (when (and (#{:table "table"} (:type v))
-                                     (= table-id (:table-id v)))
-                            k))
-                        tags)
+        tag-name  (table-template-tag-name query table-id)
         _         (when-not tag-name
                     (throw (ex-info "No table variable found for checkpoint field's table"
                                     {:checkpoint-table-id table-id
-                                     :template-tags       tags})))
+                                     :template-tags       (lib/template-tags query)})))
         filters   (cond-> []
                     lo (conj {:field-id checkpoint-filter-field-id :op :> :value (:value lo)})
                     hi (conj {:field-id checkpoint-filter-field-id :op :<= :value (:value hi)}))]
     (lib.util/update-query-stage
      query 0
-     #(assoc-in % [:template-tags tag-name :source-filters] filters))))
+     update :template-tags
+     (fn [template-tags]
+       (mapv (fn [tag]
+               (cond-> tag
+                 (= (:name tag) tag-name)
+                 (assoc :source-filters filters)))
+             template-tags)))))
 
 (mu/defn get-source-range-params :- [:maybe ::transforms-base.schema/source-range-params]
   "Returns information on the incremental range filters that ought to be applied to a source query.
@@ -287,18 +331,19 @@
    :checkpoint-filter-field-id (the field ID of the checkpoint column)
    Range predicate terms (maps :type, :value), can be nil (in which case the filter clause should be omitted):
    :lo                         values in the source table must be > this :value.
-   :hi                         values in the source table must be <= this :value."
-  [{:keys [source target] :as transform}]
+   :hi                         values in the source table must be <= this :value.
+   :rows-available             count of source rows in (lo, hi] from the same scan; nil if unavailable."
+  [{:keys [source] :as transform}]
   (let [{:keys [source-incremental-strategy]} source
         {:keys [checkpoint-filter-field-id]} source-incremental-strategy]
-    (when (and (= "table-incremental" (:type target))
+    (when (and (incremental-target? transform)
                (native-query-transform? transform)
-               (not (some (fn [[_k v]] (#{:table "table"} (:type v)))
+               (not (some (fn [tag] (#{:table "table"} (:type tag)))
                           (lib/template-tags (:query source)))))
       (let [msg (i18n/tru (str "Incremental transform with a native query requires a table variable. "
                                "Please add a table variable to the query and update the checkpoint field."))]
         (throw (ex-info msg {:transform-message msg}))))
-    (when (and (= "table-incremental" (:type target))
+    (when (and (incremental-target? transform)
                (not checkpoint-filter-field-id))
       (let [msg (i18n/tru (str "Incremental transform is enabled but no checkpoint field is selected. "
                                "Please select a checkpoint field in the transform settings."))]
@@ -318,7 +363,9 @@
             base-type         (:base-type column)
             lo                (when last_checkpoint_value (parse-checkpoint-value base-type last_checkpoint_value))
 
-            max-value
+            ;; Combine max + count in one scan: avoids a second round-trip and pins both
+            ;; numbers to the same point-in-time view of the source.
+            [max-value rows-available]
             (let [table-id          (:table-id column)
                   table-metadata    (lib.metadata/table metadata-provider table-id)
                   base-query        (lib/query metadata-provider table-metadata)
@@ -332,12 +379,13 @@
               ;; instead of NULL for `max()` over an empty relation when the column is non-nullable. Only
               ;; trust the max when the count from the same scan says there were rows, otherwise the
               ;; watermark would silently regress and the next run would reprocess already-seen rows.
-              (when-not (and cv (zero? cv)) mv))]
-        {:column                     column
-         :checkpoint-filter-field-id checkpoint-filter-field-id
-         :lo                         (when lo {:value lo})
-         :hi                         (cond (some? max-value) (tag-checkpoint-value base-type max-value)
-                                           lo {:value lo})}))))
+              [(when-not (and cv (zero? cv)) mv) cv])]
+        (cond-> {:column                     column
+                 :checkpoint-filter-field-id checkpoint-filter-field-id
+                 :lo                         (when lo {:value lo})
+                 :hi                         (cond (some? max-value) (tag-checkpoint-value base-type max-value)
+                                                   lo {:value lo})}
+          (some? rows-available) (assoc :rows-available rows-available))))))
 
 (defn preprocess-incremental-query
   "Add checkpoint filtering to a query for incremental execution.
@@ -462,16 +510,38 @@
     ;; TODO this should probably be a function in the sync module
     (t2/update! :model/Table (:id table) {:active false})))
 
+(defn- isolated-drop-target
+  "Resolve `target` to the physical warehouse table to drop.
+
+  On a workspace child the canonical target is backed by an isolation-namespace copy recorded
+  in `table_remapping`; the workspace user can only DROP inside its isolation namespace, so the
+  drop must hit that copy — not the canonical table. Looks the copy up via the general
+  canonical→isolated workspace hook (symmetric with [[canonicalize-target]], which uses the
+  inverse). The isolated namespace lives in `:schema` for schema-based drivers and in `:db` for
+  MySQL; collapse to the single `:schema` slot the driver drop path qualifies on. Off-workspace
+  the hook returns nil and `target` is dropped unchanged."
+  [db-id target]
+  (let [lookup-spec {:db (:db target) :schema (:schema target) :name (:name target)}]
+    (if-let [{:keys [db schema name]} (ws.table-remapping/workspace-remap-schema+name db-id lookup-spec)]
+      (assoc target :schema (or schema db) :name name)
+      target)))
+
 (defn delete-target-table!
-  "Delete the target table of a transform and sync it from the app db."
+  "Drop a transform's output table and deactivate its app-db Table row.
+
+  In workspace-isolation mode the transform writes to an isolation-namespace copy, so the drop
+  resolves the canonical `:target` to that copy (see [[isolated-drop-target]]); dropping the
+  canonical name would fail (the workspace user is read-only there) or hit the wrong table. The
+  app-db Table row that gets deactivated is always the canonical `:target`, since that is what
+  sync surfaces. Off-workspace the two are identical."
   [{:keys [id target], :as transform}]
   (when target
-    (let [target (update target :type keyword)
-          database-id (transforms-base.i/target-db-id transform)]
+    (let [database-id (transforms-base.i/target-db-id transform)]
       (when database-id
         (if-let [{driver :engine :as database} (t2/select-one :model/Database database-id)]
-          (do
-            (driver/drop-transform-target! driver database target)
+          (let [drop-target (->> (update target :type keyword)
+                                 (isolated-drop-target database-id))]
+            (driver/drop-transform-target! driver database drop-target)
             (log/info "Deactivating  target " (pr-str target) "for transform" id)
             (deactivate-table! database target))
           (log/warnf "Skipping drop of transform target %s for transform %d: database %d not found"
@@ -553,6 +623,13 @@
     (when-let [table (sync-target! target database)]
       (t2/update! :model/Transform (:id transform) {:target_table_id (:id table)})
       (t2/update! :model/Table (:id table) {:transform_id (:id transform)}))
+    ;; ANALYZE the target before the run is observable, so dependents don't plan on stale stats.
+    ;; Best-effort: a stats failure shouldn't fail an otherwise-successful run.
+    (try
+      (driver/refresh-table-stats! (:engine database) database (:schema target) (:name target)
+                                   (keyword (:type target)))
+      (catch Throwable t
+        (log/warnf "refresh-table-stats! failed for %s.%s: %s" (:schema target) (:name target) (ex-message t))))
     ;; Publish event after sync so the table exists in AppDB.
     (when publish-events?
       (events/publish-event! :event/transform-run-complete
@@ -567,6 +644,28 @@
   [transform]
   (t2/select-one :model/Table :transform_id (:id transform)))
 
+(defn merge-target-unique-key
+  "Physical column names of a transform's `merge` unique key, or nil when the target isn't a merge target."
+  [transform]
+  (when (merge-target? transform)
+    (not-empty (mapv :name (get-in transform [:target :target-incremental-strategy :unique-key])))))
+
+(defn target-column-names
+  "Physical column names of a transform's synced target table, ordered by position, or nil."
+  [transform]
+  (when-let [table (output-table transform)]
+    (not-empty (t2/select-fn-vec :name [:model/Field :name :position]
+                                 :table_id (:id table) :active true
+                                 {:order-by [[:position :asc]]}))))
+
+(defn validate-merge-unique-key!
+  "Throws if any of `unique-key` is not present in `columns`. Returns `unique-key`."
+  [unique-key columns]
+  (when-let [missing (not-empty (remove (set columns) unique-key))]
+    (let [msg (i18n/tru "Merge unique key references columns not present in the target: {0}"
+                        (str/join ", " missing))]
+      (throw (ex-info msg {:transform-message msg}))))
+  unique-key)
 ;;; ------------------------------------------------- Source Table Schemas -------------------------------------------------
 
 ;;; ------------------------------------------------- Source Table Resolution -------------------------------------------------
@@ -727,6 +826,13 @@
   (-> run
       (u/update-some :start_time utc-timestamp-string)
       (u/update-some :end_time   utc-timestamp-string)))
+
+(defn present-run
+  "Prepare a transform run for an API response: localize its timestamps and drop internal-only fields."
+  [run]
+  (-> run
+      localize-run-timestamps
+      (dissoc :last_heartbeat)))
 
 ;;; ------------------------------------------------- Filter Transforms -------------------------------------------------
 

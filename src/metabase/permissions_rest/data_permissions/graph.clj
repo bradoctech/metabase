@@ -30,8 +30,7 @@
    :perms/download-results      :download
    :perms/manage-table-metadata :data-model
    :perms/manage-database       :details
-   :perms/transforms            :transforms
-   :perms/workspaces            :workspaces})
+   :perms/transforms            :transforms})
 
 (def ^:private ->api-vals
   {:perms/view-data             {:unrestricted           :unrestricted
@@ -45,8 +44,7 @@
                                  :no                nil}
    :perms/manage-table-metadata {:yes :all :no nil}
    :perms/manage-database       {:yes :yes :no :no}
-   :perms/transforms            {:yes :yes :no :no}
-   :perms/workspaces            {:yes :yes :no :no}})
+   :perms/transforms            {:yes :yes :no :no}})
 
 (defenterprise add-impersonations-to-permissions-graph
   "Augment the permissions graph with active connection impersonation policies. OSS implementation returns graph as-is."
@@ -121,8 +119,7 @@
    :download       {:schemas :full}
    :data-model     {:schemas :all}
    :details        :yes
-   :transforms     :yes
-   :workspaces     :yes})
+   :transforms     :yes})
 
 (def ^:private data-analyst-perms
   "Data Analysts have implicit manage-table-metadata permission for all databases."
@@ -214,9 +211,8 @@
 
   Rows are fetched with a raw query rather than a model select, and realized one at a time: key access on unrealized
   result-set rows goes through toucan2's deferred-row machinery on every lookup, which benchmarked ~15x slower than
-  realizing each row once and reading plain map keys (see
-  [[metabase.permissions.models.data-permissions/relevant-permissions-for-user-and-dbs]]). The raw query skips the
-  model transforms, so `:type` and `:value` arrive as strings and are keywordized here."
+  realizing each row once and reading plain map keys. The raw query skips the model transforms, so `:type` and
+  `:value` arrive as strings and are keywordized here."
   [{:keys [group-id group-ids db-id perm-type audit?]}]
   (eduction
    (map (fn [row]
@@ -237,9 +233,11 @@
                 (when group-id [:= :group_id group-id])
                 (when group-ids [:in :group_id group-ids])
                 (when-not audit? [:not= :db_id audit/audit-db-id])
-                [:not-in :db_id ^:allow-subquery {:select [:id]
-                                                  :from   [(t2/table-name :model/Database)]
-                                                  :where  [:not= :router_database_id nil]}]]
+                [:not [:exists ^:allow-subquery {:select [1]
+                                                 :from   [[(t2/table-name :model/Database) :router_db]]
+                                                 :where  [:and
+                                                          [:not= :router_db.router_database_id nil]
+                                                          [:= :router_db.id :db_id]]}]]]
      :order-by [:group_id :db_id]})))
 
 (defn- add-perm
@@ -359,8 +357,7 @@
    :data-model     {:all  :yes
                     :none :no}
    :details        {:yes :yes :no :no}
-   :transforms     {:yes :yes :no :no}
-   :workspaces     {:yes :yes :no :no}})
+   :transforms     {:yes :yes :no :no}})
 
 (def ^:private api-key->perm-type
   {:view-data      :perms/view-data
@@ -368,8 +365,7 @@
    :download       :perms/download-results
    :data-model     :perms/manage-table-metadata
    :details        :perms/manage-database
-   :transforms     :perms/transforms
-   :workspaces     :perms/workspaces})
+   :transforms     :perms/transforms})
 
 (defn- resolve-api-value
   "Translates an API permission value for a single [group-id db-id api-key] into a map of
@@ -410,16 +406,12 @@
                 #(merge % {nil {:perm_value :no :schema_name nil}})))
 
     (and (= perm-type :perms/view-data) (not= db-value :unrestricted))
-    (-> (update [group-id db-id :perms/transforms]
-                #(merge % {nil {:perm_value :no :schema_name nil}}))
-        (update [group-id db-id :perms/workspaces]
-                #(merge % {nil {:perm_value :no :schema_name nil}})))
+    (update [group-id db-id :perms/transforms]
+            #(merge % {nil {:perm_value :no :schema_name nil}}))
 
     (and (= perm-type :perms/create-queries) (not= db-value :query-builder-and-native))
-    (-> (update [group-id db-id :perms/transforms]
-                #(merge % {nil {:perm_value :no :schema_name nil}}))
-        (update [group-id db-id :perms/workspaces]
-                #(merge % {nil {:perm_value :no :schema_name nil}})))))
+    (update [group-id db-id :perms/transforms]
+            #(merge % {nil {:perm_value :no :schema_name nil}}))))
 
 (defn- add-implications:table-level
   [desired group-id db-id perm-type table-entries]
@@ -475,7 +467,7 @@
    {}
    (for [[group-id group-changes] graph
          [db-id db-changes] group-changes
-         api-key [:details :data-model :download :transforms :workspaces :create-queries :view-data]
+         api-key [:details :data-model :download :transforms :create-queries :view-data]
          :let [api-value (get db-changes api-key)]
          :when api-value]
      [group-id db-id api-key api-value])))

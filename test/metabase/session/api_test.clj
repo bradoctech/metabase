@@ -34,9 +34,7 @@
 (use-fixtures :once (fixtures/initialize :db :web-server :test-users))
 
 (defn- reset-throttlers []
-  (doseq [throttler (vals @#'api.session/login-throttlers)]
-    (reset! (:attempts throttler) nil))
-  (reset! (:attempts (var-get #'api.session/reset-password-throttler)) nil))
+  (api.session/reset-throttlers-for-testing!))
 
 (use-fixtures :each (fn [f] (reset-throttlers) (f)))
 
@@ -104,12 +102,12 @@
       (mt/with-log-messages-for-level [messages :error]
         (is (=? {:specific-errors {:username ["missing required key, received: nil"]}}
                 (mt/client :post 400 "session" {:email (:email user), :password "wooo"})))
-        (is (=? {:level :error, :e clojure.lang.ExceptionInfo, :message "Authentication endpoint error"}
+        (is (=? {:level :error, :e nil, :message #"^Authentication endpoint error: .+"}
                 (or (->> (messages)
                          ;; geojson can throw errors and we want the authentication error
                          ;;
                          ;; TODO -- huh? geojson???? -- Cam
-                         (m/find-first #(= (:message %) "Authentication endpoint error")))
+                         (m/find-first #(re-find #"^Authentication endpoint error" (:message %))))
                     ["no matching message:" (messages)])))))))
 
 (deftest login-validation-username-required-test
@@ -133,6 +131,14 @@
             (mt/client :post 401 "session" (-> (mt/user->credentials :rasta)
                                                (assoc :password "something else")))))))
 
+(deftest login-unknown-email-does-not-leak-account-existence-test
+  (testing "POST /api/session - an unknown email returns the same 401 error as a wrong password (anti-enumeration)"
+    (let [unknown-email-resp  (mt/client :post 401 "session" {:username "definitely-not-a-user@metabase.test"
+                                                              :password "whatever-UP12!!"})
+          wrong-password-resp (mt/client :post 401 "session" (-> (mt/user->credentials :rasta)
+                                                                 (assoc :password "whatever-UP12!!")))]
+      (is (= wrong-password-resp unknown-email-resp)))))
+
 (deftest login-throttling-test
   (testing (str "Test that people get blocked from attempting to login if they try too many times (Check that"
                 " throttling works at the API level -- more tests in the throttle library itself:"
@@ -149,7 +155,9 @@
       (testing "Error should be logged (#14317)"
         (mt/with-log-messages-for-level [messages :error]
           (login)
-          (is (=? {:level :error, :e clojure.lang.ExceptionInfo, :message "Authentication endpoint error"}
+          (is (=? {:level   :error
+                   :e       nil
+                   :message #"^Authentication endpoint error: Too many attempts! You must wait \d+ seconds before trying again\.$"}
                   (first (messages))))))
       (is (re= #"^Too many attempts! You must wait \d+ seconds before trying again\.$"
                (login))
@@ -519,7 +527,8 @@
                                                                :password "whateverUP12!!"})))))))
 
 (deftest reset-password-cannot-forge-session-via-injected-user-id-test
-  (testing "POST /api/session/reset_password - an extra body key is dropped before the handler, not honoured"
+  (testing (str "POST /api/session/reset_password - this body takes exactly :token and :password. Request decoding "
+                "drops any other key before the handler runs, and the handler forwards only :token and :password.")
     (testing "injected user-id naming an admin"
       (mt/with-temp [:model/User {admin-id :id} {:is_active true, :is_superuser true}]
         (is (=? {:errors {:password "Invalid reset token"}}
@@ -551,8 +560,8 @@
               (mt/client :post 400 "session/reset_password"
                          {:token "garbage" :password "whateverUP12!!"}))))))
 (deftest reset-password-injected-user-id-cannot-inject-sql-test
-  ;; A `{"raw": "..."}` JSON object decodes to `{:raw "..."}`, which Honey SQL reads as query structure.
-  (testing "POST /api/session/reset_password - no body value reaches the User lookup as a non-scalar"
+  (testing (str "POST /api/session/reset_password - no request-body value may reach the User lookup as a "
+                "non-scalar; it must be a scalar value.")
     (mt/with-temp [:model/User {admin-id :id} {:is_active true, :is_superuser true}]
       (let [forged-id "00000000-0000-0000-0000-000000000000"
             ;; the injected SQL would forge a session row directly for the admin, keyed by an id the
@@ -584,10 +593,12 @@
             "and no session may exist for the targeted admin")))))
 
 (deftest reset-password-injection-cannot-forge-a-usable-session-test
-  ;; The end of the exploit, not its precondition: the injected INSERT plants a row whose id is a UUID the
-  ;; attacker chose, and `session.id` is an accepted credential. Asserting no row exists says nothing about
-  ;; whether the key works.
-  (testing "POST /api/session/reset_password - the attacker-chosen session id authenticates nobody"
+  (testing (str "POST /api/session/reset_password - the whole exploit, not just its precondition. The "
+                "injected INSERT plants a core_session row whose id is a UUID the attacker chose, which "
+                "is then presented as the metabase.SESSION cookie to be authenticated as the named "
+                "superuser (`session.id` is an accepted credential alongside `key_hashed`, and the "
+                "chosen UUID satisfies the session-key validity check). Asserting no row exists says "
+                "nothing about whether the cookie works; this asserts the cookie buys nothing.")
     (mt/with-temp [:model/User {admin-id :id} {:is_active true, :is_superuser true}]
       (let [forged-key "00000000-0000-0000-0000-000000000000"
             evil       {:raw (format (str "1); INSERT INTO core_session (id, user_id, created_at, key_hashed) "

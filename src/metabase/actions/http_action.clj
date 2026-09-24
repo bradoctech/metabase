@@ -4,7 +4,6 @@
    [clojure.string :as str]
    [metabase.lib.core :as lib]
    [metabase.query-processor.error-type :as qp.error-type]
-   [metabase.util :as u]
    [metabase.util.i18n :refer [tru]]
    [metabase.util.json :as json]
    [metabase.util.log :as log]
@@ -77,7 +76,7 @@
                  {\"bird_type\" \"Steller's Jay\"})
     ;; -> \"https://example.com/?filter=Steller's Jay\""
   [parsed-template param->value]
-  (log/tracef "Substituting params\n%s\nin template\n%s" (u/pprint-to-str param->value) (u/pprint-to-str parsed-template))
+  (log/trace "Substituting params in template")
   (let [[sql missing] (try
                         (substitute* param->value parsed-template false)
                         (catch Throwable e
@@ -86,7 +85,6 @@
                                            :params       param->value
                                            :parsed-query parsed-template}
                                           e))))]
-    (log/tracef "=>%s" sql)
     (when (seq missing)
       (throw (ex-info (tru "Cannot call the service: missing required parameters: {0}" (str/join ", " (set missing)))
                       {:type        qp.error-type/missing-required-parameter
@@ -131,7 +129,7 @@
                    :status-code 400})))
 
 ;; Unreachable now that `execute-http-action!` above refuses unconditionally; kept, unused, while
-;; we decide the feature's fate rather than deleting the SSRF-capable request-building logic from history.
+;; we decide the feature's fate rather than deleting the request-building logic from history.
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var :unused-private-var]}
 (defn- execute-http-action-impl!
   [action params->value]
@@ -153,7 +151,7 @@
                        (select-keys [:body :headers :status])
                        (update :body json/decode))
           error (json/decode (apply-json-query response (or (:error_handle action) ".status >= 400")))]
-      (log/trace "Response before handle:" response)
+      (log/trace "Response status before handle:" (:status response))
       (if error
         {:status 400
          :headers {"Content-Type" "application/json"}

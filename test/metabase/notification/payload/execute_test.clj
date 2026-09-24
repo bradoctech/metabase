@@ -62,14 +62,13 @@
     (mt/with-temp [:model/Card          {card-id :id} {:dataset_query (mt/mbql-query orders)}
                    :model/Dashboard     {dash-id :id} {}
                    :model/DashboardCard _ {:dashboard_id dash-id :card_id card-id}]
-      (let [row-count (fn [attached-card-ids]
+      (let [row-count (fn [opts]
                         (let [part (first (card-parts (notification.payload.execute/execute-dashboard
-                                                       dash-id (mt/user->id :rasta) []
-                                                       {:attached-card-ids attached-card-ids})))]
+                                                       dash-id (mt/user->id :rasta) [] opts)))]
                           (temp-storage/cleanup! (-> part :result :data :rows))
                           (-> part :result :row_count)))]
         (is (= 2000 (row-count nil)))
-        (is (< 2000 (row-count #{card-id})))))))
+        (is (< 2000 (row-count {:attached-card-ids #{card-id}})))))))
 
 (deftest attached-card-series-uses-display-limit-test
   (testing "additional series are display-only even when the primary card is attached"

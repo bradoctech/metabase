@@ -15,7 +15,9 @@
    [metabase.config.core :as config]
    [metabase.content-verification.core :as moderation]
    [metabase.dashboards.autoplace :as autoplace]
+   [metabase.embedding.settings :as embed.settings]
    [metabase.events.core :as events]
+   [metabase.graph.core :as graph]
    [metabase.lib-be.core :as lib-be]
    [metabase.lib-be.schema :as lib-be.schema]
    [metabase.lib.core :as lib]
@@ -37,15 +39,15 @@
    [metabase.queries.models.parameter-card :as parameter-card]
    [metabase.queries.models.query :as query]
    [metabase.queries.schema :as queries.schema]
-   [metabase.query-processor.util :as qp.util]
    [metabase.search.core :as search]
+   [metabase.settings.core :as setting]
+   [metabase.staleness.core :as staleness]
    [metabase.util :as u]
    [metabase.util.embed :refer [maybe-populate-initially-published-at]]
    [metabase.util.honey-sql-2 :as h2x]
    [metabase.util.i18n :refer [tru]]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
-   [metabase.warehouse-schema.models.field-values :as field-values]
    [methodical.core :as methodical]
    [toucan2.core :as t2]
    [toucan2.pipeline :as t2.pipeline]
@@ -142,11 +144,7 @@
   ([_ pk]
    (mi/can-write? (t2/select-one :model/Card :id pk))))
 
-(defmethod mi/can-read? :model/Card
-  ([instance]
-   (perms/can-read-audit-helper :model/Card instance))
-  ([_ pk]
-   (mi/can-read? (t2/select-one :model/Card :id pk))))
+(perms/define-collection-based-visibility! :model/Card)
 
 (defn model?
   "Returns true if `card` is a model."
@@ -503,15 +501,25 @@
   metabase-enterprise.sandbox.models.sandbox
   [_])
 
+(defn- value-field-gone?
+  [metadata-columns value-field]
+  (or (nil? value-field)
+      (empty? metadata-columns)
+      (nil? (lib/find-matching-column (lib/->mbql5 value-field) metadata-columns))))
+
 (defn- update-parameters-using-card-as-values-source
   "Update the config of parameter on any Dashboard/Card use this `card` as values source .
 
   Remove parameter.values_source_type and set parameter.values_source_type to nil ( the default type ) when:
   - card is archived
   - card.result_metadata changes and the parameter values source field can't be found anymore"
-  [{:keys [id]} changes]
+  [{:keys [id database_id]} changes]
   (when (some #{:archived :result_metadata} (keys changes))
-    (let [parameter-cards (t2/select :model/ParameterCard :card_id id)]
+    (let [parameter-cards  (t2/select :model/ParameterCard :card_id id)
+          metadata-columns (when-let [result-metadata (:result_metadata changes)]
+                             (lib/->card-metadata-columns
+                              (lib-be/application-database-metadata-provider database_id)
+                              result-metadata))]
       (doseq [[[po-type po-id] param-cards]
               (group-by (juxt :parameterized_object_type :parameterized_object_id) parameter-cards)]
         (let [model                  (case po-type :card 'Card :dashboard 'Dashboard)
@@ -528,11 +536,10 @@
                                               (filter (fn [param-card]
                                                         ;; if can't find the value-field in result_metadata, then we should
                                                         ;; remove it
-                                                        ;; existing usage -- do not use this in new code
-                                                        #_{:clj-kondo/ignore [:deprecated-var]}
-                                                        (nil? (qp.util/field->field-info
-                                                               (get-in (param-id->parameter (:parameter_id param-card)) [:values_source_config :value_field])
-                                                               (:result_metadata changes)))))
+                                                        (value-field-gone?
+                                                         metadata-columns
+                                                         (get-in (param-id->parameter (:parameter_id param-card))
+                                                                 [:values_source_config :value_field]))))
                                               (map :parameter_id)
                                               set))
 
@@ -597,7 +604,7 @@
                         "Is Now:" new-param-field-ids
                         "Newly Added:" newly-added-param-field-ids)
               ;; Now update the FieldValues for the Fields referenced by this Card.
-              (field-values/update-field-values-for-on-demand-dbs! newly-added-param-field-ids)))))
+              ((requiring-resolve 'metabase.sync.field-values/update-field-values-for-on-demand-dbs!) newly-added-param-field-ids)))))
       ;; updating a model dataset query to not support implicit actions will disable implicit actions if they exist
       (when (and (:dataset_query changes)
                  (= (:type old-card-info) :model)
@@ -722,20 +729,17 @@
   Always returns `card`."
   [card]
   (when (= (:dataset_query card) {})
-    (log/infof "Card %d has a blank :dataset_query - this indicates a Metabase issue. Legacy MBQL: %s"
-               (:id card) (:legacy_query card))
+    (log/infof "Card %d has a blank :dataset_query - this indicates a Metabase issue."
+               (:id card))
     (let [uniques (swap! unique-cards-with-blank-dataset-query conj (:id card))]
       (analytics/set-gauge! :metabase-card/unique-cards-failed-conversion (count uniques))))
   ;; Always returns the original card.
   card)
 
-(defn- mbql5-conversion-clean-callback [untransformed-card pre-cleaning-query post-cleaning-query]
+(defn- mbql5-conversion-clean-callback [untransformed-card _pre-cleaning-query _post-cleaning-query]
   (analytics/inc! :metabase-card/conversions-requiring-cleaning)
-  (log/infof "MBQL 4->5 conversion for Card %d had real 'clean' changes from %s into %s; :legacy_query is %s"
-             (:id untransformed-card)
-             (pr-str (dissoc pre-cleaning-query :lib/metadata))
-             (pr-str (dissoc post-cleaning-query :lib/metadata))
-             (:legacy_query untransformed-card)))
+  (log/infof "MBQL 4->5 conversion for Card %d had real 'clean' changes"
+             (:id untransformed-card)))
 
 ;; Uses [[lib/with-card-clean-hook]] to bind a callback which logs the impact of the cleaning process during
 ;; `transform-out`, so that we can log whenever a card gets converted and [[lib.convert/clean]] makes material
@@ -790,7 +794,7 @@
   (u/prog1 card
     (when-let [field-ids (seq (params/card->template-tag-field-ids card))]
       (log/info "Card references Fields in params:" field-ids)
-      (field-values/update-field-values-for-on-demand-dbs! field-ids))
+      ((requiring-resolve 'metabase.sync.field-values/update-field-values-for-on-demand-dbs!) field-ids))
     (parameter-card/upsert-or-delete-from-parameters! "card" (:id card) (:parameters card))))
 
 (defn- apply-dashboard-question-updates [card changes]
@@ -1184,6 +1188,35 @@
             (doseq [[id update] updates]
               (t2/update! :model/DashboardCard :id id update))))))))
 
+(deftype SourceCardDependentsGraph []
+  graph/Graph
+  (children-of [_this key-seq]
+    (if (empty? key-seq)
+      {}
+      (let [deps (t2/select [:model/Card :id :source_card_id :card_schema] :source_card_id [:in key-seq])]
+        (u/group-by :source_card_id :id conj #{} deps)))))
+
+(defn- dependent-cards-to-update
+  [root-card-id old-db-id]
+  (let [all-dep-ids (graph/transitive (->SourceCardDependentsGraph) [root-card-id])]
+    (when (seq all-dep-ids)
+      (into []
+            (filter (fn [{:keys [dataset_query]}] (= (:database dataset_query) old-db-id)))
+            (t2/select [:model/Card :id :dataset_query :card_schema] :id [:in all-dep-ids])))))
+
+(defn- cascade-database-change-to-dependents!
+  "When a card's `database_id` changes, update all cards that use it as a `:source-card` (transitively) so their
+  `dataset_query` `:database` key stays in sync. Without this dependent cards would fail with 'Card does not exist'
+   because the metadata provider filters cards by database (#74561)."
+  [card-before-update card-updates]
+  (let [card-id   (:id card-before-update)
+        old-db-id (-> card-before-update :dataset_query :database)
+        new-db-id (-> card-updates :dataset_query :database)]
+    (when (and old-db-id new-db-id (not= old-db-id new-db-id))
+      (let [cards-to-update (dependent-cards-to-update card-id old-db-id)]
+        (doseq [{dep-id :id, dep-query :dataset_query} cards-to-update]
+          (t2/update! :model/Card dep-id {:dataset_query (assoc dep-query :database new-db-id)}))))))
+
 (defn update-card!
   "Update a Card. Metadata is fetched asynchronously. If it is ready before [[metadata-sync-wait-ms]] elapses it will be
   included, otherwise the metadata will be saved to the database asynchronously."
@@ -1206,14 +1239,13 @@
                                  :with-overrides? true})
       ;; ok, now save the Card
       (t2/update! :model/Card (:id card-before-update) updated-fields))
+    ;; Update all transitively dependent cards if the database was changed (#74561)
+    (cascade-database-change-to-dependents! card-before-update card-updates)
     ;; ok, now update dependent dashcard parameters
     (try
       (update-associated-parameters! card-before-update card-updates)
       (catch Throwable e
-        (log/error e "Update of dependent card parameters failed!")
-        (log/debug e
-                   "`card-before-update`:" (pr-str card-before-update)
-                   "`card-updates`:" (pr-str card-updates))))
+        (log/errorf "Update of dependent card parameters failed!: %s" (ex-message e))))
     (collection/check-for-remote-sync-update card-before-update))
   ;; Fetch the updated Card from the DB
   (let [card (t2/select-one :model/Card :id (:id card-before-update))]
@@ -1328,9 +1360,12 @@
 (defmethod serdes/make-spec "Card"
   [_model-name _opts]
   {:copy [:archived :archived_directly :collection_position :collection_preview :description :display
-          :embedding_params :enable_embedding :embedding_type :entity_id :metabase_version :public_uuid :type :name
+          :embedding_params :enable_embedding :embedding_type :entity_id :public_uuid :type :name
           :card_schema]
-   :skip [;; cache invalidation is instance-specific
+   :skip [;; instance-specific build version; serializing it produces spurious remote-sync diffs, and the
+          ;; serialized representation is versioned by :card_schema instead
+          :metabase_version
+          ;; cache invalidation is instance-specific
           :cache_invalidated_at
           ;; those are instance-specific analytic columns
           :view_count :last_used_at :initially_published_at
@@ -1494,3 +1529,39 @@
 
 (search/define-spec "metric"
   (-> (base-search-spec) (sql.helpers/where [:= :this.type "metric"])))
+
+(defmethod staleness/find-stale-query :model/Card
+  [_model args]
+  ^:allow-subquery
+  {:select [:report_card.id
+            [(h2x/literal "Card") :model]
+            [:report_card.name :name]
+            :last_used_at]
+   :from :report_card
+   :left-join [:moderation_review [:and
+                                   [:= :moderation_review.moderated_item_id :report_card.id]
+                                   [:= :moderation_review.moderated_item_type (h2x/literal "card")]
+                                   [:= :moderation_review.most_recent true]
+                                   [:= :moderation_review.status (h2x/literal "verified")]]
+               :pulse_card [:= :pulse_card.card_id :report_card.id]
+               :pulse [:and
+                       [:= :pulse_card.pulse_id :pulse.id]
+                       [:= :pulse.archived false]]
+               :sandboxes [:= :sandboxes.card_id :report_card.id]
+               :collection [:= :collection.id :report_card.collection_id]]
+   :where [:and
+           [:= :sandboxes.id nil]
+           [:= :pulse.id nil]
+           [:= :moderation_review.id nil]
+           [:= :report_card.archived false]
+           [:<= :report_card.last_used_at (-> args :cutoff-date)]
+           ;; find things only in regular collections, not the `instance-analytics` collection.
+           [:= :collection.type nil]
+           (when (embed.settings/some-embedding-enabled?)
+             [:= :report_card.enable_embedding false])
+           (when (setting/get :enable-public-sharing)
+             [:= :report_card.public_uuid nil])
+           [:or
+            (when (contains? (:collection-ids args) nil)
+              [:is :report_card.collection_id nil])
+            [:in :report_card.collection_id (-> args :collection-ids)]]]})

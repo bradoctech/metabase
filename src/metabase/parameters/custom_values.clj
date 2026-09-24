@@ -99,15 +99,12 @@
                                      (log/warnf "Cannot get values from Card %d: Card query has no visible columns"
                                                 card-id))]
         (when-let [value-column (or (lib/find-matching-column query -1 field-ref visible-columns)
-                                    (log/warnf "Cannot get values from Card %d: failed to find column for ref %s\nFound: %s"
-                                               card-id
-                                               (pr-str field-ref)
-                                               (pr-str (map (some-fn :lib/source-column-alias :name) visible-columns))))]
+                                    (log/warnf "Cannot get values from Card %d: failed to find matching column for ref"
+                                               card-id))]
           (let [label-column    (when label-field
                                   (or (lib/find-matching-column query -1 label-field visible-columns)
-                                      (log/warnf "Cannot get labels from Card %d: failed to find column for ref %s"
-                                                 card-id
-                                                 (pr-str label-field))))
+                                      (log/warnf "Cannot get labels from Card %d: failed to find matching column for ref"
+                                                 card-id)))
                 search-column   (or label-column value-column)
                 value-textual?  (lib.types.isa/string? value-column)
                 search-textual? (lib.types.isa/string? search-column)
@@ -138,13 +135,24 @@
       (let [keep-idxs (into [] (keep-indexed (fn [i c] (when-not (drop-names (:name c)) i))) cols)]
         (perf/mapv (fn [row] (perf/mapv #(nth row %) keep-idxs)) rows)))))
 
+(defn- run-values-query
+  "Run a value-source `query` through the QP. Permission errors raised by the QP (e.g. the user cannot read a Card the
+  value-source Card's query nests) carry no HTTP status, so surface them as a 403 rather than a 500."
+  [query]
+  (try
+    (qp/process-query query)
+    (catch clojure.lang.ExceptionInfo e
+      (if (:permissions-error? (ex-data e))
+        (throw (ex-info (ex-message e) {:status-code 403} e))
+        (throw e)))))
+
 (mu/defn- values-from-card* :- ms/FieldValuesResult
   "Core of [[values-from-card]], working off a prebuilt value-source `query`."
   [query     :- [:maybe ::lib.schema/query]
    field-ref :- [:or :mbql.clause/field :mbql.clause/expression]
    opts      :- [:maybe ::values-from-card-query.options]]
   (let [mbql-query (values-from-card-query query field-ref opts)
-        result     (some-> mbql-query qp/process-query)
+        result     (some-> mbql-query run-values-query)
         values     (some-> result result->rows)]
     {:values          (or values [])
      ;; If the row_count returned = the limit we specified, then it's probably has more than that.

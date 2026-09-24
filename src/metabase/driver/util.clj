@@ -255,7 +255,7 @@
         ;; actually if we are going to `throw-exceptions` we'll rethrow the original but attempt to humanize the
         ;; message first
         (catch Throwable e
-          (log/error e "Failed to connect to Database")
+          (log/errorf "Failed to connect to Database: %s" (ex-message e))
           (throw (if-let [humanized-message (some->> (u/all-ex-messages e)
                                                      (driver/humanize-connection-error-message driver))]
                    (let [error-data (cond
@@ -272,7 +272,7 @@
     (try
       (can-connect-with-details? driver details-map :throw-exceptions)
       (catch Throwable e
-        (log/error e "Failed to connect to database")
+        (log/errorf "Failed to connect to database: %s" (ex-message e))
         false))))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
@@ -323,12 +323,22 @@
    accidental coupling between tests."
   (not (or config/is-test? config/is-dev?)))
 
+(defn- check-feature
+  "Ask `driver` whether it supports one feature, degrading to false (with a log line) if it throws. Puts no bound on
+  how long the driver may take -- callers bound it at whatever granularity suits them."
+  [driver feature database]
+  (try
+    (driver/database-supports? driver feature database)
+    (catch Throwable e
+      (log/error (u/format-color 'red "Failed to check feature '%s' for database %s: %s" (u/qualified-name feature) (:id database) (ex-message e)))
+      false)))
+
 (defn- supports?* [driver feature database]
   (try
     (u/with-timeout supports?-timeout-ms
-      (driver/database-supports? driver feature database))
+      (check-feature driver feature database))
     (catch Throwable e
-      (log/error e (u/format-color 'red "Failed to check feature '%s' for database '%s'" (u/qualified-name feature) (:name database)))
+      (log/error (u/format-color 'red "Failed to check feature '%s' for database %s: %s" (u/qualified-name feature) (:id database) (ex-message e)))
       false)))
 
 (def ^:private memoized-supports?*
@@ -376,10 +386,35 @@
   #{;; used intenrally during the sync process, does not really need to be hydrated
     :metadata/table-writable-check})
 
-(defn- features* [driver database]
+(defn- feature-set
+  "The set of features for which `supported?` returns truthy, minus the ones we never hydrate."
+  [supported?]
   (set (for [feature driver/features
-             :when (and (not (skip-internal-features feature)) (supports? driver feature database))]
+             :when (and (not (skip-internal-features feature)) (supported? feature))]
          feature)))
+
+(defn- features* [driver database]
+  (feature-set #(supports? driver % database)))
+
+(defn- features-timeout-ms
+  "Budget for one batched scan of every feature. Read per call so that rebinding [[supports?-timeout-ms]] moves it too."
+  []
+  (* 4 supports?-timeout-ms))
+
+(defn- features-batched*
+  "Like [[features*]], but bounds the whole scan with a single timeout instead of giving each of the ~90 checks its
+  own. A per-check timeout costs a thread handoff that the check itself does not, and that handoff dominates the scan.
+
+  Only used while [[*memoize-supports?*]] is off. With memoization on, [[memoized-supports?*]] already absorbs the
+  repeat cost, and going around it would change what that cache ends up holding."
+  [driver database]
+  (try
+    (u/with-timeout (features-timeout-ms)
+      (feature-set #(check-feature driver % database)))
+    (catch Throwable _
+      ;; Budget blown, so fall back to the per-feature path: it bounds each check separately and therefore yields
+      ;; exactly what this call would have yielded had it never been batched.
+      (features* driver database))))
 
 (def ^:private memoized-features*
   (memoize/memo
@@ -396,21 +431,16 @@
                 [:map
                  [:lib/type [:= :metadata/database]]]
                 (ms/InstanceOf :model/Database)]]
-  (let [database (ensure-lib-database database)
-        f (if *memoize-supports?* memoized-features* features*)]
-    (f driver database)))
-
-(mu/defn- supported-in-environment?
-  "Returns true if a driver is supported in the the current metabase environment. As implemented this just disallows the
-  sqlite driver on hosted metabase because hosted metabase does not support uploading a SQLite file for use."
-  [driver :- :keyword]
-  (or (not (premium-features/is-hosted?))
-      (not= :sqlite (keyword driver))))
+  (let [database (ensure-lib-database database)]
+    (if *memoize-supports?*
+      (memoized-features* driver database)
+      (features-batched* driver database))))
 
 (defn available-drivers
   "Return a set of all currently available drivers."
   []
-  (into #{} (filter #(and (driver/available? %) (supported-in-environment? %)))
+  (into #{}
+        (filter driver/available?)
         (descendants driver/hierarchy :metabase.driver/driver)))
 
 (mu/defn semantic-version-gte :- :boolean
@@ -491,7 +521,7 @@
   (let [content (or placeholder
                     (try (getter)
                          (catch Throwable e
-                           (log/errorf e "Error invoking getter for connection property %s" (:name conn-prop)))))]
+                           (log/errorf "Error invoking getter for connection property %s: %s" (:name conn-prop) (ex-message e)))))]
     (when (string? content)
       (-> conn-prop
           (assoc :placeholder content)
@@ -502,7 +532,7 @@
   [{:keys [check] :as conn-prop}]
   (if (try (check)
            (catch Throwable e
-             (log/errorf e "Error invoking getter for connection property %s" (:name conn-prop))))
+             (log/errorf "Error invoking getter for connection property %s: %s" (:name conn-prop) (ex-message e))))
     [(-> conn-prop
          (assoc :type "section")
          (dissoc :check))]
@@ -718,27 +748,41 @@
     "official"
     "community"))
 
+(defn- creatable?
+  "Whether users may select this driver to create a new data warehouse connection, given `context` -- a map describing
+  the environment, currently `{:hosted? <boolean>}`. Defaults to true. A driver registered only to power an
+  internal/bundled database -- e.g. SQLite, which backs the bundled Sample Database but is not offered to Cloud users
+  as a warehouse -- returns false in the contexts where it is not user-creatable, so it is omitted from the
+  add-database engine list there. Affects only the engine list shown to users; the driver stays registered and
+  `available?` for internal use."
+  [driver {:keys [hosted?]}]
+  (not (and
+        (= driver :sqlite)
+        hosted?)))
+
 (defn available-drivers-info
   "Return info about all currently available drivers, including their connection properties fields and supported
   features. The output of `driver/connection-properties` is passed through `connection-props-server->client` before
   being returned, to handle any transformation between the server side and client side representation."
   []
-  (persistent!
-   (reduce (fn [acc driver]
-             (if-some [props (try
-                               (->> (driver/connection-properties driver)
-                                    (connection-props-server->client driver))
-                               (catch Throwable e
-                                 (log/errorf e "Unable to determine connection properties for driver %s" driver)))]
-               ;; TODO - maybe we should rename `details-fields` -> `connection-properties` on the FE as well?
-               (assoc! acc driver {:source {:type (driver-source (name driver))
-                                            :contact (driver/contact-info driver)}
-                                   :details-fields props
-                                   :driver-name    (driver/display-name driver)
-                                   :superseded-by  (driver/superseded-by driver)
-                                   :extra-info     (driver/extra-info driver)})
-               acc))
-           (transient {}) (available-drivers))))
+  (let [context {:hosted? (premium-features/is-hosted?)}]
+    (persistent!
+     (reduce (fn [acc driver]
+               (if-some [props (try
+                                 (->> (driver/connection-properties driver)
+                                      (connection-props-server->client driver))
+                                 (catch Throwable e
+                                   (log/errorf "Unable to determine connection properties for driver %s: %s" driver (ex-message e))))]
+                 ;; TODO - maybe we should rename `details-fields` -> `connection-properties` on the FE as well?
+                 (assoc! acc driver {:source         {:type    (driver-source (name driver))
+                                                      :contact (driver/contact-info driver)}
+                                     :details-fields props
+                                     :driver-name    (driver/display-name driver)
+                                     :superseded-by  (driver/superseded-by driver)
+                                     :creatable?     (creatable? driver context)
+                                     :extra-info     (driver/extra-info driver)})
+                 acc))
+             (transient {}) (available-drivers)))))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                             TLS Helpers                                                        |

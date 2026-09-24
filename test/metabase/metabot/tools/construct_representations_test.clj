@@ -516,7 +516,7 @@
   (testing (str "If the LLM references a column name that the previous stage doesn't produce,\n"
                 "the cross-stage assert pass raises an :agent-error? naming the column and\n"
                 "listing the valid ones, rather than passing a typeless ref through into a\n"
-                "non-runnable query (BOT-1442).")
+                "non-runnable query.")
     (with-mp-and-stubs!
       (fn []
         (let [e (try
@@ -539,7 +539,7 @@
             (is (re-find #"no_such_column" (ex-message e)))))))))
 
 (deftest multi-stage-aggregation-display-name-recovered-end-to-end-test
-  (testing (str "BOT-1442: a stage-1 breakout that references a previous stage's\n"
+  (testing (str ": a stage-1 breakout that references a previous stage's\n"
                 "aggregation column by its UI display label (`Max of Doubled`) instead of the\n"
                 "machine name (`max`) is recovered end-to-end: the tool succeeds, the ref is\n"
                 "rewritten to `max` with a stamped base-type, and the resolved query is runnable.")
@@ -578,7 +578,7 @@
     (catch clojure.lang.ExceptionInfo ex ex)))
 
 (deftest offset-in-custom-column-surfaces-error-end-to-end-test
-  (testing (str "BOT-1442 sibling: an `offset` in a custom column surfaces a loud, retryable\n"
+  (testing (str "sibling: an `offset` in a custom column surfaces a loud, retryable\n"
                 "agent-error through the tool, instead of building a query the editor silently\n"
                 "can't run. The resolved query schema rejects any aggregation/window clause in\n"
                 "`:expressions`, so this is caught by the canRun-mirror gate, whose message\n"
@@ -702,7 +702,7 @@
 (deftest query-not-runnable-explanation-gate-test
   (testing (str "The runnability backstop returns nil for a runnable resolved query and a\n"
                 "non-nil Malli explanation for one whose breakout field ref is missing its\n"
-                "base-type (the BOT-1442 schema invalidity that disables the editor's run/save).")
+                "base-type (the schema invalidity that disables the editor's run/save).")
     (with-mp-and-stubs!
       (fn []
         (let [result (construct/execute-representations-query
@@ -956,12 +956,12 @@
             (is (true? (:agent-error? (ex-data e))))))))))
 
 ;;; ============================================================
-;;; Quoted source-card column names are canonicalised before type inference (BOT-1587)
+;;; Quoted source-card column names are canonicalised before type inference
 ;;; ============================================================
 
 (deftest source-card-quoted-column-name-canonicalized-test
   (testing
-   (str "Regression (BOT-1587): the LLM sometimes references a `source-card:` column by a name\n"
+   (str "Regression: the LLM sometimes references a `source-card:` column by a name\n"
         "that doesn't EXACTLY match a column the card returns - it quotes the name the way it\n"
         "would a SQL identifier, e.g. `[\"field\" {} \"\\\"TOTAL\\\"\"]` instead of\n"
         "`[\"field\" {} \"TOTAL\"]`. Without canonicalisation the `infer-source-card-field-types*`\n"

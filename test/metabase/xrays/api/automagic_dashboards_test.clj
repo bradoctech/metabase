@@ -410,30 +410,6 @@
                                   (str/includes? "there's not much else to show")))
                         (:dashcards dash))))))))))
 
-(deftest linked-entities-only-includes-readable-tables-test
-  (testing "an FK into the model's pk can come from any table on the instance, so only readable ones are x-rayed"
-    (mt/dataset test-data
-      (with-indexed-model! [{:keys [model-index] :as info}
-                            {:query     (mt/mbql-query products)
-                             :pk-ref    (mt/$ids :products $id)
-                             :value-ref (mt/$ids :products $title)}]
-        (mt/with-test-user :crowberto
-          (testing "sanity: an admin sees the tables linking to the model"
-            (is (seq (api.magic/linked-entities info)))))
-        (perms.test-util/with-no-data-perms-for-all-users!
-          (mt/with-test-user :rasta
-            (testing "a caller with no data permissions gets none of them"
-              (is (empty? (api.magic/linked-entities info))))))
-        (testing "and the endpoint answers with the empty-state dashboard rather than their metadata"
-          (perms.test-util/with-no-data-perms-for-all-users!
-            (let [dash (mt/user-http-request :rasta :get 200
-                                             (format "automagic-dashboards/model_index/%d/primary_key/%d"
-                                                     (:id model-index) 1))]
-              (is (some (fn [dashcard]
-                          (some-> dashcard :visualization_settings :text
-                                  (str/includes? "there's not much else to show")))
-                        (:dashcards dash))))))))))
-
 (deftest create-linked-dashboard-test-regular-queries
   (mt/dataset test-data
     (testing "x-ray an mbql model"

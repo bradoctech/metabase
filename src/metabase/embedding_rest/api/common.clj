@@ -13,6 +13,7 @@
    [metabase.models.resolution :as models.resolution]
    [metabase.notification.payload.core :as notification.payload]
    [metabase.parameters.dashboard :as parameters.dashboard]
+   [metabase.parameters.params :as params]
    [metabase.public-sharing-rest.api :as api.public]
    [metabase.queries.core :as queries]
    [metabase.query-processor.card :as qp.card]
@@ -125,6 +126,12 @@
   "Runs check-embedding-enabled-for-object for a pre-loaded Dashboard entity."
   check-embedding-enabled-for-object)
 
+(mu/defn active-card
+  "The non-archived Card with `card-id`, or nil. A trashed Card keeps its DashboardCard rows, so the dashcard routes
+  select it as absent rather than checking `:archived` after the fact."
+  [card-id :- ms/PositiveInt]
+  (t2/select-one :model/Card :id card-id :archived false))
+
 (defn- resolve-card-parameters
   "Returns the combined `:parameters` (including template-tag parameters) for a pre-loaded `card` entity."
   [card]
@@ -145,7 +152,7 @@
     (vec (for [[slug value] slug->value
                :let [slug (u/qualified-name slug)
                      param-type (get slug->type slug)
-                     default-options (parameters.dashboard/param-type->default-options param-type)]]
+                     default-options (params/param-type->default-options param-type)]]
            (cond-> {:slug slug
                     :id    (or (get slug->id slug)
                                (throw (ex-info (tru "No matching parameter with slug {0}. Found: {1}" (pr-str slug) (pr-str (keys slug->id)))
@@ -219,9 +226,19 @@
         merged-slug->value (validate-and-merge-params embedding-params token-params slug-query-params)]
     (into {} (for [[slug value] merged-slug->value
                    :when        value]
-               [(get slug->id (name slug)) value]))))
+               [(or (get slug->id (name slug))
+                    (throw (ex-info (tru "The parameter {0} does not exist on this dashboard." (name slug))
+                                    {:status-code 400})))
+                value]))))
 
 ;;; ---------------------------------------------- Other Param Util Fns ----------------------------------------------
+
+(defn- locked-slug->value
+  "The `\"locked\"` parameter values carried by the signed JWT. These are supplied by the embedding server rather
+  than the client, and are passed to the parameter value lookups as constraints so the values offered for the
+  enabled parameters match the rows the locked values select."
+  [embedding-params token-params]
+  (into {} (filter (fn [[slug _value]] (= (get embedding-params (keyword slug)) "locked"))) token-params))
 
 (defn- enabled-param-slugs
   "The set of param slugs (as keywords) from `dashboard-or-card-params` that may be exposed to embed viewers: only
@@ -502,7 +519,10 @@
         ;; guest embeds always use the router (primary) database, never a routed destination
         (database-routing/with-database-routing-off
           (request/as-admin
-            (queries/card-param-values card param-key search-prefix)))
+            (queries/card-param-values card param-key search-prefix
+                                       (queries/card-param-constraints
+                                        card
+                                        (locked-slug->value embedding-params slug-token-params)))))
         (catch Throwable e
           (throw (ex-info (.getMessage e)
                           {:card-id       (u/the-id card)
@@ -520,8 +540,7 @@
                           :param-slug          searched-param-slug
                           :token-params        slug-token-params}
                          e)]
-          (log/errorf e "embedded card-param-values error\n%s"
-                      (u/pprint-to-str (u/all-ex-data e)))
+          (log/errorf "embedded card-param-values error for Card %s: %s" (u/the-id card) (ex-message e))
           (throw e))))))
 
 (defn card-param-remapped-value
@@ -547,7 +566,10 @@
       (try
         (database-routing/with-database-routing-off
           (request/as-admin
-            (queries/card-param-remapped-value card param-key value)))
+            (queries/card-param-remapped-value card param-key value
+                                               (queries/card-param-constraints
+                                                card
+                                                (locked-slug->value embedding-params slug-token-params)))))
         (catch Throwable e
           (throw (ex-info (.getMessage e)
                           {:card-id   (u/the-id card)
@@ -565,8 +587,7 @@
                           :param-slug          searched-param-slug
                           :token-params        slug-token-params}
                          e)]
-          (log/errorf e "embedded card-param-values error\n%s"
-                      (u/pprint-to-str (u/all-ex-data e)))
+          (log/errorf "embedded card-param-values error for Card %s: %s" (u/the-id card) (ex-message e))
           (throw e))))))
 
 (defn dashboard-param-values
@@ -623,7 +644,7 @@
                           :param-slug          searched-param-slug
                           :token-params        slug-token-params}
                          e)]
-          (log/errorf e "Chain filter error\n%s" (u/pprint-to-str (u/all-ex-data e)))
+          (log/errorf "Chain filter error for Dashboard %s: %s" dashboard-id (ex-message e))
           (throw e))))))
 
 (defn dashboard-param-remapped-value

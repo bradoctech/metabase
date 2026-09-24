@@ -39,6 +39,15 @@
   (log/debugf "Saving fingerprint for %s" (sync-util/name-for-logging field))
   (t2/update! :model/Field (u/the-id field) (merge (incomplete-analysis-kvs) {:fingerprint fingerprint})))
 
+(mu/defn- mark-fingerprinting-failed!
+  "Advance `fingerprint_version` to the latest version for `fields` without saving a fingerprint. Called when
+  fingerprinting fails for a non-transient reason, so that the Fields are not re-selected by [[fields-to-fingerprint]]
+  and retried on every subsequent sync. Transient failures (see [[metabase.sync.util/transient-exception?]]) are
+  left untouched so they are retried."
+  [fields :- [:maybe [:sequential i/FieldInstance]]]
+  (when-let [ids (seq (map u/the-id fields))]
+    (t2/update! :model/Field :id [:in ids] {:fingerprint_version i/*latest-fingerprint-version*})))
+
 (mr/def ::FingerprintStats
   [:map
    [:no-data-fingerprints   ms/IntGreaterThanOrEqualToZero]
@@ -70,7 +79,9 @@
                  (reduce (fn [count-info [field fingerprint]]
                            (cond
                              (instance? Throwable fingerprint)
-                             (update count-info :failed-fingerprints inc)
+                             (do
+                               (mark-fingerprinting-failed! [field])
+                               (update count-info :failed-fingerprints inc))
 
                              (some-> fingerprint :global :distinct-count zero?)
                              (update count-info :no-data-fingerprints inc)
@@ -207,14 +218,18 @@
              (sync-util/name-for-logging table) limit limit))
 
 (mu/defn- fingerprint-fields-of-table!
-  "Fingerprint the (non-empty) `fields` of `table`."
+  "Fingerprint the (non-empty) `fields` of `table`. On a non-transient error, advance their fingerprint version so we
+  don't re-attempt every sync; transient errors are left untouched to retry next sync."
   [table  :- i/TableInstance
    fields :- [:sequential i/FieldInstance]]
   (log/infof "Fingerprinting %s fields in table %s" (count fields) (sync-util/name-for-logging table))
   (let [stats (sync-util/with-returning-throwable (format "Error fingerprinting %s" (sync-util/name-for-logging table))
                 (fingerprint-fields! table fields))]
-    (if (:throwable stats)
-      (merge (empty-stats-map 0) stats)
+    (if-let [throwable (:throwable stats)]
+      (do
+        (when-not (sync-util/transient-exception? throwable)
+          (mark-fingerprinting-failed! fields))
+        (merge (empty-stats-map 0) stats))
       stats)))
 
 (mu/defn fingerprint-table!

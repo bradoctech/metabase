@@ -263,8 +263,14 @@
     (assoc request :success? false
            :error disabled-account-snippet
            :message disabled-account-message)
-    (let [{:keys [user device-info]} request
-          session (auth-session/create-session-with-auth-tracking! user device-info provider)]
+    (let [{:keys [user device-info saml-data]} request
+          session (auth-session/create-session-with-auth-tracking!
+                   user device-info provider
+                   ;; SAML logins carry the IdP's own identifiers; single logout needs them to
+                   ;; name the session and subject to end. Other providers have none and store NULL.
+                   {:saml-session-index  (:session-index saml-data)
+                    :saml-name-id        (:name-id saml-data)
+                    :saml-name-id-format (:name-id-format saml-data)})]
       (assoc request :session session))))
 
 (methodical/defmethod login! ::provider
@@ -284,6 +290,13 @@
       (assoc request
              :success? true
              :redirect-url redirect-url))))
+
+(defenterprise apply-mfa-gate
+  "Decide whether a successful first-factor login must complete a second factor before a session is
+  created. OSS has no native MFA, so the login result passes through unchanged."
+  metabase-enterprise.mfa.core
+  [_provider login-result]
+  login-result)
 
 (def ^:private authenticate-owned-keys
   "Keys the pipeline derives for itself, dropped from the merge base. Callers forward user-controlled
@@ -328,9 +341,11 @@
     ;; user's tenant assignment was lost) must not leave a half-provisioned account behind (UXW-4898)
     (t2/with-transaction [_]
       (next-method provider $))
+    (apply-mfa-gate provider $)
     (cond-> $
-      (and (true? (:success? $)) (:user $)) (create-session! provider))
-    (select-keys $ [:success? :user :redirect-url :error :message :user-data :session :jwt-data :claims :oidc-provider-key])))
+      (and (true? (:success? $)) (:user $) (not (:mfa/pending? $))) (create-session! provider))
+    (select-keys $ [:success? :user :redirect-url :error :message :user-data :session :jwt-data :claims :oidc-provider-key
+                    :mfa/pending? :mfa/methods :mfa/first-factor])))
 
 (defenterprise sso-user-fields
   "Return the list of User model fields that should be populated from SSO user data.

@@ -27,7 +27,9 @@
   ([s]
    (like-pattern s identity))
   ([s wrap]
-   [:escape (wrap (escape-like-pattern s)) ^:allow-raw-sql [:inline "!"]]))
+   ;; `::literal` rather than [:inline "!"]: with a driver bound, inline strings compile via driver-specific
+   ;; `inline-value` (MySQL emits `_utf8mb4 X'21'`, whose collation can clash with LIKE's other operands)
+   [:escape (wrap (escape-like-pattern s)) [::literal "!"]]))
 
 (defn like-substring
   "`LIKE` right-hand side matching `s` case-insensitively as a literal substring; compare it against a lowercased column."
@@ -169,6 +171,8 @@
    [:= ::identifier]
    IdentifierType
    [:sequential {:min 1} :string]])
+
+; dirt
 
 (defn- format-identifier [_tag [_identifier-type components :as _args]]
   ;; don't error if the identifier has something 'suspicious' like a semicolon in it -- it's ok because we're quoting
@@ -515,9 +519,9 @@
   "HoneySQL form that should be used to get the current `datetime` (or equivalent), e.g. `:%now`."
   [db-type]
   (case db-type
-    (:h2 :h2-mbql5) (with-database-type-info :%now "timestamp")
+    :h2       (with-database-type-info :%now "timestamp")
     :mysql    (with-database-type-info [:now [:inline 6]] "timestamp")
-    (:postgres :postgres-mbql5) (with-database-type-info :%now "timestamptz")))
+    :postgres (with-database-type-info :%now "timestamptz")))
 
 (defn- format-postgres-interval
   "Generate a Postgres 'INTERVAL' literal.
@@ -571,10 +575,6 @@
     (let [hsql-form (->pg-timestamp hsql-form)]
       (-> (+ hsql-form (pg-interval amount unit))
           (with-type-info (type-info hsql-form))))))
-
-(defmethod add-interval-honeysql-form :postgres-mbql5
-  [db-type hsql-form amount unit]
-  ((get-method add-interval-honeysql-form :postgres) db-type hsql-form amount unit))
 
 (def ^:private mysql-interval-units
   "Allow-list of the temporal-interval units MySQL's `INTERVAL` accepts."
@@ -631,10 +631,6 @@
 
     :else
     (dateadd-h2 unit amount hsql-form)))
-
-(defmethod add-interval-honeysql-form :h2-mbql5
-  [db-type hsql-form amount unit]
-  ((get-method add-interval-honeysql-form :h2) db-type hsql-form amount unit))
 
 (defmethod add-interval-honeysql-form :default
   [db-type hsql-form amount unit]

@@ -253,7 +253,7 @@
                         {:query (or (u/ignore-exceptions (mbql.normalize/normalize query))
                                     query)}
                         e)]
-         (if throw-exceptions? (throw e) (log/error e)))
+         (if throw-exceptions? (throw e) (log/error (ex-message e))))
        {:perms/create-queries {0 :query-builder}})))) ; table 0 will never exist
 
 (defn- mbql5-required-perms
@@ -287,13 +287,14 @@
   "Checks that the current user has at least `required-perm` for the entire DB specified by `db-id`."
   [perm-type required-perm db-id]
   (perms/at-least-as-permissive? perm-type
-                                 (perms/full-db-permission-for-user api/*current-user-id* perm-type db-id)
+                                 (perms/full-database-permission-for-user api/*current-user-id* perm-type db-id)
                                  required-perm))
 
 (defn- has-perm-for-table?
   "Checks that the current user has the permissions for tables specified in `table-id->perm`. Returns true if access
   is allowed, otherwise false."
   [perm-type table-id->required-perm db-id]
+  (perms/prime-table-perms-cache {:db-ids #{db-id} :table-ids (set (keys table-id->required-perm))})
   (every? (fn [[table-id required-perm]]
             (perms/user-has-permission-for-table?
              api/*current-user-id*
@@ -324,13 +325,14 @@
         table-ids (into (set (keep (some-fn :table-id :table_id) result-metadata))
                         (when (seq field-ids)
                           (t2/select-fn-set :table_id :model/Field :id [:in field-ids])))]
+    (perms/prime-table-perms-cache {:db-ids #{database-id} :table-ids table-ids})
     (run! #(when-not (perms/user-has-permission-for-table?
                       api/*current-user-id*
                       :perms/view-data
                       :unrestricted
                       database-id
                       %)
-             (throw (perms-exception (tru "You do not have permission to view data of table {0} in result_metadata." %)
+             (throw (perms-exception (tru "You do not have permission to view data of table {0} in result_metadata." (str %))
                                      {database-id {:perms/view-data {% :unrestricted}}})))
           table-ids)))
 
@@ -428,16 +430,12 @@
     (let [table-ids             (t2/select-fn-set :table_id :model/Field :id [:in (set field-ids)])
           table-id->database-id (when (seq table-ids)
                                   (t2/select-pk->fn :db_id :model/Table :id [:in table-ids]))]
-      (perms/prime-db-cache (set (vals table-id->database-id)))
+      (perms/prime-table-perms-cache {:table-ids table-ids})
       (doseq [table-id table-ids
               :let     [database-id (table-id->database-id table-id)]]
         (when-not (can-query-table? database-id table-id)
-          (throw (ex-info (tru "You must have data permissions to add a parameter referencing the Table {0}."
-                               (pr-str (t2/select-one-fn :name :model/Table :id table-id)))
-                          {:status-code        403
-                           :database-id        database-id
-                           :table-id           table-id
-                           :actual-permissions @api/*current-user-permissions-set*})))))))
+          (throw (ex-info (tru "You must have data permissions to add a parameter referencing this Field.")
+                          {:status-code 403})))))))
 
 (mu/defn check-run-permissions-for-query
   "Make sure the Current User has the appropriate permissions to run `query`. We don't want Users saving Cards with

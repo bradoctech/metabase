@@ -45,7 +45,7 @@
                               ;; and the client picks it, so it can only leave the transport unknown
                               {"origin" "https://mysite.com"}  :unknown
                               {"origin" "http://mysite.com"}   :http
-                              ;; a blank proto header must fall through to the boolean HTTPS indicators (BOT-1617)
+                              ;; a blank proto header must fall through to the boolean HTTPS indicators
                               {"x-forwarded-proto" "" "x-forwarded-ssl" "on"}          :https
                               {"x-forwarded-proto" "" "front-end-https" "on"}          :https
                               {"x-forwarded-proto" "  " "origin" "https://mysite.com"} :unknown

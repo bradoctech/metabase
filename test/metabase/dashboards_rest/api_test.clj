@@ -12,6 +12,7 @@
    [metabase.analytics.snowplow-test :as snowplow-test]
    [metabase.api.response :as api.response]
    [metabase.api.test-util :as api.test-util]
+   [metabase.channel.render.core :as channel.render]
    [metabase.collections.models.collection :as collection]
    [metabase.config.core :as config]
    [metabase.dashboards-rest.api :as api.dashboard]
@@ -694,6 +695,67 @@
           (is (= "You don't have permissions to do that."
                  (mt/user-http-request :rasta :get 403 (format "dashboard/%d" dashboard-id)))))))))
 
+;;; ------------------------------------------- PDF export ----------------------------------------------------------
+
+;; The actual server-side render is exercised by metabase.channel.render.pdf-test (golden + smoke tests); here we
+;; stub it so these tests cover only the HTTP contract: parameter threading, paper size, and content negotiation.
+(deftest dashboard-pdf-test
+  (testing "POST /api/dashboard/:id/pdf"
+    (mt/with-temp [:model/Dashboard {dash-id :id} {:name "My Bird Dashboard"}]
+      (let [calls    (atom [])
+            fake-pdf (.getBytes "%PDF-1.4 fake")]
+        (with-redefs [channel.render/render-dashboard-to-pdf
+                      (fn [dashboard-id user-id parameters paper-key]
+                        (swap! calls conj {:dashboard-id dashboard-id
+                                           :user-id      user-id
+                                           :parameters   parameters
+                                           :paper-key    paper-key})
+                        fake-pdf)]
+          (testing "defaults to empty parameters and A4, streaming a non-empty PDF body"
+            (reset! calls [])
+            (let [resp (mt/user-http-request :rasta :post 200 (format "dashboard/%d/pdf" dash-id)
+                                             {:request-options {:as :byte-array}}
+                                             {})]
+              (is (pos? (count resp)))
+              (is (= [{:dashboard-id dash-id
+                       :user-id      (mt/user->id :rasta)
+                       :parameters   []
+                       :paper-key    :a4}]
+                     @calls))))
+          (testing "threads parameter overrides (array form) and paper_size through to the renderer"
+            (reset! calls [])
+            (mt/user-http-request :rasta :post 200 (format "dashboard/%d/pdf" dash-id)
+                                  {:request-options {:as :byte-array}}
+                                  {:parameters [{:id "p1" :value "CA"}]
+                                   :paper_size "letter"})
+            (is (= [{:id "p1" :value "CA"}] (:parameters (first @calls))))
+            (is (= :letter (:paper-key (first @calls)))))
+          (testing "accepts parameters as a JSON-encoded string (for <form>-driven downloads)"
+            (reset! calls [])
+            (mt/user-http-request :rasta :post 200 (format "dashboard/%d/pdf" dash-id)
+                                  {:request-options {:as :byte-array}}
+                                  {:parameters (json/encode [{:id "p1" :value "NY"}])})
+            (is (= [{:id "p1" :value "NY"}] (:parameters (first @calls)))))
+          (testing "a JSON string that is valid JSON but not a well-formed parameter list is a 400 (not a 500)"
+            ;; an object instead of an array
+            (is (mt/user-http-request :rasta :post 400 (format "dashboard/%d/pdf" dash-id)
+                                      {:parameters (json/encode {:id "p1" :value "x"})}))
+            ;; an array whose entry is missing the required :id
+            (is (mt/user-http-request :rasta :post 400 (format "dashboard/%d/pdf" dash-id)
+                                      {:parameters (json/encode [{:value "x"}])})))
+          (testing "rejects an invalid paper_size"
+            (mt/user-http-request :rasta :post 400 (format "dashboard/%d/pdf" dash-id)
+                                  {:paper_size "a3"})))))))
+
+(deftest dashboard-pdf-permissions-test
+  (testing "POST /api/dashboard/:id/pdf requires read permission on the dashboard"
+    (with-redefs [channel.render/render-dashboard-to-pdf (fn [& _] (.getBytes "x"))]
+      (mt/with-non-admin-groups-no-root-collection-perms
+        (mt/with-temp [:model/Collection {coll-id :id} {:name "No-read Collection"}
+                       :model/Dashboard  {dash-id :id} {:collection_id coll-id}]
+          (is (= "You don't have permissions to do that."
+                 (mt/user-http-request :rasta :post 403 (format "dashboard/%d/pdf" dash-id) {}))))))))
+
 (deftest put-dashboard-hides-unreadable-cards-test
   (testing "PUT /api/dashboard/:id should hide card details from collections the user cannot access (#UXW-3571)"
     (mt/with-non-admin-groups-no-root-collection-perms
@@ -772,7 +834,7 @@
       (mt/with-log-messages-for-level [messages [metabase.parameters.params :trace]]
         (is (some? (mt/user-http-request :rasta :get 200 (str "dashboard/" dash-id))))
         (is (=? [{:level   :trace
-                  :message "Could not find matching Field ID for target: \"not-existed-filter\""}]
+                  :message "Could not find matching Field ID for target template tag"}]
                 (messages)))))))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
@@ -2355,14 +2417,14 @@
       (do-with-add-card-parameter-mapping-permissions-fixtures!
        (fn [{:keys [card-id mappings add-card! dashcards]}]
          (data-perms/set-database-permission! (perms-group/all-users) (mt/id) :perms/view-data :unrestricted)
-         (is (=? {:message "You must have data permissions to add a parameter referencing the Table \"VENUES\"."}
-                 (add-card! 403)))
+         (is (= "You must have data permissions to add a parameter referencing this Field."
+                (add-card! 403)))
          (is (= []
                 (dashcards)))
          (testing "Permissions for a different table in the same DB should not count"
            (data-perms/set-table-permission! (perms-group/all-users) (mt/id :categories) :perms/create-queries :query-builder)
-           (is (=? {:message  "You must have data permissions to add a parameter referencing the Table \"VENUES\"."}
-                   (add-card! 403)))
+           (is (= "You must have data permissions to add a parameter referencing this Field."
+                  (add-card! 403)))
            (is (= []
                   (dashcards))))
          (testing "If they have data permissions, it should be ok"
@@ -2391,7 +2453,7 @@
                                                 :target       [:dimension [:field (mt/id :venues :category_id) nil]]}]}]
             (let [resp (mt/user-http-request :rasta :post 403 (format "dashboard/save/collection/%d" coll-id)
                                              {:name "transient" :parameters [] :dashcards [dashcard]})]
-              (is (re-find #"data permissions.*VENUES" (:cause resp))))
+              (is (= "You must have data permissions to add a parameter referencing this Field." resp)))
             (testing "and once granted, the save succeeds"
               (data-perms/set-table-permission! (perms-group/all-users) (mt/id :venues) :perms/create-queries :query-builder)
               (is (some? (mt/user-http-request :rasta :post 200 (format "dashboard/save/collection/%d" coll-id)
@@ -2497,8 +2559,8 @@
       (do-with-update-cards-parameter-mapping-permissions-fixtures!
        (fn [{:keys [dashboard-id card-id original-mappings update-mappings! update-size! new-dashcard-info new-mappings]}]
          (testing "Should *NOT* be allowed to update the `:parameter_mappings` without proper data permissions"
-           (is (=? {:message  "You must have data permissions to add a parameter referencing the Table \"VENUES\"."}
-                   (update-mappings! 403)))
+           (is (= "You must have data permissions to add a parameter referencing this Field."
+                  (update-mappings! 403)))
            (is (= original-mappings
                   (t2/select-one-fn :parameter_mappings :model/DashboardCard :dashboard_id dashboard-id, :card_id card-id))))
          (testing "Changing another column should be ok even without data permissions."
@@ -2656,8 +2718,8 @@
                                                          :dashcards  [(text-dashcard field-id)]
                                                          :tabs       []}))]
               (testing "a Field the user cannot query is rejected"
-                (is (re-find #"You must have data permissions to add a parameter referencing the Table"
-                             (:cause (save! (mt/id :categories :name) 403))))
+                (is (= "You must have data permissions to add a parameter referencing this Field."
+                       (save! (mt/id :categories :name) 403)))
                 (is (empty? (t2/select :model/DashboardCard :dashboard_id dashboard-id))))
               (testing "a Field the user can query is accepted"
                 (is (some? (save! (mt/id :venues :name) 200)))))))))))
@@ -3749,15 +3811,53 @@
           (is (some? (mt/user-http-request :rasta :get 200 (chain-filter-values-url dashboard-id "abc"))))
           (is (some? (mt/user-http-request :rasta :get 200 (chain-filter-search-url dashboard-id "abc" "red")))))))))
 
+(deftest parameter-values-from-card-nested-source-card-test
+  (testing "users must have permissions to read every card the source card's query nests, not just the source card (SEC-1158)"
+    (mt/with-non-admin-groups-no-root-collection-perms
+      (mt/with-temp
+        [:model/Collection private-coll {:name "Private nested card collection"}
+         :model/Card       {nested-card-id :id} {:collection_id (:id private-coll)
+                                                 :database_id   (mt/id)
+                                                 :table_id      (mt/id :venues)
+                                                 :dataset_query (mt/mbql-query venues {:limit 5})}
+         :model/Collection wrapper-coll {:name "Readable wrapper card collection"}
+         :model/Card       {wrapper-card-id :id} {:collection_id (:id wrapper-coll)
+                                                  :database_id   (mt/id)
+                                                  :dataset_query {:database (mt/id)
+                                                                  :type     :query
+                                                                  :query    {:source-table (str "card__" nested-card-id)}}}
+         :model/Collection dash-coll {:name "Dashboard collection"}
+         :model/Dashboard  {dashboard-id :id} {:collection_id (:id dash-coll)
+                                               :parameters    [{:id                   "abc"
+                                                                :type                 "category"
+                                                                :name                 "CATEGORY"
+                                                                :values_source_type   "card"
+                                                                :values_source_config {:card_id     wrapper-card-id
+                                                                                       :value_field (mt/$ids $venues.name)}}]}]
+        (perms/grant-collection-read-permissions! (perms-group/all-users) dash-coll)
+        (perms/grant-collection-read-permissions! (perms-group/all-users) wrapper-coll)
+        (testing "read permission on the wrapper card is not enough when its query nests a card the user cannot read"
+          (is (= (format "You do not have permissions to view Card %d." nested-card-id)
+                 (mt/user-http-request :rasta :get 403 (chain-filter-values-url dashboard-id "abc"))))
+          (is (= (format "You do not have permissions to view Card %d." nested-card-id)
+                 (mt/user-http-request :rasta :get 403 (chain-filter-search-url dashboard-id "abc" "red")))))
+        ;; grant permission to read the collection containing the nested card
+        (perms/grant-collection-read-permissions! (perms-group/all-users) private-coll)
+        (testing "success once the user can read the nested card too"
+          (is (=? {:values seq}
+                  (mt/user-http-request :rasta :get 200 (chain-filter-values-url dashboard-id "abc"))))
+          (is (=? {:values seq}
+                  (mt/user-http-request :rasta :get 200 (chain-filter-search-url dashboard-id "abc" "red")))))))))
+
 (deftest parameter-values-from-card-test-4
-  ;; TODO: Re-enable this test, or delete it. Now that mapping dashboard filters to fields on cards is powered by MLv2,
+  ;; TODO: Re-enable this test, or delete it. Now that mapping dashboard filters to fields on cards is powered by Lib,
   ;; the FE does not use the /api/table/:card__id/query_metadata API call to determine the fields which can be filtered
   ;; on a saved question. It uses `Lib.filterableColumns` instead, which given a saved question with aggregations in the
   ;; last stage will return the pre-aggregation columns on that last stage. That allows linking the dashboard filter not
   ;; to the aggregations and breakouts, but to the pre-aggregation columns which feed into the aggregations.
   ;; This is typically what's wanted for filtering an aggregated query in a dashboard: filtering SUM(subtotal) to a
   ;; time range, product category, etc.
-  ;; This test should either (1) be rehabilitated to use MLv2 to get the set of columns for filtering a dashcard (like
+  ;; This test should either (1) be rehabilitated to use Lib to get the set of columns for filtering a dashcard (like
   ;; the FE); or (2) just be dropped if it's not providing value.
   #_(testing "field selection should compatible with field-id from /api/table/:card__id/query_metadata"
       ;; FE use the id returned by /api/table/:card__id/query_metadata
@@ -3802,7 +3902,7 @@
 (deftest ^:parallel valid-filter-fields-test
   (testing "GET /api/dashboard/params/valid-filter-fields"
     (letfn [(result= [expected {:keys [filtered filtering]}]
-              (testing (format "\nGET dashboard/params/valid-filter-fields")
+              (testing "\nGET dashboard/params/valid-filter-fields"
                 (is (= expected
                        (mt/user-http-request :rasta :get 200 "dashboard/params/valid-filter-fields"
                                              :filtered filtered :filtering filtering)))))]
@@ -4262,6 +4362,7 @@
                         (mt/user-http-request :crowberto :post 400
                                               (format "dashboard/%s/dashcard/%s/execute" dashboard-id dashcard-id)
                                               {:parameters {"id" 1}}))))))))
+
 (deftest dashcard-implicit-action-execution-delete-test
   (mt/test-drivers (mt/normal-drivers-with-feature :actions)
     (mt/with-actions-test-data-and-actions-enabled
@@ -4806,11 +4907,12 @@
                                       :type  "string/="
                                       :value ["LinkedIn"]}],
                       :dashboard_id dash-id}]
-                    (#'api.dashboard/broken-pulses dash-id {param-id param}))))
+                    ;; `broken-pulses` doesn't order its results, so sort them for a stable comparison
+                    (sort-by :id (#'api.dashboard/broken-pulses dash-id {param-id param})))))
           (testing "We can gather all needed data regarding broken params"
             (let [bad-pulses    (mapv
                                  #(update % :affected-users (partial sort-by :email))
-                                 (#'api.dashboard/broken-subscription-data dash-id {param-id param}))
+                                 (sort-by :pulse-id (#'api.dashboard/broken-subscription-data dash-id {param-id param})))
                   bad-pulse-ids (set (map :pulse-id bad-pulses))]
               (testing "We only detect the bad pulse and not the good one"
                 (is (true? (contains? bad-pulse-ids bad-pulse-id)))
@@ -4970,9 +5072,9 @@
       :email-body-pattern        "href="
       :match-email-body-pattern? false})))
 
-(deftest run-mlv2-dashcard-query-test
+(deftest run-mbql5-dashcard-query-test
   (testing "POST /api/dashboard/:dashboard-id/dashcard/:dashcard-id/card/:card-id"
-    (testing "Should be able to run a query for a DashCard with an MLv2 query (#39024)"
+    (testing "Should be able to run a query for a DashCard with an MBQL 5 query (#39024)"
       (let [metadata-provider (mt/metadata-provider)
             venues            (lib.metadata/table metadata-provider (mt/id :venues))
             query             (-> (lib/query metadata-provider venues)
@@ -5974,12 +6076,12 @@
                     (t2/select-one :model/Card :name card-name)))))))))
 
 ;;; +--------------------------------------------------------------------------------------------------+
-;;; |       result_metadata persistence with parameters (QUE2-502)                                     |
+;;; |       result_metadata persistence with parameters                                     |
 ;;; |       See also: metabase.queries-rest.api.card-test (card endpoint tests for native cards)       |
 ;;; +--------------------------------------------------------------------------------------------------+
 
 (deftest parameterized-mbql-dashcard-does-not-persist-result-metadata-test
-  ;; QUE2-502
+  ;;
   (testing "POST /api/dashboard/:id/dashcard/:id/card/:id/query — MBQL card with parameters should not update result_metadata"
     (mt/with-temp [:model/Card          {card-id :id}
                    {:dataset_query (mt/mbql-query orders
@@ -6016,7 +6118,7 @@
               "result_metadata should remain stable across different parameter values"))))))
 
 (deftest parameterized-native-dashcard-does-not-persist-result-metadata-test
-  ;; QUE2-502
+  ;;
   (testing "POST /api/dashboard/:id/dashcard/:id/card/:id/query — native card with non-default parameters should not update result_metadata"
     (let [native-query (mt/native-query
                         {:query         "SELECT COUNT(*) AS cnt FROM ORDERS WHERE PRODUCT_ID = {{product_id}}"
@@ -6054,7 +6156,7 @@
                 "result_metadata should not change when native dashcard is run with non-default parameter values")))))))
 
 (deftest native-dashcard-with-default-parameters-persists-result-metadata-test
-  ;; QUE2-502
+  ;;
   (testing "POST /api/dashboard/:id/dashcard/:id/card/:id/query — native card with default parameter values SHOULD update result_metadata"
     (let [native-query (mt/native-query
                         {:query         "SELECT COUNT(*) AS cnt FROM ORDERS WHERE PRODUCT_ID = {{product_id}}"
@@ -6114,7 +6216,7 @@
                                                 {:dashcards [{:id -1 :card_id card-id :row 0 :col 0 :size_x 4 :size_y 4
                                                               :parameter_mappings mapping}]
                                                  :tabs      []}))]
-            (is (=? {:message #"(?i).*data permissions.*PRODUCTS.*"} (put! 403)))
+            (is (= "You must have data permissions to add a parameter referencing this Field." (put! 403)))
             (data-perms/set-table-permission! (perms-group/all-users) (mt/id :products) :perms/view-data :unrestricted)
             (data-perms/set-table-permission! (perms-group/all-users) (mt/id :products) :perms/create-queries :query-builder)
             (is (=? [{:parameter_mappings [{:parameter_id "_ID_"

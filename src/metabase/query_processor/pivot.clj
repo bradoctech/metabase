@@ -23,6 +23,7 @@
    [metabase.query-processor.error-type :as qp.error-type]
    [metabase.query-processor.metadata :as qp.metadata]
    [metabase.query-processor.middleware.add-remaps :as qp.add-remaps]
+   [metabase.query-processor.middleware.drop-fields-in-summaries :as qp.drop-fields-in-summaries]
    [metabase.query-processor.middleware.normalize-query :as qp.middleware.normalize]
    [metabase.query-processor.pipeline :as qp.pipeline]
    [metabase.query-processor.pivot.common :as pivot.common]
@@ -199,7 +200,7 @@
                       (seq info) (qp/userland-query info))]
           (qp/process-query query rff))
         (catch Throwable e
-          (log/error e "Error processing additional pivot table query")
+          (log/errorf "Error processing additional pivot table query: %s" (ex-message e))
           (throw e))))))
 
 (mu/defn- process-queries-append-results
@@ -399,7 +400,7 @@
                                                   legacy-ref
                                                   breakouts))
                                           (catch Throwable e
-                                            (log/errorf e "Error finding matching column for ref %s" (pr-str legacy-ref))
+                                            (log/errorf "Error finding matching column for ref %s: %s" (pr-str legacy-ref) (ex-message e))
                                             nil)))
         process-refs                  (fn process-refs [refs]
                                         (when (seq refs)
@@ -469,7 +470,12 @@
   Some pivot subqueries exclude certain breakouts, so we need to fill in those missing columns with `nil` in the overall
   results -- "
   [query :- ::lib.schema/query]
-  (let [remapped-query           (qp.add-remaps/add-remapped-columns query)
+  ;; `drop-fields-in-summaries` mirrors the QP preprocessing step that strips `:fields` from stages that
+  ;; also have `:aggregation`/`:breakout`. Without it, `lib/returned-columns` on such a stage would
+  ;; concat the `:fields` cols with the summary cols and overcount `:qp.pivot/num-remapped-cols` (#81203).
+  (let [remapped-query           (-> query
+                                     qp.drop-fields-in-summaries/drop-fields-in-summaries
+                                     qp.add-remaps/add-remapped-columns)
         remap                    (remapped-indexes (lib/breakouts remapped-query))
         remapped-cols            (lib/returned-columns remapped-query)
         num-remapped-cols        (count remapped-cols)
@@ -503,7 +509,7 @@
 
   ([query :- ::qp.schema/any-query
     rff   :- [:maybe ::qp.schema/rff]]
-   (log/debugf "Running pivot query:\n%s" (u/pprint-to-str query))
+   (log/debug "Running pivot query")
    ;; Do not bind *card-id* here. Callers that run pivot queries for saved cards
    ;; (e.g. card.clj, dashboards) bind *card-id* themselves before calling
    ;; run-pivot-query, so binding it here from the query's :info map would be
