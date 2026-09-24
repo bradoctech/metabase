@@ -15,12 +15,14 @@
    [metabase.permissions-rest.data-permissions.graph :as data-perms.graph]
    [metabase.permissions.models.permissions-group :as perms-group]
    [metabase.plugins.core :as plugins]
+   [metabase.sync.core :as sync.core]
    [metabase.sync.sync :as sync]
    [metabase.sync.task.sync-databases :as task.sync-databases]
    [metabase.task.core :as task]
    [metabase.test :as mt]
    [metabase.test.fixtures :as fixtures]
    [metabase.util :as u]
+   [toucan2.connection :as t2.connection]
    [toucan2.core :as t2])
   (:import
    (java.nio.charset StandardCharsets)
@@ -79,8 +81,7 @@
               :perms/manage-table-metadata :no
               :perms/view-data             :unrestricted
               :perms/create-queries        :no
-              :perms/transforms            :no
-              :perms/workspaces            :no}
+              :perms/transforms            :no}
              (-> (data-perms.graph/data-permissions-graph :db-id audit/audit-db-id :audit? true)
                  (get-in [(u/the-id (perms-group/all-users)) audit/audit-db-id])))))
     (testing "Audit DB does not have scheduled syncs"
@@ -91,7 +92,7 @@
                                         db-id))]
         (is (not (db-has-sync-job-trigger? audit/audit-db-id)))))
     (testing "Audit DB doesn't get re-installed unless the engine changes"
-      (with-redefs [ee.audit.settings/load-analytics-content (constantly nil)]
+      (mt/with-dynamic-fn-redefs [ee.audit.settings/load-analytics-content (constantly nil)]
         (is (= ::ee-audit/no-op (ee-audit/ensure-audit-db-installed!)))
         (t2/update! :model/Database :is_audit true {:engine "datomic"})
         (is (= ::ee-audit/updated (ee-audit/ensure-audit-db-installed!)))
@@ -134,7 +135,7 @@
       (is (= '("metabase.task.update-field-values.trigger.13371337")
              (get-audit-db-trigger-keys))
           "no sync scheduled after installation")
-      (with-redefs [task.sync-databases/job-context->database-id (constantly audit/audit-db-id)]
+      (mt/with-dynamic-fn-redefs [task.sync-databases/job-context->database-id (constantly audit/audit-db-id)]
         (is (thrown-with-msg?
              clojure.lang.ExceptionInfo
              #"Cannot sync Database: It is the audit db."
@@ -168,7 +169,7 @@
     (t2/delete! :model/Database :is_audit true)
     (testing "If audit content loading throws an exception, the checksum should not be stored"
       (audit/last-analytics-checksum! 0)
-      (with-redefs [serialization.cmd/v2-load-internal! (fn [& _] (throw (Exception. "Audit loading failed")))]
+      (mt/with-dynamic-fn-redefs [serialization.cmd/v2-load-internal! (fn [& _] (throw (Exception. "Audit loading failed")))]
         (is (thrown-with-msg? Exception
                               #"Audit loading failed"
                               (ee-audit/ensure-audit-db-installed!)))
@@ -202,9 +203,9 @@
           (.putNextEntry out (JarEntry. (str resource "/" rel)))
           (.write out (.getBytes ^String sql StandardCharsets/UTF_8))
           (.closeEntry out)))
-      (with-redefs [io/resource (fn [path]
-                                  (when (= path resource)
-                                    jar-url))]
+      (mt/with-dynamic-fn-redefs [io/resource (fn [path]
+                                                (when (= path resource)
+                                                  jar-url))]
         (is (= expected (#'ee-audit/views-checksum))))
       (finally
         (Files/deleteIfExists jar-path)))))
@@ -227,9 +228,9 @@
           [jar-a url-a] (make-jar [["a.sql" "select 1;"]])
           [jar-b url-b] (make-jar [["b.sql" "select 1;"]])]
       (try
-        (let [checksum-a (with-redefs [io/resource (constantly url-a)]
+        (let [checksum-a (mt/with-dynamic-fn-redefs [io/resource (constantly url-a)]
                            (#'ee-audit/views-checksum))
-              checksum-b (with-redefs [io/resource (constantly url-b)]
+              checksum-b (mt/with-dynamic-fn-redefs [io/resource (constantly url-b)]
                            (#'ee-audit/views-checksum))]
           (is (not= checksum-a checksum-b)))
         (finally
@@ -240,9 +241,9 @@
   (mt/with-temp [:model/Database audit-db {:engine "h2" :is_audit true}]
     (let [checksum 12345]
       (ee.audit.settings/last-analytics-views-checksum! 0)
-      (with-redefs [ee-audit/views-checksum (constantly checksum)
-                    sync/sync-database! (fn [& _]
-                                          (throw (Exception. "sync failed")))]
+      (mt/with-dynamic-fn-redefs [ee-audit/views-checksum (constantly checksum)
+                                  sync/sync-database! (fn [& _]
+                                                        (throw (Exception. "sync failed")))]
         (is (nil? (#'ee-audit/maybe-sync-audit-db! audit-db false)))
         (is (= 0 (ee.audit.settings/last-analytics-views-checksum)))))))
 
@@ -454,3 +455,85 @@
         (t2/delete! :model/Database :is_audit true)
         (audit/last-analytics-checksum! 0)
         (mbc/ensure-audit-db-installed!)))))
+
+(deftest interrupted-engine-changed-sync-repaired-on-next-boot-test
+  ;; A failed or interrupted post-load dialect sync must be repaired by the next boot.
+  ;;
+  ;; `engine-changed? true` is the mysql/h2-host state: `maybe-load-analytics-content!` flips the
+  ;; audit DB engine to postgres for the serdes load and back to the host dialect after, and the
+  ;; returned boolean triggers a one-shot schema sync so field metadata gets re-scanned for the
+  ;; host dialect. (On a postgres appdb the engine never flips, so the boolean is injected here.)
+  ;; By the time that sync runs, the content checksum has already advanced -- so if the sync dies
+  ;; (or merely fails: `maybe-sync-audit-db!` catches and logs), the next boot sees engine
+  ;; matching, checksum matching, and views not stale, and must still notice the audit DB never
+  ;; got its dialect sync. There is no other repair path: the scheduled sync task and the sync
+  ;; API both refuse the audit DB.
+  (with-audit-db-restoration!
+    (let [audit-db (t2/select-one :model/Database :is_audit true)]
+      ;; "Boot 1": steady state (checksums current), the engine-changed sync dies mid-flight.
+      (with-redefs [sync.core/sync-database! (fn [& _] (throw (ex-info "killed mid-sync" {})))]
+        (#'ee-audit/maybe-sync-audit-db! audit-db true))
+      ;; "Boot 2": the full, un-stubbed pipeline, spying on audit-DB syncs.
+      (let [audit-db-syncs (atom 0)
+            real-sync      sync.core/sync-database!]
+        (with-redefs [sync.core/sync-database! (fn [db & [opts]]
+                                                 (when (:is_audit db)
+                                                   (swap! audit-db-syncs inc))
+                                                 (real-sync db opts))]
+          (mbc/ensure-audit-db-installed!))
+        (testing "the boot after an interrupted engine-changed sync re-syncs the audit DB"
+          (is (pos? @audit-db-syncs)))))))
+
+(deftest audit-pipeline-commits-incrementally-test
+  ;; Pins the `:detached? true` on `ensure-audit-db-installed!`'s cluster lock behaviorally: work
+  ;; done inside the pipeline must be visible to other sessions while the pipeline is still
+  ;; running. Under the pre-detached design the whole pipeline rode the lock's transaction, so
+  ;; nothing was visible until the final commit -- if a refactor drops the flag, the marker row
+  ;; below stays invisible to the probing thread and this test fails. (The probe binds
+  ;; *current-connectable* to nil because future conveys bindings: without it, a transactional
+  ;; pipeline would hand the probe its own connection and it would see uncommitted work.)
+  (with-audit-db-restoration!
+    (let [email   (mt/random-email)
+          visible (atom ::not-checked)]
+      (try
+        ;; stale the content checksum so the (stubbed) load runs inside the locked pipeline
+        (audit/last-analytics-checksum! 0)
+        (with-redefs [serialization.cmd/v2-load-internal!
+                      (fn [& _]
+                        (t2/insert! :model/User (assoc (mt/with-temp-defaults :model/User) :email email))
+                        (reset! visible
+                                (deref (future
+                                         (binding [t2.connection/*current-connectable* nil]
+                                           (t2/exists? :model/User :email email)))
+                                       5000 ::timeout))
+                        ;; report no errors: content is already loaded from the steady state, so
+                        ;; letting the checksum advance leaves a consistent end state
+                        {:errors [] :seen []})]
+          (mbc/ensure-audit-db-installed!))
+        (testing "work committed inside the audit pipeline is visible mid-pipeline from another connection"
+          (is (true? @visible)))
+        (finally
+          (t2/delete! :model/User :email email))))))
+
+(deftest crash-mid-load-repaired-on-next-boot-test
+  ;; Pins the self-healing premise the detached lock's safety argument leans on: a crash in the
+  ;; middle of the serdes load must be repaired by the next boot. Two halves: the content
+  ;; checksum must not advance past a load that did not complete (so the next boot re-enters the
+  ;; load), and the next boot's un-stubbed pipeline must actually converge back to the healthy
+  ;; state.
+  (with-audit-db-restoration!
+    (let [healthy-checksum (audit/last-analytics-checksum)]
+      ;; make the content look new again, as an upgrade would
+      (audit/last-analytics-checksum! 0)
+      ;; "Boot 1": the serdes load dies partway through.
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"killed mid-load"
+                            (with-redefs [serialization.cmd/v2-load-internal!
+                                          (fn [& _] (throw (ex-info "killed mid-load" {})))]
+                              (mbc/ensure-audit-db-installed!))))
+      (testing "the content checksum does not advance past an incomplete load"
+        (is (= 0 (audit/last-analytics-checksum))))
+      ;; "Boot 2": the full, un-stubbed pipeline.
+      (mbc/ensure-audit-db-installed!)
+      (testing "the next boot re-runs the load and converges to the healthy state"
+        (is (= healthy-checksum (audit/last-analytics-checksum)))
+        (is (pos? (t2/count :model/Card :database_id audit/audit-db-id)))))))

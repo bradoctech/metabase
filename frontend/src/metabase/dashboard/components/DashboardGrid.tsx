@@ -528,8 +528,10 @@ class DashboardGridInner extends Component<
       return;
     }
 
-    // Await the commit before closing — closing early lets a dashboard save
-    // run against the not-yet-updated dashcard and drop the change.
+    // Await the replacement before closing the modal: it commits the new
+    // card series to the dashcard only after fetching the referenced cards.
+    // Closing early lets a subsequent dashboard save run against the
+    // not-yet-updated dashcard, which would drop the new series.
     await this.props.replaceCardWithVisualization({
       dashcardId: visualizerModalStatus.dashcardId,
       visualization,

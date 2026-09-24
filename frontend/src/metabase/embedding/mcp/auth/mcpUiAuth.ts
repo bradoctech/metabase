@@ -1,6 +1,6 @@
 import type { App } from "@modelcontextprotocol/ext-apps/react";
 
-import api from "metabase/api/legacy-client";
+import { PLUGIN_API } from "metabase/plugins";
 import { retry } from "metabase/utils/retry";
 
 import {
@@ -18,7 +18,9 @@ export interface McpUiAuth {
 }
 
 export function installMcpUiCredential(credential: string) {
-  api.mcpUiCredential = credential;
+  PLUGIN_API.onBeforeRequestHandlers.setEmbeddingRequestAuthHeaders =
+    // eslint-disable-next-line metabase/no-literal-metabase-strings -- request header name
+    async () => ({ headers: { "X-Metabase-Mcp-Ui-Auth": credential } });
 }
 
 export async function refreshMcpUiAuth(

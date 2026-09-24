@@ -15,6 +15,7 @@ import { SANKEY_CHART_DEFINITION } from "metabase/visualizations/visualizations/
 import { SCALAR_CHART_DEFINITION } from "metabase/visualizations/visualizations/Scalar/definition";
 import { SCATTER_PLOT_DEFINITION } from "metabase/visualizations/visualizations/ScatterPlot/definition";
 import { SMART_SCALAR_CHART_DEFINITION } from "metabase/visualizations/visualizations/SmartScalar/definition";
+import { TREEMAP_CHART_DEFINITION } from "metabase/visualizations/visualizations/TreemapChart/definition";
 import { WATERFALL_CHART_DEFINITION } from "metabase/visualizations/visualizations/WaterfallChart/definition";
 
 const STATIC_CHART_DEFINITIONS = [
@@ -32,6 +33,7 @@ const STATIC_CHART_DEFINITIONS = [
   SANKEY_CHART_DEFINITION,
   ROW_CHART_DEFINITION,
   PROGRESS_CHART_DEFINITION,
+  TREEMAP_CHART_DEFINITION,
 ];
 
 export const registerStaticVisualizations = () => {

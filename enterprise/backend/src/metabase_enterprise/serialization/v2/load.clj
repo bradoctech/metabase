@@ -4,14 +4,12 @@
   (:require
    [clojure.string :as str]
    [diehard.core :as dh]
-   [medley.core :as m]
    [metabase-enterprise.serialization.settings :as serialization.settings]
    [metabase-enterprise.serialization.v2.backfill-ids :as serdes.backfill]
    [metabase-enterprise.serialization.v2.ingest :as serdes.ingest]
    [metabase-enterprise.serialization.v2.models :as serdes.models]
    [metabase.app-db.core :as mdb]
    [metabase.app-db.transient-error :as transient-error]
-   [metabase.config.core :as config]
    [metabase.models.serialization :as serdes]
    [metabase.search.core :as search]
    [metabase.util :as u]
@@ -43,16 +41,12 @@
   pointing to the dashboard it's in. But when we try to load that dashboard, we'll create all its dashcards, and one
   of those dashcards will point to the card we started with.
 
-  This map works around this: given a model (e.g. `Card`) that triggered a dependency loop, it provides a set of paths to
-  keys to remove from the model so that we'll be able to successfully load it. You can remove keys in vectors using :* to
-  indicate that all items in that vector should have a key removed."
-  {"Dashboard" #{:dashcards}
+  This map works around this: given a model (e.g. `Card`) that triggered a dependency loop, it provides the set of
+  top-level keys to remove from the model so that we'll be able to successfully load it. The stripped keys are restored
+  when the original (outer) load of the entity completes its full pass."
+  {"Dashboard" #{:dashcards :parameters}
    "Document"  #{:document}
-   "Card"      #{:dashboard_id :document_id}})
-
-(def ^:private ^:dynamic *warned-version-mismatch*
-  "Used to avoid double-logging on version mismatches. Warns if nil or set to true"
-  nil)
+   "Card"      #{:dashboard_id :document_id :parameters}})
 
 (defn- keys-to-strip [ingested]
   (let [model (-> ingested :serdes/meta last :model)]
@@ -67,22 +61,21 @@
   If [[load-one]] throws because it can't find that entity in the filesystem, check if it's already loaded in
   our database."
   [ctx deps]
-  (binding [*warned-version-mismatch* (if (nil? *warned-version-mismatch*) (atom false) *warned-version-mismatch*)]
-    (if (empty? deps)
-      ctx
-      (letfn [(loader [ctx dep]
-                (try
-                  (load-one! ctx dep)
-                  (catch Exception e
-                    (cond
-                      ;; It was missing, but we found it locally, so just return the context.
-                      (and (= (:error (ex-data e)) ::not-found)
-                           (serdes/load-find-local dep))
-                      ctx
+  (if (empty? deps)
+    ctx
+    (letfn [(loader [ctx dep]
+              (try
+                (load-one! ctx dep)
+                (catch Exception e
+                  (cond
+                    ;; It was missing, but we found it locally, so just return the context.
+                    (and (= (:error (ex-data e)) ::not-found)
+                         (serdes/load-find-local dep))
+                    ctx
 
-                      :else
-                      (throw e)))))]
-        (reduce loader ctx deps)))))
+                    :else
+                    (throw e)))))]
+      (reduce loader ctx deps))))
 
 (defn- safe-local-id
   "Looks up the local primary key for `path`, swallowing any exception from the DB lookup.
@@ -96,7 +89,7 @@
     (when-let [entity (serdes/load-find-local path)]
       ((t2/select-pks-fn entity) entity))
     (catch Exception e
-      (log/debugf e "Could not look up local id for %s while building load error data" (serdes/log-path-str path))
+      (log/debugf "Could not look up local id for %s while building load error data: %s" (serdes/log-path-str path) (ex-message e))
       nil)))
 
 (defn- path-error-data [error-type expanding path]
@@ -145,23 +138,6 @@
   (when (valid-model-name-for-load? model-name)
     (let [model (t2.model/resolve-model (symbol model-name))]
       (serdes.backfill/has-entity-id? model))))
-
-(defn- warn-if-version-mismatch
-  "Checks if the version in the exported entity differs from the current Metabase version.
-  Logs a warning if there is a mismatch. Entities without a `:metabase_version` (eg. Settings,
-  which are bundled into settings.yaml without per-entity metadata) are skipped."
-  [ingested path]
-  (when (and (or (nil? *warned-version-mismatch*) (not @*warned-version-mismatch*))
-             (:metabase_version ingested))
-    (let [current-version  config/mb-version-string
-          exported-version (:metabase_version ingested)]
-      (when (not= exported-version current-version)
-        (log/warnf "Version mismatch loading %s: exported with: %s, current version: %s"
-                   path
-                   exported-version
-                   current-version)
-        (when (not (nil? *warned-version-mismatch*))
-          (reset! *warned-version-mismatch* true))))))
 
 (defn- load-one!
   "Loads a single entity, specified by its `:serdes/meta` abstract path, into the appdb, doing some bookkeeping to
@@ -241,7 +217,6 @@
                                                                             :level     (count expanding)}))
               local-or-nil       (when-not require-new-entity (serdes/load-find-local rebuilt-path))]
           (try
-            (warn-if-version-mismatch ingested path)
             (with-retries 3 200
               (fn []
                 (t2/with-transaction [_tx]
@@ -277,7 +252,6 @@
    :seen      #{}
    :circular  #{}
    :ingestion ingestion
-   :from-ids  (->> ingestion serdes.ingest/ingest-list (m/index-by :id))
    :errors    []})
 
 (defn load-metabase!
@@ -286,8 +260,7 @@
                 :or   {backfill?         true
                        continue-on-error false
                        reindex?          true}}]
-  (binding [*warned-version-mismatch*        (atom false)
-            serdes/*skip-schema-validation?* (serialization.settings/serialization-skip-schema-validation)]
+  (binding [serdes/*skip-schema-validation?* (serialization.settings/serialization-skip-schema-validation)]
     (u/prog1
       ;; Each entity is loaded in its own transaction (inside load-one!), so a deadlock or transient
       ;; failure on one entity doesn't abort the entire import. See #74412.

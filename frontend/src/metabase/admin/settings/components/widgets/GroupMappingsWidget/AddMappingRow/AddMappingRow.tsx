@@ -47,7 +47,7 @@ export function AddMappingRow({
     <Flex
       align="center"
       justify="space-between"
-      bd="1px solid var(--mb-color-brand)"
+      bd="1px solid var(--mb-color-core-brand)"
       bdrs="md"
       m="md"
       p="sm"

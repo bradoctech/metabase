@@ -121,12 +121,22 @@
     (when (not attr-value)
       (throw (ex-info (tru "Query requires user attribute `{0}`" (name attr-name))
                       {:type qp.error-type/missing-required-parameter})))
-    {:type   (if (and field-base-type (isa? field-base-type :type/Number))
-               :number/=
-               :string/=)
-     :target target
-     ;; :number/= and :string/= are variadic operators that require a sequential value
-     :value  [(attr-value->param-value field-base-type attr-value)]}))
+    (let [param-value (attr-value->param-value field-base-type attr-value)]
+      (when (nil? param-value)
+        ;; Without this a nil `param-value` propagates as `[nil]`, which
+        ;; `parameters.mbql/expand` treats as "no value" and filter is dropped. (#81821)
+        (throw (ex-info (tru "User attribute `{0}` value `{1}` cannot be coerced to column type {2}"
+                             (name attr-name) attr-value field-base-type)
+                        {:type            qp.error-type/invalid-parameter
+                         :attribute-name  attr-name
+                         :attribute-value attr-value
+                         :field-base-type field-base-type})))
+      {:type   (if (and field-base-type (isa? field-base-type :type/Number))
+                 :number/=
+                 :string/=)
+       :target target
+       ;; :number/= and :string/= are variadic operators that require a sequential value
+       :value  [param-value]})))
 
 (mu/defn- sandbox->parameters :- [:maybe [:sequential ::lib.schema.parameter/parameter]]
   [metadata-providerable                        :- ::lib.schema.metadata/metadata-providerable
@@ -165,8 +175,7 @@
         persisted-info (:lib/persisted-info card)
         persisted?     (qp.persisted/can-substitute? card persisted-info)
         query          (lib/card->underlying-query metadata-providerable card)]
-    ;; log the query at this point, it's useful for some purposes
-    (log/debugf "Fetched query from Card %s:\n%s" card-id (u/cprint-to-str (select-keys query [:stages :parameters])))
+    (log/debugf "Fetched query from Card %s" card-id)
     (cond-> query
       ;; This will be applied, if still appropriate, by the persistence middleware
       persisted?
@@ -262,10 +271,10 @@
                                             (not= table-id original-table-id))
                                        (do
                                          (log/errorf (str "Sandboxes can only include columns from the original Table (%d),"
-                                                          " query included %s from Table %d. This is unsupported and may not"
+                                                          " query included column %s from Table %d. This is unsupported and may not"
                                                           " work in the future.")
                                                      original-table-id
-                                                     (pr-str (:name sandbox-col))
+                                                     (:id sandbox-col)
                                                      table-id)
                                          true)
 
@@ -273,9 +282,9 @@
                                        (not matching-table-col)
                                        (do
                                          (log/errorf (str "Sandboxes can only include columns from the original Table,"
-                                                          " but query included %s. This is unsupported and may not work in"
+                                                          " but query included column %s. This is unsupported and may not work in"
                                                           " the future.")
-                                                     (pr-str (:name sandbox-col)))
+                                                     (:id sandbox-col))
                                          true)
 
                                        :else
@@ -384,9 +393,7 @@
                               (sandbox-exposed-field-ids sandbox-query source-table)))
         replacement-stages (cond-> new-source-stages
                              wrapper-stage (conj wrapper-stage))]
-    (log/tracef "Applied Sandbox: replaced stage\n\n%s\n\nwith stages\n\n%s"
-                (u/cprint-to-str stage)
-                (u/cprint-to-str replacement-stages))
+    (log/trace "Applied Sandbox: replaced stage with sandboxed stages")
     replacement-stages))
 
 (mu/defn- apply-sandboxes :- ::lib.schema/query

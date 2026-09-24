@@ -19,6 +19,7 @@
    [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
    [metabase.lib.core :as lib]
    [metabase.lib.metadata :as lib.metadata]
+   [metabase.lib.test-metadata :as meta]
    [metabase.query-processor.compile :as qp.compile]
    [metabase.query-processor.error-type :as qp.error-type]
    [metabase.query-processor.test :as qp]
@@ -893,14 +894,14 @@
                                      :tables
                                      (into #{}))
                     default-table-set (tables-set)
-                    do-with-resolved-connection sql-jdbc.execute/do-with-resolved-connection]
-                (with-redefs [sql-jdbc.execute/do-with-resolved-connection
-                              (fn [driver db options f]
-                                (do-with-resolved-connection driver db options
-                                                             (fn [conn]
-                                                               (when-not (:connection db)
-                                                                 (driver/set-role! driver/*driver* conn role-a))
-                                                               (f conn))))]
+                    do-with-resolved-connection (mt/original-fn #'sql-jdbc.execute/do-with-resolved-connection)]
+                (mt/with-dynamic-fn-redefs [sql-jdbc.execute/do-with-resolved-connection
+                                            (fn [driver db options f]
+                                              (do-with-resolved-connection driver db options
+                                                                           (fn [conn]
+                                                                             (when-not (:connection db)
+                                                                               (driver/set-role! driver/*driver* conn role-a))
+                                                                             (f conn))))]
                   (is (= default-table-set (tables-set))))))))))))
 
 (defn do-on-all-connection-in-pool [driver db-id options f]
@@ -1138,6 +1139,74 @@
                           (format "INSERT INTO %s (name) VALUES ('x'); SELECT 1;" venues-table)
                           (format "SET ROLE NONE; DELETE FROM %s WHERE id = -1;" venues-table))))))))))))))
 
+(deftest impersonated-action-write-permission-denied-test
+  (testing "An impersonated custom action whose role lacks write grants surfaces the DB permission error and leaves the row unchanged"
+    (mt/test-drivers (mt/normal-driver-select {:+features [:connection-impersonation :actions/custom]})
+      (mt/with-premium-features #{:advanced-permissions}
+        (let [venues-table (sql.tx/qualify-and-quote driver/*driver* "test-data" "venues")
+              role-a (u/lower-case-en (mt/random-name))]
+          (tx/with-temp-roles! driver/*driver*
+            (impersonation-granting-details driver/*driver* (mt/db))
+            ;; role-a is granted SELECT only (no INSERT/UPDATE/DELETE)
+            {role-a {venues-table {}}}
+            (impersonation-default-user driver/*driver*)
+            (impersonation-default-role driver/*driver*)
+            (let [granting-details (impersonation-granting-details driver/*driver* (mt/db))
+                  spec             (sql-jdbc.conn/connection-details->spec driver/*driver* granting-details)
+                  read-name        (fn [] (-> (jdbc/query spec [(format "SELECT name FROM %s WHERE id = 1" venues-table)])
+                                              first :name))]
+              (with-impersonation-db!
+                (mt/with-actions-enabled
+                  (impersonation.util-test/with-impersonations! {:impersonations [{:db-id (mt/id) :attribute "impersonation_attr"}]
+                                                                 :attributes     {"impersonation_attr" role-a}}
+                    (let [original-name (read-name)
+                          execute-action-with-sql
+                          (fn [sql]
+                            (mt/with-actions [{_card-id :id} {:type :model :dataset_query (mt/mbql-query venues)}
+                                              {action-id :action-id} {:type          :query
+                                                                      :name          "Test action"
+                                                                      :dataset_query (update (mt/native-query {:query sql})
+                                                                                             :type name)
+                                                                      :database_id   (mt/id)
+                                                                      :parameters    []}]
+                              (actions.execution/execute-action! (action/select-action :id action-id) {})))]
+                      (testing "write is denied for a role with only SELECT"
+                        (is (thrown-with-msg?
+                             java.lang.Exception
+                             #"(?i)permission denied|denied to user|not authorized"
+                             (execute-action-with-sql
+                              (format "UPDATE %s SET name = 'hacked' WHERE id = 1" venues-table)))))
+                      (testing "the row is unchanged"
+                        (is (= original-name (read-name)))))))))))))))
+
+(deftest admins-can-run-show-timezone-statement-test
+  (mt/test-drivers (mt/normal-driver-select {:+parent :postgres})
+    (mt/with-premium-features #{:advanced-permissions}
+      (let [venues-table (sql.tx/qualify-and-quote driver/*driver* "test-data" "venues")
+            role-a (u/lower-case-en (mt/random-name))]
+        (tx/with-temp-roles! driver/*driver*
+          (impersonation-granting-details driver/*driver* (mt/db))
+          {role-a {venues-table {}}}
+          (impersonation-default-user driver/*driver*)
+          (impersonation-default-role driver/*driver*)
+          (with-impersonation-db!
+            (let [impersonation-setup {:impersonations [{:db-id (mt/id) :attribute "impersonation_attr"}]
+                                       :attributes     {"impersonation_attr" role-a}}]
+              (testing "A SHOW TIMEZONE statement works for admin"
+                (impersonation.util-test/with-impersonations-for-user! :crowberto impersonation-setup
+                  (is (= [["UTC"]]
+                         (-> (lib/native-query (mt/metadata-provider) "SHOW TIMEZONE")
+                             (qp/process-query)
+                             (mt/rows))))))
+              (testing "A SHOW TIMEZONE statement errors for non-admin"
+                (impersonation.util-test/with-impersonations! impersonation-setup
+                  (is (thrown-with-msg?
+                       java.lang.Exception
+                       #"Invalid impersonated native query. Must be a single select statement."
+                       (-> (lib/native-query (mt/metadata-provider) "SHOW TIMEZONE")
+                           (qp/process-query)
+                           (mt/rows)))))))))))))
+
 (deftest ^:parallel impersonated-query-parse-error-message-test
   (testing "When a native query fails to parse, the validator reports a parse error -- not a misleading 'must be a single select' message (#73593)"
     (let [validate (fn [sql]
@@ -1159,3 +1228,47 @@
           (is (some? thrown) "expected validate-impersonated-query* to throw")
           (is (= qp.error-type/invalid-query (:type (ex-data thrown))))
           (is (re-find #"single select statement" (ex-message thrown))))))))
+
+(deftest ^:parallel impersonated-query-placeholder-cast-test
+  (let [sql "SELECT (?::date - bill_date::date) AS diff FROM some_table"
+        query (lib/native-query meta/metadata-provider sql)
+        out-sql (-> (driver/validate-impersonated-query :postgres query)
+                    (get-in [:stages 0 :native]))]
+    (is (string? out-sql))
+    (is (re-find #"\?" out-sql) "the placeholder must survive into the re-emitted SQL")))
+
+(deftest ^:parallel validate-impersonated-query-keys-on-allow-write-flag-test
+  (testing "validate-impersonated-query* derives read-vs-write from *impersonation-allow-write?*"
+    (let [query   (fn [sql] {:stages [{:lib/type :mbql.stage/native :native sql}]})
+          outcome (fn [q]
+                    (try
+                      (driver.sql/validate-impersonated-query* :postgres q)
+                      :ok
+                      (catch clojure.lang.ExceptionInfo _ :rejected)))
+          select  "SELECT 1 AS x"
+          write   "UPDATE t SET x = 1 WHERE id = -1"]
+      (testing "unbound: SELECT allowed, write rejected"
+        (is (= :ok       (outcome (query select))))
+        (is (= :rejected (outcome (query write)))))
+      (testing "bound true: write allowed, SELECT rejected"
+        (binding [driver.settings/*impersonation-allow-write?* true]
+          (is (= :ok       (outcome (query write))))
+          (is (= :rejected (outcome (query select))))))
+      (testing "the flag is a binding, so a caller can't widen a read to a write by sending the old key"
+        ;; it used to be read off the query, where it was indistinguishable from one supplied in the request body
+        (let [injected #(assoc (query %) :impersonation/allow-write? true)]
+          (is (= :ok       (outcome (injected select))))
+          (is (= :rejected (outcome (injected write)))))))))
+
+(deftest validate-impersonated-query-is-enforced-for-all-impersonation-drivers-test
+  (testing "every driver that supports connection-impersonation enforces the single-statement guard (SEC-1189)"
+    (mt/test-drivers (mt/normal-drivers-with-feature :connection-impersonation)
+      (let [query (fn [sql] {:stages [{:lib/type :mbql.stage/native :native sql}]})]
+        (testing "a multi-statement native query is rejected"
+          (is (thrown-with-msg?
+               clojure.lang.ExceptionInfo #"single select statement"
+               (driver/validate-impersonated-query driver/*driver* (query "SELECT 1; SELECT 2")))))
+        (testing "a single select statement is still allowed"
+          (let [result (driver/validate-impersonated-query :mysql (query "SELECT 1"))]
+            (is (map? result))
+            (is (string? (get-in result [:stages 0 :native])))))))))

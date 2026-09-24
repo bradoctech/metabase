@@ -2,14 +2,12 @@ import dayjs from "dayjs";
 import { t } from "ttag";
 
 import type { ColorGetter } from "metabase/ui/colors/types";
-import type { OptionsType } from "metabase/utils/formatting/types";
 import { isNumber } from "metabase/utils/types";
 import { isEmpty } from "metabase/utils/validate";
 import { formatValue } from "metabase/visualizations/lib/formatting";
 import { formatDateTimeRangeWithUnit } from "metabase/visualizations/lib/formatting/date";
 import { computeChange } from "metabase/visualizations/lib/numeric";
 import { findPreviousNonEmptyRowIndex } from "metabase/visualizations/lib/trend-helpers";
-import type { ColumnSettings } from "metabase/visualizations/types";
 import { COMPARISON_TYPES } from "metabase/visualizations/visualizations/SmartScalar/constants";
 import {
   formatChange,
@@ -18,6 +16,7 @@ import {
 import type { ClickObject } from "metabase-lib";
 import { isDate } from "metabase-lib/v1/types/utils/isa";
 import type {
+  ColumnSettings,
   DatasetColumn,
   DateTimeAbsoluteUnit,
   LegacyDatasetQuery,
@@ -293,13 +292,26 @@ function getCurrentMetricData({
   const isNative = cols.some((col) => col.source === "native");
 
   const dateColumnWithUnit = { ...dateColumn };
-  dateColumnWithUnit.unit ??= dateUnit;
+  if (!isNative) {
+    dateColumnWithUnit.unit ??= dateUnit;
+  }
   const dateColumnSettings = settings?.column?.(dateColumnWithUnit) ?? {};
+
+  const { date_granularity } = dateColumnSettings;
+  const displayUnit = isAbsoluteDateTimeUnit(date_granularity)
+    ? date_granularity
+    : undefined;
+  const displaySettings = displayUnit
+    ? { ...dateColumnSettings, time_enabled: null }
+    : dateColumnSettings;
+  if (displayUnit) {
+    dateColumnWithUnit.unit = displayUnit;
+  }
 
   const dateUnitSettings: DateUnitSettings = {
     dateColumn: dateColumnWithUnit,
-    dateColumnSettings,
-    dateUnit,
+    dateColumnSettings: displaySettings,
+    dateUnit: displayUnit ?? dateUnit,
     queryType: isNative ? "native" : "query",
   };
 
@@ -687,7 +699,7 @@ function formatDateStr({
 }: {
   date: string;
   dateUnitSettings: DateUnitSettings;
-  options?: OptionsType;
+  options?: ColumnSettings;
 }) {
   const { dateColumn, dateColumnSettings, dateUnit, queryType } =
     dateUnitSettings;
@@ -781,12 +793,12 @@ function getArrowColor(
 ) {
   const arrowIconColorNames = shouldSwitchPositiveNegative
     ? {
-        [CHANGE_ARROW_ICONS.ARROW_DOWN]: getColor("success"),
-        [CHANGE_ARROW_ICONS.ARROW_UP]: getColor("error"),
+        [CHANGE_ARROW_ICONS.ARROW_DOWN]: getColor("feedback-positive"),
+        [CHANGE_ARROW_ICONS.ARROW_UP]: getColor("feedback-negative"),
       }
     : {
-        [CHANGE_ARROW_ICONS.ARROW_DOWN]: getColor("error"),
-        [CHANGE_ARROW_ICONS.ARROW_UP]: getColor("success"),
+        [CHANGE_ARROW_ICONS.ARROW_DOWN]: getColor("feedback-negative"),
+        [CHANGE_ARROW_ICONS.ARROW_UP]: getColor("feedback-positive"),
       };
 
   return arrowIconColorNames[changeArrowIconName];

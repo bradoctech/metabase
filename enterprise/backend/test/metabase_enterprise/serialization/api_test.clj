@@ -7,6 +7,7 @@
    [medley.core :as m]
    [metabase-enterprise.serialization.api :as api.serialization]
    [metabase-enterprise.serialization.metadata-file-import :as metadata-file-import]
+   [metabase-enterprise.serialization.v2.extract :as v2.extract]
    [metabase-enterprise.serialization.v2.ingest :as v2.ingest]
    [metabase.analytics.snowplow-test :as snowplow-test]
    [metabase.models.serialization :as serdes]
@@ -102,13 +103,12 @@
        (mt/with-premium-features #{:serialization}
          (mt/with-temp [:model/Collection ~coll  {}
                         :model/Dashboard  ~dash  {:collection_id (:id ~coll), :name "thraddash"}
+                        ;; target the test-data database explicitly: `with-temp` defaults `:database_id` to
+                        ;; `(mt/id)`, and an unordered `select-one-pk` can hand back the audit database, which
+                        ;; native queries are (correctly) forbidden from targeting
                         :model/Card       ~card  {:collection_id (:id ~coll), :name "frobinate", :type :model
                                                   :query_type    :native
                                                   :dataset_query {:type     :native
-                                                                  ;; must be the test-data DB, not whatever
-                                                                  ;; `select-one-pk` happens to return first -- on
-                                                                  ;; Postgres that can be the audit DB, and a native
-                                                                  ;; query against the audit DB is rejected outright
                                                                   :database (mt/id)
                                                                   :native   {:query "SELECT 1"}}}]
            ~@body)))))
@@ -252,8 +252,9 @@
 (deftest export-log-captures-extract-warnings-test
   (testing "export.log captures escape-analysis warnings emitted during the eager extract phase (GHY-3802)"
     ;; A dashboard in the exported collection references a card living in a different collection. Escape analysis
-    ;; runs eagerly inside extract/extract (before storage streaming) and warns about the escaped card. That warning
-    ;; must still land in export.log even though extract happens outside the storage logging block.
+    ;; runs eagerly inside extract/extract (before storage streaming) and warns about the escaped card. Under
+    ;; continue-on-error the export still completes, and that warning must land in export.log even though extract
+    ;; happens outside the storage logging block.
     (mt/with-premium-features #{:serialization}
       (mt/with-temp [:model/Collection    target       {:name "Target Collection"}
                      :model/Collection    other        {:name "Other Collection"}
@@ -262,11 +263,30 @@
                      :model/DashboardCard _            {:dashboard_id (:id dash) :card_id (:id outside-card)}]
         (let [res (binding [api.serialization/*additive-logging* false]
                     (mt/user-http-request :crowberto :post 200 "ee/serialization/export" {}
-                                          :collection (:id target) :data_model false :settings false))
+                                          :collection (:id target) :data_model false :settings false
+                                          :continue_on_error true))
               log (read-export-log res)]
           (is (some? log) "export.log should be present in the archive")
           (is (re-find #"outside requested collections" log)
               "export.log should contain the escape-analysis warning emitted during extract"))))))
+
+(deftest export-aborts-on-escaped-card-test
+  (testing "Export fails loudly with a 4xx instead of silently emitting an empty archive when a referenced card lives outside the requested collections (#75176)"
+    (mt/with-premium-features #{:serialization}
+      (mt/with-log-messages-for-level [messages [metabase-enterprise.serialization :error]]
+        (mt/with-temp [:model/Collection    target       {:name "Target Collection"}
+                       :model/Collection    other        {:name "Other Collection"}
+                       :model/Card          outside-card {:collection_id (:id other) :name "OutsideCard"}
+                       :model/Dashboard     dash         {:collection_id (:id target) :name "DashWithOutsideCard"}
+                       :model/DashboardCard _            {:dashboard_id (:id dash) :card_id (:id outside-card)}]
+          (let [body (binding [api.serialization/*additive-logging* false]
+                       (mt/user-http-request :crowberto :post 400 "ee/serialization/export" {}
+                                             :collection (:id target) :data_model false :settings false))]
+            (is (re-find #"incomplete export" (str body))
+                "the 4xx body explains that the export would be incomplete")
+            (is (empty? (filter #(str/starts-with? (str (:message %)) "Error during serialization export")
+                                (messages)))
+                "the abort surfaces as a client-side 4xx, not logged as a server error")))))))
 
 (deftest import-restores-entities-test
   (testing "Import restores deleted/renamed entities and updates search index"
@@ -442,6 +462,43 @@
                    "success"         true
                    "error_message"   nil}
                   (-> (snowplow-test/pop-event-data-and-user-id!) last :data))))))))
+
+(deftest export-eager-error-honors-full-stacktrace-test
+  (testing "a server-side failure during eager extraction setup (before streaming) honors full_stacktrace (GDGT-2491)"
+    (mt/with-premium-features #{:serialization}
+      (mt/with-temp [:model/Collection {coll-id :id} {}]
+        (mt/with-dynamic-fn-redefs [v2.extract/extract (fn [& _] (throw (ex-info "deliberate eager failure" {})))]
+          (testing "stripped one-liner by default"
+            (mt/with-log-messages-for-level [messages [metabase-enterprise.serialization :error]]
+              (mt/user-http-request :crowberto :post 500 "ee/serialization/export"
+                                    :collection coll-id :data_model false :settings false)
+              (let [errs (filter #(str/starts-with? (str (:message %)) "Error during serialization export")
+                                 (messages))]
+                (is (seq errs) "the eager failure is logged")
+                (is (every? (comp nil? :e) errs)
+                    "no throwable attached when full_stacktrace is off"))))
+          (testing "full trace when full_stacktrace=true"
+            (mt/with-log-messages-for-level [messages [metabase-enterprise.serialization :error]]
+              (mt/user-http-request :crowberto :post 500 "ee/serialization/export"
+                                    :collection coll-id :data_model false :settings false
+                                    :full_stacktrace true)
+              (is (some :e (messages))
+                  "the throwable is attached when full_stacktrace is on"))))))))
+
+(deftest export-eager-input-error-is-not-logged-test
+  (testing "a bad collection id fails eager extraction with a clean 4xx and is not logged as a server error (GDGT-2491)"
+    (mt/with-premium-features #{:serialization}
+      (mt/with-log-messages-for-level [messages [metabase-enterprise.serialization :error]]
+        ;; well-formed (21-char) but non-existent entity id: passes endpoint validation, then
+        ;; parse-target throws an ex-info carrying a :status-code, so it surfaces as a 4xx
+        (mt/user-http-request :crowberto :post 400 "ee/serialization/export"
+                              :collection "0123456789abcdef01234" :data_model false :settings false)
+        ;; same for a well-formed but non-existent numeric id
+        (mt/user-http-request :crowberto :post 400 "ee/serialization/export"
+                              :collection Integer/MAX_VALUE :data_model false :settings false)
+        (is (empty? (filter #(str/starts-with? (str (:message %)) "Error during serialization export")
+                            (messages)))
+            "client input errors are not logged as server errors")))))
 
 (deftest serialization-permissions-test
   (testing "Only admins can export/import"

@@ -16,11 +16,21 @@
                          {:builder-fn jdbc.rs/as-unqualified-lower-maps})
       (:table_exists false)))
 
+(defn index-exists?
+  "Does an index named `index-name` exist in the pgvector DB's pg_indexes?"
+  [pgvector index-name]
+  (-> (jdbc/execute-one! pgvector
+                         ["SELECT exists (select 1 FROM pg_indexes WHERE indexname = ?) index_exists"
+                          index-name]
+                         {:builder-fn jdbc.rs/as-unqualified-lower-maps})
+      (:index_exists false)))
+
 (defn semantic-search-configured?
   "Is a pgvector DB configured for this instance?
   The boot-static input: gates Quartz job scheduling, which happens once at startup.
   The runtime gates (license, kill switch, engine activity) are checked per job execution instead, so
-  flipping them never requires a restart."
+  flipping them never requires a restart.
+  This check becomes a DB probe under BOT-1796."
   []
   (string? (not-empty semantic.db.datasource/db-url)))
 

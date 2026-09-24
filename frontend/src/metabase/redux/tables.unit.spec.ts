@@ -1,12 +1,10 @@
 import fetchMock from "fetch-mock";
 
-import { getStore } from "__support__/entities-store";
+import { getMainStore } from "__support__/entities-store";
 import {
   setupTableQueryMetadataEndpoint,
   setupUnauthorizedFieldEndpoint,
 } from "__support__/server-mocks";
-import { Api } from "metabase/api";
-import { mainReducers } from "metabase/reducers-main";
 import { getMetadata } from "metabase/selectors/metadata";
 import { createMockField, createMockTable } from "metabase-types/api/mocks";
 
@@ -35,11 +33,7 @@ describe("fetchTableMetadataAndForeignKeys", () => {
     setupTableQueryMetadataEndpoint(TABLE_A);
     setupUnauthorizedFieldEndpoint(createMockField({ id: FK_TARGET_FIELD_ID }));
 
-    const store = getStore(
-      { ...mainReducers, [Api.reducerPath]: Api.reducer },
-      {},
-      [Api.middleware],
-    );
+    const store = getMainStore();
 
     // Check there's no permission error
     await expect(

@@ -340,7 +340,7 @@ function DashCardInner({
           DashboardS.Card,
           EmbedFrameS.Card,
           CS.relative,
-          CS.rounded,
+          CS.roundedSm,
           !isAction && CS.bordered,
           CS.flex,
           CS.flexColumn,

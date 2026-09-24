@@ -14,6 +14,15 @@ import type { TimelineEventsModel } from "metabase/visualizations/echarts/cartes
 import type { RenderingContext } from "metabase/visualizations/types";
 import type { TimelineEventId, TimelineIcon } from "metabase-types/api";
 
+const TIMELINE_EVENT_ICON_SOURCES: Record<TimelineIcon, string> = {
+  star: star_source,
+  cake: cake_source,
+  mail: mail_source,
+  warning: warning_source,
+  bell: bell_source,
+  cloud: cloud_source,
+};
+
 import {
   TIMELINE_EVENT_DATA_NAME,
   TIMELINE_EVENT_SERIES_ID,
@@ -32,15 +41,6 @@ export const setSvgColor = (svgString: string, color: string) => {
   // Serialize the SVG back to a string
   const serializer = new XMLSerializer();
   return serializer.serializeToString(svg);
-};
-
-const TIMELINE_EVENT_ICON_SOURCES: Record<TimelineIcon, string> = {
-  star: star_source,
-  cake: cake_source,
-  mail: mail_source,
-  warning: warning_source,
-  bell: bell_source,
-  cloud: cloud_source,
 };
 
 export function svgToDataUri(svgString: string) {
@@ -74,7 +74,7 @@ export const getTimelineEventsSeries = (
       selectedEventsIds.includes(event.id),
     );
 
-    const color = getColor(isSelected ? "brand" : "text-tertiary");
+    const color = getColor(isSelected ? "core-brand" : "text-disabled");
     const iconName = events.length === 1 ? events[0].icon : "star";
 
     const iconSvg = setSvgColor(
@@ -89,7 +89,7 @@ export const getTimelineEventsSeries = (
       symbolOffset: [0, 12],
       symbolRotate: 0,
       symbol: dataUri,
-      lineStyle: isSelected ? { color: getColor("brand") } : undefined,
+      lineStyle: isSelected ? { color: getColor("core-brand") } : undefined,
       label: {
         show: events.length > 1,
         formatter: () => String(events.length),
@@ -133,13 +133,13 @@ export const getTimelineEventsSeries = (
       },
       emphasis: {
         lineStyle: {
-          color: getColor("brand"),
+          color: getColor("core-brand"),
         },
         label: {
-          color: getColor("brand"),
+          color: getColor("core-brand"),
         },
         itemStyle: {
-          color: getColor("brand"),
+          color: getColor("core-brand"),
         },
       },
       symbol: "none",

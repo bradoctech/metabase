@@ -132,6 +132,42 @@
                           :from_entity_type :card :from_entity_id card-id
                           :to_entity_type :snippet :to_entity_id snippet-id)))))))
 
+(deftest ^:sequential backfill-snippet-in-snippet-test
+  (testing "A snippet referencing another snippet produces a snippet->snippet dependency"
+    (backfill-all-existing-entities!)
+    (mt/with-premium-features #{}
+      (mt/with-temp [:model/NativeQuerySnippet {inner-id :id} {:name "inner_snip" :content "1 = 1"}
+                     :model/NativeQuerySnippet {outer-id :id} {:name "outer_snip" :content "SELECT * WHERE {{snippet: inner_snip}}"}]
+        (mark-stale! :snippet inner-id)
+        (mark-stale! :snippet outer-id)
+        (is (false? (t2/exists? :model/Dependency
+                                :from_entity_type :snippet :from_entity_id outer-id
+                                :to_entity_type :snippet :to_entity_id inner-id)))
+        (backfill-dependencies-single-trigger!)
+        (assert-processed :snippet inner-id)
+        (assert-processed :snippet outer-id)
+        (is (t2/exists? :model/Dependency
+                        :from_entity_type :snippet :from_entity_id outer-id
+                        :to_entity_type :snippet :to_entity_id inner-id))))))
+
+(deftest ^:sequential backfill-snippet-referencing-card-test
+  (testing "A snippet referencing a card produces a snippet->card dependency"
+    (backfill-all-existing-entities!)
+    (mt/with-premium-features #{}
+      (mt/with-temp [:model/Card {card-id :id} {:dataset_query (mt/mbql-query orders)}
+                     :model/NativeQuerySnippet {snippet-id :id} {:name "card_ref_snip"
+                                                                 :content (format "SELECT * FROM {{#%d}}" card-id)}]
+        (mark-stale! :card card-id)
+        (mark-stale! :snippet snippet-id)
+        (is (false? (t2/exists? :model/Dependency
+                                :from_entity_type :snippet :from_entity_id snippet-id
+                                :to_entity_type :card :to_entity_id card-id)))
+        (backfill-dependencies-single-trigger!)
+        (assert-processed :snippet snippet-id)
+        (is (t2/exists? :model/Dependency
+                        :from_entity_type :snippet :from_entity_id snippet-id
+                        :to_entity_type :card :to_entity_id card-id))))))
+
 (deftest ^:sequential backfill-idempotency-test
   (testing "Running the backfill multiple times should be idempotent"
     (backfill-all-existing-entities!)
@@ -404,6 +440,38 @@
         (is (t2/exists? :model/Dependency :from_entity_type :card :from_entity_id card-id
                         :to_entity_type :table :to_entity_id (mt/id :orders)))))))
 
+(deftest ^:sequential backfill-no-status-row-test
+  (testing "Entities with no dependency_status row yet get picked up and processed by the backfill"
+    (backfill-all-existing-entities!)
+    (mt/with-premium-features #{}
+      (mt/with-temp [:model/Card {card-id :id} {:dataset_query (mt/mbql-query orders)}]
+        ;; Precondition: the temp card was inserted directly (no :event/card-create), so it has no
+        ;; status row at all. This is the case the left-join in instances-for-dependency-calculation
+        ;; must catch — guard it so the test can't silently pass without exercising that branch.
+        (is (not (t2/exists? :model/DependencyStatus :entity_type :card :entity_id card-id))
+            "Expected the temp card to start with no dependency_status row")
+        (backfill-dependencies-single-trigger!)
+        (assert-processed :card card-id)
+        (is (t2/exists? :model/Dependency :from_entity_type :card :from_entity_id card-id
+                        :to_entity_type :table :to_entity_id (mt/id :orders)))))))
+
+(deftest ^:sequential has-stale-or-outdated?-counts-no-status-row-test
+  (testing "has-stale-or-outdated? (backing /backfill-status) stays consistent with what the backfill processes"
+    (backfill-all-existing-entities!)
+    (mt/with-premium-features #{}
+      ;; Clean slate: nothing left to process.
+      (is (false? (deps.dependency-status/has-stale-or-outdated?))
+          "Expected no pending work after backfilling all existing entities")
+      (mt/with-temp [:model/Card {card-id :id} {:dataset_query (mt/mbql-query orders)}]
+        ;; A card with no status row is pending work, even though no DependencyStatus row exists.
+        (is (not (t2/exists? :model/DependencyStatus :entity_type :card :entity_id card-id)))
+        (is (true? (deps.dependency-status/has-stale-or-outdated?))
+            "Expected pending work: a card with no status row still needs calculation")
+        (backfill-dependencies-single-trigger!)
+        (assert-processed :card card-id)
+        (is (false? (deps.dependency-status/has-stale-or-outdated?))
+            "Expected no pending work once the card has been processed")))))
+
 (deftest ^:sequential batch-size-zero-suppresses-event-triggers-but-stays-warm-test
   (testing "A non-positive batch size stops the job doing work, but leaves it on its slow periodic schedule so it
            resumes if the setting ever becomes positive. What it must not do is keep firing the 1-second event-driven
@@ -502,6 +570,25 @@
           (is (true? (actionable? nil))))
         (testing "definitively unlicensed: not actionable"
           (is (false? (actionable? false))))))))
+
+(deftest ^:sequential backfill-records-failure-for-never-processed-entity-test
+  (testing "An entity with no dependency_status row yet must still get a failure recorded when it fails. Such entities
+           are explicitly selected for processing (instances-for-dependency-calculation matches a null status row), so
+           on a first backfill every entity is in this state -- exactly the population most likely to fail on a large
+           instance. record-failure! only updated an existing row, so nothing was recorded and the next run selected
+           the identical batch: the crash loop, unbroken for the entities most likely to cause it."
+    (backfill-all-existing-entities!)
+    (mt/with-premium-features #{}
+      (mt/with-temp [:model/Card {card-id :id} {:dataset_query (mt/mbql-query orders)}]
+        (is (not (t2/exists? :model/DependencyStatus :entity_type :card :entity_id card-id))
+            "test setup: the card must have no status row, which is what makes it eligible")
+        (with-redefs [deps.calculation/calculate-deps (fn [& _] (throw (ex-info "boom" {})))]
+          (backfill-dependencies-single-trigger!))
+        (testing "the failure is recorded, so the entity backs off instead of being reselected unchanged"
+          (let [{:keys [fail_count next_retry_at]}
+                (t2/select-one :model/DependencyStatus :entity_type :card :entity_id card-id)]
+            (is (= 1 fail_count))
+            (is (some? next_retry_at))))))))
 
 (deftest ^:sequential fatal-error-still-reschedules-test
   (testing "A failure must not leave the job unscheduled. The job is one-shot self-rescheduling with no cron

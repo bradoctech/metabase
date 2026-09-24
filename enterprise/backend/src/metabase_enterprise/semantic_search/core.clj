@@ -39,6 +39,21 @@
   []
   (semantic.util/semantic-search-available?))
 
+(defn build-hnsw-index-async!
+  "Build the HNSW index on the active semantic search index in the background, returning promptly.
+
+  No-ops when semantic search isn't active on this instance. Backs the just-in-time HNSW build, which
+  runs only when an instance is configured to the `:hnsw` vector-search strategy."
+  []
+  (when (semantic.util/semantic-search-active?)
+    (future
+      (try
+        (semantic.pgvector-api/ensure-active-hnsw-index! (semantic.env/get-pgvector-datasource!)
+                                                         (semantic.env/get-index-metadata))
+        (catch Throwable t
+          (log/errorf "Failed to build HNSW index for semantic search: %s" (ex-message t))))))
+  nil)
+
 (defn- with-zero-semantic-distance-score
   "Record a 0 `:semantic-distance` score on `results` that lack it, for a consistent merged-result score breakdown."
   [search-ctx results]
@@ -93,7 +108,7 @@
                                        (into [] (comp (map t2.realize/realize)
                                                       (take total-limit))))
                                      (catch Throwable t
-                                       (log/warn t "Semantic search fallback errored, ignoring")
+                                       (log/warnf "Semantic search fallback errored, ignoring: %s" (ex-message t))
                                        []))
                   fallback-results (take total-limit fallback-results)
                   _                (analytics/observe! :metabase-search/semantic-fallback-results-usage (count fallback-results))
@@ -101,7 +116,7 @@
                   deduped-results  (m/distinct-by (juxt :model :id) combined-results)]
               (take total-limit deduped-results)))))
       (catch Exception e
-        (log/error e "Error executing semantic search, falling back to appdb")
+        (log/errorf "Error executing semantic search, falling back to appdb: %s" (ex-message e))
         (let [fallback (fallback-engine)]
           (analytics/inc! :metabase-search/semantic-error-fallback {:fallback-engine fallback})
           (if fallback

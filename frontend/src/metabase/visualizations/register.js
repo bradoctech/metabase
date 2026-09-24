@@ -1,4 +1,3 @@
-import { ListViz } from "metabase/list-view/components/ListViz";
 import {
   registerSettingWidgets,
   registerVisualization,
@@ -35,6 +34,7 @@ import { ComboChart } from "./visualizations/ComboChart";
 import { Funnel } from "./visualizations/Funnel";
 import { Gauge } from "./visualizations/Gauge";
 import { LineChart } from "./visualizations/LineChart";
+import { ListViz } from "./visualizations/List/components/ListViz";
 import { Map } from "./visualizations/Map";
 import { ObjectDetail } from "./visualizations/ObjectDetail";
 import { PieChart } from "./visualizations/PieChart";
@@ -49,6 +49,8 @@ import { ScatterPlot } from "./visualizations/ScatterPlot";
 import { SmartScalar } from "./visualizations/SmartScalar";
 import { SmartScalarComparisonWidget } from "./visualizations/SmartScalar/SettingsComponents/SmartScalarSettingsWidgets";
 import { Table } from "./visualizations/Table/Table";
+import { TreemapChart } from "./visualizations/TreemapChart";
+import { TreemapGroupsPicker } from "./visualizations/TreemapChart/TreemapGroupsPicker";
 import { WaterfallChart } from "./visualizations/WaterfallChart";
 
 function registerVisualizationComponents() {
@@ -71,6 +73,7 @@ function registerVisualizationComponents() {
   registerVisualization(ObjectDetail);
   registerVisualization(PivotTable);
   registerVisualization(SankeyChart);
+  registerVisualization(TreemapChart);
 
   registerVisualization(ListViz);
 
@@ -103,6 +106,7 @@ function registerVisualizationSettingWidgets() {
     pieDimensions: DimensionsWidget,
     pieSliceName: SliceNameWidget,
     smartScalarComparison: SmartScalarComparisonWidget,
+    treemapGroups: TreemapGroupsPicker,
   });
 }
 

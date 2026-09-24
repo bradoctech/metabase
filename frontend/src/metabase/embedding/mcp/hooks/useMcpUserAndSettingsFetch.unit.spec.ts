@@ -4,8 +4,8 @@ import type { SdkStore } from "embedding-sdk-bundle/store/types";
 
 import { useMcpUserAndSettingsFetch } from "./useMcpUserAndSettingsFetch";
 
-jest.mock("metabase/services", () => ({
-  UserApi: { current: jest.fn().mockResolvedValue({}) },
+jest.mock("metabase/api/utils/run-rtk-endpoint", () => ({
+  runRtkEndpoint: jest.fn().mockResolvedValue({}),
 }));
 
 jest.mock("metabase/redux/settings", () => ({

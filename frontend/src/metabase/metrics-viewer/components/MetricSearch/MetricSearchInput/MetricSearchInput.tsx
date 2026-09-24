@@ -10,12 +10,18 @@ import type {
   MetricDefinitionEntry,
   MetricSourceId,
   MetricsViewerDefinitionEntry,
+  MetricsViewerDimensionBreakoutState,
   MetricsViewerFormulaEntity,
   SelectedMetric,
   SourceColorMap,
 } from "../../../types/viewer-state";
 import { isExpressionEntry, isMetricEntry } from "../../../types/viewer-state";
 import { getEffectiveDefinitionEntry } from "../../../utils/definition-entries";
+import {
+  computeMetricSlots,
+  findStandaloneSlot,
+  slotsForEntity,
+} from "../../../utils/metric-slots";
 import {
   createMeasureSourceId,
   createMetricSourceId,
@@ -36,6 +42,7 @@ import { useMetricNameTracking } from "./useMetricNameTracking";
 type MetricSearchInputProps = {
   definitions: Record<MetricSourceId, MetricsViewerDefinitionEntry>;
   formulaEntities: MetricsViewerFormulaEntity[];
+  activeDimensionBreakout: MetricsViewerDimensionBreakoutState | null;
   onFormulaEntitiesChange: (
     entities: MetricsViewerFormulaEntity[],
     slotMapping?: Map<number, number>,
@@ -54,6 +61,7 @@ type MetricSearchInputProps = {
 export function MetricSearchInput({
   definitions,
   formulaEntities,
+  activeDimensionBreakout,
   onFormulaEntitiesChange,
   selectedMetrics,
   metricColors,
@@ -124,6 +132,10 @@ export function MetricSearchInput({
   );
 
   const isCollapsed = !isFocused && formulaEntities.length > 0;
+  const metricSlots = useMemo(
+    () => computeMetricSlots(formulaEntities),
+    [formulaEntities],
+  );
   // The initial document for a fresh editor: the same text useFormulaEditor
   // initializes every editing session with. Once the session is active the
   // document is the source of truth — @uiw/react-codemirror's value-sync
@@ -137,16 +149,13 @@ export function MetricSearchInput({
     <Flex
       ref={containerRef}
       className={S.inputWrapper}
-      bg="background-primary"
       align="center"
       gap="sm"
-      px="sm"
-      py="xs"
       onClick={handleContainerClick}
       data-has-error={validationError ? true : undefined}
       data-testid="metrics-formula-input"
     >
-      <Flex align="center" gap="sm" flex={1} wrap="wrap" mih="2.375rem">
+      <Flex align="center" gap="sm" flex={1} wrap="wrap" mih="2rem">
         {isCollapsed ? (
           // Unfocused: each formula entity rendered as MetricPill or MetricExpressionPill
           <>
@@ -166,12 +175,21 @@ export function MetricSearchInput({
                   entry,
                   definitions,
                 );
+                const metricSlot = findStandaloneSlot(metricSlots, entryIndex);
+                const isDisabled =
+                  activeDimensionBreakout != null &&
+                  activeDimensionBreakout.type !== "scalar" &&
+                  metricSlot != null &&
+                  activeDimensionBreakout.dimensionMapping[
+                    metricSlot.slotIndex
+                  ] == null;
                 return (
                   <span key={`${entry.id}-${entryIndex}`}>
                     <MetricPill
                       metric={metric}
                       colors={metricColors[entryIndex]}
                       definitionEntry={definition}
+                      isDisabled={isDisabled}
                       onSwap={handleSwapMetric}
                       onRemove={(_id, _sourceType) =>
                         handleRemoveItem(entryIndex)
@@ -188,6 +206,16 @@ export function MetricSearchInput({
                 const expressionColors = metricColors[entryIndex]
                   ? [metricColors[entryIndex][0]]
                   : undefined;
+                const expressionSlots = slotsForEntity(metricSlots, entryIndex);
+                const isDisabled =
+                  activeDimensionBreakout != null &&
+                  activeDimensionBreakout.type !== "scalar" &&
+                  expressionSlots.some(
+                    (slot) =>
+                      activeDimensionBreakout.dimensionMapping[
+                        slot.slotIndex
+                      ] == null,
+                  );
 
                 return (
                   <span
@@ -198,6 +226,7 @@ export function MetricSearchInput({
                       expressionEntry={entry}
                       metricNames={metricNames}
                       colors={expressionColors}
+                      isDisabled={isDisabled}
                       onNameChange={(newName) => {
                         const updated = [...formulaEntities];
                         updated[entryIndex] = { ...entry, name: newName };
@@ -253,7 +282,7 @@ export function MetricSearchInput({
       {isFocused && !pendingFocusRef.current && isExpressionDirty && (
         <Button
           variant="light"
-          color="brand"
+          color="core-brand"
           size="xs"
           py="sm"
           px="sm"

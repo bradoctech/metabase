@@ -26,7 +26,7 @@ import S from "./GroupSelect.module.css";
 
 function getGroupColor(group: Pick<GroupInfo, "magic_group_type">) {
   if (isAdminGroup(group)) {
-    return "var(--mb-color-filter)";
+    return "var(--mb-color-core-filter)";
   }
   if (isDefaultGroup(group)) {
     return "var(--mb-color-text-secondary)";
@@ -85,6 +85,8 @@ export const GroupSelect = ({
   return (
     <Combobox
       store={combobox}
+      // a closed dropdown stays unmounted, or a page with many rows carries every group per row
+      keepMounted={false}
       position="bottom-start"
       width={rem(240)}
       classNames={{ groupLabel: S.groupLabel }}
@@ -98,7 +100,7 @@ export const GroupSelect = ({
               groups={groups}
               selectedGroupIds={selectedGroupIds}
             />
-            <Icon c="text-tertiary" name="chevrondown" size={10} />
+            <Icon c="text-disabled" name="chevrondown" size={10} />
           </Flex>
         </UnstyledButton>
       </Combobox.Target>
