@@ -2,7 +2,7 @@ import cx from "classnames";
 
 import { ColorSelector } from "metabase/common/components/ColorSelector";
 import CS from "metabase/css/core/index.css";
-import { getAccentColors } from "metabase/ui/colors/groups";
+import { SP_PALETTE_COLORS } from "metabase/ui/colors/constants/accent-colors";
 import type { SingleSeries, VisualizationSettings } from "metabase-types/api";
 
 import { SeriesNameInput } from "./ChartNestedSettingSeries.styled";
@@ -42,7 +42,7 @@ const ChartNestedSettingsSeriesSingle = ({
         <ColorSelector
           withinPortal={false}
           value={computedSettings.color}
-          colors={getAccentColors()}
+          colors={SP_PALETTE_COLORS}
           onChange={(value) => onChangeObjectSettings(object, { color: value })}
         />
         <SeriesNameInput

@@ -19,6 +19,8 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 | [issue-edd-1356.md](./issue-edd-1356.md)                   | EDD-1356 — processo semi-automático de merge                              |
 | [manifesto-customizacoes.md](./manifesto-customizacoes.md) | Inventário classificado (SP-owned / Adapter / Behavior) + quick wins      |
 | [runbook-atualizacao.md](./runbook-atualizacao.md)         | Como executar o merge (`bin/merge-upstream-preserve-sp.sh`)               |
+| [checklist-smoke-test.md](./checklist-smoke-test.md)       | Checklist canônica de smoke (UI/marca, charts, datagrid, i18n)            |
+| [notas-etapa-62-63.md](./notas-etapa-62-63.md)             | Diário da etapa 62→63                                                     |
 | [lists/](./lists/)                                         | Listas canônicas restore-ours / dual-changed / behavior-manual            |
 
 ---

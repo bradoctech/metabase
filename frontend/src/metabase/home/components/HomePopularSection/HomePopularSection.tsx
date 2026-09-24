@@ -8,6 +8,7 @@ import * as Urls from "metabase/urls";
 import { getName } from "metabase/utils/name";
 import type { PopularItem } from "metabase-types/api";
 
+import { getItemBadge } from "../../utils";
 import { HomeCaption } from "../HomeCaption";
 import { HomeHelpCard } from "../HomeHelpCard";
 import { HomeModelCard } from "../HomeModelCard";
@@ -34,6 +35,7 @@ export const HomePopularSection = (): JSX.Element => {
           <HomeModelCard
             key={index}
             title={getName(item)}
+            badge={getItemBadge(item)}
             icon={getIcon(item)}
             url={Urls.modelToUrl(item) ?? ""}
           />

@@ -17,17 +17,17 @@ Atualizar o fork Metabase São Paulo / Trilhas para uma versão mais recente **p
 
 Trate isto como verdade até alguém atualizar este arquivo após nova verificação:
 
-| Fato                     | Detalhe                                                                                       |
-| ------------------------ | --------------------------------------------------------------------------------------------- |
-| Remote do fork           | `origin` → `git@github.com:bradoctech/metabase.git`                                           |
-| Remote oficial           | `upstream` → `https://github.com/metabase/metabase.git` (fetch de releases; não é destino SP) |
-| Branch principal do fork | `saopaulo` — ainda **0.60.x** até a EDD-1355 mergear de volta                                 |
+| Fato                     | Detalhe                                                                                                                                              |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Remote do fork           | `origin` → `git@github.com:bradoctech/metabase.git`                                                                                                  |
+| Remote oficial           | `upstream` → `https://github.com/metabase/metabase.git` (fetch de releases; não é destino SP)                                                        |
+| Branch principal do fork | `saopaulo` — ainda **0.60.x** até a EDD-1355 mergear de volta                                                                                        |
 | Branch da PoC de upgrade | `EDD-1355` — tip com merge `upstream/release-x.63.x` + fixups; smoke detalhado com 3 pendências (ver [notas-etapa-62-63.md](./notas-etapa-62-63.md)) |
-| Backup da etapa 60→61    | Tag `saopaulo-pre-61x`                                                                        |
-| Backup da etapa 61→62    | Tag `saopaulo-pre-62x`                                                                        |
-| Script de merge          | `bin/merge-upstream-preserve-sp.sh` (EDD-1356); **restore estreito** após lição da 61         |
-| Alvo final da EDD-1355   | Linha **63.x** (caminho em etapas 61→62→63; não pular para 63 com adapters 61 quebrados)      |
-| Customizações            | Commits `feat[EDD-…]` + listas em `lists/`; isolamento ainda parcial                          |
+| Backup da etapa 60→61    | Tag `saopaulo-pre-61x`                                                                                                                               |
+| Backup da etapa 61→62    | Tag `saopaulo-pre-62x`                                                                                                                               |
+| Script de merge          | `bin/merge-upstream-preserve-sp.sh` (EDD-1356); **restore estreito** após lição da 61                                                                |
+| Alvo final da EDD-1355   | Linha **63.x** (caminho em etapas 61→62→63; não pular para 63 com adapters 61 quebrados)                                                             |
+| Customizações            | Commits `feat[EDD-…]` + listas em `lists/`; isolamento ainda parcial                                                                                 |
 
 ### Arquivos SP / críticos (amostra)
 
@@ -71,7 +71,7 @@ Trate isto como verdade até alguém atualizar este arquivo após nova verifica�
 ```text
 EDD-1361 (inventário + isolamento mínimo)     ✅
   → EDD-1356 MVP (script + runbook)           ✅ MVP
-  → EDD-1355 (update = PoC)                   🔄 61→62 smoke OK; próximo 62→63
+  → EDD-1355 (update = PoC)                   🔄 62→63 mergeado; smoke detalhado com pendências
   → EDD-1362 (tema/marca pós-update)
   → EDD-1356 v2 (endurecer com aprendizados)
 ```
@@ -83,12 +83,12 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 
 ## Issues
 
-| ID           | Papel                                                      | Estado                                                 |
-| ------------ | ---------------------------------------------------------- | ------------------------------------------------------ |
+| ID           | Papel                                                      | Estado                                                                      |
+| ------------ | ---------------------------------------------------------- | --------------------------------------------------------------------------- |
 | **EDD-1355** | Atualizar Metabase + reaplicar customizações               | Em andamento — merge **63** feito; smoke detalhado com 3 pendências abertas |
-| **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | MVP entregue; v2 após lições da 1355                   |
-| **EDD-1361** | Inventário + quick wins de isolamento                      | Concluída (manifesto publicado)                        |
-| **EDD-1362** | Refatorar tema/marca na base já atualizada                 | Após 1355                                              |
+| **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | MVP entregue; v2 após lições da 1355                                        |
+| **EDD-1361** | Inventário + quick wins de isolamento                      | Concluída (manifesto publicado)                                             |
+| **EDD-1362** | Refatorar tema/marca na base já atualizada                 | Após 1355                                                                   |
 
 ---
 
@@ -123,16 +123,16 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 
 Voltam ao tip upstream com frequência — **priorizar no verify de cada major** (válido na 63):
 
-| Área | Paths-chave | Sintoma se perdeu |
-| ---- | ----------- | ----------------- |
-| LogoIcon brasão | `common/components/LogoIcon/LogoIcon.tsx` | Diamante Metabase no AppBar/login |
-| SpLogo hide | `css/core/layout.module.css` (`.SpLogo`) | logo-gov aparece no header do painel |
-| Login / DS | `auth/components/AuthLayout/*`, `Login*`, `Button`/`Input`/`Checkbox` CSS | Layout login padrão Metabase |
-| Hover linha | `DataGrid.module.css` **e** `css/admin.module.css` | Clique marca linha; hover não (admin CSS não carrega na view de pergunta) |
-| Dashcards DS | `DashCard.*`, `LegendCaption`, `padding.ts`, `series.ts`, `Progress` | Cards sem shadow/legenda SP |
-| Eixos 969 | `echarts/cartesian/option/axis.ts` (+ helpers em `utils.ts`) | Sem TitleCase/truncate nos cartesianos (RowChart pode continuar ok) |
-| Home Xray | `HomeXrayCard.tsx` + styled | Crash / badge quebrado |
-| i18n | `locales/pt-BR.po`; títulos LDAP com `t\`` (não string crua) | Inglês em admin; typo em msgstr |
+| Área            | Paths-chave                                                               | Sintoma se perdeu                                                         |
+| --------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| LogoIcon brasão | `common/components/LogoIcon/LogoIcon.tsx`                                 | Diamante Metabase no AppBar/login                                         |
+| SpLogo hide     | `css/core/layout.module.css` (`.SpLogo`)                                  | logo-gov aparece no header do painel                                      |
+| Login / DS      | `auth/components/AuthLayout/*`, `Login*`, `Button`/`Input`/`Checkbox` CSS | Layout login padrão Metabase                                              |
+| Hover linha     | `DataGrid.module.css` **e** `css/admin.module.css`                        | Clique marca linha; hover não (admin CSS não carrega na view de pergunta) |
+| Dashcards DS    | `DashCard.*`, `LegendCaption`, `padding.ts`, `series.ts`, `Progress`      | Cards sem shadow/legenda SP                                               |
+| Eixos 969       | `echarts/cartesian/option/axis.ts` (+ helpers em `utils.ts`)              | Sem TitleCase/truncate nos cartesianos (RowChart pode continuar ok)       |
+| Home Xray       | `HomeXrayCard.tsx` + styled                                               | Crash / badge quebrado                                                    |
+| i18n            | `locales/pt-BR.po`; títulos LDAP com `t\`` (não string crua)              | Inglês em admin; typo em msgstr                                           |
 
 ### Smoke Trilhas (mínimo antes da próxima major)
 
