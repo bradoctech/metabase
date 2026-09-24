@@ -78,4 +78,11 @@ QuestionDataSource.shouldRender = ({
 }: {
   question: Question;
   isObjectDetail?: boolean;
-}) => getDataSourceParts({ question, isObjectDetail }).length > 0;
+}) => {
+  try {
+    return getDataSourceParts({ question, isObjectDetail }).length > 0;
+  } catch {
+    // Freshly saved cards can have incomplete metadata; don't crash the QB header.
+    return false;
+  }
+};

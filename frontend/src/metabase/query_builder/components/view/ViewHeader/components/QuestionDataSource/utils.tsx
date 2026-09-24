@@ -11,7 +11,6 @@ import {
   getQuestionVirtualTableId,
   isVirtualCardId,
 } from "metabase-lib/v1/metadata/utils/saved-questions";
-import type NativeQuery from "metabase-lib/v1/queries/NativeQuery";
 import type { IconName } from "metabase-types/api";
 
 import { HeadBreadcrumbs } from "../HeaderBreadcrumbs/HeaderBreadcrumbs";
@@ -61,7 +60,7 @@ export function getDataSourceParts({
   if (database) {
     parts.push({
       icon: !subHead ? "database" : undefined,
-      name: database.displayName(),
+      name: entityDisplayName(database),
       href: database.id >= 0 ? Urls.browseDatabase(database) : undefined,
       model: "database",
     });
@@ -69,7 +68,7 @@ export function getDataSourceParts({
 
   const table = !isNative
     ? metadata.table(Lib.sourceTableOrCardId(query))
-    : (question.legacyNativeQuery() as NativeQuery).table();
+    : (question.legacyNativeQuery()?.table() ?? null);
   if (table?.schema_name && hasMultipleSchemas) {
     const isBasedOnSavedQuestion = isVirtualCardId(table.id);
     if (database != null && !isBasedOnSavedQuestion) {
@@ -86,7 +85,7 @@ export function getDataSourceParts({
     if (isNative) {
       return [
         {
-          name: table.displayName(),
+          name: entityDisplayName(table),
           href: hasTableLink ? getTableURL(table) : "",
         },
       ];
@@ -118,7 +117,7 @@ export function getDataSourceParts({
       />
     ) : (
       {
-        name: table.displayName(),
+        name: entityDisplayName(table),
         href: hasTableLink ? getTableURL(table) : "",
         model: table.type ?? "table",
       }
@@ -158,7 +157,7 @@ function QuestionTableBadges({
       color={badgeInactiveColor}
     >
       <span>
-        {table.displayName()}
+        {entityDisplayName(table)}
         {!subHead && (
           <span className={S.IconWrapper}>
             <TableInfoIcon
@@ -188,8 +187,25 @@ function getTableURL(table: Table) {
   if (isVirtualCardId(table.id)) {
     const cardId = getQuestionIdFromVirtualTableId(table.id);
     if (cardId != null) {
-      return Urls.card({ id: cardId, name: table.displayName() });
+      return Urls.card({ id: cardId, name: entityDisplayName(table) });
     }
   }
-  return Urls.question(table.newQuestion());
+  if (typeof table.newQuestion === "function") {
+    return Urls.question(table.newQuestion());
+  }
+  if (table.db_id != null) {
+    return Urls.queryBuilderTable(table.id, table.db_id);
+  }
+  return "";
+}
+
+function entityDisplayName(entity: {
+  displayName?: (() => string) | string;
+  display_name?: string;
+  name?: string;
+}): string | undefined {
+  if (typeof entity.displayName === "function") {
+    return entity.displayName();
+  }
+  return entity.displayName ?? entity.display_name ?? entity.name;
 }

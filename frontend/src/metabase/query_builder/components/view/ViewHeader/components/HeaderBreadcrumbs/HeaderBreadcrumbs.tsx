@@ -55,8 +55,8 @@ export function HeadBreadcrumbs({
       })}
       {...rest}
     >
-      {parts.map((part, index) => {
-        const isLast = index === parts.length - 1;
+      {parts.filter(isRenderableDataSourcePart).map((part, index, visible) => {
+        const isLast = index === visible.length - 1;
         const badgeInactiveColor =
           inactiveColor || getBadgeInactiveColor({ variant, isLast });
         return (
@@ -95,6 +95,14 @@ function Divider({ char = "/" }: { char?: string }) {
 
 function isDataSourceReactElement(part: DataSourcePart): part is ReactElement {
   return isValidElement(part);
+}
+
+function isRenderableDataSourcePart(
+  part: DataSourcePart | null | undefined | false,
+): part is DataSourcePart {
+  return (
+    isDataSourceReactElement(part) || (part != null && typeof part === "object")
+  );
 }
 
 function isDividerReactElement(

@@ -8,33 +8,41 @@ export function useHiddenSourceTables(
 ): Lib.TableDisplayInfo[] {
   const datasetQuery = question.datasetQuery();
   const metadata = useSelector(getMetadataUnfiltered);
-  const metadataProvider = Lib.metadataProvider(
-    datasetQuery.database,
-    metadata,
-  );
-  const query = Lib.fromJsQuery(metadataProvider, datasetQuery);
-  const sourceTableId = Lib.sourceTableOrCardId(query);
-
-  const joinTablesInfo = Lib.stageIndexes(query).flatMap((stageIndex) =>
-    Lib.joins(query, stageIndex)
-      .map((join) => Lib.joinedThing(query, join))
-      .filter((joinTable) => joinTable != null)
-      .map((joinTable) => Lib.displayInfo(query, stageIndex, joinTable)),
-  );
-
-  if (sourceTableId) {
-    const sourceTableMetadata = Lib.tableOrCardMetadata(
-      metadataProvider,
-      sourceTableId,
-    );
-    if (sourceTableMetadata) {
-      const sourceTableInfo = Lib.displayInfo(query, -1, sourceTableMetadata);
-      joinTablesInfo.unshift(sourceTableInfo);
-    }
+  if (datasetQuery?.database == null) {
+    return [];
   }
 
-  return joinTablesInfo.filter(
-    (tableInfo) =>
-      !tableInfo.isSourceTable || tableInfo.visibilityType !== null,
-  );
+  try {
+    const metadataProvider = Lib.metadataProvider(
+      datasetQuery.database,
+      metadata,
+    );
+    const query = Lib.fromJsQuery(metadataProvider, datasetQuery);
+    const sourceTableId = Lib.sourceTableOrCardId(query);
+
+    const joinTablesInfo = Lib.stageIndexes(query).flatMap((stageIndex) =>
+      Lib.joins(query, stageIndex)
+        .map((join) => Lib.joinedThing(query, join))
+        .filter((joinTable) => joinTable != null)
+        .map((joinTable) => Lib.displayInfo(query, stageIndex, joinTable)),
+    );
+
+    if (sourceTableId) {
+      const sourceTableMetadata = Lib.tableOrCardMetadata(
+        metadataProvider,
+        sourceTableId,
+      );
+      if (sourceTableMetadata) {
+        const sourceTableInfo = Lib.displayInfo(query, -1, sourceTableMetadata);
+        joinTablesInfo.unshift(sourceTableInfo);
+      }
+    }
+
+    return joinTablesInfo.filter(
+      (tableInfo) =>
+        !tableInfo.isSourceTable || tableInfo.visibilityType !== null,
+    );
+  } catch {
+    return [];
+  }
 }

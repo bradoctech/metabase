@@ -54,7 +54,7 @@ function LastEditInfoLabelInner({
 }: {
   prefix: string;
   item: ItemWithLastEditInfo;
-  user: User;
+  user: User | null;
   onClick?: MouseEventHandler<HTMLButtonElement>;
   className?: string;
   fullName: string | null;
@@ -67,8 +67,10 @@ function LastEditInfoLabelInner({
   const timestamp = lastEditInfo?.timestamp;
   const timeLabel = timestamp ? getHowLongAgo(timestamp) : "";
 
-  fullName ||= formatEditorName(lastEditInfo) || null;
-  const editorFullName = editorId === user.id ? t`you` : fullName;
+  if (lastEditInfo) {
+    fullName ||= formatEditorName(lastEditInfo) || null;
+  }
+  const editorFullName = editorId === user?.id ? t`you` : fullName;
 
   tooltipProps ??= { children: null, label: null };
   tooltipProps.label ??= timestamp ? <DateTime value={timestamp} /> : null;
