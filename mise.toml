@@ -41,9 +41,6 @@ env_file = ".env"
 # Uses the version in the tool's version file when installing
 idiomatic_version_file_enable_tools = ["bun"]
 
-# Uses the version in the tool's version file when installing
-idiomatic_version_file_enable_tools = ["bun"]
-
 [env]
 # Add bin/ to PATH so mage and other project scripts are available
 _.path = ["{{ config_root }}/bin"]
