@@ -3,7 +3,7 @@
 **Como usar:** no início de uma nova conversa sobre EDD-1355, EDD-1356, EDD-1361, EDD-1362, tema SP ou upgrade do fork, peça ao agente para ler este arquivo (e, se precisar de detalhe, os outros `.md` desta pasta) antes de planejar ou editar código.
 
 **Pasta:** `docs/internal/atualizacao-metabase-sp/`  
-**Última consolidação de contexto:** etapa **61→62** da EDD-1355 **fechada no smoke** na branch `EDD-1355`; próximo passo **62→63**; EDD-1361/1356 MVP já na base; notas em [notas-etapa-61-62.md](./notas-etapa-61-62.md) (e [notas-etapa-60-61.md](./notas-etapa-60-61.md) para a etapa anterior).
+**Última consolidação de contexto:** etapa **62→63** da EDD-1355 na branch `EDD-1355`; login/boot OK, smoke detalhado rodado com **3 pendências abertas** (filtros cascata QB, paleta 1092 no Visualizer, datagrid via "ver registros" — ver [notas-etapa-62-63.md](./notas-etapa-62-63.md)); EDD-1361/1356 MVP já na base; notas anteriores em [notas-etapa-61-62.md](./notas-etapa-61-62.md) e [notas-etapa-60-61.md](./notas-etapa-60-61.md).
 
 ---
 
@@ -22,7 +22,7 @@ Trate isto como verdade até alguém atualizar este arquivo após nova verifica�
 | Remote do fork           | `origin` → `git@github.com:bradoctech/metabase.git`                                           |
 | Remote oficial           | `upstream` → `https://github.com/metabase/metabase.git` (fetch de releases; não é destino SP) |
 | Branch principal do fork | `saopaulo` — ainda **0.60.x** até a EDD-1355 mergear de volta                                 |
-| Branch da PoC de upgrade | `EDD-1355` — tip com merge `upstream/release-x.62.x` + fixups de smoke **validados**            |
+| Branch da PoC de upgrade | `EDD-1355` — tip com merge `upstream/release-x.63.x` + fixups; smoke detalhado com 3 pendências (ver [notas-etapa-62-63.md](./notas-etapa-62-63.md)) |
 | Backup da etapa 60→61    | Tag `saopaulo-pre-61x`                                                                        |
 | Backup da etapa 61→62    | Tag `saopaulo-pre-62x`                                                                        |
 | Script de merge          | `bin/merge-upstream-preserve-sp.sh` (EDD-1356); **restore estreito** após lição da 61         |
@@ -85,7 +85,7 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 
 | ID           | Papel                                                      | Estado                                                 |
 | ------------ | ---------------------------------------------------------- | ------------------------------------------------------ |
-| **EDD-1355** | Atualizar Metabase + reaplicar customizações               | Em andamento — **62 smoke OK**; próximo merge **63**   |
+| **EDD-1355** | Atualizar Metabase + reaplicar customizações               | Em andamento — merge **63** feito; smoke detalhado com 3 pendências abertas |
 | **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | MVP entregue; v2 após lições da 1355                   |
 | **EDD-1361** | Inventário + quick wins de isolamento                      | Concluída (manifesto publicado)                        |
 | **EDD-1362** | Refatorar tema/marca na base já atualizada                 | Após 1355                                              |
@@ -136,13 +136,17 @@ Voltam ao tip upstream com frequência — **priorizar no verify de cada major**
 
 ### Smoke Trilhas (mínimo antes da próxima major)
 
+Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist-smoke-test.md](./checklist-smoke-test.md). Resumo:
+
 1. Backend sobe (`clojure -M:run:dev:dev-start:…`).
 2. FE hot compila sem erros de módulo.
 3. Login SP (painel esquerdo + brasão via LogoIcon) / setup (H2 novo após reset é esperado).
 4. Home (cards SP / badges) + brasão no AppBar.
-5. Dashboard (dashcards DS), filtros cascata, charts (eixos 969 + paleta 1092), datagrid (pin 944 + hover 564).
+5. Dashboard (dashcards DS), filtros cascata, charts (eixos 969 + paleta 1092 — testar também no **Visualizer**), datagrid (pin 944 + hover 564 — testar também via **"ver registros" de uma question**).
 6. SpLogo nos headers de painel continua **oculto**; LogoIcon continua **brasão** (ver seção Logos).
-7. Amostra i18n admin (LDAP titles traduzidos; e-mail sem typo “Adicionr”).
+7. Amostra i18n admin (LDAP titles traduzidos; e-mail sem typo "Adicionr").
+
+**Lição da 63:** rodar a checklist detalhada, não só a lista de telas — vários itens (eixos 969, i18n LDAP) regridem de forma pontual (um efeito React específico, uma string crua) mesmo com o smoke "básico" passando. Ver [notas-etapa-62-63.md](./notas-etapa-62-63.md) para os achados exatos.
 
 ---
 
@@ -206,6 +210,8 @@ Voltam ao tip upstream com frequência — **priorizar no verify de cada major**
 | [issue-edd-1356.md](./issue-edd-1356.md)                   | Entrega da EDD-1356                              |
 | [notas-etapa-60-61.md](./notas-etapa-60-61.md)             | Diário da etapa 60→61 (EDD-1355)                 |
 | [notas-etapa-61-62.md](./notas-etapa-61-62.md)             | Diário da etapa 61→62 (EDD-1355)                 |
+| [notas-etapa-62-63.md](./notas-etapa-62-63.md)             | Diário da etapa 62→63 (EDD-1355)                 |
+| [checklist-smoke-test.md](./checklist-smoke-test.md)       | Checklist canônica de smoke test (usar sempre)   |
 | [lists/](./lists/)                                         | Listas restore-ours / dual-changed / behavior    |
 | **Este arquivo**                                           | Bootstrap de contexto para o agente em chat novo |
 

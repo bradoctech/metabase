@@ -92,7 +92,7 @@ export const SettingsLdapForm = () => {
         {({ dirty }) => (
           <Form>
             <SettingsSection>
-              <FormSection title={"Server settings"}>
+              <FormSection title={t`Server settings`}>
                 <Stack gap="md">
                   <FormTextInput
                     name="ldap-host"
@@ -147,7 +147,7 @@ export const SettingsLdapForm = () => {
                 </Stack>
               </FormSection>
               <Divider />
-              <FormSection title={"User schema"}>
+              <FormSection title={t`User schema`}>
                 <Stack gap="md">
                   <FormTextInput
                     name="ldap-user-base"
@@ -169,7 +169,7 @@ export const SettingsLdapForm = () => {
                 </Stack>
               </FormSection>
               <Divider />
-              <FormSection title={"Attributes"}>
+              <FormSection title={t`Attributes`}>
                 <Stack gap="md">
                   <FormTextInput
                     name="ldap-attribute-email"
@@ -198,7 +198,7 @@ export const SettingsLdapForm = () => {
                 </Stack>
               </FormSection>
               <Divider />
-              <FormSection title={"Group schema"}>
+              <FormSection title={t`Group schema`}>
                 <Stack gap="md">
                   <GroupMappingsWidget
                     isFormik
