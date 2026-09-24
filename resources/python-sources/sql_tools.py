@@ -1,12 +1,36 @@
 import json
+import logging
 import re
 
 import sqlglot
+
+# sqlglot's parser warnings quote raw chunks of the SQL being parsed ("... contains unsupported
+# syntax. Falling back to parsing as a 'Command'."); silence them so customer SQL never reaches
+# stderr/server logs.
+logging.getLogger("sqlglot").setLevel(logging.CRITICAL)
 import sqlglot.lineage as lineage
 import sqlglot.optimizer as optimizer
 import sqlglot.optimizer.qualify as qualify
 from sqlglot import exp
+from sqlglot.dialects.clickhouse import ClickHouse
 from sqlglot.errors import OptimizeError, ParseError
+
+# sqlglot (as of 28.6.0) renders every placeholder in ClickHouse's named-parameter
+# syntax `{name: Type}`, so a positional JDBC placeholder `?` (a nameless Placeholder)
+# round-trips to `{?: }`, which ClickHouse rejects with "Expected substitution name"
+# (Code 62). Compiled queries we rewrite can carry prepared-statement params — e.g.
+# workspace table remapping of an incremental transform's checkpoint filter — so keep
+# positional placeholders as `?`; named query parameters still take the upstream path.
+_clickhouse_placeholder_sql = ClickHouse.Generator.placeholder_sql
+
+
+def _placeholder_sql_keep_positional(self, expression: exp.Placeholder) -> str:
+    if not expression.this:
+        return "?"
+    return _clickhouse_placeholder_sql(self, expression)
+
+
+ClickHouse.Generator.placeholder_sql = _placeholder_sql_keep_positional
 
 
 def is_quoted_identifier(name: str, dialect: str = None) -> bool:
@@ -1623,17 +1647,38 @@ def transpile_sql(sql: str, from_dialect: str = None, to_dialect: str = None):
 
     return json.dumps(result)
 
+def _split_placeholder_casts(sql: str, dialect: str = None) -> str:
+    """sqlglot's tokenizer treats `?::` as a single token in every dialect, but only Databricks'
+    parser consumes it (the `expr?::type` try-cast operator). So a JDBC parameter followed by a
+    cast (e.g. `select ?::text`) gets treated as this single token and fails to be parsed in every
+    other dialect. To work around this we rewrite `?::` to `? ::` outside Databricks (#81373).
+    """
+    if dialect == "databricks" or "?::" not in sql:
+        return sql
+    try:
+        tokens = sqlglot.tokenize(sql, read=dialect)
+    except Exception:
+        return sql
+    # Insert right-to-left so earlier token offsets stay valid.
+    for tok in reversed(tokens):
+        if tok.token_type == sqlglot.TokenType.QDCOLON:
+            sql = sql[: tok.start + 1] + " " + sql[tok.start + 1 :]
+    return sql
+
+
 def is_single_stmt_of_type(sql: str, stmt_type: str = "read", dialect: str = None) -> str:
     """Validates that a query is a single read statement (SELECT) or a single write statement (INSERT, UPDATE, DELETE)
     and returns the query reconstructed from the parsed AST.
     """
-    result = {"is_single_stmt?": False}
+    result = {"is_single_stmt?": False, "allowed_stmt_type?": False}
     try:
-        stmts = sqlglot.parse(sql, read=dialect)
+        stmts = sqlglot.parse(_split_placeholder_casts(sql, dialect), read=dialect)
         allowed_types = (exp.Select, exp.SetOperation)
         if stmt_type != "read": allowed_types = (exp.Update, exp.Insert, exp.Delete)
-        if len(stmts) == 1 and isinstance(stmts[0], allowed_types):
+        if len(stmts) == 1:
             result["is_single_stmt?"] = True
+            if isinstance(stmts[0], allowed_types):
+                result["allowed_stmt_type?"] = True
             result["sql"] = stmts[0].sql(dialect=dialect) if dialect else stmts[0].sql()
     except Exception as e:
         result["error"] = str(e)

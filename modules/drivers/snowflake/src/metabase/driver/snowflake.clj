@@ -29,6 +29,8 @@
    [metabase.driver.sql.util :as sql.u]
    [metabase.driver.sync :as driver.s]
    [metabase.driver.util :as driver.u]
+   [metabase.lib.schema.common :as lib.schema.common]
+   [metabase.lib.schema.metadata :as lib.schema.metadata]
    [metabase.util :as u]
    [metabase.util.date-2 :as u.date]
    [metabase.util.honey-sql-2 :as h2x]
@@ -82,15 +84,17 @@
                               :collate                                true
                               :now                                    true
                               :database-routing                       true
+                              :uploads                                true
                               :metadata/table-existence-check         true
                               :regex/lookaheads-and-lookbehinds       false
+                              :transforms/accurate-rows-affected      false
                               :transforms/python                      true
                               :transforms/table                       true
                               :workspace                              false}]
   (defmethod driver/database-supports? [:snowflake feature] [_driver _feature _db] supported?))
 
-(defn- quote-schema [s] (sql.u/quote-name :snowflake :schema s))
-(defn- quote-field  [s] (sql.u/quote-name :snowflake :field s))
+(mu/defn- quote-schema ^String [s :- :string] (sql.u/quote-name :snowflake :schema s))
+(mu/defn- quote-field  ^String [s :- :string] (sql.u/quote-name :snowflake :field s))
 
 (defmethod driver/humanize-connection-error-message :snowflake
   [_ messages]
@@ -175,7 +179,7 @@
              (keep (fn [param]
                      (let [key-val (str/split param #"=")]
                        (if-not (= 2 (count key-val))
-                         (log/warnf "Invalid Snowflake connection URI parameter: '%s'" param)
+                         (log/warn "Invalid Snowflake connection URI parameter")
                          (let [[k v] key-val]
                            [(u/upper-case-en (URLDecoder/decode ^String k "UTF-8"))
                             (URLDecoder/decode ^String v "UTF-8")])))))
@@ -391,6 +395,63 @@
 (defmethod driver/type->database-type :snowflake
   [_driver base-type]
   (type->database-type base-type))
+
+(defmethod driver/upload-type->database-type :snowflake
+  [_driver upload-type]
+  (case upload-type
+    :metabase.upload/varchar-255              [[:varchar 255]]
+    :metabase.upload/text                     [:text]
+    :metabase.upload/int                      [:bigint]
+    ;; `_mb_row_id` must follow insertion order, but the default `NOORDER` allocates ids from per-cluster
+    ;; ranges, leaving gaps or even out-of-order values between inserts. `ORDER` fixes that by serializing
+    ;; id generation -- an acceptable cost, since uploads insert from a single connection.
+    :metabase.upload/auto-incrementing-int-pk [:number [:identity 1 1] :order]
+    :metabase.upload/float                    [:double]
+    :metabase.upload/boolean                  [:boolean]
+    :metabase.upload/date                     [:date]
+    :metabase.upload/datetime                 [:timestamp_ntz]
+    :metabase.upload/offset-datetime          [:timestamp_tz]))
+
+;; Snowflake's JDBC driver cannot bind `java.time` values: `setObject` handles temporal binds only via the
+;; legacy `java.sql.Date`/`Time`/`Timestamp` classes, and throws on anything else.
+;;
+;; Converting through those legacy classes is no better: `setTimestamp` binds nanos-since-epoch as
+;; `TIMESTAMP_LTZ` computed in the JVM default zone, while the session runs with `TIMEZONE=UTC`
+;; (see [[connection-details->spec]]), so wall-clock times would shift whenever the JVM zone isn't UTC.
+;;
+;; String binds sidestep both problems: Snowflake parses them server-side into the column's type, independent
+;; of any timezone. Nine fractional digits keep full nanosecond precision -- the CSV parser accepts arbitrary
+;; sub-second precision and Snowflake timestamps store up to 9 digits.
+(defn- temporal-bind->string
+  "Convert a temporal upload value to a string bind that Snowflake will coerce to the column type.
+  Non-temporal values pass through unchanged."
+  [v]
+  (condp instance? v
+    LocalDate      (u.date/format v)
+    LocalDateTime  (u.date/format "yyyy-MM-dd HH:mm:ss.SSSSSSSSS" v)
+    OffsetDateTime (u.date/format "yyyy-MM-dd HH:mm:ss.SSSSSSSSS xx" v)
+    v))
+
+(defmethod driver/insert-into! :snowflake
+  [driver db-id table-name column-names values]
+  ;; Snowflake's fast bulk path (`PUT` + `COPY INTO` from a stage) is unavailable because Metabase's
+  ;; Snowflake connections set `enablePutGet=false`, so use the generic multi-row `INSERT`.
+  ((get-method driver/insert-into! :sql-jdbc)
+   driver db-id table-name column-names
+   (map #(mapv temporal-bind->string %) values)))
+
+(defmethod driver/add-columns! :snowflake
+  [driver db-id table-name column-definitions & args]
+  ;; Snowflake doesn't support adding multiple columns in one statement, so add them one at a time
+  (let [add-column! (get-method driver/add-columns! :sql-jdbc)]
+    (doseq [[column definition] column-definitions]
+      (apply add-column! driver db-id table-name {column definition} args))))
+
+(defmethod driver/allowed-promotions :snowflake
+  [_driver]
+  ;; Snowflake's `ALTER COLUMN` can widen a type (e.g. VARCHAR length, NUMBER precision) but never convert
+  ;; to a different one, so no promotions are possible
+  {})
 
 (defmethod sql.qp/unix-timestamp->honeysql [:snowflake :seconds]      [_ _ expr] [:to_timestamp_tz expr])
 (defmethod sql.qp/unix-timestamp->honeysql [:snowflake :milliseconds] [_ _ expr] [:to_timestamp_tz expr 3])
@@ -780,7 +841,7 @@
         ;; The Snowflake JDBC driver may throw for unsupported column types (e.g. UUID) during
         ;; DatabaseMetaData.getColumns() iteration. Fall back to SELECT * metadata which doesn't
         ;; hit the same code path. See #71595.
-        (log/warnf e "Error reading JDBC metadata for table %s, falling back to SELECT * metadata" (:name table))
+        (log/warnf "Error reading JDBC metadata for table %s, falling back to SELECT * metadata: %s" (:name table) (ex-message e))
         (mapv fix-base-type
               (fallback-fields-metadata driver conn table database))))))
 
@@ -804,25 +865,33 @@
   [_ entity-name]
   (escape-name-for-metadata entity-name))
 
-(defn- dynamic-table?
-  "Check if the table is a dynamic table.
+(defn- show-dynamic-tables-sql
+  "Takes raw, unescaped names. Only the LIKE argument is a pattern, where `_` is a wildcard; the IN SCHEMA
+  names are plain identifiers and must not be escaped (#78541)."
+  [db-name schema-name table-name]
+  (format "SHOW DYNAMIC TABLES LIKE '%s' IN SCHEMA %s.%s;"
+          (escape-name-for-metadata table-name) (quote-schema db-name) (quote-schema schema-name)))
+
+(mu/defn- dynamic-table?
+  "Check if the table is a dynamic table. Takes raw, unescaped names.
 
   You can't rely on :table_type from INFORMATION_SCHEMA.TABLES or :type from getTables because in
   both cases it returns `Table` for dynamic tables."
-  [^Connection conn ^String db-name ^String schema-name ^String table-name]
+  [^Connection conn    :- (lib.schema.common/instance-of-class Connection)
+   ^String db-name     :- :string
+   ^String schema-name :- :string
+   ^String table-name  :- :string]
   (try
     ;; there is another way of checking this by using SHOW TABLES command and check `is_dynamic` column.
     ;; But this column is not documented on https://docs.snowflake.com/en/sql-reference/sql/show-tables (2024/05/07),
     ;; So we avoid using it here.
-    (-> (jdbc/query
-         {:connection conn}
-         [(format "SHOW DYNAMIC TABLES LIKE '%s' IN SCHEMA %s.%s;"
-                  table-name (quote-schema db-name) (quote-schema schema-name))])
+    (-> (jdbc/query {:connection conn} [(show-dynamic-tables-sql db-name schema-name table-name)])
         first
         some?)
     (catch SnowflakeSQLException e
-      (log/warn e "Failed to check if table is dynamic")
-      ;; query will fail if schema doesn't exist
+      ;; query will fail if schema doesn't exist. This runs once per table, so skip the stack trace.
+      (log/warnf "Failed to check if table %s.%s.%s is dynamic: %s"
+                 db-name schema-name table-name (ex-message e))
       false)))
 
 (defn- table->db-name
@@ -832,12 +901,10 @@
         driver-api/database
         db-name)))
 
-;; The Snowflake JDBC driver is buggy: schema and table name are interpreted as patterns
-;; in getPrimaryKeys and getImportedKeys calls. When this bug gets fixed, the
-;; [[sql-jdbc.describe-table/get-table-pks]] method and the [[describe-table-fks*]] and
-;; [[describe-table-fks]] functions can be dropped and the call to [[describe-table-fks]]
-;; can be replaced with a call to [[sql-jdbc.sync/describe-table-fks]]. See #26054 for
-;; more context.
+;; The Snowflake JDBC driver is buggy: schema and table name are interpreted as patterns in getPrimaryKeys and
+;; getImportedKeys calls. When this bug gets fixed, the [[sql-jdbc.describe-table/get-table-pks]] method can be
+;; dropped and the the [[reducible-table-fks-from-jdbc-metadata]] function can be simplified. See #26054 for more
+;; context.
 (defmethod sql-jdbc.describe-table/get-table-pks :snowflake
   [_driver ^Connection conn db-name-or-nil table]
   (let [^DatabaseMetaData metadata (.getMetaData conn)
@@ -855,45 +922,30 @@
           []
           (throw e))))))
 
-(defn- describe-table-fks*
-  "Stolen from [[sql-jdbc.describe-table]].
-  The only change is that it escapes `schema` and `table-name`."
-  [_driver ^Connection conn {^String schema :schema, ^String table-name :name} db-name]
-  ;; Snowflake bug: schema and table name are interpreted as patterns
-  (let [metadata    (.getMetaData conn)
-        schema-name (escape-name-for-metadata schema)
-        table-name  (escape-name-for-metadata table-name)]
-    (try
-      (into
-       #{}
-       (sql-jdbc.sync.common/reducible-results #(.getImportedKeys metadata db-name schema-name table-name)
-                                               (fn [^ResultSet rs]
-                                                 (fn []
-                                                   {:fk-column-name   (.getString rs "FKCOLUMN_NAME")
-                                                    :dest-table       {:name   (.getString rs "PKTABLE_NAME")
-                                                                       :schema (.getString rs "PKTABLE_SCHEM")}
-                                                    :dest-column-name (.getString rs "PKCOLUMN_NAME")}))))
-      (catch SnowflakeSQLException e
-        ;; dynamic tables doesn't support fks so it's fine to suppress the exception
-        (if (dynamic-table? conn db-name schema table-name)
-          #{}
-          (throw e))))))
+(mu/defn- reducible-table-fks-from-jdbc-metadata :- ::driver/describe-fks.result
+  "Wrapper around [[metabase.driver.sql-jdbc.sync/reducible-table-fks-from-jdbc-metadata]].
+  The only changes are that it escapes `schema` and `table-name`, and catches errors when trying to get FKs for
+  dynamic tables."
+  [^Connection       conn       :- (lib.schema.common/instance-of-class Connection)
+   ^DatabaseMetaData metadata   :- (lib.schema.common/instance-of-class DatabaseMetaData)
+   ^String           db-name    :- [:maybe :string]
+   ^String           schema     :- [:maybe :string]
+   ^String           table-name :- :string]
+  (when-not (dynamic-table? conn db-name schema table-name)
+    ;; Snowflake bug: schema and table name are interpreted as patterns
+    (sql-jdbc.sync/reducible-table-fks-from-jdbc-metadata metadata db-name
+                                                          (escape-name-for-metadata schema)
+                                                          (escape-name-for-metadata table-name))))
 
-(defn- describe-table-fks
-  "Stolen from [[sql-jdbc.describe-table]].
-  The only change is that it calls the stolen function [[describe-table-fks*]]."
-  [driver db-or-id-or-spec table db-name]
-  (sql-jdbc.execute/do-with-connection-with-options
-   driver
-   db-or-id-or-spec
-   nil
-   (fn [conn]
-     (describe-table-fks* driver conn table db-name))))
-
-#_{:clj-kondo/ignore [:deprecated-var]}
-(defmethod driver/describe-table-fks :snowflake
-  [driver database table]
-  (describe-table-fks driver database table (db-name database)))
+(mu/defmethod driver/describe-fks :snowflake :- ::driver/describe-fks.result
+  [driver          :- :keyword
+   database        :- ::lib.schema.metadata/database
+   & {:as options} :- ::driver/describe-fks.options]
+  (let [db-name (db-name database)
+        f       (fn f [^Connection conn table]
+                  (let [metadata (.getMetaData conn)]
+                    (reducible-table-fks-from-jdbc-metadata conn metadata db-name (:schema table) (:name table))))]
+    (sql-jdbc.sync/reducible-fks-for-tables-matching-options driver database options f)))
 
 (defmethod sql.qp/current-datetime-honeysql-form :snowflake [_] :%current_timestamp)
 

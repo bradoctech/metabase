@@ -303,7 +303,7 @@
   (try (set (jdbc/query (sql-jdbc.conn/db->pooled-connection-spec database)
                         ["SELECT TABLE_SCHEMA AS \"schema\", TABLE_NAME AS \"name\" FROM V_CATALOG.VIEWS;"]))
        (catch Throwable e
-         (log/error e "Failed to fetch materialized views for this database"))))
+         (log/errorf "Failed to fetch materialized views for this database: %s" (ex-message e)))))
 
 (defmethod driver/describe-database* :vertica
   [driver database]
@@ -326,7 +326,7 @@
   (fn read-time []
     (when-let [s (.getString rs i)]
       (let [t (u.date/parse s)]
-        (log/tracef "(.getString rs %d) [TIME] -> %s -> %s" i s t)
+        (log/tracef "(.getString rs %d) [TIME]" i)
         t))))
 
 (defmethod sql-jdbc.execute/read-column-thunk [:vertica Types/TIME_WITH_TIMEZONE]
@@ -334,7 +334,7 @@
   (fn read-time-with-timezone []
     (when-let [s (.getString rs i)]
       (let [t (u.date/parse s)]
-        (log/tracef "(.getString rs %d) [TIME_WITH_TIMEZONE] -> %s -> %s" i s t)
+        (log/tracef "(.getString rs %d) [TIME_WITH_TIMEZONE]" i)
         t))))
 
 ;; for some reason vertica `TIMESTAMP WITH TIME ZONE` columns still come back as `Type/TIMESTAMP`, which seems like a
@@ -346,7 +346,7 @@
     (fn read-timestamp []
       (when-let [s (.getString rs i)]
         (let [t (u.date/parse s timezone)]
-          (log/tracef "(.getString rs %d) [TIME_WITH_TIMEZONE] -> %s -> %s" i s t)
+          (log/tracef "(.getString rs %d) [TIME_WITH_TIMEZONE]" i)
           t)))))
 
 (defmethod sql.qp/->honeysql [:vertica ::sql.qp/cast-to-text]

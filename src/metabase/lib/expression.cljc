@@ -66,17 +66,17 @@
     stage-number    :- :int
     expression-name :- ::lib.schema.common/non-blank-string]
    (or (maybe-resolve-expression query stage-number expression-name)
-       (log/warnf "Expression %s does not exist in stage %d" (pr-str expression-name) (lib.util/canonical-stage-index query stage-number))
+       (log/warnf "Expression does not exist in stage %d" (lib.util/canonical-stage-index query stage-number))
        (when-let [previous-stage-number (lib.util/previous-stage-number query stage-number)]
          (u/prog1 (resolve-expression query previous-stage-number expression-name)
            (when <>
-             (log/warnf "Found expression %s in previous stage" (pr-str expression-name)))))
+             (log/warn "Found expression in previous stage"))))
        (when (lib.util/first-stage? query stage-number)
          (when-let [source-card (lib.metadata.calculation/primary-source-card query)]
            (u/prog1 (resolve-expression (:dataset-query source-card) expression-name)
              (when <>
-               (log/warnf "Found expression %s in source card %d. Next time, use a :field name ref!"
-                          (pr-str expression-name) (:id source-card))))))
+               (log/warnf "Found expression in source card %d. Next time, use a :field name ref!"
+                          (:id source-card))))))
        (throw (ex-info (i18n/tru "No expression named {0}" (pr-str expression-name))
                        {:expression-name expression-name
                         :query           query
@@ -93,9 +93,15 @@
                                              (lib.metadata.calculation/cacheable-options {})]
     (fn []
       (let [base-type (lib.metadata.calculation/type-of query stage-number expression-ref-clause)]
-        (merge {:lib/type                :metadata/column
-                ;; TODO (Cam 8/7/25) -- is the source UUID of an expression ref supposed to be the ID of the ref, or the ID
-                ;; of the expression definition??
+        ;; special case for when the expression is just a plain field -- pull in the Field ID and Table ID so we can
+        ;; resolve Field ID refs in later stages (fix for a very specific bug, #70233)
+        (merge (let [resolved (resolve-expression query stage-number expression-name)]
+                 (when (lib.util/clause-of-type? resolved :field)
+                   (select-keys (lib.metadata.calculation/metadata query stage-number resolved)
+                                [:id :table-id])))
+               {:lib/type                :metadata/column
+                ;; TODO (Cam 8/7/25) -- is the source UUID of an expression ref supposed to be the ID of the ref, or
+                ;; the ID of the expression definition??
                 :lib/source-uuid         (:lib/uuid opts)
                 :name                    expression-name
                 :lib/expression-name     expression-name
@@ -567,7 +573,7 @@
          (assoc opts :name new-name :display-name new-name))))))
 
 (def ^:private aggregation-explainer
-  (mr/explainer ::lib.schema.aggregation/aggregation))
+  (mr/explainer ::lib.schema.aggregation/aggregation-with-no-unaggregated-refs))
 
 (def ^:private filter-explainer
   (mr/explainer ::lib.schema.expression/boolean))

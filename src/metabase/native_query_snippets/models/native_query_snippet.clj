@@ -25,6 +25,7 @@
   (derive :hook/timestamped?)
   (derive :hook/entity-id))
 
+;; TODO (Cam 2026-07-08) Change Native Query Snippets to store template tags as a list like we do in MBQL as of 63.
 (t2/deftransforms :model/NativeQuerySnippet
   {:template_tags {:in mi/json-in
                    :out (comp (mi/catch-normalization-exceptions
@@ -60,7 +61,9 @@
                                      (filter snippet-tag?)
                                      (map (juxt :snippet-name identity)))
                             old-tags)
-        new-tags (lib/recognize-template-tags (:content snippet))
+        new-tags (into {}
+                       (map (juxt :name identity))
+                       (lib/recognize-template-tags (:content snippet)))
         set-snippet-id (fn [{:keys [snippet-name] :as tag}]
                          ;; Check for exact match in database:
                          (if-let [snippet-id (t2/select-one-fn :id :model/NativeQuerySnippet
@@ -168,15 +171,21 @@
                                                                    (when-let [collection-ids (not-empty (remove nil? collection-set))]
                                                                      [:in :collection_id collection-ids])
                                                                    (when (some nil? collection-set)
-                                                                     [:= :collection_id nil])]]}
+                                                                     [:= :collection_id nil])]]
+                                                          ;; stable filename de-dup suffixes across exports, see GHY-3754
+                                                          :order-by serdes/stable-storage-order}
                                                    where (sql.helpers/where :or where))))
 
 (defmethod serdes/make-spec "NativeQuerySnippet" [_model-name _opts]
-  {:copy      [:archived :content :description :entity_id :name :template_tags]
+  {:copy      [:archived :content :description :entity_id :name]
    :skip      []
    :transform {:created_at    (serdes/date)
                :collection_id (serdes/fk :model/Collection)
-               :creator_id    (serdes/fk :model/User)}
+               :creator_id    (serdes/fk :model/User)
+               ;; Normalize on import so template-tag name keys come back as strings (YAML ingest keywordizes
+               ;; them).
+               :template_tags {:export identity
+                               :import #(lib/normalize :metabase.lib.schema.template-tag/template-tag-map %)}}
    :defaults {:archived false}})
 
 (defmethod serdes/required "NativeQuerySnippet"

@@ -19,6 +19,7 @@
    [metabase.lib.schema.expression :as lib.schema.expression]
    [metabase.lib.schema.id :as lib.schema.id]
    [metabase.lib.schema.metadata :as lib.schema.metadata]
+   [metabase.lib.schema.template-tag :as lib.schema.template-tag]
    [metabase.lib.temporal-bucket :as lib.temporal-bucket]
    [metabase.lib.types.isa :as lib.types.isa]
    [metabase.lib.util :as lib.util]
@@ -96,24 +97,23 @@
        (:database query)
        (boolean (can-run-method query card-type))))
 
-(defmulti can-save-method
+(defmulti can-save?-method
   "Returns whether the query can be saved based on first stage :lib/type."
   {:arglists '([query card-type])}
   (fn [query _card-type]
     (:lib/type (lib.util/query-stage query 0))))
 
-(defmethod can-save-method :default
+(defmethod can-save?-method :default
   [_query _card-type]
   true)
 
-;;; TODO FIXME -- boolean functions should end in `?`
-(mu/defn can-save :- :boolean
+(mu/defn can-save? :- :boolean
   "Returns whether `query` for a card of `card-type` can be saved."
   [query :- ::lib.schema/query
    card-type :- ::lib.schema.metadata/card.type]
   (and (lib.metadata/editable? query)
        (can-run query card-type)
-       (boolean (can-save-method query card-type))))
+       (boolean (can-save?-method query card-type))))
 
 (mu/defn can-preview :- :boolean
   "Returns whether the query can be previewed.
@@ -439,8 +439,7 @@
              {:query        (query a-query card)
               :stage-number -1}
              (do
-               (log/warn "Failed to wrap native query with MBQL; card not found" {:query   a-query
-                                                                                  :card-id card-id})
+               (log/warn "Failed to wrap native query with MBQL; card not found" {:card-id card-id})
                nil)))
       {:query        a-query
        :stage-number stage-number}))
@@ -452,13 +451,16 @@
   (let [{q :query, n :stage-number} (wrap-native-query-with-mbql a-query stage-number card-id)]
     (apply f q n args)))
 
-(defn- template-tag-stages
-  [template-tags]
-  (for [{:keys [card-id snippet-id] tag-type :type} (vals template-tags)
-        :when (#{:card :snippet} tag-type)]
-    (case tag-type
-      :card {:source-card card-id}
-      :snippet {:source-snippet-id snippet-id})))
+(mu/defn- template-tag-stages
+  ;; works with either map or sequence of template tags because Native Query Snippets still store them as a map at the
+  ;; time of this writing
+  [template-tags :- [:maybe ::lib.schema.template-tag/template-tag-map-or-sequence]]
+  (let [template-tags (lib.normalize/normalize ::lib.schema.template-tag/template-tags template-tags)]
+    (for [{:keys [card-id snippet-id] tag-type :type} template-tags
+          :when                                       (#{:card :snippet} tag-type)]
+      (case tag-type
+        :card    {:source-card card-id}
+        :snippet {:source-snippet-id snippet-id}))))
 
 (defn- stage-seq* [query-fragment]
   (cond

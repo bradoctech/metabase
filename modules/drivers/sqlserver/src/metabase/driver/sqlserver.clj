@@ -1,6 +1,6 @@
 (ns metabase.driver.sqlserver
   "Driver for SQLServer databases. Uses the official Microsoft JDBC driver under the hood (pre-0.25.0, used jTDS)."
-  (:refer-clojure :exclude [mapv get-in])
+  (:refer-clojure :exclude [empty? mapv get-in])
   (:require
    [clojure.java.io :as io]
    [clojure.java.jdbc :as jdbc]
@@ -35,7 +35,7 @@
    [metabase.util.malli :as mu]
    [metabase.util.match :as match]
    [metabase.util.memoize :as memoize]
-   [metabase.util.performance :as perf :refer [mapv get-in]]
+   [metabase.util.performance :as perf :refer [empty? mapv get-in]]
    [next.jdbc :as next.jdbc])
   (:import
    (java.sql Connection DatabaseMetaData PreparedStatement ResultSet Time)
@@ -207,13 +207,16 @@
        ;; https://social.technet.microsoft.com/Forums/sqlserver/en-US/bc1373f5-cb40-479d-9770-da1221a0bc95/connecting-to-sql-server-in-a-different-domain-using-jdbc-driver?forum=sqldataaccess
        :user               (str (when domain (str domain "\\"))
                                 user)
-       :instanceName       instance
        :encrypt            (boolean ssl)
        ;; only crazy people would want this. See https://docs.microsoft.com/en-us/sql/connect/jdbc/configuring-how-java-sql-time-values-are-sent-to-the-server?view=sql-server-ver15
        :sendTimeAsDatetime false}
       ;; only include `port` if it is specified; leave out for dynamic port: see
       ;; https://github.com/metabase/metabase/issues/7597
-      (merge (when port {:port port}))
+      ;; only include `instanceName` if supplied — mssql-jdbc treats an empty string as a named instance and
+      ;; initiates SQL Server Browser lookup, which breaks Microsoft Fabric / Synapse serverless endpoints
+      ;; that drop the connection whenever the property is present (#81270)
+      (merge (when port {:port port})
+             (when-not (str/blank? instance) {:instanceName instance}))
       (sql-jdbc.common/handle-additional-options details, :seperator-style :semicolon)))
 
 (def ^:private disallowed-additional-opts
@@ -619,9 +622,13 @@
 
 (defmethod sql.qp/apply-top-level-clause [:sqlserver :page]
   [_driver _top-level-clause honeysql-form {{:keys [items page]} :page}]
-  (assoc honeysql-form :offset [:raw (format "%d ROWS FETCH NEXT %d ROWS ONLY"
-                                             (* items (dec page))
-                                             items)]))
+  (-> honeysql-form
+      ;; SQL Server rejects OFFSET/FETCH without an ORDER BY (#81988). Supply a placeholder when the
+      ;; caller didn't provide one; the row order is unspecified either way.
+      (cond-> (empty? (:order-by honeysql-form))
+        (assoc :order-by [[{:select [nil]}]]))
+      (assoc :offset (sql.qp/inline-num (* items (dec page)))
+             :fetch  (sql.qp/inline-num items))))
 
 (defn- optimized-temporal-buckets
   "If `field-clause` is being truncated temporally to `:year`, `:month`, or `:day`, return a optimized set of
@@ -1022,11 +1029,18 @@
       (try
         (.setFetchDirection stmt ResultSet/FETCH_FORWARD)
         (catch Throwable e
-          (log/debug e "Error setting statement fetch direction to FETCH_FORWARD")))
+          (log/debugf "Error setting statement fetch direction to FETCH_FORWARD: %s" (ex-message e))))
       stmt
       (catch Throwable e
         (.close stmt)
         (throw e)))))
+
+(defmethod sql-jdbc.execute/cancelation-poisons-connection? :sqlserver
+  [_driver]
+  ;; `.cancel` sends an out-of-band TDS attention packet. Its acknowledgement is not drained before the Connection is
+  ;; checked back into the pool, and it surfaces later as `The result set is closed.` while an unrelated query is
+  ;; reading rows on the recycled Connection.
+  true)
 
 (defmethod sql.qp/inline-value [:sqlserver LocalDate]
   [_ ^LocalDate t]
@@ -1175,6 +1189,15 @@
         ^String table-name (first (sql.qp/format-honeysql driver (keyword output-table)))]
     [(format "INSERT INTO %s %s" table-name sql-query) sql-params]))
 
+(defmethod driver/run-transform! [:sqlserver :table-incremental]
+  [driver transform-details opts]
+  ;; SQL Server has no row-valued `IN (...)`, so the shared `:sql` merge can't express a composite-key
+  ;; delete the default way. Ask it to use a correlated `EXISTS` instead by threading `:delete-strategy`
+  ;; through `merge-opts`; only inject it when a merge is actually happening (leave append/create alone).
+  (let [opts (cond-> opts
+               (:merge opts) (assoc-in [:merge :delete-strategy] :exists))]
+    ((get-method driver/run-transform! [:sql :table-incremental]) driver transform-details opts)))
+
 (defmethod driver/table-exists? :sqlserver
   [driver database {:keys [schema name] :as _table}]
   (sql-jdbc.execute/do-with-connection-with-options
@@ -1245,9 +1268,14 @@
                            escaped-username quoted-user quoted-user)
                    (format "IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = '%s') EXEC('CREATE SCHEMA %s')"
                            escaped-schema quoted-schema)
-                   ;; CONTROL ON SCHEMA gives ALTER (needed for creating objects in schema)
-                   (format "GRANT CONTROL ON SCHEMA::%s TO %s" quoted-schema quoted-user)
-                   ;; CREATE TABLE at database level is also required in SQL Server
+                   ;; Least-privilege grant on the workspace's own schema (vs. the old GRANT
+                   ;; CONTROL, dropping EXECUTE, VIEW DEFINITION, REFERENCES, and re-grant rights):
+                   ;;   ALTER  - create/drop/sp_rename objects in the schema
+                   ;;   SELECT, INSERT, UPDATE, DELETE - full DML (SQL Server, unlike Postgres,
+                   ;;            does not confer DML from ALTER/ownership, so grant it explicitly)
+                   (format "GRANT ALTER, SELECT, INSERT, UPDATE, DELETE ON SCHEMA::%s TO %s"
+                           quoted-schema quoted-user)
+                   ;; db-level CREATE TABLE: SELECT INTO (transform materialization) needs it too
                    (format "GRANT CREATE TABLE TO %s" quoted-user)]]
         (jdbc/execute! conn-spec [sql]))
       (catch Throwable t
@@ -1309,10 +1337,6 @@
 
 (defmethod driver/llm-sql-dialect-resource :sqlserver [_]
   "metabot/prompts/dialects/sqlserver.md")
-
-(defmethod driver/validate-impersonated-query :sqlserver
-  [driver query]
-  (driver.sql/validate-impersonated-query* driver query))
 
 (defmethod sql-jdbc.sync/current-user-table-privileges :sqlserver
   [_driver conn-spec & {:as _options}]

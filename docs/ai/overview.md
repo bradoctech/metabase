@@ -11,24 +11,24 @@ Here are the different ways to use AI with Metabase:
 
 - [Metabot](#metabot)
 - [MCP server](#mcp-server)
-- [Agent-driven file-based development workflow](#agent-driven-development-workflow)
+- [Agent-driven development workflow](#agent-driven-development-workflow)
 
 ## Metabot
 
 **Best for: daily tasks in Metabase; granular control over people's AI usage.**
 
-Metabot is Metabase's built-in AI agent. Metabot can help you with most daily tasks around Metabase, like answering questions about your data, creating queries, generating SQL code, explaining charts, or creating Documents. If you're embedding Metabase into your product, you can get the Metabot agent through the [AI chat component](../embedding/components.md#ai-chat). See [non-exhaustive list of things Metabot can do](metabot.md#what-metabot-can-do), as well as its [limitations](metabot.md#current-limitations).
+Metabot is Metabase's built-in AI agent. Metabot can help you with most daily tasks around Metabase, like answering questions about your data, creating queries, generating SQL code, explaining charts, or creating Documents. If you're embedding Metabase into your product, you can get the Metabot agent through the [AI chat component](../embedding/ai-chat.md). See a [non-exhaustive list of things Metabot can do](metabot.md#what-metabot-can-do), as well as its [limitations](metabot.md#current-limitations).
 
 **Controls:** Metabot will only see what the person using it can see. Metabot also comes with additional permission controls and usage limits so that you control who can use which Metabot tools (e.g. chat vs SQL generation) and how many tokens they can spend.
 
 **Provider**: Choose from:
 
 - Metabase's own AI Service (available as an add-on exclusively for Metabase Cloud)
-- Third-party models via an API key (Anthropic models only for now).
+- Third-party models via your own [provider API key](settings.md#bring-your-own-api-key)
 
 **Plans**: available on all plans. You can only use Metabase's AI Service on Metabase Cloud.
 
-See [full docs for Metabot](metabot.md) and [embedded AI chat](../embedding/components.md#ai-chat).
+See [full docs for Metabot](metabot.md) and [embedded AI chat](../embedding/ai-chat.md).
 
 ## MCP server
 
@@ -50,7 +50,7 @@ See [full docs for MCP server](mcp.md).
 
 **Best for: developers creating stuff that other people will use.**
 
-Use a coding agent like Claude Code to understand your database's metadata, generate Metabase content as YAML files locally, verify the schema, then sync and import the generated content into your production Metabase. Sky's the limit on what you can accomplish.
+Use a coding agent like Claude Code with the Metabase CLI to create Metabase content directly in a development instance, then version that content as YAML files and pull the changes into your production Metabase.
 
 **Controls**: Only admins can sync content to Metabase instances.
 
@@ -58,4 +58,4 @@ Use a coding agent like Claude Code to understand your database's metadata, gene
 
 **Plans**: Agent-driven workflows require a Pro/Enterprise plan.
 
-See [full docs for agent-driven workflow](./file-based-development.md)
+See [full docs for agent-driven workflow](./agent-driven-development.md)

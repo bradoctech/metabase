@@ -165,7 +165,6 @@
  qp.util.transformations.nest-breakouts/nest-breakouts-in-stages-with-window-aggregation
  qp.util/default-query->remark
  qp.util/query->remark
- qp.wrap-value-literals/wrap-value-literals-in-mbql
  qp.wrap-value-literals/wrap-value-literals-in-mbql5
  qp.writeback/execute-write-sql!
  qp/process-query
@@ -173,6 +172,7 @@
  secrets/uploaded-base-64-prefix-pattern
  setting/defsetting
  sync-util/name-for-logging
+ sync-util/reducible-sync-tables
  system/site-uuid
  upload.db/current-database)
 
@@ -343,7 +343,7 @@
 
 (def MBQLQuery
   "Schema for a legacy MBQL inner query."
-  ::mbql.s/MBQLQuery)
+  ::mbql.s/MBQLInnerQuery)
 
 (def Join
   "Schema for a legacy MBQL join."

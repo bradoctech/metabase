@@ -3,6 +3,8 @@
    [clojure.string :as str]
    [java-time.api :as t]
    [metabase.settings.core :as setting :refer [defsetting]]
+   [metabase.startup.core :as startup]
+   [metabase.util.http :as u.http]
    [metabase.util.i18n :refer [deferred-tru tru]]
    [metabase.util.malli.registry :as mr]
    [metabase.util.malli.schema :as ms]
@@ -56,10 +58,10 @@
   :export?    false)
 
 (defn process-files-channel-name
-  "Converts empty strings to `nil`, and removes leading `#` from the channel name if present."
+  "Converts empty strings to `nil`, and removes a leading `#` (channel) or `@` (user) from the name if present."
   [channel-name]
   (when-not (str/blank? channel-name)
-    (if (str/starts-with? channel-name "#") (subs channel-name 1) channel-name)))
+    (if (contains? #{\# \@} (first channel-name)) (subs channel-name 1) channel-name)))
 
 (defn find-cached-slack-channel-or-username
   "Look up a Slack channel or username by name or ID in [[slack-cached-channels-and-usernames]].
@@ -288,6 +290,16 @@
   :visibility :settings-manager
   :audit      :getter)
 
+(defsetting email-max-recipients-per-message
+  (deferred-tru "The maximum number of recipients allowed on a single email. Notifications with more recipients than
+                this are split into multiple messages. This guards against SMTP providers (e.g. Amazon SES) that reject
+                any message exceeding their per-message recipient cap. Defaults to 50; set to 0 to disable batching.")
+  :export?    true
+  :type       :integer
+  :default    50
+  :visibility :settings-manager
+  :audit      :getter)
+
 (defsetting email-configured?
   "Check if email is enabled and that the mandatory settings are configured."
   :type       :boolean
@@ -314,11 +326,18 @@
   :visibility :internal
   :default    :external-only
   :export?    false
-  :setter     (fn [new-value]
-                (when (some? new-value)
-                  (assert (#{:external-only :allow-private :allow-all} (keyword new-value))
-                          (tru "Invalid http-channel-host-strategy! Only values of external-only, allow-private, and allow-all are allowed.")))
-                (setting/set-value-of-type! :keyword :http-channel-host-strategy new-value)))
+  :setter     :none
+  :doc        (str "Set this when a notification webhook must reach a host on your private network "
+                   "(`allow-private`) or on this machine (`allow-all`). Default is `external-only`")
+  :getter     (fn []
+                (let [[env-var-name raw-value] (setting/env-var-source :http-channel-host-strategy)]
+                  (or (u.http/env-network-policy env-var-name raw-value)
+                      :external-only))))
+
+;; Reading it throws when the environment names a policy that does not exist: a typo stops the boot rather than
+;; surfacing at the first webhook.
+(defmethod startup/def-startup-validation! ::http-channel-host-strategy [_]
+  (http-channel-host-strategy))
 
 (defsetting slack-configured?
   "Is Slack integration configured?"

@@ -9,6 +9,8 @@
    [metabase-enterprise.serialization.v2.backfill-ids :as serdes.backfill]
    [metabase-enterprise.serialization.v2.entity-ids :as v2.entity-ids]
    [metabase-enterprise.serialization.v2.models :as serdes.models]
+   [metabase.classloader.core :as classloader]
+   [metabase.models.resolution :as models.resolution]
    [metabase.models.serialization :as serdes]))
 
 (set! *warn-on-reflection* true)
@@ -24,6 +26,9 @@
     :model/Field
     :model/FieldValues
     :model/FieldUserSettings
+    ;; OsiAiContext is identified by the entity it describes (entity_type + the entity's portable ref); its
+    ;; serdes path nests under that entity, so it has no generated entity_id.
+    :model/OsiAiContext
     ;; Settings have human-selected unique names.
     :model/Setting
     ;; Glossary items have unique `term` key
@@ -112,6 +117,12 @@
     :model/TableRemapping
     :model/Secret
     :model/Session
+    :model/SourceDimensionDaily
+    :model/SourceDimensionProfileDaily
+    :model/SourceMetricDaily
+    :model/SourceSegmentCompositeDaily
+    :model/SourceSegmentDaily
+    :model/SsoRelayState
     :model/SupportAccessGrantLog
     :model/TaskHistory
     :model/TaskRun
@@ -137,7 +148,8 @@
     ;; Workspace and WorkspaceDatabase are runtime-only -- per-instance workspace
     ;; provisioning state, not portable content. Same rationale as TableRemapping above.
     :model/Workspace
-    :model/WorkspaceDatabase})
+    :model/WorkspaceDatabase
+    :model/WorkspaceInstance})
 
 (deftest ^:parallel comprehensive-entity-id-test
   (let [entity-id-models (->> (v2.entity-ids/toucan-models)
@@ -154,6 +166,8 @@
       (testing (format (str "Model %s should either: have the ::mi/entity-id property, or be explicitly listed as having "
                             "an external name, or explicitly listed as excluded from serialization")
                        model)
+        ;; the property is registered by the model's own namespace, which nothing else here loads
+        (classloader/require (models.resolution/model->namespace model))
         (is (serdes.backfill/has-entity-id? model))))))
 
 (deftest ^:parallel comprehensive-identity-hash-test

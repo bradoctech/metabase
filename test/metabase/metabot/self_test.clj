@@ -31,7 +31,11 @@
     (is (=? {:provider "openrouter" :model "anthropic/claude-haiku-4-5" :ai-proxy? false}
             (#'self/parse-provider-model "openrouter/anthropic/claude-haiku-4-5")))
     (is (=? {:provider "openrouter" :model "google/gemini-2.5-flash" :ai-proxy? false}
-            (#'self/parse-provider-model "openrouter/google/gemini-2.5-flash"))))
+            (#'self/parse-provider-model "openrouter/google/gemini-2.5-flash")))
+    (is (=? {:provider "zai" :model "glm-5.2" :ai-proxy? false}
+            (#'self/parse-provider-model "zai/glm-5.2")))
+    (is (=? {:provider "mistral" :model "mistral-medium-3-5" :ai-proxy? false}
+            (#'self/parse-provider-model "mistral/mistral-medium-3-5"))))
   (testing "parses metabase/ prefix (AI proxy)"
     (is (=? {:provider "anthropic" :model "claude-haiku-4-5" :ai-proxy? true}
             (#'self/parse-provider-model "metabase/anthropic/claude-haiku-4-5")))
@@ -48,7 +52,9 @@
   (testing "resolves known providers to adapter functions"
     (is (fn? (#'self/resolve-adapter "anthropic")))
     (is (fn? (#'self/resolve-adapter "openai")))
-    (is (fn? (#'self/resolve-adapter "openrouter"))))
+    (is (fn? (#'self/resolve-adapter "openrouter")))
+    (is (fn? (#'self/resolve-adapter "zai")))
+    (is (fn? (#'self/resolve-adapter "mistral"))))
   (testing "throws for unknown provider"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown LLM provider"
                           (#'self/resolve-adapter "unknown")))))
@@ -81,6 +87,89 @@
                   (when-not (::skip (ex-data e))
                     (throw e))))
               (is (= expected (:tool_choice @captured))))))))))
+
+(deftest call-llm-prompt-cache-key-test
+  (testing "the conversation id (:session-id) is forwarded as the Mistral prompt_cache_key"
+    (let [captured (atom nil)]
+      ;; `:api-error true` makes `rethrow-api-error!` rethrow as-is, so `::skip` survives on the outer ex-data.
+      (mt/with-dynamic-fn-redefs [http/request (fn [opts]
+                                                 (when (:body opts)
+                                                   (reset! captured (json/decode+kw (:body opts))))
+                                                 (throw (ex-info "stop" {::skip true :api-error true})))]
+        (mt/with-temporary-setting-values [llm-mistral-api-key "mistral-key-test"]
+          (let [call! (fn [tracking-opts]
+                        (reset! captured nil)
+                        (try
+                          (run! identity (self/call-llm "mistral/mistral-medium-3-5" nil [] {} tracking-opts))
+                          (catch Exception e
+                            (when-not (::skip (ex-data e))
+                              (throw e)))))]
+            (call! {:tag "agent" :session-id "d34d4c93-a5cc-4d5e-b0a6-6b8f89525b48"})
+            (is (= "d34d4c93-a5cc-4d5e-b0a6-6b8f89525b48" (:prompt_cache_key @captured)))
+            (testing "no prompt_cache_key without a :session-id"
+              (call! {:tag "agent"})
+              (is (not (contains? @captured :prompt_cache_key))))))))))
+
+(deftest call-llm-structured-prompt-cache-key-test
+  (testing "call-llm-structured forwards :session-id as the prompt_cache_key, same contract as call-llm"
+    (let [captured (atom nil)]
+      ;; `:api-error true` makes `rethrow-api-error!` rethrow as-is, so `::skip` survives on the outer ex-data.
+      (mt/with-dynamic-fn-redefs [http/request (fn [opts]
+                                                 (when (:body opts)
+                                                   (reset! captured (json/decode+kw (:body opts))))
+                                                 (throw (ex-info "stop" {::skip true :api-error true})))]
+        (mt/with-temporary-setting-values [llm-mistral-api-key "mistral-key-test"]
+          (let [call! (fn [tracking-opts]
+                        (reset! captured nil)
+                        (try
+                          (self/call-llm-structured "mistral/mistral-medium-3-5"
+                                                    [{:role "user" :content "hi"}]
+                                                    {:type "object" :properties {:title {:type "string"}}}
+                                                    nil
+                                                    128
+                                                    tracking-opts)
+                          (catch Exception e
+                            (when-not (::skip (ex-data e))
+                              (throw e)))))]
+            (call! {:tag "conversation-title" :session-id "d34d4c93-a5cc-4d5e-b0a6-6b8f89525b48"})
+            (is (= "d34d4c93-a5cc-4d5e-b0a6-6b8f89525b48" (:prompt_cache_key @captured)))
+            (testing "no prompt_cache_key without a :session-id"
+              (call! {:tag "example-question-generation"})
+              (is (not (contains? @captured :prompt_cache_key))))))))))
+
+(deftest call-llm-prompt-cache-key-not-leaked-to-other-providers-test
+  (testing "call-llm hands :prompt-cache-key to every adapter, but only mistral forwards it to the wire"
+    (let [captured (atom nil)]
+      (mt/with-premium-features #{:metabase-ai-managed}
+        ;; `:api-error true` makes `rethrow-api-error!` rethrow as-is, so `::skip` survives on the outer ex-data.
+        (mt/with-dynamic-fn-redefs [http/request (fn [opts]
+                                                   (when (:body opts)
+                                                     (reset! captured (json/decode+kw (:body opts))))
+                                                   (throw (ex-info "stop" {::skip true :api-error true})))]
+          (mt/with-temporary-setting-values [llm-anthropic-api-key  "sk-ant-test-key"
+                                             llm-proxy-base-url     "http://proxy.example"
+                                             llm-openrouter-api-key "sk-or-v1-test-key"
+                                             llm-openai-api-key     "sk-test-key"
+                                             llm-zai-api-key        "zai-key.test"]
+            (doseq [model ["anthropic/test-model"
+                           "metabase/anthropic/claude-sonnet-4-6"
+                           "openrouter/test-model"
+                           "openai/test-model"
+                           "zai/glm-5.2"]]
+              (testing model
+                (reset! captured nil)
+                (try
+                  (run! identity (self/call-llm model
+                                                nil
+                                                []
+                                                {}
+                                                {:tag "agent" :session-id "d34d4c93-a5cc-4d5e-b0a6-6b8f89525b48"}))
+                  (catch Exception e
+                    (when-not (::skip (ex-data e))
+                      (throw e))))
+                (is (map? @captured))
+                (is (not (contains? @captured :prompt_cache_key)))
+                (is (not (contains? @captured :prompt-cache-key)))))))))))
 
 ;;; utils tests
 
@@ -1099,7 +1188,7 @@
           "retry-delay-ms picks up the 3-second Retry-After through the rethrown exception"))))
 
 (deftest rethrow-api-error!-warn-log-test
-  (testing "the full upstream body is emitted at warn level alongside provider and status"
+  (testing "provider and status are emitted at warn level; the body is never logged"
     (let [upstream (ex-info "clj-http error"
                             {:status 502 :reason-phrase "Bad Gateway"
                              :headers {"content-type" "text/plain"}
@@ -1114,9 +1203,11 @@
       (is (nil? more) "exactly one warn line at the failure boundary")
       (is (=? {:level :warn :namespace 'metabase.metabot.self.core}
               entry))
-      (is (re-find #"provider=openrouter status=502 body=\"upstream gateway timeout\""
-                   (:message entry)))))
-  (testing "an oversized body is capped in the warn log, but preserved in full on ex-data"
+      (is (re-find #"provider=openrouter status=502"
+                   (:message entry)))
+      (is (not (str/includes? (:message entry) "upstream gateway timeout"))
+          "the response body is not logged")))
+  (testing "the body never reaches the warn log, but is preserved in full on ex-data"
     (let [cap      @#'self.core/max-body-log-chars
           big-body (apply str (repeat (+ cap 1000) \x))
           upstream (ex-info "clj-http error"
@@ -1133,11 +1224,9 @@
                   "the full, untruncated body still survives on ex-data"))
             (msgs))]
       (is (nil? more) "exactly one warn line at the failure boundary")
-      (is (str/ends-with? (:message entry)
-                          (str "body=" (subs (pr-str big-body) 0 cap) "…"))
-          "the warn line's body segment is capped at max-body-log-chars with a trailing ellipsis")
-      (is (not (str/includes? (:message entry) big-body))
-          "the full oversized body is not spliced into the warn line"))))
+      (is (re-find #"provider=openrouter status=502" (:message entry)))
+      (is (not (str/includes? (:message entry) "xxx"))
+          "no fragment of the body is spliced into the warn line"))))
 
 (deftest rethrow-api-error!-auth-status-body-not-leaked-test
   (testing "401/403 bodies are not appended to the user-facing message (may carry sensitive auth/account detail)"
@@ -1162,5 +1251,8 @@
                     "the full decoded body is still preserved on ex-data for debugging"))
               (msgs))]
         (is (nil? more) "exactly one warn line at the failure boundary")
-        (is (str/includes? (:message entry) secret)
-            "the full body is still emitted at warn level for server-side debugging")))))
+        (is (str/includes? (:message entry)
+                           (str "provider=anthropic status=" status))
+            "a warn with provider and status is still emitted for server-side debugging")
+        (is (not (str/includes? (:message entry) secret))
+            "the secret-bearing body never appears in the warn log")))))

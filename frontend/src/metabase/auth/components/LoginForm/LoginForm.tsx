@@ -11,9 +11,8 @@ import {
   FormSubmitButton,
   FormTextInput,
 } from "metabase/forms";
+import type { LoginData } from "metabase/redux/auth";
 import * as Errors from "metabase/utils/errors";
-
-import type { LoginData } from "../../types";
 
 const LOGIN_SCHEMA = Yup.object().shape({
   username: Yup.string()

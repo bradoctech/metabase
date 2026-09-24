@@ -1,7 +1,8 @@
 import type { Store } from "@reduxjs/toolkit";
-import type { ComponentType } from "react";
-import { IndexRoute, Route } from "react-router";
+import { IndexRoute, Route, type RouteComponent } from "react-router";
 
+import { DependencyDiagnosticsSectionLayout } from "metabase/monitor/dependency-diagnostics/DependencyDiagnosticsSectionLayout";
+import { DependencyDiagnosticsUpsellPage } from "metabase/monitor/dependency-diagnostics/DependencyDiagnosticsUpsellPage";
 import {
   PLUGIN_DEPENDENCIES,
   PLUGIN_FEATURE_LEVEL_PERMISSIONS,
@@ -17,7 +18,6 @@ import * as Urls from "metabase/urls";
 import { DataSectionLayout } from "./app/pages/DataSectionLayout";
 import { DataStudioLayout } from "./app/pages/DataStudioLayout";
 import { DependenciesSectionLayout } from "./app/pages/DependenciesSectionLayout";
-import { DependencyDiagnosticsSectionLayout } from "./app/pages/DependencyDiagnosticsSectionLayout";
 import { GitSyncSectionLayout } from "./app/pages/GitSyncSectionLayout";
 import { TransformsSectionLayout } from "./app/pages/TransformsSectionLayout";
 import { WorkspacesSectionLayout } from "./app/pages/WorkspacesSectionLayout";
@@ -25,17 +25,16 @@ import { getDataStudioMetadataRoutes } from "./data-model/routes";
 import { getDataStudioGlossaryRoutes } from "./glossary/routes";
 import {
   DependenciesUpsellPage,
-  DependencyDiagnosticsUpsellPage,
   LibraryUpsellPage,
   SchemaViewerUpsellPage,
 } from "./upsells/pages";
 
 export function getDataStudioRoutes(
   store: Store<State>,
-  CanAccessDataStudio: ComponentType,
-  CanAccessDataModel: ComponentType,
-  _CanAccessTransforms: ComponentType,
-  IsAdmin: ComponentType,
+  CanAccessDataStudio: RouteComponent,
+  CanAccessDataModel: RouteComponent,
+  _CanAccessTransforms: RouteComponent,
+  IsAdmin: RouteComponent,
 ) {
   return (
     <Route component={CanAccessDataStudio}>

@@ -42,9 +42,9 @@
   (testing "POST /api/session/reset_password works with support access grant token"
     (mt/with-temp [:model/User {creator-id :id} {}]
       (mt/with-model-cleanup [:model/SupportAccessGrantLog :model/AuthIdentity :model/User]
-        (with-redefs [sag.settings/support-access-grant-email (constantly "support@example.com")
-                      sag.settings/support-access-grant-first-name (constantly "Support")
-                      sag.settings/support-access-grant-last-name (constantly "User")]
+        (mt/with-dynamic-fn-redefs [sag.settings/support-access-grant-email (constantly "support@example.com")
+                                    sag.settings/support-access-grant-first-name (constantly "Support")
+                                    sag.settings/support-access-grant-last-name (constantly "User")]
           (let [grant (grants/create-grant! creator-id 60 "TICKET-123" "Test notes")
                 token (:token grant)
                 new-password "NewSecurePassword123!"]
@@ -92,9 +92,9 @@
   (testing "POST /api/session/reset_password rejects expired support access grant token"
     (mt/with-temp [:model/User {creator-id :id} {}]
       (mt/with-model-cleanup [:model/SupportAccessGrantLog :model/AuthIdentity :model/User]
-        (with-redefs [sag.settings/support-access-grant-email (constantly "support@example.com")
-                      sag.settings/support-access-grant-first-name (constantly "Support")
-                      sag.settings/support-access-grant-last-name (constantly "User")]
+        (mt/with-dynamic-fn-redefs [sag.settings/support-access-grant-email (constantly "support@example.com")
+                                    sag.settings/support-access-grant-first-name (constantly "Support")
+                                    sag.settings/support-access-grant-last-name (constantly "User")]
           (let [grant (t/with-clock (t/mock-clock (t/minus (t/instant) (t/weeks 5)))
                         (grants/create-grant! creator-id 60 "TICKET-123" "Test notes"))
                 token (:token grant)]
@@ -109,9 +109,9 @@
   (testing "GET /api/session/password_reset_token_valid works with support access grant token"
     (mt/with-temp [:model/User {creator-id :id} {}]
       (mt/with-model-cleanup [:model/SupportAccessGrantLog :model/AuthIdentity :model/User]
-        (with-redefs [sag.settings/support-access-grant-email (constantly "support@example.com")
-                      sag.settings/support-access-grant-first-name (constantly "Support")
-                      sag.settings/support-access-grant-last-name (constantly "User")]
+        (mt/with-dynamic-fn-redefs [sag.settings/support-access-grant-email (constantly "support@example.com")
+                                    sag.settings/support-access-grant-first-name (constantly "Support")
+                                    sag.settings/support-access-grant-last-name (constantly "User")]
           (let [grant (grants/create-grant! creator-id 60 "TICKET-456" "Test notes")
                 token (:token grant)]
             (is (some? token) "Token should be created")
@@ -139,9 +139,9 @@
   (testing "GET /api/session/password_reset_token_valid returns false for expired support grant"
     (mt/with-temp [:model/User {creator-id :id} {}]
       (mt/with-model-cleanup [:model/SupportAccessGrantLog :model/AuthIdentity :model/User]
-        (with-redefs [sag.settings/support-access-grant-email (constantly "support@example.com")
-                      sag.settings/support-access-grant-first-name (constantly "Support")
-                      sag.settings/support-access-grant-last-name (constantly "User")]
+        (mt/with-dynamic-fn-redefs [sag.settings/support-access-grant-email (constantly "support@example.com")
+                                    sag.settings/support-access-grant-first-name (constantly "Support")
+                                    sag.settings/support-access-grant-last-name (constantly "User")]
           (let [grant (t/with-clock (t/mock-clock (t/minus (t/instant) (t/weeks 5)))
                         (grants/create-grant! creator-id 60 "TICKET-123" "Test notes"))
                 token (:token grant)]
@@ -155,9 +155,9 @@
   (testing "POST /api/session/reset_password creates a session after successful password reset"
     (mt/with-temp [:model/User {creator-id :id} {}]
       (mt/with-model-cleanup [:model/SupportAccessGrantLog :model/AuthIdentity :model/User :model/Session]
-        (with-redefs [sag.settings/support-access-grant-email (constantly "support@example.com")
-                      sag.settings/support-access-grant-first-name (constantly "Support")
-                      sag.settings/support-access-grant-last-name (constantly "User")]
+        (mt/with-dynamic-fn-redefs [sag.settings/support-access-grant-email (constantly "support@example.com")
+                                    sag.settings/support-access-grant-first-name (constantly "Support")
+                                    sag.settings/support-access-grant-last-name (constantly "User")]
           (let [grant (grants/create-grant! creator-id 60 "TICKET-999" "Test notes")
                 token (:token grant)
                 new-password "SecurePassword123!"]
@@ -182,9 +182,9 @@
       (mt/with-temp [:model/User {creator-id :id} {}]
         (mt/with-model-cleanup [:model/SupportAccessGrantLog :model/AuthIdentity :model/User]
           (let [email "support-repro@example.com"]
-            (with-redefs [sag.settings/support-access-grant-email (constantly email)
-                          sag.settings/support-access-grant-first-name (constantly "Support")
-                          sag.settings/support-access-grant-last-name (constantly "User")]
+            (mt/with-dynamic-fn-redefs [sag.settings/support-access-grant-email (constantly email)
+                                        sag.settings/support-access-grant-first-name (constantly "Support")
+                                        sag.settings/support-access-grant-last-name (constantly "User")]
               ;; Step 1: Create the support user via an initial grant (simulates first-time setup)
               (let [initial-grant (grants/create-grant! creator-id 60 "TICKET-INITIAL" "Initial setup")
                     initial-token (:token initial-grant)]
@@ -299,9 +299,9 @@
     (mt/with-temp [:model/User {creator-id :id} {}]
       (mt/with-model-cleanup [:model/SupportAccessGrantLog :model/AuthIdentity :model/User]
         (let [email "support-deactivated@example.com"]
-          (with-redefs [sag.settings/support-access-grant-email (constantly email)
-                        sag.settings/support-access-grant-first-name (constantly "Support")
-                        sag.settings/support-access-grant-last-name (constantly "User")]
+          (mt/with-dynamic-fn-redefs [sag.settings/support-access-grant-email (constantly email)
+                                      sag.settings/support-access-grant-first-name (constantly "Support")
+                                      sag.settings/support-access-grant-last-name (constantly "User")]
             ;; Create and use a first grant so the support user exists
             (let [first-grant (grants/create-grant! creator-id 60 "TICKET-FIRST" "First grant")]
               (mt/client :post 200 "session/reset_password"

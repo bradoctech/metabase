@@ -225,6 +225,40 @@
                                                (:show-row-totals pivot-options)
                                                (:show-column-totals pivot-options)))))))
 
+(deftest ^:parallel pivot-with-fields-and-summary-in-same-stage-test
+  (testing "Pivot completes when the summary stage also carries an explicit :fields clause (#81203)"
+    (let [mp        (mt/metadata-provider)
+          orders    (lib.metadata/table mp (mt/id :orders))
+          created   (lib.metadata/field mp (mt/id :orders :created_at))
+          product   (lib.metadata/field mp (mt/id :orders :product_id))
+          total     (lib.metadata/field mp (mt/id :orders :total))
+          ;; :fields carries a subset of stage-0 columns (what the notebook column picker leaves behind
+          ;; when some columns are unselected); :aggregation + :breakout are added on the same stage.
+          query     (-> (lib/query mp orders)
+                        (lib/with-fields [created product total])
+                        (lib/aggregate (lib/count))
+                        (lib/breakout (lib/with-temporal-bucket created :month))
+                        (lib/breakout product))
+          bo-names  (mapv :name (filter :lib/breakout? (lib/returned-columns query)))
+          count-nm  (:name (first (filter #(= (:lib/source %) :source/aggregations)
+                                          (lib/returned-columns query))))
+          viz       {:pivot_table.column_split {:rows    [(first bo-names)]
+                                                :columns [(second bo-names)]
+                                                :values  [count-nm]}}]
+      (testing "sanity: the QP drops :fields on summary stages, so regular execution returns breakouts + agg"
+        (is (=? {:status :completed
+                 :data   {:cols [{:name (first bo-names)}
+                                 {:name (second bo-names)}
+                                 {:name count-nm}]}}
+                (qp/process-query query))))
+      (testing "pivot returns breakouts + pivot-grouping + aggregation"
+        (is (=? {:status :completed
+                 :data   {:cols [{:name (first bo-names)}
+                                 {:name (second bo-names)}
+                                 {:name "pivot-grouping"}
+                                 {:name count-nm}]}}
+                (qp.pivot/run-pivot-query (assoc query :info {:visualization-settings viz}))))))))
+
 (deftest ^:parallel nested-question-pivot-options-test
   (testing "#35025"
     (mt/dataset test-data
@@ -511,6 +545,31 @@
                  {:expressions {"Product Rating + 1" [:+ $product_id->products.rating 1]}
                   :aggregation [[:count]]
                   :breakout    [$user_id->people.source [:expression "Product Rating + 1"]]})))))))
+
+(deftest ^:parallel measure-in-pivot-table-test
+  (testing "a :measure clause used inside a pivot query executes like the equivalent inline aggregation"
+    (mt/test-drivers (qp.pivot.test-util/applicable-drivers)
+      (let [mp         (mt/metadata-provider)
+            total      (lib.metadata/field mp (mt/id :orders :total))
+            quantity   (lib.metadata/field mp (mt/id :orders :quantity))
+            definition (-> (lib/query mp (lib.metadata/table mp (mt/id :orders)))
+                           (lib/aggregate (lib/sum total)))
+            mp         (lib.tu/mock-metadata-provider
+                        mp
+                        {:measures [{:id         1
+                                     :name       "Sum of Total"
+                                     :table-id   (mt/id :orders)
+                                     :definition definition}]})
+            pivot      (fn [agg]
+                         (-> (lib/query mp (lib.metadata/table mp (mt/id :orders)))
+                             (lib/aggregate agg)
+                             (lib/breakout quantity)))
+            measure-pivot (pivot (lib.metadata/measure mp 1))
+            inline-pivot  (pivot (lib/sum total))]
+        ;; the spliced measure must produce the same pivot output (leaf + grand-total rows) as
+        ;; the equivalent inline sum aggregation
+        (is (= (mt/rows (qp.pivot/run-pivot-query inline-pivot))
+               (mt/rows (qp.pivot/run-pivot-query measure-pivot))))))))
 
 (deftest pivot-query-should-work-without-data-permissions-test
   (testing "Pivot queries should work if the current user only has permissions to view the Card -- no data perms (#14989)"

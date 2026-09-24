@@ -51,8 +51,8 @@ export function PanelHeader({
 
   return (
     <Group className={S.root} p="lg" gap="0.75rem" wrap="nowrap">
-      <Center w="2.75rem" h="2.75rem" bdrs="50%" bg="background-secondary">
-        <FixedSizeIcon name="table" c="brand" size={20} />
+      <Center w="2.75rem" h="2.75rem" bdrs="50%" bg="background_page-secondary">
+        <FixedSizeIcon name="table" c="core-brand" size={20} />
       </Center>
       <Stack gap="xs" flex={1}>
         {onTitleClick != null ? (

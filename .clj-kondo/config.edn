@@ -7,7 +7,6 @@
 
   :aliased-namespace-symbol     {:level :warning}
   :case-symbol-test             {:level :warning}
-  :condition-always-true        {:level :warning}
   :def-fn                       {:level :warning}
   :dynamic-var-not-earmuffed    {:level :warning}
   :equals-expected-position     {:level :warning, :only-in-test-assertion true}
@@ -50,9 +49,11 @@
   ;; disabled linters
   ;;
 
+  :constant-condition {:level :off} ; TODO (sashko): too confused by defenterprises, some hook/config is needed
   :redundant-ignore {:level :off} ; lots of false positives, see https://github.com/clj-kondo/clj-kondo/issues/2414
   :unexpected-recur {:level :off} ; TODO (cam): I think we just need to tell it how to handle MBQL match and we can enable this?
   :redundant-primitive-coercion {:level :off} ; there are many defensive boolean coercions, kondo looks too much into it
+  :type-mismatch {:level :off} ; Still quite raw, can sometimes give useful insights, but sometimes is just confused
 
   ;;
   ;; globally-enabled custom linters
@@ -61,6 +62,7 @@
   :metabase/check-def-check-not-uppercase-name               {:level :warning}
   :metabase/check-def-no-underscores                         {:level :warning}
   :metabase/check-me-humanize                                {:level :warning}
+  :metabase/check-testing-not-empty                          {:level :warning}
   :metabase/defsetting-must-specify-export                   {:level :warning}
   :metabase/defsetting-namespace                             {:level :warning}
   :metabase/discourage-millis-duration                       {:level :warning}
@@ -76,6 +78,7 @@
   :metabase/validate-defendpoint-route-uses-kebab-case       {:level :warning}
   :metabase/validate-defendpoint-query-params-use-kebab-case {:level :warning}
   :metabase/validate-logging                                 {:level :warning}
+  :metabase/validate-mb-app-db-migrations-test               {:level :warning}
   :metabase/validate-mb-driver-tests                         {:level :warning}
   :metabase/validate-mb-once                                 {:level :warning}
 
@@ -180,6 +183,10 @@
      clojure.core.async/to-chan!!
      metabase.api.macros.defendpoint.tools-manifest/assert-optional-fields-nullable!
      metabase.channel.core/send!
+     metabase.channel.render.pdf/draw-too-large!
+     metabase.channel.render.pdf/draw-no-results!
+     metabase.channel.render.pdf/render-card-cell!
+     metabase.channel.render.pdf.font/load-fonts!
      metabase.warehouses.models.database/assert-not-h2!
      metabase.driver.sql-jdbc.execute/execute-prepared-statement!
      metabase.notification.models/create-notification!
@@ -440,6 +447,10 @@
   instaparse.core/defparser                                                             clojure.core/def
   metabase-enterprise.action-v2.test-util/with-test-tables!                             clojure.core/let
   metabase-enterprise.content-translation.routes-test/with-new-secret-key!              clojure.core/fn
+  metabase-enterprise.entity-retrieval.reconcile-test/with-isolated-index                 clojure.core/fn
+  metabase-enterprise.mfa.enrollment-flow-test/with-fresh-user-session!                  clojure.core/fn
+  metabase-enterprise.mfa.login-flow-test/with-enrolled-rasta!                           clojure.core/fn
+  metabase-enterprise.mfa.recovery-codes-test/with-confirmed-enrollment!                 clojure.core/fn
   metabase-enterprise.serialization.metadata-file-import.wire-format-test/with-tiny-fixture! clojure.core/fn
   metabase-enterprise.serialization.test-util/with-dbs                                  clojure.core/fn
   metabase-enterprise.serialization.test-util/with-random-dump-dir                      clojure.core/let
@@ -448,6 +459,8 @@
   metabase.actions.test-util/with-actions                                               clojure.core/let
   metabase.transforms.test-util/with-transform-cleanup!                                 clojure.core/let
   metabase.api.common/let-404                                                           clojure.core/let
+  metabase.app-db.connection/with-unshared-connection                                   clojure.core/fn
+  metabase.app-db.core/with-unshared-connection                                         clojure.core/fn
   metabase.app-db.custom-migrations.util/with-temp-scheduler!                           clojure.core/fn
   metabase.app-db.custom-migrations/define-migration                                    clj-kondo.lint-as/def-catch-all
   metabase.app-db.custom-migrations/define-reversible-migration                         clj-kondo.lint-as/def-catch-all
@@ -456,6 +469,7 @@
   metabase.channel.impl.http-test/with-captured-http-requests                           clojure.core/fn
   metabase.channel.impl.http-test/with-server                                           clojure.core/let
   metabase.collections.models.collection-test/with-collection-in-location               clojure.core/let
+  metabase.collections.test-utils/with-library                                          clojure.core/fn
   metabase.driver.mongo.connection/with-mongo-client                                    clojure.core/let
   metabase.driver.mongo.connection/with-mongo-database                                  clojure.core/let
   metabase.driver.mongo.query-processor/mongo-let                                       clojure.core/let
@@ -469,6 +483,7 @@
   metabase.notification.test-util/with-card-notification                                clojure.core/let
   metabase.notification.test-util/with-system-event-notification!                       clojure.core/let
   metabase.notification.test-util/with-temp-notification                                clojure.core/let
+  metabase.osi.ai-context.api-test/with-test-entry                                      clojure.core/let
   metabase.premium-features.core/defenterprise-schema                                   clj-kondo.lint-as/def-catch-all
   metabase.premium-features.defenterprise/defenterprise-schema                          clj-kondo.lint-as/def-catch-all
   metabase.premium-features.settings/define-premium-feature                             clojure.core/def
@@ -494,7 +509,6 @@
   metabase.test.data.interface/defdataset                                               clojure.core/def
   metabase.test.data.interface/defdataset-edn                                           clojure.core/def
   metabase.test.embedded-postgres.core/with-system                                      clojure.core/let
-  metabase.test.gentest/defgentest                                                      clojure.test/deftest
   metabase.test/defdataset                                                              clojure.core/def
   metabase.test/let-url                                                                 clojure.core/let
   metabase.test/with-actions                                                            clojure.core/let
@@ -535,6 +549,7 @@
  {:analyze-call
   {cljs.test/deftest                                                                                                         hooks.clojure.test/deftest
    cljs.test/is                                                                                                              hooks.clojure.test/is
+   cljs.test/testing                                                                                                         hooks.clojure.test/testing
    cljs.test/use-fixtures                                                                                                    hooks.clojure.test/use-fixtures
    clojure.core/def                                                                                                          hooks.clojure.core.def/lint-def
    clojure.core/definterface                                                                                                 hooks.clojure.core.def/lint-def
@@ -553,6 +568,7 @@
    clojure.core/-                                                                                                            hooks.metabase.util.timing/discourage-millis-duration
    clojure.test/deftest                                                                                                      hooks.clojure.test/deftest
    clojure.test/is                                                                                                           hooks.clojure.test/is
+   clojure.test/testing                                                                                                      hooks.clojure.test/testing
    clojure.test/use-fixtures                                                                                                 hooks.clojure.test/use-fixtures
    malli.error/humanize                                                                                                      hooks.malli.error/humanize
    metabase-enterprise.advanced-permissions.models.permissions.application-permissions-test/with-new-group-and-current-graph hooks.common/with-two-top-level-bindings
@@ -567,7 +583,7 @@
    metabase-enterprise.transforms-python.drivers-test/with-test-table                                                        hooks.common/with-two-bindings
    metabase.api.common.internal-test/with-jetty-server                                                                       hooks.common/with-one-binding
    metabase.api.macros/defendpoint                                                                                           hooks.metabase.api.macros/defendpoint
-   metabase.app-db.schema-migrations-test.impl/test-migrations                                                               hooks.metabase.app-db.schema-migrations-test.impl/test-migrations
+   metabase.app-db.schema-migrations-test.impl/test-migrations                                                               hooks.metabase.app-db.schema-migrations-test.impl/test-migrations!
    metabase.channel.render.js.pool/with-static-viz-context                                                                   hooks.common/with-one-top-level-binding
    metabase.channel.template.handlebars-helper/defhelper                                                                     hooks.metabase.channel.template.handlebars-helper/defhelper
    metabase.channel.template.handlebars-test/with-temp-template!                                                             hooks.common/with-vec-first-binding
@@ -646,7 +662,6 @@
    metabase.test.data/dataset                                                                                                hooks.metabase.test.data/dataset
    metabase.test.data/mbql-query                                                                                             hooks.metabase.test.data/mbql-query
    metabase.test.data/run-mbql-query                                                                                         hooks.metabase.test.data/mbql-query
-   metabase.test.gentest/iterate                                                                                             hooks.metabase.test.gentest/iterate*
    metabase.test.util.async/with-open-channels                                                                               hooks.common/let-with-optional-value-for-last-binding
    metabase.test.util.generators.jvm/with-random-cards                                                                       hooks.metabase.test.util.generators.jvm/with-random-cards
    metabase.test.util.log/with-log-level                                                                                     hooks.common/with-ignored-first-arg
@@ -711,8 +726,8 @@
    clojurewerkz.quartzite.schedule.cron/schedule                                                macros.quartz/schedule
    clojurewerkz.quartzite.schedule.simple/schedule                                              macros.quartz/simple-schedule
    clojurewerkz.quartzite.triggers/build                                                        macros.quartz/build-trigger
-   metabase-enterprise.database-routing.e2e-test/with-routing-setup!                            macros.metabase-enterprise.database-routing.e2e-test/with-routing-setup!
    metabase-enterprise.database-routing.e2e-test/with-temp-dbs!                                 macros.metabase-enterprise.database-routing.e2e-test/with-temp-dbs!
+   metabase-enterprise.database-routing.e2e-test/with-routing-setup!                            macros.metabase-enterprise.database-routing.e2e-test/with-routing-setup!
    metabase-enterprise.impersonation.util-test/with-impersonations!                             macros.metabase-enterprise.impersonation.util-test/with-impersonations!
    metabase-enterprise.query-reference-validation.api-test/with-test-setup!                     macros.metabase-enterprise.query-reference-validation.api-test/with-test-setup!
    metabase-enterprise.sandbox.test-util/with-gtaps!                                            macros.metabase-enterprise.sandbox.test-util/with-gtaps!
@@ -800,16 +815,8 @@
   ;;
   {:pattern "^metabase(?:((?:-enterprise\\.sandbox)?\\.query-processor)|(?:\\.driver\\.sql(?!server)(?!ite))).*-test$"
    :name    general-qp-and-driver-test-namespaces}
-
   {:pattern "(?:^mage.*)"
-   :name    mage-namespaces}
-  ;;
-  ;; Namespaces where `with-redefs` is still the idiom because they haven't been audited for conversion
-  ;; to `with-dynamic-fn-redefs` yet (enterprise tests, driver tests). The linter's nudge is too noisy
-  ;; here — audit can happen in follow-up PRs.
-  ;;
-  {:pattern "^(?:metabase-enterprise\\..+-test(?:\\..+)?|metabase\\.driver\\..+-test(?:\\..+)?)$"
-   :name    prefer-with-dynamic-fn-redefs-unaudited}]
+   :name    mage-namespaces}]
 
  :config-in-ns
  {test-namespaces
@@ -831,10 +838,6 @@
   metabase.lib.aggregation-test
   {:linters {:metabase/prefer-with-dynamic-fn-redefs {:level :off}}}
   metabase.util.time-test
-  {:linters {:metabase/prefer-with-dynamic-fn-redefs {:level :off}}}
-
-  ;; Enterprise tests and driver tests haven't been audited yet — silence the linter so CI can ship.
-  prefer-with-dynamic-fn-redefs-unaudited
   {:linters {:metabase/prefer-with-dynamic-fn-redefs {:level :off}}}
 
   source-namespaces
@@ -931,10 +934,7 @@
 
     :deprecated-namespace
     {:exclude
-     [metabase.driver.common.parameters.dates
-      metabase.driver.common.parameters.operators
-      metabase.driver.common.parameters.values
-      metabase.legacy-mbql.normalize
+     [metabase.legacy-mbql.normalize
       metabase.legacy-mbql.schema
       metabase.legacy-mbql.schema.helpers
       metabase.legacy-mbql.schema.macros

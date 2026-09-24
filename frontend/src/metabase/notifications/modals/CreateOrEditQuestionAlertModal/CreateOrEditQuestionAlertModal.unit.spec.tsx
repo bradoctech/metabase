@@ -11,10 +11,11 @@ import { setupWebhookChannelsEndpoint } from "__support__/server-mocks/channel";
 import { mockSettings } from "__support__/settings";
 import { createMockEntitiesState } from "__support__/store";
 import { renderWithProviders, screen, waitFor, within } from "__support__/ui";
-import { CreateOrEditQuestionAlertModalWithQuestion } from "metabase/notifications/modals";
-import { createMockQueryBuilderState } from "metabase/redux/store/mocks";
+import { CreateOrEditQuestionAlertModal } from "metabase/notifications/modals";
+import { createMockState } from "metabase/redux/store/mocks";
+import { getMetadata } from "metabase/selectors/metadata";
+import { checkNotNull } from "metabase/utils/types";
 import type {
-  ChannelApiResponse,
   Notification,
   NotificationChannel,
   UserListResult,
@@ -46,7 +47,7 @@ const expectNotConfigured = async (channel: string) =>
     within(await configuredAlerts()).queryByText(channel),
   ).not.toBeInTheDocument();
 
-describe("CreateOrEditQuestionAlertModalWithQuestion", () => {
+describe("CreateOrEditQuestionAlertModal", () => {
   it("should show 'When this question has results' for question cards", async () => {
     setup({ isAdmin: true });
 
@@ -580,7 +581,7 @@ function setup({
     slack: { configured: isSlackSetup },
     email: { configured: isEmailSetup },
     http: { configured: isHttpSetup },
-  } as ChannelApiResponse["channels"]);
+  });
 
   setupWebhookChannelsEndpoint(webhooksResult);
   setupUserRecipientsEndpoint({ users: [] });
@@ -597,23 +598,30 @@ function setup({
       can_access_subscription: false,
     };
   }
-  const storeConfig = {
-    storeInitialState: {
-      currentUser,
-      qb: createMockQueryBuilderState({
-        card: mockCard,
-      }),
-      entities: createMockEntitiesState({
-        databases: [createSampleDatabase()],
-        questions: [mockCard],
-      }),
-      settings,
-    },
-  };
+  const storeInitialState = createMockState({
+    currentUser,
+    entities: createMockEntitiesState({
+      databases: [createSampleDatabase()],
+      questions: [mockCard],
+    }),
+    settings,
+  });
+  const storeConfig = { storeInitialState };
+
+  const metadata = getMetadata(storeInitialState);
+  // The modal takes `question` as a prop. In production it comes from the `getQuestion` selector
+  // which composes metrics and models into runnable ad-hoc questions.
+  // Matching that behavior here.
+  const savedQuestion = checkNotNull(metadata.question(mockCard.id));
+  const question =
+    cardType === "metric" || cardType === "model"
+      ? savedQuestion.composeQuestion()
+      : savedQuestion;
 
   if (editingNotification) {
     renderWithProviders(
-      <CreateOrEditQuestionAlertModalWithQuestion
+      <CreateOrEditQuestionAlertModal
+        question={question}
         editingNotification={editingNotification}
         onAlertUpdated={onAlertUpdatedMock}
         onClose={jest.fn()}
@@ -624,7 +632,8 @@ function setup({
   }
 
   renderWithProviders(
-    <CreateOrEditQuestionAlertModalWithQuestion
+    <CreateOrEditQuestionAlertModal
+      question={question}
       onAlertCreated={onAlertCreatedMock}
       onClose={jest.fn()}
     />,

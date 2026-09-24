@@ -9,7 +9,7 @@ import { DragSource } from "react-dnd";
 import { getEmptyImage } from "react-dnd-html5-backend";
 
 import { getErrorMessage } from "metabase/api/utils";
-import { isRootTrashCollection } from "metabase/collections/utils";
+import { isRootTrashCollection } from "metabase/common/collections/utils";
 import {
   type MovableItem,
   type PinnableItem,
@@ -154,7 +154,7 @@ export function ItemDragSource(props: ItemDragSourceProps) {
     sendToast({
       message: getErrorMessage(error),
       icon: "warning_triangle_filled",
-      iconColor: "warning",
+      iconColor: "feedback-warning",
     });
   return (
     <DragSourceComponent

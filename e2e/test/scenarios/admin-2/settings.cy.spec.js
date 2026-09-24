@@ -213,7 +213,7 @@ describe("scenarios > admin > settings", () => {
       .as("timezoneSelect")
       .clear()
       .type("Centr");
-    cy.findByRole("listbox").findByText("US/Central").click();
+    H.selectDropdown().findByText("US/Central").click();
     cy.wait("@reportTimezone");
     cy.get("@timezoneSelect").should("have.value", "US/Central");
   });
@@ -854,9 +854,9 @@ describe("scenarios > admin > settings > map settings", () => {
     cy.button("Load").click();
     cy.wait("@getGeoJson");
     cy.findByTestId("map-region-key-select").click();
-    H.popover().contains("NAME").click();
+    H.selectDropdown().contains("NAME").click();
     cy.findByTestId("map-region-name-select").click();
-    H.popover().contains("NAME").click();
+    H.selectDropdown().contains("NAME").click();
     cy.button("Add map").click();
     cy.findByTestId("admin-layout-content").within(() => {
       cy.contains("NAME").should("not.exist");
@@ -1154,7 +1154,7 @@ describe("admin > settings > nav", () => {
     cy.findByTestId("admin-layout-sidebar")
       .findByText(/api keys/i)
       .click();
-    cy.findByTestId("admin-layout-content").findByText(/No API keys here yet/i);
+    cy.findByTestId("admin-layout-content").findByText(/No API keys yet/i);
     cy.url().should("include", "/admin/settings/authentication/api-keys");
   });
 });

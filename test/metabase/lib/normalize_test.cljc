@@ -105,6 +105,13 @@
                            "aggregation"  [["count" {}]]
                            "filters"      [["=" {} ["field" {} 1] 4]]}]})))))
 
+(deftest ^:parallel lazy-seq-input-test
+  (testing "Seq input (e.g. LazySeqs from json/decode+kw) normalizes"
+    (is (=? [:= {:lib/uuid string?} [:field {:lib/uuid string?} 1] 4]
+            (lib/normalize '("=" {} ("field" {} 1) 4))))
+    (is (=? [:> {:lib/uuid string?} [:field {:lib/uuid string?} 1] 0]
+            (lib/normalize '(">" {} ("field" {} 1) 0))))))
+
 (deftest ^:parallel normalize-from-json-test
   (let [query '{:lib/type     "mbql/query"
                 :lib/metadata nil
@@ -124,8 +131,7 @@
                                                     :lib/uuid       "ff3dc321-27a7-42d8-a7fc-518160250984"
                                                     :effective-type "type/Integer"}
                                                    76329)))
-                                                :stages      ({:lib/type "mbql.stage/mbql", :source-card 13281})
-                                                :lib/options #:lib{:uuid "517699ac-dede-4f6b-bc53-272def3eea8b"}})
+                                                :stages      ({:lib/type "mbql.stage/mbql", :source-card 13281})})
                                 :lib/type     "mbql.stage/mbql"
                                 :source-table 11763
                                 :fields       (("field"
@@ -206,7 +212,6 @@
                                                         76329]]]
                                         :fields      :all
                                         :stages      [{:source-card 13281, :lib/type :mbql.stage/mbql}]
-                                        :lib/options {:lib/uuid "517699ac-dede-4f6b-bc53-272def3eea8b"}
                                         :lib/type    :mbql/join}]
                         :limit        3
                         :source-table 11763

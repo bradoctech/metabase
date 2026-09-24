@@ -2,11 +2,13 @@
   (:require
    [clojure.test :refer :all]
    [metabase.api-scope.core :as api-scope]
+   [metabase.entity-retrieval.core :as entity-retrieval]
    [metabase.metabot.agent.profiles :as profiles]
    [metabase.metabot.scope :as scope]
    [metabase.metabot.tools :as agent-tools]
    [metabase.metabot.tools.charts.create :as create-chart-tools]
    [metabase.metabot.tools.construct :as construct]
+   [metabase.metabot.tools.shared :as shared]
    [metabase.test :as mt]))
 
 (deftest all-tools-test
@@ -66,12 +68,23 @@
     (is (contains? tools "read_resource"))
     (is (contains? tools "ask_for_sql_clarification"))))
 
-(deftest ^:parallel get-tools-for-nlq-profile-test
-  (let [tools (tools-for-profile :nlq)]
-    (is (map? tools))
-    (is (contains? tools "search"))
-    (is (contains? tools "construct_notebook_query"))
-    (is (contains? tools "create_chart"))))
+(deftest get-tools-for-nlq-profile-test
+  (testing "nlq discovers data through the curated library tool when it can serve queries, else general search"
+    ;; Entity retrieval unavailable (no pgvector / OSS): the general `search` fallback is the discovery tool,
+    ;; so the agent is never left with zero ways to find data. The library tool is filtered out.
+    (mt/with-dynamic-fn-redefs [entity-retrieval/entity-retrieval-available? (constantly false)]
+      (let [tools (tools-for-profile :nlq)]
+        (is (map? tools))
+        (is (contains? tools "search"))
+        (is (contains? tools "construct_notebook_query"))
+        (is (contains? tools "create_chart"))
+        (is (not (contains? tools "retrieve_library_entities")))))
+    ;; Entity retrieval available (pgvector configured + library-retrieval licensed): the curated library tool
+    ;; replaces general search. Exactly one discovery tool survives capability filtering.
+    (mt/with-dynamic-fn-redefs [entity-retrieval/entity-retrieval-available? (constantly true)]
+      (let [tools (tools-for-profile :nlq)]
+        (is (contains? tools "retrieve_library_entities"))
+        (is (not (contains? tools "search")))))))
 
 (deftest ^:parallel get-tools-for-document-generate-content-profile-test
   (let [tools     (tools-for-profile :document-generate-content)
@@ -137,8 +150,8 @@
                                                                      :chart-link "metabase://chart/c-1"
                                                                      :chart-content "<chart/>"
                                                                      :query-id (:query-id args)
-                                                                     :reactions [{:type :metabot.reaction/redirect
-                                                                                  :url "/question#hash"}]})]
+                                                                     :query {:database 1}
+                                                                     :results-url "/question#hash"})]
         (let [query-input {:lib/type "mbql/query"
                            :stages   [{:lib/type     "mbql.stage/mbql"
                                        :source-table ["Sample" "PUBLIC" "ORDERS"]
@@ -146,6 +159,7 @@
               result (agent-tools/construct-notebook-query-tool
                       {:reasoning     "check seats"
                        :query         query-input
+                       :title         "Seat check"
                        :visualization {:chart_type "table"}})]
           (is (= query-input @query-captured))
           (is (= "c-1" (get-in result [:structured-output :chart-id])))
@@ -160,6 +174,7 @@
     (is (contains? @#'agent-tools/state-dependent-tools "create_sql_query"))
     (is (contains? @#'agent-tools/state-dependent-tools "edit_sql_query"))
     (is (contains? @#'agent-tools/state-dependent-tools "replace_sql_query"))
+    (is (contains? @#'agent-tools/state-dependent-tools "construct_notebook_query"))
     (is (contains? @#'agent-tools/state-dependent-tools "todo_write"))
     (is (contains? @#'agent-tools/state-dependent-tools "todo_read"))
     (is (contains? @#'agent-tools/state-dependent-tools "navigate_user"))
@@ -179,7 +194,7 @@
                                      :charts {"c1" {:query-id "q1"}}}})
           base-tools {"create_sql_query" #'agent-tools/create-sql-query-tool
                       "search" #'agent-tools/search-tool}
-          wrapped-tools (agent-tools/wrap-tools-with-state base-tools memory-atom nil)]
+          wrapped-tools (agent-tools/wrap-tools-with-state base-tools memory-atom nil :nlq)]
       ;; State-dependent tool should be wrapped into a tool-def map
       (is (map? (get wrapped-tools "create_sql_query")))
       (is (contains? (get wrapped-tools "create_sql_query") :fn))
@@ -190,14 +205,14 @@
   (testing "wrapped tools preserve original metadata"
     (let [memory-atom (atom {:state {:queries {} :charts {}}})
           base-tools {"create_chart" #'agent-tools/create-chart-tool}
-          wrapped-tools (agent-tools/wrap-tools-with-state base-tools memory-atom nil)
+          wrapped-tools (agent-tools/wrap-tools-with-state base-tools memory-atom nil :nlq)
           wrapped-tool (get wrapped-tools "create_chart")]
       (is (= (:doc (meta #'agent-tools/create-chart-tool)) (:doc wrapped-tool)))
       (is (= (:schema (meta #'agent-tools/create-chart-tool)) (:schema wrapped-tool)))))
   (testing "wrapped function receives augmented args with state"
     (let [memory-atom (atom {:state {:queries {"test-query" {:db 1}}
                                      :charts {"test-chart" {:type :bar}}}})
-          wrapped (agent-tools/wrap-tools-with-state {"create_sql_query" #'agent-tools/create-sql-query-tool} memory-atom nil)
+          wrapped (agent-tools/wrap-tools-with-state {"create_sql_query" #'agent-tools/create-sql-query-tool} memory-atom nil :nlq)
           wrapped-fn (get-in wrapped ["create_sql_query" :fn])]
       ;; Just verify the wrapped function is callable
       (is (fn? wrapped-fn))))
@@ -205,12 +220,19 @@
     (let [memory-atom (atom {:state {:queries {"q1" {:db 1}} :charts {}}})
           base-tools {"search" #'agent-tools/search-tool
                       "construct_notebook_query" #'agent-tools/construct-notebook-query-tool}
-          wrapped-tools (agent-tools/wrap-tools-with-state base-tools memory-atom nil)]
+          wrapped-tools (agent-tools/wrap-tools-with-state base-tools memory-atom nil :nlq)]
       ;; All tools are converted to tool-def maps
       (is (map? (get wrapped-tools "search")))
       (is (fn? (:fn (get wrapped-tools "search"))))
       (is (map? (get wrapped-tools "construct_notebook_query")))
       (is (fn? (:fn (get wrapped-tools "construct_notebook_query")))))))
+
+(deftest inline-viz-capable-test
+  (testing "only the nlq profile emits inline visualizations"
+    (binding [shared/*profile-id* :nlq]
+      (is (true? (shared/inline-viz-capable?))))
+    (binding [shared/*profile-id* :sql]
+      (is (false? (shared/inline-viz-capable?))))))
 
 (deftest tool-schemas-exclude-state-keys-test
   (testing "create_chart schema does not expose state keys"

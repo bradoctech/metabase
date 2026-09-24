@@ -128,7 +128,9 @@
       ...)"
   {:style/indent :defn}
   [table-definitions & body]
-  `(do-with-dataset-definition (tx/dataset-definition "temp-test-data" ~table-definitions) (fn [] ~@body)))
+  `(do-with-dataset-definition (tx/dataset-definition (str "temp-test-data" (u.random/random-name))
+                                                      ~table-definitions)
+                               (fn [] ~@body)))
 
 (defmacro with-empty-db
   "Sets the current dataset to a freshly created db that gets destroyed at the conclusion of `body`.
@@ -349,3 +351,15 @@
   `(with-actions-test-data
      (with-actions-enabled
        ~@body)))
+
+(defn latest-query-execution-id
+  "The id of the newest QueryExecution row, or 0 when there is none: the `since-id` for [[action-executions]]."
+  []
+  (or (t2/select-one-pk :model/QueryExecution {:order-by [[:id :desc]]}) 0))
+
+(defn action-executions
+  "The action-context QueryExecution rows written after `since-id`, oldest first."
+  [since-id]
+  (into []
+        (filter (comp #{:action-execute :public-action-execute} :context))
+        (t2/select :model/QueryExecution {:where [:> :id since-id], :order-by [[:id :asc]]})))

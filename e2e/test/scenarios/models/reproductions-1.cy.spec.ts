@@ -199,45 +199,6 @@ describe("issues 25884 and 34349", () => {
   });
 });
 
-describe("issue 23103", () => {
-  beforeEach(() => {
-    H.restore();
-    cy.signInAsAdmin();
-    cy.intercept("PUT", "/api/card/*").as("updateModel");
-  });
-
-  it("shows correct number of distinct values (metabase#23103)", () => {
-    H.createNativeQuestion(
-      {
-        type: "model",
-        native: {
-          query: "select * from products limit 5",
-        },
-      },
-      { visitQuestion: true },
-    );
-
-    H.openQuestionActions();
-    H.popover().findByText("Edit metadata").click();
-    H.waitForLoaderToBeRemoved();
-
-    cy.findAllByTestId("header-cell").contains("CATEGORY").click();
-    cy.findAllByTestId("select-button").contains("None").click();
-    H.popover().within(() => {
-      cy.findByText("Products").click();
-      cy.findByText("Category").click();
-    });
-
-    cy.button("Save changes").click();
-    cy.wait("@updateModel");
-    cy.button("Saving…").should("not.exist");
-
-    cy.findAllByTestId("header-cell").contains("Category").trigger("mouseover");
-
-    H.hovercard().findByText("4 distinct values").should("exist");
-  });
-});
-
 describe("issue 39150", { viewportWidth: 1600 }, () => {
   beforeEach(() => {
     H.restore();
@@ -837,6 +798,12 @@ describe("issue 33844", () => {
 
   function testModelMetadata(isNew: boolean) {
     cy.log("make a column visible only in detail views");
+    // Wait for the metadata editor to finish loading before clicking the
+    // header. Otherwise a late query/metadata load remounts the results
+    // table and closes the column-settings sidebar we just opened, so the
+    // "Detail views only" option never appears.
+    H.waitForLoaderToBeRemoved();
+    H.tableInteractive().findByText("ID").should("be.visible");
     cy.findAllByTestId("detail-shortcut").should("not.exist");
     H.tableHeaderClick("ID");
     cy.findByLabelText("Detail views only").click();
@@ -1066,11 +1033,11 @@ describe("issue 35840", () => {
 
   function checkColumnMapping(path: string[]) {
     H.pickEntity({ path, select: true });
-    H.modal().findByText("Pick a column…").click();
-    H.popover().findAllByText("Category").eq(0).click();
+    H.modal().findByPlaceholderText("Pick a column…").click();
+    H.selectDropdown().findAllByText("Category").eq(0).click();
     H.modal().within(() => {
-      cy.findByText("Category").should("be.visible");
-      cy.findByText("Category, Category").should("not.exist");
+      cy.findByDisplayValue("Category").should("be.visible");
+      cy.findByDisplayValue("Category, Category").should("not.exist");
     });
   }
 

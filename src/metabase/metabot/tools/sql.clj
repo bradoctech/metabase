@@ -1,6 +1,7 @@
 (ns metabase.metabot.tools.sql
   "SQL tool wrappers."
   (:require
+   [metabase.metabot.agent.links :as links]
    [metabase.metabot.agent.streaming :as streaming]
    [metabase.metabot.scope :as scope]
    [metabase.metabot.tmpl :as te]
@@ -78,14 +79,15 @@
 (def ^:private create-sql-schema
   [:map {:closed true}
    [:database_id :int]
-   [:sql_query :string]])
+   [:sql_query :string]
+   [:title :string]])
 
 (mu/defn ^{:tool-name    "create_sql_query"
            :scope        scope/agent-sql-create
            :capabilities #{:permission-write-sql-queries}}
   create-sql-query-tool
-  "Create a new SQL query."
-  [{:keys [database_id sql_query]} :- create-sql-schema]
+  "Create a new SQL query. Provide a short, human-friendly `title` shown above the results."
+  [{:keys [database_id sql_query title]} :- create-sql-schema]
   (try
     (let [{:keys [validation-result action-result]}
           (create-sql-query-tools/create-sql-query
@@ -100,12 +102,17 @@
           {:output (format-query-output structured instr {:preamble? true})
            :structured-output structured
            :instructions instr
-           :data-parts [(streaming/navigate-to-part results-url)]})
+           :data-parts [(streaming/viz-part {:inline?   (shared/inline-viz-capable?)
+                                             :entity-id (str (random-uuid))
+                                             :query-id  query-id
+                                             :query     (links/->legacy-mbql query)
+                                             :title     title
+                                             :link      results-url})]})
         (let [instr (instructions/sql-validation-error-instructions dialect error-message)]
           {:output (format-validation-error-output instr)
            :instructions instr})))
     (catch Exception e
-      (log/error e "Error creating SQL query")
+      (log/errorf "Error creating SQL query: %s" (ex-message e))
       (if (:agent-error? (ex-data e))
         (metabot.tools.u/handle-agent-error e)
         {:output (str "Failed to create SQL query: " (or (ex-message e) "Unknown error"))}))))
@@ -150,14 +157,16 @@
    [:edits [:sequential [:map {:closed true}
                          [:old_string :string]
                          [:new_string :string]
-                         [:replace_all {:optional true} [:maybe :boolean]]]]]])
+                         [:replace_all {:optional true} [:maybe :boolean]]]]]
+   [:title :string]])
 
 (mu/defn ^{:tool-name    "edit_sql_query"
            :scope        scope/agent-sql-edit
            :capabilities #{:permission-write-sql-queries}}
   edit-sql-query-tool
-  "Edit an existing SQL query using structured edits."
-  [{:keys [query_id edits checklist]} :- edit-sql-schema]
+  "Edit an existing SQL query using structured edits. Provide a short,
+  human-friendly `title` shown above the results."
+  [{:keys [query_id edits checklist title]} :- edit-sql-schema]
   (try
     (let [{:keys [validation-result action-result]}
           (edit-sql-query-tools/edit-sql-query
@@ -175,12 +184,19 @@
           {:output (format-query-output structured instr)
            :structured-output structured
            :instructions instr
-           :data-parts [(if buffer-id (code-edit-part buffer-id query-content) (streaming/navigate-to-part results-url))]})
+           :data-parts [(if buffer-id
+                          (code-edit-part buffer-id query-content)
+                          (streaming/viz-part {:inline?   (shared/inline-viz-capable?)
+                                               :entity-id (str (random-uuid))
+                                               :query-id  query-id
+                                               :query     (links/->legacy-mbql query)
+                                               :title     title
+                                               :link      results-url}))]})
         (let [instr (instructions/sql-validation-error-instructions dialect error-message)]
           {:output (format-validation-error-output instr)
            :instructions instr})))
     (catch Exception e
-      (log/error e "Error editing SQL query")
+      (log/errorf "Error editing SQL query: %s" (ex-message e))
       (if (:agent-error? (ex-data e))
         (metabot.tools.u/handle-agent-error e)
         {:output (str "Failed to edit SQL query: " (or (ex-message e) "Unknown error"))}))))
@@ -193,14 +209,16 @@
   [:map {:closed true}
    [:query_id [:or :string :int]]
    [:checklist :string]
-   [:new_query :string]])
+   [:new_query :string]
+   [:title :string]])
 
 (mu/defn ^{:tool-name    "replace_sql_query"
            :scope        scope/agent-sql-edit
            :capabilities #{:permission-write-sql-queries}}
   replace-sql-query-tool
-  "Replace the SQL content of an existing query entirely."
-  [{:keys [query_id new_query checklist]} :- replace-sql-schema]
+  "Replace the SQL content of an existing query entirely. Provide a short,
+  human-friendly `title` shown above the results."
+  [{:keys [query_id new_query checklist title]} :- replace-sql-schema]
   (try
     (let [{:keys [validation-result action-result]}
           (replace-sql-query-tools/replace-sql-query
@@ -218,12 +236,19 @@
           {:output (format-query-output structured instr)
            :structured-output structured
            :instructions instr
-           :data-parts [(if buffer-id (code-edit-part buffer-id query-content) (streaming/navigate-to-part results-url))]})
+           :data-parts [(if buffer-id
+                          (code-edit-part buffer-id query-content)
+                          (streaming/viz-part {:inline?   (shared/inline-viz-capable?)
+                                               :entity-id (str (random-uuid))
+                                               :query-id  query-id
+                                               :query     (links/->legacy-mbql query)
+                                               :title     title
+                                               :link      results-url}))]})
         (let [instr (instructions/sql-validation-error-instructions dialect error-message)]
           {:output (format-validation-error-output instr)
            :instructions instr})))
     (catch Exception e
-      (log/error e "Error replacing SQL query")
+      (log/errorf "Error replacing SQL query: %s" (ex-message e))
       (if (:agent-error? (ex-data e))
         (metabot.tools.u/handle-agent-error e)
         {:output (str "Failed to replace SQL query: " (or (ex-message e) "Unknown error"))}))))

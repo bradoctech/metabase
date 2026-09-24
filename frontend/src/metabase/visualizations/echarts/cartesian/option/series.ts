@@ -54,6 +54,7 @@ import {
 } from "../model/series";
 import { getBarSeriesDataLabelKey } from "../model/util";
 
+import { getPadding } from "./ticks";
 import { getSeriesYAxisIndex } from "./utils";
 
 const MIN_LABEL_SPACING_PX = 40;
@@ -298,7 +299,7 @@ export const buildEChartsLabelOptions = (
     fontWeight: CHART_STYLE.seriesLabels.weight,
     fontSize,
     color: renderingContext.getColor("text-primary"),
-    textBorderColor: renderingContext.getColor("background-primary"),
+    textBorderColor: renderingContext.getColor("background_page-primary"),
     textBorderWidth: 3,
     formatter:
       formatter &&
@@ -326,8 +327,12 @@ export const computeContinuousScaleBarWidth = (
     return 1;
   }
 
+  const padding = isTimeSeriesAxis(xAxisModel)
+    ? getPadding(xAxisModel.intervalsCount)
+    : 0.5;
+
   let barWidth =
-    (boundaryWidth / (xAxisModel.intervalsCount + 2)) *
+    (boundaryWidth / (xAxisModel.intervalsCount + 1 + 2 * padding)) *
     CHART_STYLE.series.barWidth;
 
   if (!stackedOrSingleSeries) {
@@ -439,7 +444,7 @@ function getDataLabelSeriesOption(
       fontWeight: 600,
       fontSize: "11px",
       color: renderingContext.getColor("text-primary"),
-      textBorderColor: renderingContext.getColor("background-primary"),
+      textBorderColor: renderingContext.getColor("background_page-primary"),
       textBorderWidth: 3,
     },
     labelLayout: {
@@ -695,7 +700,7 @@ const buildEChartsLineAreaSeries = (
     },
     symbol: "circle", // default is "emptyCircle", but it's filled with white, so we need to handle the fill ourselves for dark mode
     itemStyle: {
-      color: renderingContext.getColor("background-primary"),
+      color: renderingContext.getColor("background_page-primary"),
       borderColor: seriesModel.color,
       borderWidth: lineWidth,
       opacity: isSymbolVisible ? 1 : 0, // Make the symbol invisible to keep it for event trigger for tooltip

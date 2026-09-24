@@ -107,9 +107,6 @@ jobs:
           - name: Driver - Databricks
             file: modules/drivers/databricks/pom.xml
             category: driver-databricks
-          - name: Driver - Druid
-            file: modules/drivers/druid/pom.xml
-            category: driver-druid
           - name: Driver - Druid JDBC
             file: modules/drivers/druid-jdbc/pom.xml
             category: driver-druid-jdbc
@@ -134,9 +131,6 @@ jobs:
           - name: Driver - SparkSQL
             file: modules/drivers/sparksql/pom.xml
             category: driver-sparksql
-          - name: Driver - SQLite
-            file: modules/drivers/sqlite/pom.xml
-            category: driver-sqlite
           - name: Driver - SQL Server
             file: modules/drivers/sqlserver/pom.xml
             category: driver-sqlserver

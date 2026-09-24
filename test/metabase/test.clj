@@ -103,6 +103,8 @@
 #_{:clj-kondo/ignore [:discouraged-var :deprecated-var]}
 (p/import-vars
  [actions.test-util
+  action-executions
+  latest-query-execution-id
   with-actions
   with-actions-disabled
   with-actions-enabled
@@ -228,6 +230,7 @@
   user-http-request
   user-http-request-full-response
   user-real-request
+  user-real-request-full-response
   with-group
   with-group-for-user
   with-test-user]

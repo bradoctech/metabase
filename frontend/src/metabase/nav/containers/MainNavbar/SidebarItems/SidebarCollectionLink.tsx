@@ -2,7 +2,7 @@ import type { KeyboardEvent } from "react";
 import { forwardRef, useCallback, useEffect, useRef } from "react";
 import { usePrevious } from "react-use";
 
-import { getCollectionIcon } from "metabase/collections/utils";
+import { getCollectionIcon } from "metabase/common/collections/utils";
 import { CollectionDropTarget } from "metabase/common/components/dnd/CollectionDropTarget";
 import { TreeNode } from "metabase/common/components/tree/TreeNode";
 import type {
@@ -95,9 +95,8 @@ const SidebarCollectionLink = forwardRef<HTMLLIElement, Props>(
     );
 
     const icon = getCollectionIcon(collection, { isTenantUser });
-    const isRegularCollection = PLUGIN_COLLECTIONS.isRegularCollection(
-      collection as unknown as Collection,
-    );
+    const isRegularCollection =
+      PLUGIN_COLLECTIONS.isRegularCollection(collection);
 
     const content = (
       <>

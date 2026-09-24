@@ -27,7 +27,6 @@
   See also [[metabase.parameters.chain-filter]] for another explanation of remapping."
   (:refer-clojure :exclude [mapv select-keys some empty? not-empty get-in])
   (:require
-   [clojure.data :as data]
    [medley.core :as m]
    [metabase.lib-be.core :as lib-be]
    [metabase.lib.core :as lib]
@@ -439,7 +438,7 @@
     from-display-name :name
     to-name           :human-readable-field-name} :- ::external-remapping]
   (log/trace "Considering column\n"
-             (u/pprint-to-str 'cyan (select-keys column [:id :name :fk_field_id :display_name :options]))
+             (pr-str (select-keys column [:id :fk_field_id :options]))
              (u/colorize :magenta "\nAdd :remapped_to metadata?")
              "\n=>" '(= dimension-id original-field-dimension-id)
              "\n=>" (list '= dimension-id original-field-dimension-id)
@@ -457,26 +456,28 @@
             ;; if this is a column we're remapping FROM, we need to add information about which column we're remapping
             ;; TO
             (when (= dimension-id original-field-dimension-id)
-              {:remapped_to (or (some (fn [{{::keys [new-field-dimension-id]} :options, target-name :name}]
-                                        (when (= new-field-dimension-id dimension-id)
-                                          target-name))
+              {:remapped_to (or (some (fn [{{::keys [new-field-dimension-id]} :options, :as target-col}]
+                                        (when (and (= new-field-dimension-id dimension-id)
+                                                   (= (:lib/join-alias target-col) (:lib/join-alias column)))
+                                          (:name target-col)))
                                       columns)
                                 to-name)})
             ;; if this is a column we're remapping TO, we need to add information about which column we're remapping
             ;; FROM
             (when (= dimension-id new-field-dimension-id)
-              {:remapped_from (or (some (fn [{{::keys [original-field-dimension-id]} :options, source-name :name}]
-                                          (when (= original-field-dimension-id dimension-id)
-                                            source-name))
+              {:remapped_from (or (some (fn [{{::keys [original-field-dimension-id]} :options, :as source-col}]
+                                          (when (and (= original-field-dimension-id dimension-id)
+                                                     (= (:lib/join-alias source-col) (:lib/join-alias column)))
+                                            (:name source-col)))
                                         columns)
                                   from-name)
                :display_name  from-display-name}))
     (when (not= column <>)
-      (log/tracef "Added metadata:\n%s" (u/pprint-to-str 'green (second (data/diff column <>)))))))
+      (log/trace "Added remapping metadata to column"))))
 
 (mu/defn- merge-metadata-for-externally-remapped-column :- [:maybe [:sequential :map]]
   [columns :- [:maybe [:sequential :map]] dimension :- ::external-remapping]
-  (log/tracef "Merging metadata for external dimension\n%s" (u/pprint-to-str 'yellow (into {} dimension)))
+  (log/tracef "Merging metadata for external dimension %s" (:id dimension))
   (mapv #(merge-metadata-for-externally-remapped-column* columns % dimension)
         columns))
 

@@ -180,7 +180,7 @@
       (let [report (serdes/with-cache (serialization/load-metabase! (serialization/ingest-yaml temp-dir) {:backfill? false}))]
         (log/info "Import complete:" (count (:seen report)) "entities loaded")
         (when (seq (:errors report))
-          (log/warn "Import had errors:" (:errors report)))
+          (log/warn "Import had errors:" (mapv ex-message (:errors report))))
         report)
       (finally
         (when (.exists (io/file temp-dir))
@@ -205,9 +205,9 @@
                   :include-field-values true}
             report (serdes/with-cache (serialization/store! (serialization/extract opts)
                                                             (serialization/file-writer (.getPath temp-path))))]
-        (log/info "Export complete:" (count (:seen report)) "entities exported")
+        (log/info "Export complete:" (reduce + 0 (vals (:entity-counts report))) "entities exported")
         (when (seq (:errors report))
-          (log/warn "Export had errors:" (:errors report)))
+          (log/warn "Export had errors:" (mapv ex-message (:errors report))))
         {:report report
          :export-dir (.getPath temp-path)})
       (catch Exception e
@@ -312,12 +312,12 @@
           (log/info "Analytics dev environment already set up, skipping initialization")
           (when-let [admin-user (first-admin-user)]
             (cleanup-real-analytics)
-            (log/info "Setting up analytics dev environment with user:" (:email admin-user))
+            (log/info "Setting up analytics dev environment with user:" (:id admin-user))
             (create-analytics-dev-database! (:id admin-user))
             (import-analytics-content! (:email admin-user))
             (log/info "Analytics dev environment ready")))
         (catch Exception e
-          (log/error e "Failed to set up analytics dev environment"))))))
+          (log/errorf "Failed to set up analytics dev environment: %s" (ex-message e)))))))
 
 (defmethod startup/def-startup-logic! ::analytics-dev-mode-setup
   [_] (analytics-dev-mode-setup))

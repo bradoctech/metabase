@@ -12,6 +12,7 @@
    [metabase.api.macros :as api.macros]
    [metabase.app-db.core :as app-db]
    [metabase.channel.email.messages :as messages]
+   [metabase.channel.render.core :as channel.render]
    [metabase.collections-rest.api :as api.collection]
    [metabase.collections.core :as collections]
    [metabase.collections.models.collection :as collection]
@@ -277,7 +278,7 @@
       [(qp.util/query-hash query)
        (qp.util/query-hash (assoc query :constraints (qp.constraints/default-query-constraints)))]
       (catch Throwable e
-        (log/errorf e "Error hashing query %s: %s" (pr-str query) (ex-message e))
+        (log/errorf "Error hashing query: %s" (ex-message e))
         nil))))
 
 (defn- dashcard->query-hashes
@@ -691,6 +692,40 @@
       (u/prog1 (first (revisions/with-last-edit-info [dashboard] :dashboard))
         (events/publish-event! :event/dashboard-read {:object-id (:id dashboard) :user-id api/*current-user-id*})))))
 
+#_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
+(api.macros/defendpoint :post "/:id/pdf" :- :any
+  "Render Dashboard with ID to a PDF (server-side, the same way dashboard subscriptions render charts) and stream it
+  back as a file download.
+
+  `parameters` are runtime parameter overrides -- the same shape the dashcard query endpoints accept: a sequence of
+  `{:id ... :value ...}` maps, or a JSON-encoded string of that sequence (the string form lets an HTML `<form>`
+  action drive the download). Parameters left unspecified fall back to the dashboard's own defaults.
+
+  `paper_size` is `\"a4\"` (default) or `\"letter\"`."
+  [{:keys [id]} :- [:map
+                    [:id ms/PositiveInt]]
+   _query-params
+   {:keys [parameters paper_size]} :- [:map
+                                       [:parameters {:optional true} [:maybe ::parameters.schema/api.parameter-values]]
+                                       [:paper_size {:default "a4"} [:maybe [:enum "a4" "letter"]]]]
+   _request
+   respond
+   raise]
+  (try
+    (let [dashboard (api/read-check :model/Dashboard id)
+          pdf-bytes (channel.render/render-dashboard-to-pdf id api/*current-user-id*
+                                                            (or parameters [])
+                                                            (keyword (or paper_size "a4")))
+          filename  (str (or (not-empty (u/slugify (:name dashboard)))
+                             (str "dashboard-" id))
+                         ".pdf")]
+      (respond {:status  200
+                :headers {"Content-Type"        "application/pdf"
+                          "Content-Disposition" (format "attachment; filename=\"%s\"" filename)}
+                :body    (java.io.ByteArrayInputStream. pdf-bytes)}))
+    (catch Throwable e
+      (raise e))))
+
 ;; TODO (Cam 2025-11-25) please add a response schema to this API endpoint, it makes it easier for our customers to
 ;; use our API + we will need it when we make auto-TypeScript-signature generation happen
 ;;
@@ -972,7 +1007,8 @@
                                      (t2/select-one [:model/Dashboard :id :parameters] dashboard-id)
                                      :resolved-params)
           dashboard-params (set (keys resolved-params))]
-      (->> (t2/select :model/Pulse :dashboard_id dashboard-id :archived false)
+      ;; ordered so the notifications go out in a stable order rather than whatever order the rows come back in
+      (->> (t2/select :model/Pulse :dashboard_id dashboard-id :archived false {:order-by [[:id :asc]]})
            (keep (fn [{:keys [parameters] :as pulse}]
                    (let [bad-params (filterv
                                      (fn [{param-id :id}] (not (contains? dashboard-params param-id)))

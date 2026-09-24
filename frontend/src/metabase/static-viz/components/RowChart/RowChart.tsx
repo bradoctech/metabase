@@ -2,8 +2,8 @@ import { Group } from "@visx/group";
 
 import type { StaticChartProps } from "metabase/static-viz/components/StaticVisualization";
 import { measureTextWidth } from "metabase/static-viz/lib/text";
+import { getChartHeight } from "metabase/static-viz/lib/utils";
 import type { FontStyle, TextWidthMeasurer } from "metabase/utils/measure-text";
-import { extractRemappedColumns } from "metabase/visualizations";
 import { getChartGoal } from "metabase/visualizations/lib/settings/goal";
 import { getStackOffset } from "metabase/visualizations/lib/settings/stacking";
 import { RowChart } from "metabase/visualizations/shared/components/RowChart";
@@ -12,7 +12,6 @@ import {
   trimData,
 } from "metabase/visualizations/shared/utils/data";
 import { getTwoDimensionalChartSeries } from "metabase/visualizations/shared/utils/series";
-import type { RemappingHydratedChartData } from "metabase/visualizations/types";
 import {
   getColumnValueFormatter,
   getFormatters,
@@ -59,10 +58,9 @@ export const StaticRowChart = ({
   width = WIDTH,
   height = HEIGHT,
   hasDevWatermark = false,
+  fitWithinBounds = false,
 }: StaticChartProps) => {
-  const data = extractRemappedColumns(
-    rawSeries[0].data,
-  ) as RemappingHydratedChartData;
+  const data = rawSeries[0].data;
   const { getColor } = renderingContext;
   const columnValueFormatter = getColumnValueFormatter();
 
@@ -100,7 +98,9 @@ export const StaticRowChart = ({
   });
 
   const legendHeight = legend != null ? legend.height + CHART_PADDING : 0;
-  const fullChartHeight = height + legendHeight;
+  const chartHeight = getChartHeight({ fitWithinBounds, legendHeight, height });
+
+  const fullChartHeight = fitWithinBounds ? height : height + legendHeight;
 
   return (
     <svg
@@ -120,7 +120,7 @@ export const StaticRowChart = ({
       <Group top={legendHeight}>
         <RowChart
           width={width}
-          height={height}
+          height={chartHeight}
           data={groupedData}
           trimData={trimData}
           series={series}

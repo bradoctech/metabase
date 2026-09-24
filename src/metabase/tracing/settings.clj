@@ -48,7 +48,7 @@
                   (if (#{"TRACE" "DEBUG" "INFO"} v)
                     v
                     (do
-                      (log/warnf "MB_TRACING_LOG_LEVEL value '%s' is not valid, expected 'TRACE', 'DEBUG', or 'INFO'. Defaulting to 'INFO'." v)
+                      (log/warn "MB_TRACING_LOG_LEVEL value is not valid, expected 'TRACE', 'DEBUG', or 'INFO'. Defaulting to 'INFO'.")
                       "INFO")))))
 
 (defsetting tracing-max-queue-size

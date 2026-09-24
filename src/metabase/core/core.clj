@@ -13,7 +13,6 @@
    [metabase.core.config-from-file :as config-from-file]
    [metabase.core.init]
    [metabase.core.perf :as perf]
-   [metabase.driver.h2]
    [metabase.driver.mysql]
    [metabase.driver.postgres]
    [metabase.embedding.settings :as embed.settings]
@@ -46,8 +45,8 @@
 
 (comment
   metabase.core.init/keep-me
-  ;; Load up the drivers shipped as part of the main codebase, so they will show up in the list of available DB types
-  metabase.driver.h2/keep-me
+  ;; Load up the drivers shipped as part of the main codebase, so they will show up in the list of available DB types.
+  ;; H2 is intentionally omitted: lazy-loaded on demand so the H2 library can be absent from the classpath.
   metabase.driver.mysql/keep-me
   metabase.driver.postgres/keep-me
   ;; Make sure the custom Metabase logger code gets loaded up so we use our custom logger for performance reasons.
@@ -134,7 +133,7 @@
         (try
           (.handle original-handler sig)
           (catch Exception e
-            (log/errorf e "Error calling original signal handler for SIG%s" signal-name)))))))
+            (log/errorf "Error calling original signal handler for SIG%s: %s" signal-name (ex-message e))))))))
 
 (defn- init-signal-logging!
   "Set up signal handlers to log system signals like SIGTERM, SIGINT, etc."
@@ -155,13 +154,26 @@
         (catch IllegalArgumentException e
           (log/debugf "Ignoring invalid signal SIG%s: %s" signal-name (.getMessage e)))
         (catch Exception e
-          (log/warnf e "Failed to register signal handler for SIG%s" signal-name))))))
+          (log/warnf "Failed to register signal handler for SIG%s: %s" signal-name (ex-message e)))))))
+
+(defn- reconcile-sample-database!
+  "Bring the sample database into line with the bundled one, adding it if there is none.
+
+  Keyed on whether a sample database row is present rather than on whether this is a new install: the
+  `CreateSampleContentV2` migration seeds that row before this runs, and an instance with no users reports a
+  new install on every boot, so keying on the install leaves a seeded sample database unreconciled forever -
+  including across a change of bundled engine."
+  []
+  (if (sample-data/sample-database-id)
+    (sample-data/update-sample-database-if-needed!)
+    (when (config/load-sample-content?)
+      (sample-data/extract-and-sync-sample-database!))))
 
 (defn- init!*
   "General application initialization function which should be run once at application startup."
   []
   (log/infof "Starting Metabase version %s ..." config/mb-version-string)
-  (log/infof "System info:\n %s" (u/pprint-to-str (u.system-info/system-info)))
+  (log/infof "System info:\n %s" (pr-str (u.system-info/system-info)))
   (perf/maybe-enable-monitoring!)
   (init-signal-logging!)
   (init-status/set-progress! 0.1)
@@ -214,13 +226,7 @@
       ;; The instance is already set up. Clear out any stale setup token.
       (setup/clear-token!))
     (init-status/set-progress! 0.7)
-    ;; deal with our sample database as needed
-    (when (config/load-sample-content?)
-      (if new-install?
-        ;; add the sample database DB for fresh installs
-        (sample-data/extract-and-sync-sample-database!)
-        ;; otherwise update if appropriate
-        (sample-data/update-sample-database-if-needed!)))
+    (reconcile-sample-database!)
     (init-status/set-progress! 0.8))
   (ensure-audit-db-installed!)
   (notification/seed-notification!)
@@ -269,7 +275,7 @@
     (when (config/config-bool :mb-jetty-join)
       (.join (server/instance)))
     (catch Throwable e
-      (log/error e "Metabase Initialization FAILED")
+      (log/errorf "Metabase Initialization FAILED: %s" (ex-message e))
       (System/exit 1))))
 
 (defn- run-cmd [cmd init-fn args]

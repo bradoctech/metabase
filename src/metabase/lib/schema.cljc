@@ -103,7 +103,9 @@
      [:collection {:optional true} ::common/non-blank-string]
      ;; optional template tag declarations. Template tags are things like `{{x}}` in the query (the value of the
      ;; `:native` key), but their definition lives under this key.
-     [:template-tags {:optional true} [:ref ::template-tag/template-tag-map]]
+     ;;
+     ;; Prior to 63, this was a map, but was changed to a list to preserve order with more than 8 template tags.
+     [:template-tags {:optional true} [:ref ::template-tag/template-tags]]
      ;; optional, set of Card IDs referenced by this query in `:card` template tags like `{{card}}`. This is added
      ;; automatically during parameter expansion. To run a native query you must have native query permissions as well
      ;; as permissions for any Cards' parent Collections used in `:card` template tag parameters.
@@ -258,7 +260,9 @@
     {:page 1, :items 10} = items 1-10
     {:page 2, :items 10} = items 11-20"
   [:map
-   {:decode/normalize common/normalize-map}
+   {:decode/normalize common/normalize-map
+    :decode/api       common/remove-internal-keys
+    :encode/serialize common/remove-internal-keys}
    [:page  pos-int?]
    [:items pos-int?]])
 
@@ -363,7 +367,9 @@
    (common/disallowed-keys
     {:source-metadata "A query stage should not have :source-metadata, the prior stage should have :lib/stage-metadata instead"
      :source-query    ":source-query is not allowed in MBQL 5 queries."
-     :type            ":type is not allowed in a query stage in any version of MBQL"})])
+     :type            ":type is not allowed in a query stage in any version of MBQL"
+     :database        ":database is not allowed in a query stage, only at the top level of a query."
+     :lib/options     "A stage should not have :lib/options"})])
 
 (mr/def ::stage.initial
   [:multi {:dispatch      lib-type

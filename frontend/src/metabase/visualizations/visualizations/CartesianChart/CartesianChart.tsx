@@ -1,12 +1,5 @@
 import type { EChartsType } from "echarts/core";
-import {
-  type MouseEvent as ReactMouseEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type MouseEvent, useCallback, useMemo, useRef, useState } from "react";
 import React from "react";
 import { useSet } from "react-use";
 
@@ -15,9 +8,7 @@ import { ChartRenderingErrorBoundary } from "metabase/visualizations/components/
 import { DataPointsVisiblePopover } from "metabase/visualizations/components/DataPointsVisiblePopover/DataPointsVisiblePopover";
 import { ResponsiveEChartsRenderer } from "metabase/visualizations/components/EChartsRenderer";
 import { LegendCaption } from "metabase/visualizations/components/legend/LegendCaption";
-// import { X_AXIS_DATA_KEY } from "metabase/visualizations/echarts/cartesian/constants/dataset";
 import { getLegendItems } from "metabase/visualizations/echarts/cartesian/model/legend";
-import { getOriginalAxisLabel } from "metabase/visualizations/echarts/cartesian/option/utils";
 import {
   useCartesianChartSeriesColorsClasses,
   useCloseTooltipOnScroll,
@@ -28,7 +19,6 @@ import {
   CartesianChartRoot,
 } from "metabase/visualizations/visualizations/CartesianChart/CartesianChart.styled";
 import { useChartEvents } from "metabase/visualizations/visualizations/CartesianChart/use-chart-events";
-// import type { RowValue } from "metabase-types/api";
 
 import { useChartDebug } from "./use-chart-debug";
 import { useModelsAndOption } from "./use-models-and-option";
@@ -94,7 +84,11 @@ function CartesianChartInner(props: VisualizationProps) {
   useChartDebug({ isQueryBuilder, rawSeries, option, chartModel });
 
   const chartRef = useRef<EChartsType>();
-  const [chartDom, setChartDom] = useState<HTMLElement | null>(null);
+  // Mirror the ECharts instance into state so that effects depending on it
+  // (e.g. brush setup) re-run once it becomes available. With the lazily loaded
+  // EChartsRenderer, `onInit` fires after the surrounding effects have already
+  // run, and a ref assignment alone would not re-trigger them.
+  const [chartInstance, setChartInstance] = useState<EChartsType>();
 
   const description = settings["card.description"];
 
@@ -106,7 +100,9 @@ function CartesianChartInner(props: VisualizationProps) {
 
   const handleInit = useCallback((chart: EChartsType) => {
     chartRef.current = chart;
-    setChartDom(chart.getDom());
+    setChartInstance(chart);
+
+    // HACK: clip paths cause glitches in Safari on multiseries line charts on dashboards (metabase#51383)
     if (isWebkit()) {
       chartRef.current.on("finished", () => {
         const svg = containerRef.current?.querySelector("svg");
@@ -119,7 +115,7 @@ function CartesianChartInner(props: VisualizationProps) {
   }, []);
 
   const handleToggleSeriesVisibility = useCallback(
-    (event: ReactMouseEvent, seriesIndex: number) => {
+    (event: MouseEvent, seriesIndex: number) => {
       const seriesModel = chartModel.seriesModels[seriesIndex];
       const willShowSeries = hiddenSeries.has(seriesModel.dataKey);
       const hasMoreVisibleSeries =
@@ -139,54 +135,8 @@ function CartesianChartInner(props: VisualizationProps) {
     option,
     renderingContext,
     props,
+    chartInstance,
   );
-
-  const [axisLabelTooltip, setAxisLabelTooltip] = useState<{
-    text: string;
-    x: number;
-    y: number;
-  } | null>(null);
-
-  useEffect(() => {
-    const el = chartDom;
-    if (!el) {
-      return;
-    }
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const target = e.target as Element;
-      const textEl =
-        target.tagName === "text"
-          ? (target as SVGTextElement)
-          : target.closest("text");
-      if (!textEl) {
-        setAxisLabelTooltip(null);
-        return;
-      }
-      const content = textEl.textContent?.trim() ?? "";
-      const fullText = getOriginalAxisLabel(content);
-      if (fullText) {
-        const containerRect = el.getBoundingClientRect();
-        setAxisLabelTooltip({
-          text: fullText,
-          x: e.clientX - containerRect.left,
-          y: e.clientY - containerRect.top,
-        });
-      } else {
-        setAxisLabelTooltip(null);
-      }
-    };
-
-    const handleMouseLeave = () => setAxisLabelTooltip(null);
-
-    el.addEventListener("mousemove", handleMouseMove);
-    el.addEventListener("mouseleave", handleMouseLeave);
-
-    return () => {
-      el.removeEventListener("mousemove", handleMouseMove);
-      el.removeEventListener("mouseleave", handleMouseLeave);
-    };
-  }, [chartDom]);
 
   const handleResize = useCallback((width: number, height: number) => {
     setChartSize({ width, height });
@@ -243,6 +193,7 @@ function CartesianChartInner(props: VisualizationProps) {
       >
         <ResponsiveEChartsRenderer
           ref={containerRef}
+          display={card.display}
           option={option}
           eventHandlers={eventHandlers}
           onResize={handleResize}
@@ -254,29 +205,6 @@ function CartesianChartInner(props: VisualizationProps) {
             chartModel={chartModel}
             settings={settings}
           />
-          {axisLabelTooltip && (
-            <div
-              style={{
-                position: "absolute",
-                left: axisLabelTooltip.x,
-                top: axisLabelTooltip.y - 36,
-                transform: "translateX(-50%)",
-                background: "var(--mb-color-tooltip-background)",
-                color: "var(--mb-color-tooltip-text)",
-                padding: "4px 8px",
-                borderRadius: "4px",
-                fontSize: "12px",
-                pointerEvents: "none",
-                whiteSpace: "nowrap",
-                zIndex: 100,
-                maxWidth: "300px",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {axisLabelTooltip.text}
-            </div>
-          )}
         </ResponsiveEChartsRenderer>
       </CartesianChartLegendLayout>
       {seriesColorsCss}

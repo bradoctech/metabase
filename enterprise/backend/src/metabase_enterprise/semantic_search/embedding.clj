@@ -98,11 +98,15 @@
                (let [text-measure (measure text)]
                  (cond
                    ;; Single text exceeds the limit - skip it with warning
+                   ;; TODO (Chris 2026-06-29) -- silently dropping an over-budget doc here is a poor default —
+                   ;; it vanishes from the index with only a warning. Make the over-budget policy a per-call
+                   ;; option (:truncate / :skip / :error, likely truncate-by-default eventually) and check what
+                   ;; the ai-service path does, which bypasses create-batches entirely.
+                   ;; https://linear.app/metabase/issue/BOT-1742
                    (> text-measure threshold)
                    (do
                      (log/warn
-                      (format "Skipping text that exceeds maximum measure per batch: %s"
-                              (str (subs text 0 10) "..."))
+                      "Skipping text that exceeds maximum measure per batch"
                       {:measure text-measure :threshold threshold})
                      acc)
 
@@ -156,7 +160,7 @@
         (json/decode true)
         :embedding)
     (catch Exception e
-      (log/error e "Failed to generate Ollama embedding for text of length:" (count text))
+      (log/error "Failed to generate Ollama embedding for text of length" (count text) ":" (ex-message e))
       (throw e))))
 
 (defn- ollama-get-embeddings-batch [model-name texts]
@@ -172,7 +176,7 @@
                {:headers {"Content-Type" "application/json"}
                 :body    (json/encode {:model model-name})})
     (catch Exception e
-      (log/error e "Failed to pull embedding model")
+      (log/errorf "Failed to pull embedding model: %s" (ex-message e))
       (throw e))))
 
 ;; Ollama is not used in production. Token tracking is not implemented.
@@ -256,12 +260,12 @@
         (semantic.models.token-tracking/record-tokens model-name (:type opts) total-tokens))
       (decode-embeddings data))
     (catch ConnectException e
-      (log/error e (str "Failed to connect to " provider) {:endpoint endpoint})
+      (log/error (str "Failed to connect to " provider ": " (ex-message e)) {:endpoint endpoint})
       (throw (ex-info (str provider " unavailable (connection refused)")
                       {:status 502 :endpoint endpoint}
                       e)))
     (catch Exception e
-      (log/error e (str provider " embeddings API call failed")
+      (log/error (str "Failed to generate " provider " embeddings: " (ex-message e))
                  {:documents (count texts) :tokens (count-tokens-batch texts)})
       (throw e))))
 
@@ -361,6 +365,33 @@
 (defmethod pull-model "openai" [_]
   (log/debug "OpenAI provider does not require pulling a model"))
 
+;;;; Query prefixes for asymmetric retrieval models
+
+(def ^:private model-family-query-prefixes
+  "Query prefixes for embedding-model families trained for asymmetric retrieval.
+  These models expect search queries — but not the indexed documents — to carry a fixed prefix."
+  ;; Patterns must be mutually exclusive: lookup scans entries in unspecified order.
+  ;; Keep patterns narrow: a false positive is unfixable without a code change, since the
+  ;; `ee-embedding-query-prefix` setting can only replace a matched prefix, never suppress it.
+  {#"(?i)snowflake-arctic-embed" "query: "})
+
+(defn- default-query-prefix
+  [model-name]
+  (when model-name
+    (some (fn [[pattern prefix]]
+            (when (re-find pattern model-name)
+              prefix))
+          model-family-query-prefixes)))
+
+(defn prefix-search-query
+  "Prepend the query prefix expected by `embedding-model` to `search-string`.
+  The `ee-embedding-query-prefix` setting overrides the per-model-family default and is prepended verbatim.
+  Returns `search-string` unchanged when neither applies."
+  [embedding-model search-string]
+  (str (or (not-empty (semantic-settings/ee-embedding-query-prefix))
+           (default-query-prefix (:model-name embedding-model)))
+       search-string))
+
 ;;;; Global embedding model
 
 (defn get-configured-model
@@ -369,6 +400,28 @@
   {:provider (semantic-settings/ee-embedding-provider)
    :model-name (semantic-settings/ee-embedding-model)
    :vector-dimensions (semantic-settings/ee-embedding-model-dimensions)})
+
+(defmulti embedding-supported?
+  "Whether `embedding-model`'s provider is *configured* to compute embeddings — the endpoint/credentials it
+  needs are present. This is a config-presence check, not a liveness probe: a set URL whose service is down
+  (or a stopped ollama) still reads as supported and surfaces at call time. Dispatches on provider,
+  mirroring [[get-embedding]] and the config each provider's impl resolves; a new provider — including a
+  future in-process embedder — adds a method. The `:default` is false, so an unrecognized provider gates
+  callers off safely."
+  {:arglists '([embedding-model])} dispatch-provider)
+
+(defmethod embedding-supported? :default [_] false)
+
+(defmethod embedding-supported? "ai-service" [_]
+  (boolean (or (not-empty (semantic-settings/ee-embedding-service-base-url))
+               (not-empty (llm.settings/ai-service-base-url)))))
+
+(defmethod embedding-supported? "openai" [_]
+  (boolean (not-empty (semantic-settings/openai-api-key))))
+
+;; ollama's endpoint is hardcoded (localhost:11434) with no setting to check, so config-presence is always
+;; true — consistent with ai-service/openai, which likewise check for a configured URL, not a live server.
+(defmethod embedding-supported? "ollama" [_] true)
 
 (defn- calc-token-metrics
   [texts]

@@ -5,10 +5,12 @@ import { c, t } from "ttag";
 
 import { useInvalidateTarget } from "metabase/admin/performance/hooks/useInvalidateTarget";
 import { useIsFormPending } from "metabase/admin/performance/hooks/useIsFormPending";
-import type { ModelWithClearableCache } from "metabase/admin/performance/types";
 import { useConfirmation } from "metabase/common/hooks/use-confirmation";
 import { FormProvider, FormSubmitButton } from "metabase/forms";
-import type { InvalidateNowButtonProps } from "metabase/plugins";
+import type {
+  InvalidateNowButtonProps,
+  ModelWithClearableCache,
+} from "metabase/plugins";
 import { Group, Icon, Loader, Text } from "metabase/ui";
 
 /** Button that clears the cache of a particular object (the "target") */
@@ -75,7 +77,7 @@ const InvalidateNowFormBody = ({
         }}
         disabled={wasFormRecentlyPending}
         variant="subtle"
-        c="error"
+        c="feedback-negative"
         px="sm"
         leftSection={<Icon name="trash" />}
         label={buttonText}
@@ -88,7 +90,7 @@ const InvalidateNowFormBody = ({
         }
         successLabel={
           <Group gap="sm" align="center">
-            <Icon name="check" c="success" />
+            <Icon name="check" c="feedback-positive" />
             <Text>{t`Cache cleared`}</Text>
           </Group>
         }

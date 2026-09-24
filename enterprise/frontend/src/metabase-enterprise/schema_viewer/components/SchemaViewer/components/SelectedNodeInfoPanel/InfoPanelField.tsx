@@ -62,7 +62,7 @@ export function InfoPanelField({
         >
           <UnstyledButton
             className={S.fkLink}
-            c="brand"
+            c="core-brand"
             disabled={isExpanding}
             onClick={onFetchExternal}
             flex="0 1 auto"
@@ -86,12 +86,12 @@ export function InfoPanelField({
           miw={0}
           maw="50%"
         >
-          <Text c="text-tertiary" lh={1} fz="1rem">
+          <Text c="text-disabled" lh={1} fz="1rem">
             →
           </Text>
           <UnstyledButton
             className={S.fkLink}
-            c="brand"
+            c="core-brand"
             onClick={() => onZoomToNode(targetNode.id)}
           >
             <Group align="end" gap={4} flex="0 0 auto" wrap="nowrap" w="100%">

@@ -5,7 +5,7 @@ import { databaseApi } from "metabase/api";
 import { runRtkEndpoint } from "metabase/api/utils/run-rtk-endpoint";
 import { combineReducers } from "metabase/redux";
 import { createDatabase } from "metabase/redux/databases";
-import { updateMetadata } from "metabase/redux/metadata-typed";
+import { updateMetadata } from "metabase/redux/metadata";
 import type { Dispatch } from "metabase/redux/store";
 import { DatabaseSchema } from "metabase/schema";
 import type { DatabaseData, DatabaseId } from "metabase-types/api";
@@ -64,7 +64,7 @@ export const deleteDatabase = function (databaseId: DatabaseId) {
 };
 
 export const databasesReducer = combineReducers({
-  deletionError: createReducer(null as null | unknown, (builder) => {
+  deletionError: createReducer<null | unknown>(null, (builder) => {
     builder.addCase(
       DELETE_DATABASE_FAILED,
       (_state, action) => action.payload.error,

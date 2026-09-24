@@ -7,7 +7,6 @@ import {
 } from "metabase/visualizations/lib/formatting/date";
 import type { ValueAndColumnForColumnNameDate } from "metabase/visualizations/lib/formatting/link";
 import * as Lib from "metabase-lib";
-import type { TemplateTagDimension } from "metabase-lib/v1/Dimension";
 import type Question from "metabase-lib/v1/Question";
 import {
   columnFilterForParameter,
@@ -116,9 +115,7 @@ function getTargetsForDimensionOptions(
     .dimensionOptions()
     .all()
     .map((templateTagDimension) => {
-      const { name, id } = (
-        templateTagDimension as unknown as TemplateTagDimension
-      ).tag();
+      const { name, id } = templateTagDimension.tag();
       const target: ClickBehaviorTarget = { type: "variable", id: name };
 
       const field = templateTagDimension.field();

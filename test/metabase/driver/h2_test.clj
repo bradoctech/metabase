@@ -1,4 +1,4 @@
-(ns metabase.driver.h2-test
+(ns ^:mb/driver-tests metabase.driver.h2-test
   {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.driver.h2-test]}}}}}}
   (:require
    [clojure.java.jdbc :as jdbc]
@@ -22,38 +22,20 @@
    [metabase.query-processor.preprocess :as qp.preprocess]
    [metabase.query-processor.test :as qp]
    [metabase.test :as mt]
-   [metabase.test.data.datasets :as mtd]
-   [metabase.test.data.env :as tx.env]
-   [metabase.test.data.interface :as tx]
    [metabase.util.honey-sql-2 :as h2x]
    [toucan2.core :as t2]))
 
 (set! *warn-on-reflection* true)
 
-;; temporary hack to run all tests against both the old :h2 and new mbql5 :h2
-;; remove this once :h2 does mbql5 by default!
-(defn- test-driver [driver thunk]
-  (when (contains? (tx.env/test-drivers) driver)
-    (testing (str "\n" driver "\n")
-      (driver/with-driver (tx/the-driver-with-test-extensions driver)
-        (thunk))
-      ;; the above is the original definition of test-driver, but we add in
-      ;; this clause to avoid having to rewrite all the tests below twice:
-      (when (= driver :h2)
-        (driver/with-driver (tx/the-driver-with-test-extensions :h2-mbql5)
-          (thunk))))))
-
-(use-fixtures :each (fn [f]
-                      ;; NB: because of test parallelism, this *will* affect other non-h2
-                      ;; tests, but the check above in the test-driver function will
-                      ;; prevent it from actually doing anything different in those tests.
-                      ;; The kondo ignore is the exemption: this `with-redefs` is
-                      ;; parallel-safe by construction (the redef target is a no-op
-                      ;; identity for h2, and the inner conditional in `test-driver`
-                      ;; prevents it from affecting non-h2 tests).
-                      #_{:clj-kondo/ignore [:metabase/validate-deftest]}
-                      (with-redefs [mtd/-test-driver test-driver]
-                        (f))))
+(deftest ^:parallel connection-hosts-test
+  (testing "local H2 databases have no network host"
+    (is (= [] (driver/connection-hosts :h2 {:db "file:./sample.db"})))
+    (is (= [] (driver/connection-hosts :h2 {:db "mem:test"}))))
+  (testing "remote H2 TCP and SSL connection strings expose their hosts"
+    (are [db expected] (= expected (driver/connection-hosts :h2 {:db db}))
+      "tcp://10.0.0.5:9092/sample"          ["10.0.0.5"]
+      "jdbc:h2:tcp://db.example.com/sample" ["db.example.com"]
+      "ssl://[::1]:9092/sample"             ["::1"])))
 
 (deftest ^:parallel connection-hosts-test
   (testing "local H2 databases have no network host"
@@ -514,3 +496,16 @@
            (sql-jdbc.actions/maybe-parse-sql-error
             :h2 actions.error/violate-check-constraint nil :model.row/create
             "Check constraint violation: \"users_email_check\"")))))
+
+;;; Metabase never reads Java objects out of H2 query results. Requiring the h2 driver registers a
+;;; JavaObjectSerializer that refuses to reconstruct them, so reading a JAVA_OBJECT value fails rather
+;;; than deserializing arbitrary classes. This verifies that refusal at the serializer itself.
+
+(deftest ^:parallel java-object-deserialization-is-refused-test
+  (testing "the registered H2 serializer refuses to reconstruct a Java object"
+    (let [^org.h2.api.JavaObjectSerializer serializer @#'h2/java-object-serializer]
+      (is (thrown-with-msg? Exception #"(?i)not supported"
+                            (.deserialize serializer (byte-array 0))))))
+  (testing "ordinary values still read normally"
+    (let [spec (mdb/spec :h2 {:db "mem:h2_read_test"})]
+      (is (= [{:x 1}] (jdbc/query spec ["SELECT 1 AS x"]))))))

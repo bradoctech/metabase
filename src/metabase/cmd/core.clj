@@ -90,7 +90,7 @@
       (println "Dump complete")
       (system-exit! 0))
     (catch Throwable e
-      (log/error e "Failed to dump application database to H2 file")
+      (log/errorf "Failed to dump application database to H2 file: %s" (ex-message e))
       (system-exit! 1))))
 
 (defn ^:command reset-password
@@ -230,7 +230,24 @@
     (log/info "Encryption key rotation OK.")
     (system-exit! 0)
     (catch Throwable e
-      (log/error e "ERROR ROTATING KEY.")
+      (log/errorf "ERROR ROTATING KEY: %s" (ex-message e))
+      (system-exit! 1))))
+
+(defn ^:command enable-encryption
+  "Encrypts data in the metabase database with the key in the MB_ENCRYPTION_SECRET_KEY environment variable. Run this
+  once, with Metabase stopped, after adding the key to an existing instance: Metabase refuses to start while the key is
+  set but the database is not encrypted with it."
+  []
+  (classloader/require 'metabase.cmd.enable-encryption)
+  (when-not (encryption/default-encryption-enabled?)
+    (log/error "MB_ENCRYPTION_SECRET_KEY environment variable has not been set")
+    (system-exit! 1))
+  (try
+    ((resolve 'metabase.cmd.enable-encryption/enable-encryption!))
+    (log/info "Encryption enabled OK.")
+    (system-exit! 0)
+    (catch Throwable e
+      (log/errorf "ERROR ENABLING ENCRYPTION: %s" (ex-message e))
       (system-exit! 1))))
 
 (defn ^:command enable-encryption
@@ -263,7 +280,7 @@
     (log/info "Encryption removed OK.")
     (system-exit! 0)
     (catch Throwable e
-      (log/error e "ERROR REMOVING ENCRYPTION.")
+      (log/errorf "ERROR REMOVING ENCRYPTION: %s" (ex-message e))
       (system-exit! 1))))
 
 ;;; ------------------------------------------------ Validate Commands ----------------------------------------------

@@ -1,7 +1,7 @@
 import type { Store } from "@reduxjs/toolkit";
-import type { ComponentType } from "react";
-import { IndexRedirect, Route } from "react-router";
+import { IndexRedirect, Route, type RouteComponent } from "react-router";
 
+import { PLUGIN_MULTI_FACTOR_AUTH } from "metabase/plugins";
 import type { State } from "metabase/redux/store";
 
 import AccountApp from "./app/containers/AccountApp";
@@ -12,7 +12,7 @@ import UserProfileApp from "./profile/containers/UserProfileApp";
 
 export const getAccountRoutes = (
   _store: Store<State>,
-  IsAuthenticated: ComponentType,
+  IsAuthenticated: RouteComponent,
 ) => {
   return (
     <Route path="/account" component={IsAuthenticated}>
@@ -20,6 +20,10 @@ export const getAccountRoutes = (
         <IndexRedirect to="profile" />
         <Route path="profile" component={UserProfileApp} />
         <Route path="password" component={UserPasswordApp} />
+        <Route
+          path="security"
+          component={PLUGIN_MULTI_FACTOR_AUTH.AccountSecurityPanel}
+        />
         <Route path="login-history" component={LoginHistoryApp} />
         {getNotificationRoutes()}
       </Route>

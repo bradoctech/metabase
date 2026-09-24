@@ -1,8 +1,7 @@
 import type { Store } from "@reduxjs/toolkit";
 import type { StoryFn } from "@storybook/react";
-import _ from "underscore";
 
-import { getStore } from "__support__/entities-store";
+import { getCommonStore } from "__support__/entities-store";
 import { mockSettings } from "__support__/settings";
 import { createMockEntitiesState } from "__support__/store";
 import {
@@ -10,9 +9,7 @@ import {
   VisualizationWrapper,
   createWaitForResizeToStopDecorator,
 } from "__support__/storybook";
-import { Api } from "metabase/api";
 import type { MetabaseTheme } from "metabase/embedding-sdk/theme";
-import { commonReducers } from "metabase/reducers-common";
 import { MetabaseReduxProvider } from "metabase/redux";
 import type { State } from "metabase/redux/store";
 import {
@@ -36,16 +33,7 @@ const storeInitialState = createMockState({
   settings,
   entities: createMockEntitiesState({}),
 });
-const publicReducerNames = Object.keys(commonReducers);
-const initialState = _.pick(storeInitialState, ...publicReducerNames) as State;
-
-const storeMiddleware = [Api.middleware];
-
-const store = getStore(
-  commonReducers,
-  initialState,
-  storeMiddleware,
-) as unknown as Store<State>;
+const store = getCommonStore(storeInitialState) as unknown as Store<State>;
 
 export default {
   title: "viz/Table",
@@ -58,7 +46,7 @@ const DefaultTemplate: StoryFn<{
 }> = ({
   series,
   isDashboard,
-  bgColor = "white",
+  bgColor = "core-white",
   theme,
   hasDevWatermark,
 }: {

@@ -19,6 +19,8 @@
    [metabase.query-processor.card-test :as qp.card-test]
    [metabase.query-processor.preprocess :as qp.preprocess]
    [metabase.search.ingestion :as search.ingestion]
+   [metabase.stale-test :as stale-test]
+   [metabase.staleness.core :as staleness]
    [metabase.test :as mt]
    [metabase.test.util :as tu]
    [metabase.util :as u]
@@ -384,7 +386,7 @@
                     template-tags)})
 
 (deftest ^:parallel template-tag-parameters-text-tag-test
-  (testing ":text template tag without widget-type produces :string/= parameter type (QUE2-326)"
+  (testing ":text template tag without widget-type produces :string/= parameter type"
     (let [card (native-query-card
                 "SELECT * FROM PEOPLE WHERE NAME = {{name}}"
                 {"name" {:id           "_NAME_"
@@ -403,7 +405,7 @@
              (card/template-tag-parameters card))))))
 
 (deftest ^:parallel template-tag-parameters-boolean-tag-test
-  (testing ":boolean template tag without widget-type produces :boolean/= parameter type (QUE2-326)"
+  (testing ":boolean template tag without widget-type produces :boolean/= parameter type"
     (let [card (native-query-card
                 "SELECT 1 WHERE 1 = {{active}}"
                 {"active" {:id           "_ACTIVE_"
@@ -421,7 +423,7 @@
              (card/template-tag-parameters card))))))
 
 (deftest ^:parallel template-tag-parameters-dimension-category-widget-test
-  (testing ":dimension template tag with :category widget-type passes through widget-type (QUE2-326)"
+  (testing ":dimension template tag with :category widget-type passes through widget-type"
     (let [card (native-query-card
                 "SELECT * FROM PRODUCTS WHERE {{cat}}"
                 {"cat" {:id           "_CAT_"
@@ -678,6 +680,46 @@
                     :name "Param 1"
                     :type :category}]
                   (t2/select-one-fn :parameters :model/Card :id (:id card)))))))))
+
+(deftest cleanup-parameter-join-aliased-value-field-test
+  (let [mp                (mt/metadata-provider)
+        venue-table       (lib.metadata/table mp (mt/id :venues))
+        categories-table  (lib.metadata/table mp (mt/id :categories))
+        venue-category-id (lib.metadata/field mp (mt/id :venues :category_id))
+        categories-id     (lib.metadata/field mp (mt/id :categories :id))
+        categories-name   (lib.metadata/field mp (mt/id :categories :name))
+        venues-query      (lib/query mp venue-table)
+        source-query-1    (lib/join venues-query
+                                    (lib/join-clause categories-table
+                                                     [(lib/= venue-category-id categories-id)]))
+        source-query-2    (lib/join venues-query
+                                    (-> (lib/join-clause categories-table
+                                                         [(lib/= venue-category-id categories-id)])
+                                        (lib/with-join-fields [categories-name])))]
+    (mt/with-temp
+      [:model/Card {source-card-id :id} (mt/card-with-source-metadata-for-query source-query-1)
+       :model/Card {param-card-id :id
+                    param-card-params :parameters}  {:parameters [{:name                 "Category name"
+                                                                   :slug                 "category_name"
+                                                                   :id                   "category_name_param"
+                                                                   :type                 :string/=
+                                                                   :values_query_type    :list
+                                                                   :values_source_type   :card
+                                                                   :values_source_config {:card_id     source-card-id
+                                                                                          :value_field [:field "Categories__NAME" {:base-type "type/Text"}]}}]}]
+      (testing "saving the source card with different columns that still include the value_field keeps the parameter config"
+        (t2/update! :model/Card source-card-id (mt/card-with-source-metadata-for-query source-query-2))
+        (is (= param-card-params
+               (t2/select-one-fn :parameters :model/Card :id param-card-id))))
+      (testing "removing the join from the source card removes the parameter config"
+        (t2/update! :model/Card source-card-id (mt/card-with-source-metadata-for-query venues-query))
+        (is (= [{:name "Category name",
+                 :slug "category_name",
+                 :id "category_name_param",
+                 :type :string/=,
+                 :values_query_type :list,
+                 :values_source_type nil}]
+               (t2/select-one-fn :parameters :model/Card :id param-card-id)))))))
 
 (deftest ^:parallel descendants-test
   (testing "regular cards don't depend on anything"
@@ -1599,3 +1641,62 @@
               (testing "remapped values appear correctly"
                 (is (= ["Zero" "A" "B" "C" "D"]
                        (map last rows)))))))))))
+
+(defn- dependent-card [db-id source-card]
+  {:database_id   db-id
+   :dataset_query {:lib/type :mbql/query
+                   :database db-id
+                   :stages   [{:lib/type    :mbql.stage/mbql
+                               :source-card (:id source-card)}]}})
+
+(deftest cascade-database-change-to-transitive-dependents-test
+  (testing "Recursive cascade through chains of dependent cards (#74561)"
+    (mt/with-temp [:model/Database {db1-id :id} {:name "db1" :engine :h2}
+                   :model/Database {db2-id :id} {:name "db2" :engine :h2}
+                   :model/Card     model        {:type          :model
+                                                 :database_id   db1-id
+                                                 :dataset_query {:lib/type :mbql/query
+                                                                 :database db1-id
+                                                                 :stages   [{:lib/type :mbql.stage/native
+                                                                             :native   "SELECT 1"}]}}
+                   :model/Card     question1    (dependent-card db1-id model)
+                   :model/Card     question2    (dependent-card db1-id model)
+                   :model/Card     question3    (dependent-card db1-id question1)
+                   :model/Card     question4    (dependent-card db1-id question2)
+                   :model/Card     question5    (dependent-card db1-id question4)]
+      (mt/with-test-user :crowberto
+        (card/update-card! {:card-before-update model
+                            :card-updates       {:dataset_query {:lib/type :mbql/query
+                                                                 :database db2-id
+                                                                 :stages   [{:lib/type :mbql.stage/native
+                                                                             :native   "SELECT 1"}]}}}))
+      (doseq [question [question1 question2 question3 question4 question5]]
+        (let [updated-card (t2/select-one :model/Card :id (:id question))]
+          (is (= db2-id (get-in updated-card [:dataset_query :database])))
+          (is (= db2-id (:database_id updated-card))))))))
+
+(deftest find-stale-query-test
+  (testing "the Card `find-stale-query` method selects stale cards and applies the model's own exclusions"
+    (mt/with-temp [:model/Collection {col-id :id} {}
+                   :model/Card {stale-id :id}    (stale-test/stale-card {:name "stale" :collection_id col-id})
+                   :model/Card {fresh-id :id}    {:name "fresh" :collection_id col-id
+                                                  :last_used_at (stale-test/datetime-months-ago 1)}
+                   :model/Card {archived-id :id} (stale-test/stale-card {:name "archived" :collection_id col-id
+                                                                         :archived true})]
+      (let [stale-ids (fn [] (set (map :id (t2/query (staleness/find-stale-query
+                                                      :model/Card
+                                                      {:collection-ids #{col-id}
+                                                       :cutoff-date    (stale-test/date-months-ago 6)})))))]
+        (testing "a stale, unarchived card is returned; recent and archived cards are not"
+          (let [ids (stale-ids)]
+            (is (contains? ids stale-id))
+            (is (not (contains? ids fresh-id)))
+            (is (not (contains? ids archived-id)))))
+        (testing "a publicly shared card is excluded only when public sharing is enabled"
+          (mt/with-temp [:model/Card {public-id :id} (stale-test/stale-card
+                                                      {:name "public" :collection_id col-id
+                                                       :public_uuid (str (random-uuid))})]
+            (tu/with-temporary-setting-values [enable-public-sharing false]
+              (is (contains? (stale-ids) public-id)))
+            (tu/with-temporary-setting-values [enable-public-sharing true]
+              (is (not (contains? (stale-ids) public-id))))))))))

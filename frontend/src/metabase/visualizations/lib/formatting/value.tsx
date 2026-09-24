@@ -9,7 +9,6 @@ import { NULL_DISPLAY_VALUE } from "metabase/utils/constants";
 import { formatNumber } from "metabase/utils/formatting/numbers";
 import { removeNewLines } from "metabase/utils/formatting/strings";
 import { formatTime } from "metabase/utils/formatting/time";
-import type { OptionsType } from "metabase/utils/formatting/types";
 import { parseNumber } from "metabase/utils/number";
 import {
   isBoolean,
@@ -20,7 +19,7 @@ import {
   isTime,
   isURL,
 } from "metabase-lib/v1/types/utils/isa";
-import type { DatasetColumn } from "metabase-types/api";
+import type { ColumnSettings, DatasetColumn } from "metabase-types/api";
 
 import { clickBehaviorIsValid, getDataFromClicked } from "./click-data";
 import { formatDateTimeWithUnit, formatRange } from "./date";
@@ -36,7 +35,7 @@ const MARKDOWN_RENDERERS = {
   ),
 };
 
-export function formatValue(value: unknown, _options: OptionsType = {}) {
+export function formatValue(value: unknown, _options: ColumnSettings = {}) {
   let { prefix, suffix, ...options } = _options;
   // avoid rendering <ExternalLink> if we have click_behavior set
   if (
@@ -96,7 +95,7 @@ export function formatValue(value: unknown, _options: OptionsType = {}) {
 
 export function getRemappedValue(
   value: string | number,
-  { remap, column }: OptionsType = {},
+  { remap, column }: ColumnSettings = {},
 ) {
   if (remap && column) {
     if (column.hasRemappedValue && column.hasRemappedValue(value)) {
@@ -111,7 +110,7 @@ export function getRemappedValue(
 }
 
 // fallback for formatting a string without a column semantic_type
-function formatStringFallback(value: any, options: OptionsType = {}) {
+function formatStringFallback(value: any, options: ColumnSettings = {}) {
   if (options.view_as !== null) {
     value = formatUrl(value, options);
     if (typeof value === "string") {
@@ -129,7 +128,7 @@ function formatStringFallback(value: any, options: OptionsType = {}) {
 
 export function formatValueRaw(
   value: unknown,
-  options: OptionsType = {},
+  options: ColumnSettings = {},
 ): React.ReactElement | string | number | null {
   options = {
     jsx: false,
@@ -164,11 +163,12 @@ export function formatValueRaw(
     );
   } else if (
     options.click_behavior &&
+    "linkTextTemplate" in options.click_behavior &&
     options.click_behavior.linkTextTemplate
   ) {
     return renderLinkTextForClick(
       options.click_behavior.linkTextTemplate,
-      getDataFromClicked(options.clicked) as any,
+      getDataFromClicked(options.clicked),
     );
   } else if (
     (isURL(column) && options.view_as == null) ||

@@ -572,13 +572,9 @@
   [_driver _feature _db]
   true)
 
-;; We say Mongo supports foreign keys so that the front end can use implicit
-;; joins. In reality, Mongo doesn't support foreign keys.
-;; Only define an implementation for `:foreign-keys` if none exists already.
-;; In test extensions we define an alternate implementation, and we don't want
-;; to stomp over that if it was loaded already.
-(when-not (get (methods driver/database-supports?) [:mongo :foreign-keys])
-  (defmethod driver/database-supports? [:mongo :foreign-keys] [_driver _feature _db] true))
+(defmethod driver/database-supports? [:mongo :metadata/key-constraints]
+  [_driver _feature _db]
+  false)
 
 (defmethod driver/mbql->native :mongo
   [_ query]
@@ -590,9 +586,9 @@
   (mongo.connection/with-mongo-client [_ (driver-api/database (driver-api/metadata-provider))]
     (mongo.execute/execute-reducible-query query respond)))
 
-(defmethod driver/substitute-native-parameters :mongo
-  [driver inner-query]
-  (mongo.params/substitute-native-parameters driver inner-query))
+(defmethod driver/substitute-native-parameters-in-stage-method :mongo
+  [driver metadata-providerable stage]
+  (mongo.params/substitute-native-parameters driver metadata-providerable stage))
 
 (defmethod driver/db-start-of-week :mongo
   [_]
@@ -653,7 +649,6 @@
       (encode-mongo parsed))
     (catch Throwable e
       (log/errorf "Unexpected error while prettifying Mongo BSON query: %s" (ex-message e))
-      (log/debugf e "Query:\n%s" native-form)
       native-form)))
 
 (defmethod driver/create-table! :mongo

@@ -42,7 +42,7 @@
   batch-insert-permissions!
   disable-perms-cache
   download-perms-level
-  full-db-permission-for-user
+  full-database-permission-for-user
   full-schema-permission-for-user
   groups-have-permission-for-table?
   index-database-permissions
@@ -51,7 +51,9 @@
   most-permissive-database-permission-for-user
   native-download-permission-for-user
   permissions-for-user
-  prime-db-cache
+  prime-database-perms-cache
+  prime-schema-perms-cache
+  prime-table-perms-cache
   sandboxes-for-user
   schema-permission-for-user
   set-database-permission!
@@ -67,8 +69,6 @@
   with-relevant-permissions-for-user
   has-any-transforms-permission?
   has-db-transforms-permission?
-  has-any-workspaces-permission?
-  has-db-workspaces-permission?
   set-default-group-permissions!
   set-default-database-permissions!
   set-default-table-permissions!
@@ -85,7 +85,12 @@
  [metabase.permissions.models.permissions
   namespace-clause
   can-read-audit-helper
+  can-read-via-parent-collection?
+  collection-based-visibility-search-models
+  collection-id-only-read-method
+  collection-id-only-read-models
   current-user-has-application-permissions?
+  define-collection-based-visibility!
   grant-application-permissions!
   grant-collection-read-permissions!
   grant-collection-readwrite-permissions!

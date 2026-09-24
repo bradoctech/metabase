@@ -54,7 +54,6 @@
                               :database-routing                 false
                               :datetime-diff                    true
                               :describe-default-expr            true
-                              :describe-fks                     false
                               ;; JDBC driver always provides "NO" for the IS_GENERATEDCOLUMN JDBC metadata
                               :describe-is-generated            false
                               :describe-is-nullable             true
@@ -187,7 +186,7 @@
              (when (.next rset)
                (.getBoolean rset 1))))))
       (catch Throwable e
-        (log/error e "An exception during ClickHouse connectivity check")
+        (log/errorf "An exception during ClickHouse connectivity check: %s" (ex-message e))
         false))
     ;; During normal usage, fall back to the default implementation
     (sql-jdbc.conn/can-connect? driver details)))
@@ -259,10 +258,18 @@
   ;; filenames as table/column names. But its an approximation
   206)
 
+(defn- escape-ident
+  ;; Backslash-escape rather than double the backtick: ClickHouse identifiers follow string-literal escaping, where
+  ;; a preceding backslash would defeat quote-doubling.
+  [s]
+  (-> s
+      (str/replace "\\" "\\\\")
+      (str/replace "`" "\\`")))
+
 (defn- quote-name [s]
   (let [s (if (and (keyword? s) (namespace s)) (str (namespace s) "." (name s)) s)
         parts (filter identity (str/split (name s) #"\."))]
-    (str/join "." (map #(str "`" % "`") parts))))
+    (str/join "." (map #(str "`" (escape-ident %) "`") parts))))
 
 (defn- create-table!-sql
   "Creates a ClickHouse table with the given name and column definitions. It assumes the engine is MergeTree,
@@ -398,11 +405,10 @@
   (let [sql [[(format "CREATE DATABASE IF NOT EXISTS %s;" (quote-schema schema))]]]
     (driver/execute-raw-queries! driver conn-spec sql)))
 
-#_{:clj-kondo/ignore [:deprecated-var]}
-(defmethod driver/describe-table-fks :clickhouse
-  [_driver _database _table]
-  (log/warn "Clickhouse does not support foreign keys. `describe-table-fks` should not have been called!")
-  #{})
+(defmethod driver/describe-fks :clickhouse
+  [_driver _database & {:as _options}]
+  (log/warn "Clickhouse does not support foreign keys. `describe-fks` should not have been called!")
+  nil)
 
 (defmethod driver/table-known-to-not-exist? :clickhouse
   [_driver e]
@@ -431,7 +437,15 @@
         (doseq [sql (cond-> [(format "CREATE DATABASE IF NOT EXISTS %s" quoted-db)
                              (format "CREATE USER IF NOT EXISTS %s IDENTIFIED BY '%s'"
                                      quoted-user (:password read-user))
-                             (format "GRANT ALL ON %s.* TO %s" quoted-db quoted-user)]
+                             ;; Least-privilege grant on the workspace's own DB (ClickHouse has no
+                             ;; owner auto-privileges, so grant each verb explicitly):
+                             ;;   SELECT       - read its own tables
+                             ;;   INSERT       - CTAS populate + incremental insert
+                             ;;   CREATE TABLE - transform target
+                             ;;   DROP TABLE   - swap/cleanup
+                             ;; (these four also satisfy the atomic-swap RENAME TABLE.)
+                             (format "GRANT SELECT, INSERT, CREATE TABLE, DROP TABLE ON %s.* TO %s"
+                                     quoted-db quoted-user)]
                       quoted-canonical-db
                       (conj (format "GRANT SHOW DATABASES ON %s.* TO %s"
                                     quoted-canonical-db quoted-user)))]

@@ -5,8 +5,10 @@ import "metabase-dev";
 import { push } from "react-router-redux";
 import _ from "underscore";
 
-import api from "metabase/api/legacy-client";
+import { api } from "metabase/api/client";
 import { init } from "metabase/app";
+import { setRequestClientHeaders } from "metabase/embedding/lib/embedding-request-auth";
+import { PLUGIN_API } from "metabase/plugins";
 import { mainReducers } from "metabase/reducers-main";
 import { setErrorPage } from "metabase/redux/app";
 import { clearCurrentUser } from "metabase/redux/user";
@@ -30,7 +32,8 @@ const NOT_AUTHORIZED_TRIGGERS = [
  * might want to use a flag too instead of just checking for being in an iframe.
  */
 if (isWithinIframe() && !IFRAMED_IN_SELF) {
-  api.requestClient = "embedding-iframe-full-app";
+  PLUGIN_API.onBeforeRequestHandlers.setRequestClientHeaders =
+    setRequestClientHeaders({ name: "embedding-iframe-full-app" });
 }
 
 init(mainReducers, getRoutes, (store) => {

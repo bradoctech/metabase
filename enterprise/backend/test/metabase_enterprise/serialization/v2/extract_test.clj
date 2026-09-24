@@ -12,7 +12,6 @@
    [metabase-enterprise.serialization.v2.round-trip-test :as round-trip-test]
    [metabase.actions.models :as action]
    [metabase.audit-app.core :as audit]
-   [metabase.config.core :as config]
    [metabase.core.core :as mbc]
    [metabase.lib-be.core :as lib-be]
    [metabase.lib.core :as lib]
@@ -43,6 +42,13 @@
   (->> (by-model model-name extraction)
        (map (comp :id last :serdes/meta))
        set))
+
+(defn- extract-aborts!
+  "Realize `(extract/extract opts)`, asserting it aborts with the escape-analysis error (#75176).
+   Escape warnings are logged before the abort, so callers can still assert on the logged messages."
+  [opts]
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"incomplete export"
+                        (into [] (extract/extract opts)))))
 
 (deftest fundamentals-test
   (mt/with-empty-h2-app-db!
@@ -1493,7 +1499,7 @@
                         set))))
           (testing "depending on data from personal collections results in errors"
             (mt/with-log-messages-for-level [messages [metabase-enterprise :warn]]
-              (extract/extract {:targets [["Collection" coll4-id]] :no-settings true :no-data-model true :no-transforms true})
+              (extract-aborts! {:targets [["Collection" coll4-id]] :no-settings true :no-data-model true :no-transforms true})
               (let [msgs (into #{}
                                (map :message)
                                (messages))]
@@ -1639,7 +1645,7 @@
                                                                              :values_source_config {:card_id card1-id}}]}]
       (testing "Complain about card not available for exporting"
         (mt/with-log-messages-for-level [messages [metabase-enterprise :warn]]
-          (extract/extract {:targets       [["Collection" coll1-id]]
+          (extract-aborts! {:targets       [["Collection" coll1-id]]
                             :no-settings   true
                             :no-data-model true})
           (is (some #(str/starts-with? % "Failed to export Dashboard")
@@ -1649,7 +1655,7 @@
       (testing "Complain about card depending on an outside card: "
         (testing "when its :source-table"
           (mt/with-log-messages-for-level [messages [metabase-enterprise :warn]]
-            (extract/extract {:targets       [["Collection" coll2-id]]
+            (extract-aborts! {:targets       [["Collection" coll2-id]]
                               :no-settings   true
                               :no-data-model true})
             (is (some #(str/starts-with? % "Failed to export Cards")
@@ -1658,7 +1664,7 @@
                             (messages))))))
         (testing "when it's :parameters"
           (mt/with-log-messages-for-level [messages [metabase-enterprise :warn]]
-            (extract/extract {:targets       [["Collection" coll2-id]]
+            (extract-aborts! {:targets       [["Collection" coll2-id]]
                               :no-settings   true
                               :no-data-model true})
             (is (some #(str/starts-with? % "Failed to export Cards")
@@ -1668,7 +1674,7 @@
       (testing "When exporting all collections"
         (testing "Complain about dependents in personal collections"
           (mt/with-log-messages-for-level [messages [metabase-enterprise :warn]]
-            (extract/extract {:no-settings   true
+            (extract-aborts! {:no-settings   true
                               :no-data-model true})
             (is (some #(str/starts-with? % "Failed to export Cards")
                       (into #{}
@@ -1687,6 +1693,38 @@
                                                    :no-transforms  true}))]
           (is (seq (filter #(= "Database" (-> % :serdes/meta last :model)) extracted))
               "Databases should be exported even when cards reference personal collections"))))))
+
+(deftest escape-continue-on-error-test
+  (testing "continue-on-error lets the export proceed past escape analysis instead of aborting (#74622)"
+    (mt/with-empty-h2-app-db!
+      (ts/with-temp-dpc [;; non-H2 engine so the database survives serdes extract filtering
+                         :model/Database      {db-id :id}            {:engine :postgres}
+                         :model/Collection    {coll-id  :id
+                                               coll-eid :entity_id}  {:name "Target Collection"}
+                         :model/Card          {clean-eid :entity_id} {:name          "Clean Card"
+                                                                      :collection_id coll-id
+                                                                      :database_id   db-id}
+                         :model/Dashboard     {dash-id  :id
+                                               dash-eid :entity_id}  {:name "A Dashboard" :collection_id coll-id}
+                         ;; this card lives outside the target collection, so it "escapes"
+                         :model/Card          {escaped-eid :entity_id
+                                               escaped-id  :id}      {:name "Escaped Card" :database_id db-id}
+                         :model/DashboardCard _                      {:card_id escaped-id :dashboard_id dash-id}]
+        (let [opts {:targets [["Collection" coll-id]] :no-settings true :no-data-model true}]
+          (testing "without the flag, escape analysis aborts the whole export with an error (#75176)"
+            (extract-aborts! opts))
+          (testing "with continue-on-error, everything in the target collection is exported and the escaped card is left out"
+            (mt/with-log-messages-for-level [messages [metabase-enterprise :warn]]
+              (let [extracted (into [] (extract/extract (assoc opts :continue-on-error true)))]
+                (is (= #{coll-eid} (ids-by-model "Collection" extracted)))
+                (is (= #{dash-eid} (ids-by-model "Dashboard" extracted)))
+                (is (contains? (ids-by-model "Card" extracted) clean-eid)
+                    "the clean card inside the target collection is exported")
+                (is (not (contains? (ids-by-model "Card" extracted) escaped-eid))
+                    "the escaped card outside the target collection is not exported")
+                (is (some #(str/starts-with? % "Failed to export Dashboard")
+                          (map :message (messages)))
+                    "the escape report is still logged as a warning")))))))))
 
 (deftest recursive-colls-test
   (mt/with-empty-h2-app-db!
@@ -2094,10 +2132,10 @@
   (testing "visualizer settings transform entity IDs <-> card IDs"
     (let [card-entity-id "WcMlLFNVcy0iO49mKW3WH"
           card-id 621]
-      (with-redefs [serdes/*import-fk* (fn [_entity-id _model]
-                                         card-id)
-                    serdes/*export-fk* (fn [_card-id _model]
-                                         card-entity-id)]
+      (mt/with-dynamic-fn-redefs [serdes/*import-fk* (fn [_entity-id _model]
+                                                       card-id)
+                                  serdes/*export-fk* (fn [_card-id _model]
+                                                       card-entity-id)]
         (testing "transforms sourceId in column mappings"
           (let [input {:visualization
                        {:columnValuesMapping
@@ -2876,19 +2914,14 @@
         (is (= #{light-eid dark-eid}
                (ids-by-model "EmbeddingTheme" (extract/extract {}))))))))
 
-(deftest stamp-metabase-version-test
-  (testing "extract stamps :metabase_version on entities (so load can detect version mismatches)"
+(deftest no-metabase-version-stamp-test
+  (testing "extract does not stamp :metabase_version on entities (GHY-4013: it caused spurious remote-sync diffs)"
     (mt/with-empty-h2-app-db!
       (ts/with-temp-dpc [:model/Collection {coll-id :id} {:name "My Collection"}
                          :model/Card       _             {:name "My Card" :collection_id coll-id}]
         (let [extracted (into [] (extract/extract {}))
               by-model  (group-by (comp :model last :serdes/meta) extracted)]
-          (testing "Collections and Cards get the current Metabase version"
-            (doseq [m ["Collection" "Card"]
-                    entity (get by-model m)]
-              (is (= config/mb-version-string (:metabase_version entity))
-                  (str m " should be stamped with the current version"))))
-          (testing "Settings are not stamped — settings.yaml only persists :key and :value"
-            (doseq [setting (get by-model "Setting")]
-              (is (not (contains? setting :metabase_version))
-                  "Setting should not be stamped"))))))))
+          (doseq [m      ["Collection" "Card"]
+                  entity (get by-model m)]
+            (is (not (contains? entity :metabase_version))
+                (str m " should not carry a :metabase_version"))))))))

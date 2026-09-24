@@ -1,6 +1,6 @@
 import { removeNewLines } from "metabase/utils/formatting/strings";
-import type { OptionsType } from "metabase/utils/formatting/types";
 import { isURL } from "metabase-lib/v1/types/utils/isa";
+import type { ColumnSettings } from "metabase-types/api";
 
 import { getDataFromClicked } from "./click-data";
 import { renderLinkTextForClick, renderLinkURLForClick } from "./link";
@@ -28,7 +28,7 @@ export function getUrlProtocol(url: string) {
   }
 }
 
-export function formatUrl(value: string, options: OptionsType = {}) {
+export function formatUrl(value: string, options: ColumnSettings = {}) {
   const { jsx, rich, column, collapseNewlines } = options;
 
   const url = getLinkUrl(value, options);
@@ -45,7 +45,7 @@ export function formatUrl(value: string, options: OptionsType = {}) {
   }
 }
 
-function getLinkText(value: string, options: OptionsType) {
+function getLinkText(value: string, options: ColumnSettings) {
   const { view_as, link_text, clicked, collapseNewlines } = options;
 
   const isExplicitLink = view_as === "link";
@@ -53,10 +53,7 @@ function getLinkText(value: string, options: OptionsType) {
 
   let text;
   if (isExplicitLink && hasCustomizedText) {
-    text = renderLinkTextForClick(
-      link_text,
-      getDataFromClicked(clicked) as any,
-    );
+    text = renderLinkTextForClick(link_text, getDataFromClicked(clicked));
   } else {
     text =
       getRemappedValue(value, options) ||
@@ -68,13 +65,13 @@ function getLinkText(value: string, options: OptionsType) {
 
 function getLinkUrl(
   value: string,
-  { view_as, link_url, clicked, column }: OptionsType,
+  { view_as, link_url, clicked, column }: ColumnSettings,
 ) {
   const isExplicitLink = view_as === "link";
   const hasCustomizedUrl = link_url && clicked;
 
   if (isExplicitLink && hasCustomizedUrl) {
-    return renderLinkURLForClick(link_url, getDataFromClicked(clicked) as any);
+    return renderLinkURLForClick(link_url, getDataFromClicked(clicked));
   }
 
   const protocol = getUrlProtocol(value);

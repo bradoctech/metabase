@@ -271,8 +271,8 @@
      (fn [mp]
        (let [products (lib.metadata/table mp (mt/id :products))]
          (mt/with-temp [:model/Card {card-id :id :as card} {:dataset_query (lib/query mp products)}]
-           (with-redefs [deps.dependency-status/mark-stale!
-                         (fn [_ _] (throw (ex-info "Simulated DB failure" {})))]
+           (mt/with-dynamic-fn-redefs [deps.dependency-status/mark-stale!
+                                       (fn [_ _] (throw (ex-info "Simulated DB failure" {})))]
              ;; Should not throw — the error is caught and logged
              (events/publish-event! :event/card-create {:object card :user-id api/*current-user-id*}))
            ;; Entity should NOT be stale (mark-stale! failed)

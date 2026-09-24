@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import _ from "underscore";
 
-import { TippyPopover } from "metabase/common/components/Popover/TippyPopover";
 import CS from "metabase/css/core/index.css";
+import { isEmbeddingSdk } from "metabase/embedding-sdk/config";
 import { Box, Space, Tabs } from "metabase/ui";
+import { PopoverWithRef } from "metabase/ui/components/overlays/Popover/PopoverWithRef";
 
 import type { Widget } from "../types";
 
 import ChartSettingsWidget from "./ChartSettingsWidget";
+import {
+  WidgetPopoverPortalContext,
+  useWidgetPopoverPortal,
+} from "./settings/WidgetPopoverPortalContext";
 
 interface ChartSettingsWidgetPopoverProps {
   anchor: HTMLElement;
@@ -21,7 +26,12 @@ export const ChartSettingsWidgetPopover = ({
   widgets,
 }: ChartSettingsWidgetPopoverProps) => {
   const sections = useRef<(string | undefined)[]>([]);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const {
+    value: portalValue,
+    setDropdownTarget,
+    setScrollContainer,
+    scrollContainer,
+  } = useWidgetPopoverPortal();
 
   useEffect(() => {
     sections.current = _.chain(widgets).pluck("section").unique().value();
@@ -37,20 +47,36 @@ export const ChartSettingsWidgetPopover = ({
 
   const onClose = () => {
     const activeElement = document.activeElement as HTMLElement;
-    if (activeElement && contentRef.current?.contains(activeElement)) {
+    if (activeElement && scrollContainer?.contains(activeElement)) {
       activeElement.blur();
     }
     handleEndShowWidget();
   };
 
   return (
-    <TippyPopover
-      reference={anchor}
-      content={
-        widgets.length > 0 ? (
+    <PopoverWithRef
+      anchorEl={anchor}
+      opened={!!anchor && widgets.length > 0}
+      onDismiss={onClose}
+      position="right"
+      offset={{ mainAxis: 10, crossAxis: 10 }}
+      middlewares={{
+        shift: { padding: 16 },
+        flip: { fallbackStrategy: "initialPlacement" },
+        size: { padding: 5 },
+      }}
+      styles={{ dropdown: { overflow: "visible" } }}
+      {...(isEmbeddingSdk() && {
+        withinPortal: false,
+        floatingStrategy: "fixed",
+      })}
+    >
+      <Box ref={setDropdownTarget}>
+        <WidgetPopoverPortalContext.Provider value={portalValue}>
           <Box
             pt={hasMultipleSections ? 0 : undefined}
-            ref={contentRef}
+            ref={setScrollContainer}
+            data-testid="chart-settings-widget-popover-content"
             mah="40rem"
             miw="336px"
             className={CS.overflowYAuto}
@@ -86,22 +112,8 @@ export const ChartSettingsWidgetPopover = ({
                 />
               ))}
           </Box>
-        ) : null
-      }
-      visible={!!anchor}
-      onClose={onClose}
-      placement="right"
-      offset={[10, 10]}
-      popperOptions={{
-        modifiers: [
-          {
-            name: "preventOverflow",
-            options: {
-              padding: 16,
-            },
-          },
-        ],
-      }}
-    />
+        </WidgetPopoverPortalContext.Provider>
+      </Box>
+    </PopoverWithRef>
   );
 };

@@ -118,7 +118,9 @@ export interface SetupSdkDashboardOptions extends NotificationChannelSetup {
   props?: Omit<Partial<SdkDashboardProps>, "token">;
   providerProps?: Partial<MetabaseProviderProps>;
   isLocaleLoading?: boolean;
-  component: ComponentType<SdkDashboardProps>;
+  component: ComponentType<
+    SdkDashboardProps & Pick<EditableDashboardProps, "dataPickerProps">
+  >;
   dashboardName?: string;
   dataPickerProps?: EditableDashboardProps["dataPickerProps"];
   dashcards?: DashboardCard[];
@@ -193,7 +195,7 @@ export const setupSdkDashboard = async ({
   setupNotificationChannelsEndpoints({
     email: { configured: isEmailConfigured },
     slack: { configured: isSlackConfigured },
-  } as any);
+  });
 
   setupDatabasesEndpoints([createMockDatabase()]);
 

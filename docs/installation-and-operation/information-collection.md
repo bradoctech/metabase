@@ -76,7 +76,7 @@ The token validation request includes:
 - Types of embedding (modular, guest, SDK, full app)
 - Site UUID (just an identifier for your Metabase)
 - Metabase version
-- Query execution timestamp (last UTC day)
+- Query execution counts for the previous UTC day, broken down by embedding type (SDK, interactive, static, public link, simple, and internal)
 - Metabot usage statistics: count of tokens, queries, users, and date (just counts and the date).
 
 ## Further reading

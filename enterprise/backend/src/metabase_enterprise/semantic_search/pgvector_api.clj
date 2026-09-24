@@ -16,7 +16,6 @@
    [metabase-enterprise.semantic-search.index-metadata :as semantic.index-metadata]
    [metabase-enterprise.semantic-search.repair :as semantic.repair]
    [metabase-enterprise.semantic-search.settings :as semantic.settings]
-   [metabase.util :as u]
    [metabase.util.log :as log])
   (:import (java.time Instant)))
 
@@ -57,9 +56,21 @@
     (semantic.index/create-index-table-if-not-exists! tx index)
     (semantic.dlq/create-dlq-table-if-not-exists! tx index-metadata index-id)
     (when-not active
-      (log/infof "Configured model does not match active index, switching to new index %s" (u/pprint-to-str index))
+      (log/infof "Configured model does not match active index, switching to new index %s" (pr-str index))
       (semantic.index-metadata/activate-index! tx index-metadata index-id))
     index))
+
+(defn ensure-active-hnsw-index!
+  "Build the HNSW index on the active index table if it does not already exist.
+
+  Called when an instance is (re)configured to the `:hnsw` vector-search strategy. No-ops when there is no
+  active index. Builds the index with `CREATE INDEX CONCURRENTLY` since the table is typically populated."
+  [pgvector index-metadata]
+  (if-let [{:keys [index]} (semantic.index-metadata/get-active-index-state pgvector index-metadata)]
+    (do
+      (log/info "Building HNSW index for active semantic search index" (:table-name index))
+      (semantic.index/create-hnsw-index-if-not-exists! pgvector index {:concurrently? true}))
+    (log/info "No active semantic search index; skipping HNSW index build")))
 
 (defn init-semantic-search!
   "Initialises a pgvector database for semantic search if it does not exist and creates an index for the provided

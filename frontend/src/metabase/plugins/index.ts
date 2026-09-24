@@ -15,11 +15,23 @@ export {
 } from "./oss/auth";
 export {
   PLUGIN_CACHING,
+  PerformanceTabId,
+  defaultMinDurationMs,
+  doNotCacheStrategyValidationSchema,
+  getAdaptiveStrategyValidationSchema,
+  getPerformanceTabMetadata,
+  getPositiveIntegerSchema,
+  inheritStrategyValidationSchema,
+  isModelWithClearableCache,
+  strategies,
   type InvalidateNowButtonProps,
   type MetricCachingModalProps,
+  type ModelWithClearableCache,
   type SidebarCacheSectionProps,
   type SidebarCacheFormProps,
   type PreemptiveCachingSwitchProps,
+  type StrategyData,
+  type StrategyLabel,
 } from "./oss/caching";
 export {
   PLUGIN_COLLECTIONS,
@@ -81,6 +93,10 @@ export {
 } from "./oss/metabot";
 export { PLUGIN_MODEL_PERSISTENCE } from "./oss/model-persistence";
 export {
+  PLUGIN_MULTI_FACTOR_AUTH,
+  type AuthChallengeFormProps,
+} from "./oss/multi-factor-auth";
+export {
   PLUGIN_MODERATION,
   type RevisionOrModerationEvent,
 } from "./oss/moderation";
@@ -126,6 +142,8 @@ export {
   type MoveSnippetModalProps,
   type SnippetCollectionPermissionsModalProps,
   type SnippetCollectionPickerModalProps,
+  type SnippetSidebarContext,
+  type SnippetSidebarMenuOption,
 } from "./oss/snippets";
 export {
   PLUGIN_TRANSFORMS,
@@ -139,10 +157,6 @@ export {
 export {
   PLUGIN_DEPENDENCIES,
   type DependencyGraphPageContextType,
-  type CheckDependenciesFormProps,
-  type CheckDependenciesModalProps,
-  type UseCheckDependenciesProps,
-  type UseCheckDependenciesResult,
 } from "./oss/dependencies";
 export { PLUGIN_UPLOAD_MANAGEMENT } from "./oss/upload-management";
 export { PLUGIN_WHITELABEL } from "./oss/whitelabel";
@@ -152,7 +166,7 @@ export {
 } from "./oss/writable-connection";
 export {
   PLUGIN_WORKSPACES,
-  type AdminConnectionInfoSectionProps,
+  type WorkspaceDatabaseSectionProps,
 } from "./oss/workspaces";
 export { PLUGIN_SECURITY_CENTER } from "./oss/security-center";
 export { PLUGIN_AI_CONTROLS, type AiControlsPlugin } from "./oss/ai-controls";
@@ -190,6 +204,7 @@ import { reinitialize as reinitializeLibrary } from "./oss/library";
 import { reinitialize as reinitializeMetabot } from "./oss/metabot";
 import { reinitialize as reinitializeModelPersistence } from "./oss/model-persistence";
 import { reinitialize as reinitializeModeration } from "./oss/moderation";
+import { reinitialize as reinitializeMultiFactorAuth } from "./oss/multi-factor-auth";
 import { reinitialize as reinitializePermissions } from "./oss/permissions";
 import { reinitialize as reinitializeRemoteSync } from "./oss/remote-sync";
 import { reinitialize as reinitializeReplacement } from "./oss/replacement";
@@ -234,6 +249,7 @@ export function reinitialize() {
   reinitializeMetabot();
   reinitializeModelPersistence();
   reinitializeModeration();
+  reinitializeMultiFactorAuth();
   reinitializePermissions();
   reinitializeRemoteSync();
   reinitializeReplacement();

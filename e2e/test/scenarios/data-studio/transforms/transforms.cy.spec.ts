@@ -50,9 +50,6 @@ describe("scenarios > admin > transforms", { tags: ["@external"] }, () => {
     cy.intercept("POST", "/api/transform-tag").as("createTag");
     cy.intercept("PUT", "/api/transform-tag/*").as("updateTag");
     cy.intercept("DELETE", "/api/transform-tag/*").as("deleteTag");
-    cy.intercept("POST", "/api/ee/dependencies/check-transform").as(
-      "checkTransformDependencies",
-    );
   });
 
   afterEach(() => {
@@ -195,7 +192,23 @@ describe("scenarios > admin > transforms", { tags: ["@external"] }, () => {
         cy.log("Select database");
         H.popover().findByText(DB_NAME).click();
 
+        cy.log("open the editor search panel with Cmd/Ctrl+F (metabase#73290)");
+        H.PythonEditor.focus();
+        cy.realPress([H.metaKey, "f"]);
+        cy.findByTestId("python-editor")
+          .find(".cm-panels")
+          .should("be.visible");
+
         getPythonDataPicker().findByText("Select a table…").click();
+
+        cy.log(
+          "the editor search panel must not paint over the modal (metabase#73290)",
+        );
+        H.entityPickerModal().should("be.visible");
+        cy.findByTestId("python-editor")
+          .find(".cm-panels")
+          .should("not.be.visible");
+
         H.entityPickerModal().findByText("Animals").click();
 
         getPythonDataPicker().within(() => {
@@ -346,10 +359,10 @@ describe("scenarios > admin > transforms", { tags: ["@external"] }, () => {
 
     it("should be possible to convert an MBQL transform to a SQL transform", () => {
       const EXPECTED_QUERY = `SELECT
-  "Schema Q"."Animals"."name" AS "name",
-  "Schema Q"."Animals"."score" AS "score"
+  "Schema A"."Animals"."name" AS "name",
+  "Schema A"."Animals"."score" AS "score"
 FROM
-  "Schema Q"."Animals"
+  "Schema A"."Animals"
 LIMIT
   5`;
 
@@ -1060,7 +1073,7 @@ LIMIT
       }).as("updateTransformError");
 
       cy.log("Toggle incremental on");
-      getIncrementalSwitch().click();
+      getIncrementalSwitch().findByRole("switch").should("be.enabled").click();
 
       cy.log("Wait for the failed request");
       cy.wait("@updateTransformError");
@@ -1369,16 +1382,44 @@ LIMIT
     });
 
     it("should not allow to overwrite an existing table when changing the target", () => {
+      cy.log("run a transform so its target table exists");
+      createMbqlTransform({ visitTransform: true });
+      H.DataStudio.Transforms.runTab().click();
+      runTransformAndWaitForSuccess();
+
+      cy.log("change another transform's target to that table");
+      createMbqlTransform({
+        name: "Other transform",
+        targetTable: TARGET_TABLE_2,
+        visitTransform: true,
+      });
+      H.DataStudio.Transforms.settingsTab().click();
+      getTransformsTargetContent().button("Change target").click();
+      H.modal().within(() => {
+        cy.findByLabelText("New table name").clear().type(TARGET_TABLE);
+        cy.button("Change target").click();
+        cy.wait("@updateTransform")
+          .its("response.statusCode")
+          .should("eq", 403);
+        cy.findByText("A table with that name already exists.").should(
+          "be.visible",
+        );
+      });
+    });
+
+    it("should not allow to change the target to one of the source tables", () => {
       createMbqlTransform({ visitTransform: true });
 
-      cy.log("change the target to an existing table");
+      cy.log("change the target to the source table");
       H.DataStudio.Transforms.settingsTab().click();
       getTransformsTargetContent().button("Change target").click();
       H.modal().within(() => {
         cy.findByLabelText("New table name").clear().type(SOURCE_TABLE);
         cy.button("Change target").click();
-        cy.wait("@updateTransform");
-        cy.findByText("A table with that name already exists.").should(
+        cy.wait("@updateTransform")
+          .its("response.statusCode")
+          .should("eq", 400);
+        cy.findByText(/Cyclic transform definitions detected/).should(
           "be.visible",
         );
       });
@@ -2270,8 +2311,14 @@ LIMIT
       H.modal().findByRole("button", { name: "Create" }).click();
 
       getTransformsList().within(() => {
-        // Expand the collection to see the nested collection
-        cy.findByText("Marketing Transforms").click();
+        // The list refetches its collection tree after the create, and the
+        // parent row only renders an "Expand" control once the new child is
+        // present in the refetched tree. Clicking the row name to toggle it is
+        // a no-op until then (the row isn't yet expandable), which left the
+        // nested collection hidden. Wait for the Expand control to appear — its
+        // presence is the deterministic signal the child has landed — and click
+        // that instead; it only ever expands, never toggles a collapse.
+        cy.findByRole("button", { name: "Expand" }).click();
         cy.findByText("Q4 Reports").should("be.visible");
       });
 
@@ -2767,10 +2814,10 @@ LIMIT
       cy.log("'Change target' button is not displayed");
       cy.findByRole("button", { name: /Change target/ }).should("not.exist");
 
-      cy.log("'Only process new and changed data' switch is not displayed");
-      cy.findByRole("switch", {
-        name: /Only process new and changed data/,
-      }).should("be.disabled");
+      cy.log("'Only process new data' switch is not displayed");
+      cy.findByRole("switch", { name: /Only process new data/ }).should(
+        "be.disabled",
+      );
 
       cy.log("visiting edit mode url directly redirects to view-only mode");
       cy.visit("/data-studio/transforms/1/edit");
@@ -3842,7 +3889,7 @@ describe("scenarios > admin > transforms", () => {
     cy.log("create a new transform");
     visitTransformListPage();
     cy.findByRole("heading", {
-      name: "To use transforms, you need a writable database connection",
+      name: "No compatible database connection",
     }).should("exist");
     cy.findByRole("link", { name: "View your database connections" }).should(
       "exist",
@@ -4186,7 +4233,7 @@ describe("scenarios > data studio > transforms > permissions", () => {
       "Ensure that transform permissions are visible when instance is hosted and transform feature is present",
     );
 
-    cy.findByRole("radio", { name: "Data" }).click({ force: true });
+    cy.findByRole("tab", { name: "Data" }).click({ force: true });
     cy.findByRole("menuitem", { name: "All Users" }).click();
 
     cy.findByRole("columnheader", { name: /Transforms/ })

@@ -426,7 +426,6 @@
                  :bigquery-cloud-sdk
                  :clickhouse
                  :databricks
-                 :druid
                  :snowflake
                  :sparksql
                  :sqlserver

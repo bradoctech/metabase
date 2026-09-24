@@ -11,10 +11,11 @@ import { ReadOnlyBanner } from "metabase/nav/components/ReadOnlyBanner";
 import { TrialBanner } from "metabase/nav/components/TrialBanner";
 import { PLUGIN_SECURITY_CENTER } from "metabase/plugins";
 import { useSelector } from "metabase/redux";
+import { getIsHosted } from "metabase/selectors/settings";
 import { getUserIsAdmin } from "metabase/selectors/user";
-import { getIsHosted } from "metabase/setup/selectors";
 import { isWithinIframe } from "metabase/utils/iframe";
 
+import { UpgradeBanner, useUpgradeBanner } from "./UpgradeBanner";
 import { getCurrentUTCTimestamp, shouldShowTrialBanner } from "./utils";
 
 export const AppBanner = () => {
@@ -28,6 +29,7 @@ export const AppBanner = () => {
   const migrateReadOnly = useSetting("read-only-mode");
   const isDevMode = useSetting("development-mode?");
 
+  const upgradeBannerProps = useUpgradeBanner();
   const { shouldShowLicenseTokenMissingBanner, dismissBanner } =
     useLicenseTokenMissingBanner(isAdmin);
 
@@ -51,6 +53,10 @@ export const AppBanner = () => {
 
   if (migrateReadOnly) {
     return <ReadOnlyBanner />;
+  }
+
+  if (upgradeBannerProps) {
+    return <UpgradeBanner {...upgradeBannerProps} />;
   }
 
   if (shouldShowLicenseTokenMissingBanner) {

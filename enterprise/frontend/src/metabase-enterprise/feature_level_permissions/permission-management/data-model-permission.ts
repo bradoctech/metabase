@@ -8,13 +8,8 @@ import {
 } from "metabase/admin/permissions/selectors/confirmations";
 import {
   DataPermissionType,
-  type EntityId,
   type PermissionOption,
   type PermissionSectionConfig,
-  type PermissionSubject,
-  type SchemaEntityId,
-  type SpecialGroupType,
-  type TableEntityId,
 } from "metabase/admin/permissions/types";
 import {
   getFieldsPermission,
@@ -27,6 +22,11 @@ import {
   DataPermissionValue,
   type Group,
   type GroupsPermissions,
+  type PermissionEntityId,
+  type PermissionSubject,
+  type SchemaEntityId,
+  type SpecialGroupType,
+  type TableEntityId,
 } from "metabase-types/api";
 
 export const DATA_MODEL_PERMISSION_OPTIONS: Record<string, PermissionOption> = {
@@ -35,21 +35,21 @@ export const DATA_MODEL_PERMISSION_OPTIONS: Record<string, PermissionOption> = {
     label: t`No`,
     value: DataPermissionValue.NONE,
     icon: "close",
-    iconColor: "danger",
+    iconColor: "feedback-negative",
   },
   edit: {
     // eslint-disable-next-line ttag/no-module-declaration -- see metabase#55045
     label: t`Yes`,
     value: DataPermissionValue.ALL,
     icon: "check",
-    iconColor: "success",
+    iconColor: "feedback-positive",
   },
   controlled: {
     // eslint-disable-next-line ttag/no-module-declaration -- see metabase#55045
     label: t`Granular`,
     value: DataPermissionValue.CONTROLLED,
     icon: "permissions_limited",
-    iconColor: "warning",
+    iconColor: "feedback-warning",
   },
 };
 
@@ -62,7 +62,7 @@ const DATA_MODEL_PERMISSIONS_DESC = [
 const getPermissionValue = (
   permissions: GroupsPermissions,
   groupId: number,
-  entityId: EntityId,
+  entityId: PermissionEntityId,
   permissionSubject: PermissionSubject,
 ): DataPermissionValue => {
   switch (permissionSubject) {
@@ -104,7 +104,7 @@ const getDisabledTooltip = (groupType: SpecialGroupType) => {
 };
 
 export const buildDataModelPermission = (
-  entityId: EntityId,
+  entityId: PermissionEntityId,
   groupId: number,
   groupType: SpecialGroupType,
   permissions: GroupsPermissions,

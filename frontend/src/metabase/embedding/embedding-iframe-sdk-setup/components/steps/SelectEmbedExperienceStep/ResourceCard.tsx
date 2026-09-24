@@ -46,7 +46,7 @@ export const ResourceCard = () => {
 
   const { data: selectedCollection } = useGetCollectionQuery(
     experience === "browser" && selectedItemId != null
-      ? { id: selectedItemId as CollectionId }
+      ? { id: selectedItemId }
       : skipToken,
   );
 
@@ -106,7 +106,7 @@ export const ResourceCard = () => {
       });
     } else if (experience === "browser") {
       updateSettings({
-        initialCollection: id as CollectionId,
+        initialCollection: id,
       });
     }
   };
@@ -191,7 +191,7 @@ export const ResourceCard = () => {
 
           <Button
             variant="default"
-            leftSection={<Icon name={icon} c="brand" size={16} />}
+            leftSection={<Icon name={icon} c="core-brand" size={16} />}
             rightSection={<Icon name="chevrondown" size={12} />}
             onClick={openPicker}
             data-testid="embed-browse-entity-button"

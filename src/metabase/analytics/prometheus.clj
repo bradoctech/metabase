@@ -170,6 +170,46 @@
            ([] (collect-metrics))
            ([_sampleNameFilter] (collect-metrics))))))))
 
+(defmulti pull-collector
+  "Declare a collect-time metric refresher. Each implementation returns a map of:
+
+    `:min-interval-s` -- run no more often than once every this many seconds
+    `:f`              -- a 0-arg function that refreshes one or more *declared* Prometheus metrics by making
+                         whatever update calls it wants (e.g. [[metabase.analytics-interface.core/set-gauge!]]
+                         or [[inc!]], for any number of metrics)
+
+  The dispatch value is any unique keyword identifying the collector. Implementations are run by
+  [[product-pull-collectors]] on each scrape (throttled by min-interval-s)."
+  {:arglists '([id])}
+  identity)
+
+(defonce ^:private pull-collector-last-runs
+  ;; id -> epoch-ms the collector's function last ran, used to enforce its :min-interval-s
+  (atom {}))
+
+(def ^:private product-pull-collectors
+  "Registered collector that runs the [[pull-collector]] implementations at scrape time, each throttled to
+  its own `:min-interval-s`. A throwing function is skipped without failing the scrape."
+  (letfn [(run-all! []
+            (let [now (System/currentTimeMillis)]
+              (doseq [id (keys (methods pull-collector))]
+                (try
+                  (let [{:keys [min-interval-s f]} (pull-collector id)]
+                    (when (>= (- now (get @pull-collector-last-runs id 0)) (long (* 1000 min-interval-s)))
+                      (swap! pull-collector-last-runs assoc id now)
+                      (f)))
+                  (catch Throwable e
+                    (log/warn "Error running pull collector" id (ex-message e))))))
+            [])]
+    (delay
+      (collector/named
+       {:name      "metabase_application_pull"
+        :namespace "metabase"}
+       (proxy [Collector] []
+         (collect
+           ([] (run-all!))
+           ([_sampleNameFilter] (run-all!))))))))
+
 (defn- jvm-collectors
   "JVM collectors. Essentially duplicating [[iapetos.collector.jvm]] namespace so we can set our own namespaces rather
   than \"iapetos_internal\""
@@ -320,7 +360,7 @@
                           ;; 1ms -> 10minutes
                           :buckets [1 500 1000 5000 10000 30000 60000 120000 300000 600000]})
    (prometheus/gauge :metabase-search/appdb-index-size
-                     {:description "Number of rows in the active appdb index table."})
+                     {:description "Estimated number of rows in this instance's active appdb search index table."})
    (prometheus/gauge :metabase-search/semantic-index-size
                      {:description "Number of rows in the active semantic index table."})
    (prometheus/gauge :metabase-search/semantic-dlq-size
@@ -362,6 +402,19 @@
    (prometheus/counter :metabase-search/semantic-db-query-ms
                        {:description "Total number of ms spent querying the search index"
                         :labels [:embedding-model]})
+   ;; the four semantic-vector-* diagnostics are emitted only while the semantic-search-explain setting is on
+   (prometheus/counter :metabase-search/semantic-vector-inner-ms
+                       {:description "Total ms spent in the inner vector subquery (diagnostic, off by default)"
+                        :labels [:strategy]})
+   (prometheus/counter :metabase-search/semantic-vector-tuples-scanned
+                       {:description "Total tuples the vector scan visited, returned plus filter-removed (diagnostic, off by default)"
+                        :labels [:strategy]})
+   (prometheus/counter :metabase-search/semantic-prefilter-pool-size
+                       {:description "Total rows a filter-first (brute-force) scan would have computed distances over (diagnostic, off by default)"
+                        :labels [:strategy]})
+   (prometheus/counter :metabase-search/semantic-vector-scan-used-index
+                       {:description "Count of vector searches by strategy and the plan node chosen for the index-table scan (diagnostic, off by default)"
+                        :labels [:strategy :plan-node]})
    (prometheus/counter :metabase-search/semantic-appdb-scores-ms
                        {:description "Total number of ms spent adding appdb-based scores"})
    (prometheus/counter :metabase-search/semantic-fallback-triggered
@@ -409,6 +462,25 @@
                        {:description "Number of successful semantic search DLQ retries"})
    (prometheus/counter :metabase-search/semantic-indexer-dlq-failures
                        {:description "Number of failed semantic search DLQ retries"})
+   ;; library entity index (entity-retrieval) reconciliation
+   (prometheus/histogram :metabase-entity-retrieval/reconcile-duration-ms
+                         {:description "Duration (ms) of a library entity index reconcile run, labelled :scope full | targeted."
+                          :labels      [:scope]
+                          ;; One shared bucket set has to resolve both scopes, which differ by orders of
+                          ;; magnitude: a `targeted` slice reconcile is typically sub-second, a `full` run
+                          ;; seconds-to-minutes. Fine low-end buckets keep targeted from collapsing into one
+                          ;; bucket; the high end still covers a full run. (~1ms -> 10min)
+                          :buckets     [1 10 50 100 250 500 1000 5000 10000 30000 60000 120000 300000 600000]})
+   (prometheus/counter :metabase-entity-retrieval/docs-inserted
+                       {:description "Number of documents embedded and inserted into the library entity index."})
+   (prometheus/counter :metabase-entity-retrieval/docs-deleted
+                       {:description "Number of documents garbage-collected from the library entity index."})
+   (prometheus/counter :metabase-entity-retrieval/search-failed
+                       {:description "Number of library entity index searches that errored and returned no results (e.g. a dimension mismatch before the next reconcile heals it). The nlq profile has no in-profile fallback once the curated tool is offered, so this is a real failure."})
+   (prometheus/gauge :metabase-entity-retrieval/index-documents
+                     {:description "Number of documents in the library entity index, as of the last full reconcile."})
+   (prometheus/gauge :metabase-entity-retrieval/index-entities
+                     {:description "Number of distinct entities in the library entity index, as of the last full reconcile."})
    ;; data-complexity-score timing
    ;; 1ms → 1min buckets; widen later if real-world runs push past a minute.
    (prometheus/histogram :metabase-data-complexity/scoring-duration-ms
@@ -527,7 +599,6 @@
                           :labels [:stage-label]
                           ;; 10 -> 10M rows
                           :buckets [10 100 1000 10000 100000 1000000 10000000]})
-   ;; Transform cancelation observability
    (prometheus/counter :metabase-transforms/cancelation-requests
                        {:description "Number of transform run cancelation requests issued, labeled by status (ok, error)."
                         :labels [:status]})
@@ -539,6 +610,13 @@
                           :labels [:outcome]
                           ;; 20s poll loop + 10min timeout sweep; buckets bracket both tails.
                           :buckets [100 500 1000 5000 10000 20000 30000 60000 120000 300000 600000]})
+   (prometheus/histogram :metabase-transforms/incremental-rows
+                         {:description "Source-available vs. target-processed row counts for incremental transform runs."
+                          :labels [:type :full-incremental-run]
+                          ;; Decade layout matches `data-transfer-rows`; `0` distinguishes empty
+                          ;; windows from "small but nonzero work"; `100M` covers full-incremental
+                          ;; rebuilds on large sources.
+                          :buckets [0 10 100 1000 10000 100000 1000000 10000000 100000000]})
    ;; Python-transform specific metrics
    (prometheus/histogram :metabase-transforms/python-api-call-duration-ms
                          {:description "Duration of Python runner API calls."
@@ -729,7 +807,10 @@
    ;; metaplow analytics metrics
    (prometheus/counter :metabase-metaplow/errors
                        {:description "Metaplow event pipeline errors by stage."
-                        :labels [:stage]})])
+                        :labels [:stage]})
+   (prometheus/gauge :metabase-memoize/cache-size
+                     {:description "Number of entries currently held in a monitored in-memory memoization cache."
+                      :labels [:cache]})])
 
 (defn- quartz-collectors
   []
@@ -780,7 +861,8 @@
                         (collector.ring/initialize registry)
                         (concat (jvm-collectors)
                                 (jetty-collectors)
-                                [@c3p0-collector]
+                                [@c3p0-collector
+                                 @product-pull-collectors]
                                 (product-collectors)
                                 (quartz-collectors)))]
     (when @jvm-hiccup-thread (@jvm-hiccup-thread))
@@ -858,7 +940,7 @@
              (alter-var-root #'system (constantly nil))
              (log/info "Prometheus web-server shut down")
              (catch Exception e
-               (log/warn e "Error stopping prometheus web-server")))))))
+               (log/warnf "Error stopping prometheus web-server: %s" (ex-message e))))))))
 
 (defn observe!
   "Call iapetos.core/observe on the metric in the global registry.

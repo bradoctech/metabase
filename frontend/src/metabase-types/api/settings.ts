@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 
-import type { SdkIframeEmbedSetupSettings } from "metabase/embedding/embedding-iframe-sdk-setup/types";
 import type { CurrencyStyle } from "metabase/utils/formatting";
 
 import type { InputSettingType } from "./actions";
 import type { DashboardId } from "./dashboard";
 import type { DatabaseId } from "./database";
+import type { SdkIframeEmbedSetupTheme } from "./embedding-theme";
 import type { GroupId } from "./group";
 import type { MetabotLimitPeriod, MetabotLimitType } from "./metabot";
 import type { NotificationRecipient } from "./notification";
@@ -112,6 +112,7 @@ export interface Engine {
   "details-fields"?: DatabaseFieldOrGroup[];
   source: EngineSource;
   "superseded-by": string | null;
+  "creatable?"?: boolean;
   "extra-info": {
     "db-routing-info": {
       text: string;
@@ -214,11 +215,19 @@ export interface VersionInfoRecord {
   announcement_url?: string;
 }
 
+export interface AlertUpgradeVersion {
+  min: string;
+  fixed: string;
+  message: string;
+  id?: string;
+}
+
 export interface VersionInfo {
   nightly?: VersionInfoRecord;
   beta?: VersionInfoRecord;
   latest?: VersionInfoRecord;
   older?: VersionInfoRecord[];
+  alert_upgrade_versions?: AlertUpgradeVersion[];
 }
 
 export type LocaleData = [string, string];
@@ -254,6 +263,7 @@ export type GdrivePayload = {
 const tokenStatusFeatures = [
   "advanced-config",
   "advanced-permissions",
+  "attached-dwh",
   "audit-app",
   "cache-granular-controls",
   "collection-cleanup",
@@ -344,6 +354,7 @@ export const tokenFeatures = [
   "offer-metabase-ai-managed",
   "metabase-ai-managed",
   "metabot-v3",
+  "multi-factor-auth",
   "official_collections",
   "sandboxes",
   "scim",
@@ -375,6 +386,7 @@ export const tokenFeatures = [
   "transforms-python",
   "transforms-basic",
   "library",
+  "library_retrieval",
   "support-users",
   "tenants",
   "writable_connection",
@@ -534,6 +546,14 @@ interface SettingsManagerSettings {
   "llm-anthropic-api-key"?: string | null;
   "llm-anthropic-api-base-url"?: string | null;
   "llm-openrouter-api-key"?: string | null;
+  "llm-zai-api-key"?: string | null;
+  "llm-mistral-api-key"?: string | null;
+  "llm-azure-api-key"?: string | null;
+  "llm-azure-api-base-url"?: string | null;
+  "llm-bedrock-access-key-id"?: string | null;
+  "llm-bedrock-secret-access-key"?: string | null;
+  "llm-bedrock-region"?: string | null;
+  "llm-bedrock-session-token"?: string | null;
   "openai-api-key": string | null;
   "openai-available-models"?: OpenAiModel[];
   "openai-model": string | null;
@@ -574,6 +594,7 @@ interface PublicSettings {
   "llm-metabot-configured?"?: boolean | null;
   "email-configured?": boolean;
   "embedding-app-origin": string | null;
+  "mfa-enforcement"?: "off" | "optional";
   "embedding-app-origins-sdk": string | null;
   "embedding-app-origins-interactive": string | null;
   "enable-password-login": boolean;
@@ -668,10 +689,12 @@ export type UserSettings = {
   "show-updated-permission-modal": boolean;
   "show-updated-permission-banner": boolean;
   "trial-banner-dismissal-timestamp"?: string | null;
-  "sdk-iframe-embed-setup-settings"?: Pick<
-    SdkIframeEmbedSetupSettings,
-    "theme" | "useExistingUserSession"
-  > | null;
+  // The persisted subset of the embed setup wizard's
+  // `SdkIframeEmbedSetupSettings` state.
+  "sdk-iframe-embed-setup-settings"?: {
+    theme?: SdkIframeEmbedSetupTheme;
+    useExistingUserSession?: boolean;
+  } | null;
   "color-scheme"?: string;
 };
 
@@ -699,10 +722,8 @@ export type UserSettings = {
  * Each new scope is more strict than the previous one.
  *
  * To further complicate things, there are two endpoints for fetching settings:
- *  - `GET /api/setting` that _can only be used by admins!_
- *  - `GET /api/session/properties` that can be used by any user, but some settings might be omitted (unavailable).
- *
- * SettingsApi will return `403` for non-admins, while SessionApi will return `200`!
+ *  - `GET /api/setting` that _can only be used by admins!_ — returns `403` for non-admins.
+ *  - `GET /api/session/properties` that can be used by any user (returns `200`), but some settings might be omitted (unavailable).
  */
 export type Settings = InstanceSettings &
   PublicSettings &
@@ -757,6 +778,8 @@ export interface EnterpriseSettings extends Settings {
   "llm-openai-model"?: string;
   "llm-metabot-configured?"?: boolean | null;
   "llm-openrouter-api-key"?: string | null;
+  "llm-zai-api-key"?: string | null;
+  "llm-mistral-api-key"?: string | null;
   "session-timeout": TimeoutValue | null;
   "search-engine": SearchEngineSettingValue | null;
   "scim-enabled"?: boolean | null;

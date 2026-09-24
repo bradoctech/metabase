@@ -19,9 +19,12 @@
    ^{:clj-kondo/ignore [:deprecated-namespace]} [metabase.query-processor.store :as qp.store]
    [metabase.query-processor.util.add-alias-info :as add]
    [metabase.test :as mt]
+   [metabase.test.fixtures :as fixtures]
    [metabase.util.match :as match]))
 
 (comment h2/keep-me)
+
+(use-fixtures :once (fixtures/initialize :db))
 
 (defn- remove-source-metadata
   "This is mostly to make the test failure diffs sane."
@@ -760,7 +763,7 @@
                                 [:cum-sum
                                  [:field "TOTAL" {::add/source-table ::add/source
                                                   ::add/source-alias "TOTAL"}]]
-                                {::add/source-alias "sum" ; FIXME This key shouldn't be here, this doesn't come from the source query.
+                                {::add/source-alias "sum"
                                  ::add/desired-alias "sum"}]]
                  :breakout [[:field "CREATED_AT" {::add/source-alias "CREATED_AT"
                                                   ::add/desired-alias "CREATED_AT"}]

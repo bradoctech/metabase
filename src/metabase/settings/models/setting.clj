@@ -464,26 +464,39 @@
     (or (@env-var-translation-cache sname)
         ((swap! env-var-translation-cache assoc sname (keyword (str "mb-" (munge-setting-name sname)))) sname))))
 
-(defn env-var-value
-  "Get the value of `setting-definition-or-name` from the corresponding env var, if any.
-   The name of the Setting is converted to uppercase and dashes to underscores; for example, a setting named
+(defn env-var-source
+  "Which env var supplies `setting-definition-or-name`'s value and what it holds, as `[env-var-name value]`, or nil
+  when no env var supplies one.
+
+  The name of the Setting is converted to uppercase and dashes to underscores; for example, a setting named
   `default-domain` can be set with the env var `MB_DEFAULT_DOMAIN`. Note that this strips out characters that are not
   legal for shells. Setting `foo-bar?` will expect to find the key `:mb-foo-bar` which will be sourced from the
   environment variable `MB_FOO_BAR`.
 
   When the primary env var is truly absent (nil from environ) and the setting has a `:deprecated-name`, the env var
-  derived from that name is checked as a fallback. An empty string for the primary env var means \"explicitly unset\"
-  and blocks the fallback."
-  ^String [setting-definition-or-name]
+  derived from that name is checked as a fallback, and is the one named -- so a message about the value points at
+  the variable the operator actually set. An empty string for the primary env var means \"explicitly unset\" and
+  blocks the fallback.
+
+  Prefer [[env-var-value]] unless the name is needed too."
+  [setting-definition-or-name]
   (let [setting (resolve-setting setting-definition-or-name)]
     (when (and (allows-site-wide-values? setting)
                (allows-setting-via-env? setting))
       (if-let [v (env/env (setting-env-map-name setting))]
-        ;; primary env var is set — return it only if non-empty
-        (not-empty v)
+        ;; primary env var is set — use it only if non-empty
+        (when-let [v (not-empty v)]
+          [(env-var-name setting) v])
         ;; primary env var is absent — try deprecated name
         (when-let [deprecated-name (:deprecated-name setting)]
-          (not-empty (env/env (setting-env-map-name deprecated-name))))))))
+          (when-let [v (not-empty (env/env (setting-env-map-name deprecated-name)))]
+            [(env-var-name deprecated-name) v]))))))
+
+(defn env-var-value
+  "Get the value of `setting-definition-or-name` from the corresponding env var, if any.
+  See [[env-var-source]], which this reads the value half of."
+  ^String [setting-definition-or-name]
+  (second (env-var-source setting-definition-or-name)))
 
 (defn log-deprecated-env-var-usage!
   "Log warnings for any settings currently using a deprecated env var name.
@@ -752,7 +765,7 @@
 (defn- throw-or-log
   "Given an error that should never happen, throw it for us, log it for customers."
   [e]
-  (if config/is-prod? (log/warn e) (throw e)))
+  (if config/is-prod? (log/warn (ex-message e)) (throw e)))
 
 (defn get
   "Fetch the value of `setting-definition-or-name`. What this means depends on the Setting's `:getter`; by default, this
@@ -809,9 +822,8 @@
        ;; and there's actually a row in the DB that's not in the cache for some reason. Go ahead and update the
        ;; existing value and log a warning
        (catch Throwable e
-         (log/warn "Error inserting a new Setting:\n"
-                   (ex-message e) "\n"
-                   "Assuming Setting already exists in DB and updating existing value.")
+         (log/warnf "Error inserting a new Setting: %s. Assuming Setting already exists in DB and updating existing value."
+                    (ex-message e))
          (update-setting! setting-name new-value))))
 
 (defn- obfuscated-value? [v]
@@ -1544,7 +1556,7 @@
      :value          (try
                        (m/mapply user-facing-value setting options)
                        (catch Throwable e
-                         (log/error e "Error fetching value of Setting")))
+                         (log/errorf "Error fetching value of Setting: %s" (ex-message e))))
      :is_env_setting from-env?
      :env_name       (env-var-name setting)
      :description    (str (description))
@@ -1687,7 +1699,7 @@
   (cond
     (instance? JsonEOFException ex) false
     (instance? JsonParseException ex) true
-    :else (do (log/warn ex "Unexpected exception while parsing JSON")
+    :else (do (log/warnf "Unexpected exception while parsing JSON: %s" (ex-message ex))
               ;; err on the side of caution
               true)))
 
@@ -1724,8 +1736,9 @@
                            (name (:name invalid-setting)))
                       (dissoc invalid-setting :parse-error)
                       (:parse-error invalid-setting)))
-      (log/warn (:parse-error invalid-setting)
-                (format "Unable to parse setting %s" (:name invalid-setting))))))
+      (log/warnf "Unable to parse setting %s: %s"
+                 (name (:name invalid-setting))
+                 (ex-message (:parse-error invalid-setting))))))
 
 (defn- write-setting-value
   "Store a Setting's `:value` in `:value_with_aad`, encrypted under additional authenticated data naming the setting

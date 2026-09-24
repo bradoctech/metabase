@@ -39,6 +39,7 @@ export * from "./metric";
 export * from "./modelIndexes";
 export * from "./models";
 export * from "./moderation";
+export * from "./multi-factor-auth";
 export * from "./notification";
 export * from "./notification-channels";
 export * from "./oauth";
@@ -74,7 +75,7 @@ export * from "./util";
 export * from "./visualization";
 export * from "./visualization-settings";
 export * from "./visualizer";
-export * from "./workspace";
+export * from "./workspace-manager";
 export * from "./workspace-instance";
 
 // ISO8601 timestamp

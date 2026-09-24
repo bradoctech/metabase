@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { t } from "ttag";
 
 import { skipToken, useGetCardQuery, useGetDashboardQuery } from "metabase/api";
-import { ROOT_COLLECTION } from "metabase/collections/constants";
-import { isPublicCollection } from "metabase/collections/utils";
+import { ROOT_COLLECTION } from "metabase/common/collections/constants";
+import { isPublicCollection } from "metabase/common/collections/utils";
 import { DashboardName } from "metabase/common/components/DashboardName";
 import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
 import {
@@ -49,7 +49,7 @@ const LINK_TARGETS = {
   },
   dashboard: {
     Name: ({ id }: { id: CardId | DashboardId | undefined }) => (
-      <DashboardName id={id as DashboardId | undefined} />
+      <DashboardName id={id} />
     ),
     PickerComponent: DashboardPickerModal,
     pickerIcon: "dashboard" as const,

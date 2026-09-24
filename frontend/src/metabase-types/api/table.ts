@@ -76,7 +76,7 @@ export type Table = {
   estimated_row_count?: number | null;
   transform_id: TransformId | null; // readonly
   view_count: number;
-  transform?: Transform;
+  transform?: Transform | null;
 
   collection_id: CollectionId | null;
   is_published: boolean;
@@ -123,6 +123,7 @@ export interface TableListQuery {
   "owner-email"?: string | null;
   "unused-only"?: boolean | null;
   "orphan-only"?: boolean;
+  "published-only"?: boolean | null;
 }
 
 export interface ForeignKey {

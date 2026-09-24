@@ -59,7 +59,7 @@ export const ossRoutes: RouteMap = {
   ldap: { path: "/authentication/ldap", testPattern: /Server Settings/i },
   apiKeys: {
     path: "/authentication/api-keys",
-    testPattern: /Allow users to use API keys/i,
+    testPattern: /Create API keys to let users authenticate/i,
   },
   maps: { path: "/maps", testPattern: /Map tile server URL/i },
   localization: { path: "/localization", testPattern: /Instance language/i },
@@ -163,8 +163,8 @@ export const setup = async ({
   });
 
   setupNotificationChannelsEndpoints({
-    email: { configured: false } as any,
-    slack: { configured: false } as any,
+    email: { configured: false },
+    slack: { configured: false },
   });
   fetchMock.get("path:/api/ee/security-center", {
     last_checked_at: null,

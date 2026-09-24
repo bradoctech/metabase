@@ -180,11 +180,11 @@ describe("CustomGeoJSONWIdget", () => {
 
     // Select map features for key and name
     const keySelect = within(screen.getByTestId("map-region-key-select"));
-    await userEvent.click(await keySelect.findByTestId("select-button"));
+    await userEvent.click(await keySelect.findByPlaceholderText(/Select/));
     await userEvent.click(await screen.findByText("scalerank"));
 
     const nameSelect = within(screen.getByTestId("map-region-name-select"));
-    await userEvent.click(await nameSelect.findByTestId("select-button"));
+    await userEvent.click(await nameSelect.findByPlaceholderText(/Select/));
     await userEvent.click(screen.getByText("featureclass"));
 
     // Save and check body contains data
@@ -244,11 +244,11 @@ describe("CustomGeoJSONWIdget", () => {
 
     // Select map features for key and name
     const keySelect = within(screen.getByTestId("map-region-key-select"));
-    await userEvent.click(await keySelect.findByTestId("select-button"));
+    await userEvent.click(await keySelect.findByPlaceholderText(/Select/));
     await userEvent.click(await screen.findByText("featureclass"));
 
     const nameSelect = within(screen.getByTestId("map-region-name-select"));
-    await userEvent.click(await nameSelect.findByTestId("select-button"));
+    await userEvent.click(await nameSelect.findByPlaceholderText(/Select/));
     await userEvent.click(screen.getByText("scalerank"));
 
     await userEvent.click(screen.getByRole("button", { name: /Save map/i }));

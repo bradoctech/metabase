@@ -690,7 +690,7 @@
       (try
         (.setFetchDirection stmt ResultSet/FETCH_FORWARD)
         (catch Throwable e
-          (log/debug e "Error setting result set fetch direction to FETCH_FORWARD")))
+          (log/debugf "Error setting result set fetch direction to FETCH_FORWARD: %s" (ex-message e))))
       (sql-jdbc.execute/set-parameters! driver stmt params)
       stmt
       (catch Throwable e
@@ -707,7 +707,7 @@
       (try
         (.setFetchDirection stmt ResultSet/FETCH_FORWARD)
         (catch Throwable e
-          (log/debug e "Error setting result set fetch direction to FETCH_FORWARD")))
+          (log/debugf "Error setting result set fetch direction to FETCH_FORWARD: %s" (ex-message e))))
       stmt
       (catch Throwable e
         (.close stmt)

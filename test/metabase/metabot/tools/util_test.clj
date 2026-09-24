@@ -135,6 +135,25 @@
             (is (contains? card-ids (:id root-metric)))
             (is (contains? card-ids (:id coll-model)))))))))
 
+(deftest metabot-scope-query-excludes-destination-database-cards-test
+  (testing "get-metrics-and-models excludes cards backed by a destination (routed) database -- destinations
+            are routing internals reachable only through their router database"
+    (mt/dataset test-data
+      (mt/with-temp [:model/Database router-db      {}
+                     :model/Database destination-db {:router_database_id (:id router-db)}
+                     :model/Card     destination-model {:type :model, :collection_id nil
+                                                        :database_id (:id destination-db)}
+                     :model/Card     open-model        {:type :model, :collection_id nil
+                                                        :database_id (mt/id)}
+                     :model/Metabot  metabot {:name "root metabot"
+                                              :collection_id nil
+                                              :use_verified_content false}]
+        (let [result (mt/with-test-user :crowberto
+                       (metabot.tools.util/get-metrics-and-models (:id metabot)))
+              card-ids (set (map :id result))]
+          (is (contains? card-ids (:id open-model)))
+          (is (not (contains? card-ids (:id destination-model)))))))))
+
 (deftest add-table-reference-test
   (testing "add-table-reference function adds table-reference for FK fields"
     (mt/dataset test-data
@@ -222,6 +241,33 @@
                       unverified-ids #{(:id unverified-model) (:id unverified-metric)}]
                   (is (every? verified-ids (take 2 ordered-ids)))
                   (is (every? unverified-ids (drop 2 ordered-ids))))))))))))
+
+(deftest metabot-verified-content-library-test
+  (testing "with the :library feature, use_verified_content=true includes library-published metrics/models
+            (BOT-1570), matching collections.curation/curated?"
+    (mt/with-premium-features #{:library}
+      (mt/with-temp [:model/Collection lib  {:type "library-metrics" :name "libcoll"}
+                     :model/Collection norm {:name "normcoll"}
+                     :model/Card lib-metric   {:type :metric :collection_id (:id lib)}
+                     :model/Card plain-metric {:type :metric :collection_id (:id norm)}
+                     :model/Metabot metabot {:name "mb" :use_verified_content true}]
+        (let [ids (set (map :id (mt/with-test-user :crowberto
+                                  (metabot.tools.util/get-metrics-and-models (:id metabot)))))]
+          (is (contains? ids (:id lib-metric))       "library-published metric is curated")
+          (is (not (contains? ids (:id plain-metric))) "plain metric is not curated"))))))
+
+(deftest metabot-verified-content-no-feature-test
+  (testing "use_verified_content=true with no curation features active returns nothing, rather than falling
+            through unfiltered to uncurated content"
+    (mt/with-premium-features #{}
+      (mt/with-temp [:model/Collection metabot-coll {:name "mb coll"}
+                     :model/Card _model  {:type :model  :collection_id (:id metabot-coll)}
+                     :model/Card _metric {:type :metric :collection_id (:id metabot-coll)}
+                     :model/Metabot metabot {:name "verified metabot"
+                                             :collection_id (:id metabot-coll)
+                                             :use_verified_content true}]
+        (is (empty? (mt/with-test-user :crowberto
+                      (metabot.tools.util/get-metrics-and-models (:id metabot)))))))))
 
 (deftest get-table-filters-inactive-test
   (testing "get-table only returns active tables"

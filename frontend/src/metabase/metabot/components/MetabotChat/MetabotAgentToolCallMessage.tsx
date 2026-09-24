@@ -87,7 +87,11 @@ const ToolCallDetailsModal = ({
               <Flex align="center">
                 <Text fw="bold">{t`Response`}</Text>
                 {message.is_error && (
-                  <Badge ml="sm" bg="danger" c="text-primary-inverse">
+                  <Badge
+                    ml="sm"
+                    bg="feedback-negative"
+                    c="text-primary-inverse"
+                  >
                     {t`Errored`}
                   </Badge>
                 )}
@@ -120,7 +124,7 @@ export const AgentToolCallMessage = ({
       <Flex
         p="sm"
         pl="md"
-        bd="1px solid var(--mb-color-border)"
+        bd="1px solid var(--mb-color-border-neutral)"
         bdrs="sm"
         direction="row"
         align="center"

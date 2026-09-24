@@ -599,6 +599,9 @@ The Topic column on the [Activity log](#activity-log) model takes one of:
 - measure-create
 - measure-delete
 - measure-update
+- mfa-disabled
+- mfa-enrolled
+- mfa-verification-failed
 - notification-create
 - notification-unsubscribe
 - notification-unsubscribe-ex
@@ -651,6 +654,7 @@ The Topic column on the [Activity log](#activity-log) model takes one of:
 The Query Source column on the [Query log](#query-log) model takes one of:
 
 - action
+- action-execute
 - ad-hoc
 - agent
 - cache-refresh
@@ -665,6 +669,8 @@ The Query Source column on the [Query log](#query-log) model takes one of:
 - embedded-xlsx-download
 - json-download
 - map-tiles
+- metric
+- public-action-execute
 - public-csv-download
 - public-dashboard
 - public-json-download

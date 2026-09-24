@@ -113,6 +113,14 @@ const setup = async ({
       key: "llm-openrouter-api-key",
       value: undefined,
     }),
+    createMockSettingDefinition({
+      key: "llm-zai-api-key",
+      value: undefined,
+    }),
+    createMockSettingDefinition({
+      key: "llm-mistral-api-key",
+      value: undefined,
+    }),
   ]);
   setupUpdateSettingEndpoint();
   setupCollectionByIdEndpoint({ collections });
@@ -237,7 +245,7 @@ describe("AISettingsPage", () => {
 
     expect(
       await screen.findByRole("switch", {
-        name: "Only use Verified content",
+        name: "Only use verified or curated content",
       }),
     ).toBeChecked();
   });

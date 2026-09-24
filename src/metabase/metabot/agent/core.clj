@@ -18,7 +18,6 @@
    [metabase.metabot.provider-util :as provider-util]
    [metabase.metabot.scope :as scope]
    [metabase.metabot.self :as self]
-   [metabase.metabot.self.core :as self.core]
    [metabase.metabot.tools :as tools]
    [metabase.util :as u]
    [metabase.util.json :as json]
@@ -303,10 +302,11 @@
          (map #(get-structured-output (:result %)))
          (filter #(and (:chart-id %) (:query-id %))))
    (completing
-    (fn [mem {:keys [chart-id chart-type query]}]
+    (fn [mem {:keys [chart-id query-id chart-type query]}]
       (memory/store-chart mem
                           chart-id
                           {:chart_id chart-id
+                           :query_id query-id
                            :queries [query]
                            :visualization_settings {:chart_type chart-type}})))
    memory
@@ -431,10 +431,12 @@
   "Initialize agent state."
   [{:keys [messages state metabot-id profile-id context tracking-opts]}]
   (let [context      (assign-context-ids context)
+        ;; Resolve the profile once (its nlq availability redirect probes the index): reuse it for both the
+        ;; prompt and the tools so they can't disagree about whether the curated library tool is offered.
         profile      (or (profiles/get-profile profile-id)
                          (throw (ex-info "Unknown profile" {:profile-id profile-id})))
         capabilities (get context :capabilities #{})
-        base-tools   (profiles/get-tools-for-profile profile-id capabilities)
+        base-tools   (profiles/profile->tools profile capabilities)
         seeded       (-> (or state {})
                          (seed-state context)
                          (seed-chart-configs context)
@@ -446,7 +448,7 @@
                          (memory/load-todos-from-state seeded)
                          (memory/load-link-registry-from-state seeded))
         memory-atom  (atom memory)
-        tools        (tools/wrap-tools-with-state base-tools memory-atom metabot-id)]
+        tools        (tools/wrap-tools-with-state base-tools memory-atom metabot-id profile-id)]
     (log/info "Starting agent" {:profile  profile-id
                                 :tools    (count tools)
                                 :max-iter (:max-iterations profile)
@@ -490,7 +492,7 @@
   than the raw model name returned by the API.
 
   The `metabase/` routing prefix is stripped so usage keys reflect the actual
-  provider/model (e.g. `openrouter/anthropic/claude-haiku-4-5`) regardless of
+  provider/model (e.g. `openrouter/anthropic/claude-haiku-4.5`) regardless of
   whether the request was routed through the AI proxy.
   Non-usage parts pass through unchanged."
   [usage-atom provider-and-model]
@@ -586,7 +588,7 @@
         (.write w (json/encode debug-log {:pretty true})))
       (log/debug "Wrote debug log to" debug-log-file)
       (catch Exception e
-        (log/warn e "Failed to write debug log file")))))
+        (log/warnf "Failed to write debug log file: %s" (ex-message e))))))
 
 (defn- debug-log-part
   "Create a data part containing the complete debug log.
@@ -681,23 +683,23 @@
                     result))
                 (catch Exception e
                   (analytics/inc! :metabase-metabot/agent-errors labels)
-                  (let [{:keys [api-error status provider body]} (ex-data e)
+                  (let [{:keys [api-error status provider]} (ex-data e)
                         msg (ex-message e)]
                     (cond
                       (and api-error status)
-                      (log/errorf e "Agent loop API error: %s status=%s provider=%s body=%s"
-                                  msg status provider (self.core/body-for-log body))
+                      (log/errorf "Agent loop API error: %s status=%s provider=%s"
+                                  msg status provider)
 
                       api-error
-                      (log/errorf e "Agent loop API error: %s provider=%s" msg provider)
+                      (log/errorf "Agent loop API error: %s provider=%s" msg provider)
 
                       ;; ex-message can be nil/blank for exceptions thrown without a message
                       ;; (e.g. (NullPointerException.)) — skip the colon when there's nothing to say.
                       (str/blank? msg)
-                      (log/error e "Agent loop error")
+                      (log/error "Agent loop error")
 
                       :else
-                      (log/errorf e "Agent loop error: %s" msg)))
+                      (log/errorf "Agent loop error: %s" msg)))
                   (rf init (error-part e)))
                 (finally
                   (analytics/observe! :metabase-metabot/agent-duration-ms labels (u/since-ms start-ms)))))))))))

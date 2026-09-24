@@ -6,6 +6,99 @@ import { spColors } from "../sp-colors";
 
 const baseColors = getBaseColorsForThemeDefinitionOnly();
 
+// Upstream 63 new design tokens — added to avoid TypeScript errors on new keys.
+// SP-specific overrides for core-brand etc. are intentionally absent here;
+// the deprecated keys above (brand, filter, …) already map SP colours.
+const actualColors = {
+  "background_page-filter": baseColors.filter[5],
+  "background_page-highlighted":
+    "color-mix(in srgb, var(--mb-color-core-brand) 7%, transparent)",
+  "background_page-primary": baseColors.white,
+  "background_page-primary-inverse": baseColors.orion[80],
+  "background_page-secondary": baseColors.orion[5],
+  "background_page-secondary-inverse": `color-mix(in srgb, ${baseColors.orion[100]}, black 25%)`,
+  "background_page-tertiary": baseColors.orion[10],
+  "background_page-tertiary-inverse": `color-mix(in srgb, ${baseColors.orion[100]}, black 50%)`,
+  "background_surface-brand-strong": baseColors.brand[60],
+  "background_surface-brand-strong-hover": baseColors.brand[70],
+  "background_surface-brand-strong-pressed": baseColors.brand[80],
+  "background_surface-brand-subtle":
+    "color-mix(in srgb, var(--mb-color-core-brand) 10%, transparent)",
+  "background_surface-brand-subtle-hover":
+    "color-mix(in srgb, var(--mb-color-core-brand) 30%, transparent)",
+  "background_surface-brand-subtle-pressed":
+    "color-mix(in srgb, var(--mb-color-core-brand) 60%, transparent)",
+  "background_surface-disabled": baseColors.orionAlpha[10],
+  "background_surface-disabled-inverse": baseColors.orionAlphaInverse[10],
+  "background_surface-error": baseColors.lobster[10],
+  "background_surface-error-subtle": baseColors.lobster[5],
+  "background_surface-hover":
+    "color-mix(in srgb, var(--mb-color-core-brand) 7%, transparent)",
+  "background_surface-primary": "var(--mb-color-background_page-primary)",
+  "background_surface-primary-hover": baseColors.orionAlpha[10],
+  "background_surface-primary-inverse":
+    "var(--mb-color-background_page-primary-inverse)",
+  "background_surface-primary-inverse-hover": baseColors.orionAlphaInverse[20],
+  "background_surface-primary-inverse-pressed":
+    baseColors.orionAlphaInverse[10],
+  "background_surface-primary-pressed": baseColors.orionAlpha[20],
+  "background_surface-secondary": baseColors.orionAlpha[10],
+  "background_surface-secondary-hover": baseColors.orionAlpha[20],
+  "background_surface-secondary-inverse": baseColors.orionAlphaInverse[10],
+  "background_surface-secondary-inverse-hover":
+    baseColors.orionAlphaInverse[20],
+  "background_surface-secondary-inverse-pressed":
+    baseColors.orionAlphaInverse[10],
+  "background_surface-secondary-pressed": baseColors.orionAlpha[30],
+  "background_surface-selected":
+    "color-mix(in srgb, var(--mb-color-core-brand) 21%, transparent)",
+  "background_surface-success": baseColors.palm[5],
+  "background_surface-warning": baseColors.dubloon[5],
+  "background_surface-warning-strong": baseColors.dubloon[20],
+  "border-neutral": baseColors.orion[20],
+  "border-neutral-strong": baseColors.orionAlpha[30],
+  "border-neutral-strongest": baseColors.orionAlpha[50],
+  "border-neutral-subtle": baseColors.orionAlpha[10],
+  "core-blue-saturated": baseColors.ocean[60],
+  "core-brand": spColors.red[40], // SP: same as `brand`
+  "core-brand-hover": `color-mix(in srgb, ${spColors.red[40]}, white 12%)`,
+  "core-filter": spColors.blueMedium.base,
+  "core-gold": "#FFD700",
+  "core-green-saturated": baseColors.palm[60],
+  "core-info": baseColors.orion[40],
+  "core-metabase_brand": baseColors.blue[40],
+  "core-metabase_brand-hover": baseColors.blue[30],
+  "core-purple-saturated": baseColors.octopus[60],
+  "core-red-saturated": baseColors.lobster[60],
+  "core-summarize": spColors.blueMedium.base,
+  "core-white": baseColors.white,
+  "core-white_constant": "white",
+  "core-yellow-saturated": baseColors.dubloon[30],
+  "feedback-negative": baseColors.lobster[50],
+  "feedback-negative-strong": baseColors.lobster[60],
+  "feedback-neutral-strong": baseColors.orionAlpha[60],
+  "feedback-positive": baseColors.palm[50],
+  "feedback-positive-selected": baseColors.palm[60],
+  "feedback-positive-strong": baseColors.palm[60],
+  "feedback-warning": baseColors.dubloon[30],
+  "feedback-warning-strong": baseColors.mango[60],
+  "illustration-secondary-brand": spColors.red[10],
+  "illustration-tertiary-brand": spColors.red[5],
+  "input-focus": baseColors.blue[20],
+  "modal-overlay": baseColors.orionAlpha[60],
+  "navbar-admin": "#1a1a1a",
+  "navbar-admin-inverse": baseColors.white,
+  "navbar-admin-secondary": "#404040",
+  "shadow-default": baseColors.orionAlpha[20],
+  "text-brand-hover": baseColors.brand[60],
+  "text-brand-strong": baseColors.brand[60],
+  "text-brand-strong-hover": baseColors.brand[70],
+  "text-disabled": baseColors.orionAlpha[40],
+  "text-disabled-inverse": baseColors.orionAlphaInverse[40],
+  "text-syntax-parameter": baseColors.mango[60],
+  "text-syntax-parameter-active": baseColors.mango[10],
+} as const;
+
 /**
  * The default light theme for Metabase.
  */
@@ -136,5 +229,7 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
     "sp-red-dark2": spColors.red.dark, // #B22929
     "sp-blue-light": spColors.blue.light, // #E6F0FC
     "sp-blue-soft": spColors.blue.medium, // #ADD7FB
+    // Upstream 63 new design tokens
+    ...actualColors,
   },
 };
