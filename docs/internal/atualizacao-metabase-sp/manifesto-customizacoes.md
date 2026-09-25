@@ -433,8 +433,32 @@ frontend/src/metabase/visualizations/components/settings/ChartSettingsTableForma
 
 ---
 
+## Conflitos reais da EDD-1355 (entrada EDD-1362 / 1356 v2)
+
+Registrado após a PoC 60→61→62→63. Detalhe narrativo: [notas-etapa-62-63.md](./notas-etapa-62-63.md).
+
+### O que o script ainda não automatiza bem (1356 v2)
+
+- Detecção/restauração de arquivos **stuck** e **órfãos** após `restore`.
+- Exclusão explícita de paths curated no restore stuck (evitar sobrescrever login/tema SP).
+- Sinalização de arquivos **híbridos** (API de uma major + body de outra).
+
+### O que a 1362 deve isolar primeiro (tema/marca)
+
+| Prioridade | Tema | Motivo |
+| ---------- | ---- | ------ |
+| Alta | Tokens SP ↔ tokens 63 (`background_page-*`, `core-*`, accents) | Maior atrito em dual-changed a cada major |
+| Alta | `DEFAULT_ACCENT_COLORS` + `SP_PALETTE_COLORS` (charts / Visualizer) | Regressão fácil se o picker voltar a `getAccentColors()` |
+| Média | Login / AuthLayout / DS de form | Perdido em restore stuck na 63 |
+| Média | SpLogo hide (`layout.module.css`) vs LogoIcon brasão | Dois conceitos distintos; ambos dual-changed |
+| Baixa / behavior | Datagrid, eixos 969, cascata, home badges | Continuar em `behavior-manual` até API estabilizar |
+
+Métrica alvo da 1362: reduzir contagem de paths **Adapter** ligados a tema/marca vs. a tabela de Resumo acima; registrar antes/depois aqui.
+
+---
+
 ## Como atualizar este manifesto
 
 - Após configurar `upstream` e rodar o diff 60.x, acrescentar paths faltantes e reclassificar.
-- Após EDD-1355, registrar conflitos reais encontrados (entrada da EDD-1362).
+- Após EDD-1355, registrar conflitos reais encontrados (entrada da EDD-1362) — **seed acima**.
 - Após EDD-1362, atualizar contagens de `dual-changed` (métrica antes/depois).

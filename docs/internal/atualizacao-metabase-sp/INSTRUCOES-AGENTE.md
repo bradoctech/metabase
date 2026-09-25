@@ -3,7 +3,7 @@
 **Como usar:** no início de uma nova conversa sobre EDD-1355, EDD-1356, EDD-1361, EDD-1362, tema SP ou upgrade do fork, peça ao agente para ler este arquivo (e, se precisar de detalhe, os outros `.md` desta pasta) antes de planejar ou editar código.
 
 **Pasta:** `docs/internal/atualizacao-metabase-sp/`  
-**Última consolidação de contexto:** etapa **62→63** da EDD-1355 na branch `EDD-1355`; login/boot OK, smoke detalhado rodado com **3 pendências abertas** (filtros cascata QB, paleta 1092 no Visualizer, datagrid via "ver registros" — ver [notas-etapa-62-63.md](./notas-etapa-62-63.md)); EDD-1361/1356 MVP já na base; notas anteriores em [notas-etapa-61-62.md](./notas-etapa-61-62.md) e [notas-etapa-60-61.md](./notas-etapa-60-61.md).
+**Última consolidação de contexto:** etapa **62→63** da EDD-1355 na branch `EDD-1355` **publicada** (`origin/EDD-1355`); merge + fixups + **smoke canônico OK** (ver [notas-etapa-62-63.md](./notas-etapa-62-63.md)). Próximo na sequência: EDD-1362 (tema) e EDD-1356 v2 (script). EDD-1361/1356 MVP já na base; notas anteriores em [notas-etapa-61-62.md](./notas-etapa-61-62.md) e [notas-etapa-60-61.md](./notas-etapa-60-61.md).
 
 ---
 
@@ -22,11 +22,12 @@ Trate isto como verdade até alguém atualizar este arquivo após nova verifica�
 | Remote do fork           | `origin` → `git@github.com:bradoctech/metabase.git`                                                                                                  |
 | Remote oficial           | `upstream` → `https://github.com/metabase/metabase.git` (fetch de releases; não é destino SP)                                                        |
 | Branch principal do fork | `saopaulo` — ainda **0.60.x** até a EDD-1355 mergear de volta                                                                                        |
-| Branch da PoC de upgrade | `EDD-1355` — tip com merge `upstream/release-x.63.x` + fixups; smoke detalhado com 3 pendências (ver [notas-etapa-62-63.md](./notas-etapa-62-63.md)) |
+| Branch da PoC de upgrade | `EDD-1355` — tip 63 + fixups; **smoke canônico OK** (ver [notas-etapa-62-63.md](./notas-etapa-62-63.md)). Não usar `update_with_upstream` como branch oficial |
 | Backup da etapa 60→61    | Tag `saopaulo-pre-61x`                                                                                                                               |
 | Backup da etapa 61→62    | Tag `saopaulo-pre-62x`                                                                                                                               |
-| Script de merge          | `bin/merge-upstream-preserve-sp.sh` (EDD-1356); **restore estreito** após lição da 61                                                                |
-| Alvo final da EDD-1355   | Linha **63.x** (caminho em etapas 61→62→63; não pular para 63 com adapters 61 quebrados)                                                             |
+| Backup da etapa 62→63    | Tag `saopaulo-pre-63x`                                                                                                                               |
+| Script de merge          | `bin/merge-upstream-preserve-sp.sh` (EDD-1356); **restore estreito** após lição da 61; v2 deve detectar stuck/órfãos (lições da 63)                  |
+| Alvo final da EDD-1355   | Linha **63.x** alcançada na PoC; falta PR/merge de volta a `saopaulo`                                                                                |
 | Customizações            | Commits `feat[EDD-…]` + listas em `lists/`; isolamento ainda parcial                                                                                 |
 
 ### Arquivos SP / críticos (amostra)
@@ -71,9 +72,9 @@ Trate isto como verdade até alguém atualizar este arquivo após nova verifica�
 ```text
 EDD-1361 (inventário + isolamento mínimo)     ✅
   → EDD-1356 MVP (script + runbook)           ✅ MVP
-  → EDD-1355 (update = PoC)                   🔄 62→63 mergeado; smoke detalhado com pendências
+  → EDD-1355 (update = PoC)                   ✅ 63 + smoke canônico; falta PR → saopaulo
   → EDD-1362 (tema/marca pós-update)
-  → EDD-1356 v2 (endurecer com aprendizados)
+  → EDD-1356 v2 (endurecer com aprendizados da 1355)
 ```
 
 Detalhe narrativo: [estrategia-sequencia.md](./estrategia-sequencia.md).  
@@ -85,10 +86,10 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 
 | ID           | Papel                                                      | Estado                                                                      |
 | ------------ | ---------------------------------------------------------- | --------------------------------------------------------------------------- |
-| **EDD-1355** | Atualizar Metabase + reaplicar customizações               | Em andamento — merge **63** feito; smoke detalhado com 3 pendências abertas |
-| **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | MVP entregue; v2 após lições da 1355                                        |
+| **EDD-1355** | Atualizar Metabase + reaplicar customizações               | PoC 63 + smoke canônico OK na branch; falta PR / merge em `saopaulo`        |
+| **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | MVP entregue; **v2** alimentada pelas lições da 63 (stuck/órfãos/híbridos)  |
 | **EDD-1361** | Inventário + quick wins de isolamento                      | Concluída (manifesto publicado)                                             |
-| **EDD-1362** | Refatorar tema/marca na base já atualizada                 | Após 1355                                                                   |
+| **EDD-1362** | Refatorar tema/marca na base já atualizada                 | Próxima após PR da 1355 — entrada em [notas-etapa-62-63.md](./notas-etapa-62-63.md) |
 
 ---
 
@@ -146,7 +147,29 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 6. SpLogo nos headers de painel continua **oculto**; LogoIcon continua **brasão** (ver seção Logos).
 7. Amostra i18n admin (LDAP titles traduzidos; e-mail sem typo "Adicionr").
 
-**Lição da 63:** rodar a checklist detalhada, não só a lista de telas — vários itens (eixos 969, i18n LDAP) regridem de forma pontual (um efeito React específico, uma string crua) mesmo com o smoke "básico" passando. Ver [notas-etapa-62-63.md](./notas-etapa-62-63.md) para os achados exatos.
+**Lição da 63:** rodar a checklist detalhada, não só a lista de telas — vários itens (eixos 969, i18n LDAP, breadcrumbs `hasSchema`, save no QB) regridem de forma pontual mesmo com o smoke "básico" passando. Ver [notas-etapa-62-63.md](./notas-etapa-62-63.md).
+
+### Lições da etapa 62→63 (obrigatório — alimenta 1356 v2 e 1362)
+
+#### Script / pós-merge
+
+- Após `restore`, procurar **stuck**: conteúdo do WT igual ao tip pré-merge e diferente do upstream, **fora** das listas curated → `git checkout upstream/release-x.N.x -- path`. Varrer `src/`, `test/`, `enterprise/`, `modules/`, `resources/`.
+- **Órfãos:** path no HEAD, apagado no upstream, fora das listas → deletar (não deixar half-renames).
+- Restore stuck **nunca** deve sobrescrever paths em `restore-ours` / `dual-changed` / `behavior-manual` (login EDD-577 foi perdido assim).
+- Arquivo **híbrido** (ns/API de uma major + body de outra): sintoma ClassNotFound, import inválido, `hasSchema is not a function`. Preferir body upstream + reaplicar SP só no curated.
+- Worktree temporária (`update_with_upstream`) ok localmente; **publicar só `EDD-1355`**.
+
+#### Frontend / UI
+
+- Upstream 63 removeu `Table.hasSchema()`: usar `hasMultipleSchemas` + `table.schema_name` e `HeadBreadcrumbs.Breadcrumb` (não `.Badge`).
+- Paleta Visualizer: color pickers de série usam `getAccentColors()` por padrão — SP precisa `SP_PALETTE_COLORS`; defaults de série vêm de `DEFAULT_ACCENT_COLORS`.
+- Tokens 63 (`background_page-*`, `core-*`) ≠ tokens SP antigos; login AuthLayout não pode ficar com CSS var inexistente.
+- Salvar question: toast “Salvo” + tela “Algo deu errado” = crash no header (`SavedQuestionLeftSide`), não no POST.
+- Home: X-ray é fallback até `has_question_and_dashboard` (question **e** dashboard não-internos) + recents; installer não vê Popular. “+ Novo” na AppBar **não** amarra ao dashboard atual — só o fluxo “nova question” no edit do dash.
+
+#### Ops WSL
+
+- Rspack `Killed` / exit 137 = OOM. Com BE no ar: evitar `clean-dev:js` desnecessário; `NODE_OPTIONS=--max-old-space-size=3072` + `RSPACK_WORKER_THREADS=1` costuma caber em ~8 GiB.
 
 ---
 
@@ -154,10 +177,10 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 
 ### Ao começar
 
-1. Ler este arquivo e, se na EDD-1355, [notas-etapa-61-62.md](./notas-etapa-61-62.md) (e [notas-etapa-60-61.md](./notas-etapa-60-61.md) se precisar da etapa anterior).
+1. Ler este arquivo e, se na EDD-1355, [notas-etapa-62-63.md](./notas-etapa-62-63.md) (e notas 61–62 / 60–61 se precisar de histórico).
 2. Confirmar branch (`EDD-1355` vs `saopaulo`) e remotes `origin` / `upstream`.
 3. Seguir a sequência oficial; não inverter para “refatorar tema grande → depois update” sem o usuário pedir.
-4. Não sugerir salto além da próxima major enquanto a atual não passar do smoke mínimo. Após smoke 62 OK, o próximo passo canônico é **62→63**.
+4. Smoke 63 canônico está OK — próximo foco: **PR da 1355**, depois **EDD-1362** e **EDD-1356 v2**.
 
 ### Ao inventariar customizações (EDD-1361)
 
@@ -182,8 +205,9 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 
 ### Ao refatorar tema (EDD-1362, pós-1355)
 
-- Trabalhar na árvore já atualizada.
+- Trabalhar na árvore já atualizada (base 63).
 - Objetivo: encolher `dual-changed` de visual; tokens SP-owned; menos `"Rawline"`/hex espalhados.
+- Começar pela tabela “Entrada para EDD-1362” em [notas-etapa-62-63.md](./notas-etapa-62-63.md) e pela seção de conflitos reais no [manifesto](./manifesto-customizacoes.md).
 
 ### O que evitar sugerir de novo (já descartado)
 

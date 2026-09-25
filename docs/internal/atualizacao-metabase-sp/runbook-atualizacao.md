@@ -166,8 +166,9 @@ Script: `bin/merge-upstream-preserve-sp.sh`
 3. **behavior-manual:** reaplicar feature SP na API da nova versão (datagrid pin, title-case, badges, filtros cascata, etc.).
 4. `git add` dos arquivos resolvidos e concluir o merge (`git commit` se o merge ainda estiver aberto).
 5. `./bin/merge-upstream-preserve-sp.sh verify`
-6. Validar Trilhas: login, home, dashboards, charts, datagrid.
-7. Atualizar o manifesto com conflitos reais (entrada da EDD-1362 e da 1356 v2).
+6. **Pós-verify (lição 63):** varrer stuck (WT == tip pré-merge ≠ upstream, fora das listas) e órfãos (sumiu no upstream, fora das listas). Não restaurar curated.
+7. Validar Trilhas com [checklist-smoke-test.md](./checklist-smoke-test.md).
+8. Atualizar o manifesto com conflitos reais (entrada da EDD-1362 e da 1356 v2).
 
 ---
 
