@@ -2,18 +2,14 @@ import type { Location } from "history";
 import { useCallback } from "react";
 import { withRouter } from "react-router";
 import { push } from "react-router-redux";
-import { useAsyncFn, useMount } from "react-use";
+import { useMount } from "react-use";
 
 import { updateDataPermission } from "metabase/admin/permissions/permissions";
-import {
-  DataPermission,
-  DataPermissionType,
-  DataPermissionValue,
-} from "metabase/admin/permissions/types";
+import { DataPermissionType } from "metabase/admin/permissions/types";
 import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
 import { useDatabaseQuery } from "metabase/common/hooks";
 import { getParentPath } from "metabase/hoc/ModalRoute";
-import { useDispatch } from "metabase/lib/redux";
+import { useDispatch } from "metabase/redux";
 import { updateImpersonation } from "metabase-enterprise/advanced_permissions/reducer";
 import { getImpersonation } from "metabase-enterprise/advanced_permissions/selectors";
 import type {
@@ -21,11 +17,15 @@ import type {
   ImpersonationParams,
 } from "metabase-enterprise/advanced_permissions/types";
 import { getImpersonatedDatabaseId } from "metabase-enterprise/advanced_permissions/utils";
+import { useGetImpersonationQuery } from "metabase-enterprise/api";
 import { useEnterpriseSelector } from "metabase-enterprise/redux";
-import { ImpersonationApi } from "metabase-enterprise/services";
 import { fetchUserAttributes } from "metabase-enterprise/shared/reducer";
 import { getUserAttributes } from "metabase-enterprise/shared/selectors";
-import type { Impersonation, UserAttributeKey } from "metabase-types/api";
+import {
+  DataPermission,
+  DataPermissionValue,
+  type UserAttributeKey,
+} from "metabase-types/api";
 
 import { ImpersonationModalView } from "./ImpersonationModalView";
 
@@ -52,25 +52,6 @@ const ImpersonationModalInner = ({
   params,
   location,
 }: ImpersonationModalProps) => {
-  const [
-    {
-      loading: isImpersonationLoading,
-      value: impersonation,
-      error: impersonationError,
-    },
-    fetchImpersonation,
-  ] = useAsyncFn(
-    async (
-      groupId: number,
-      databaseId: number,
-    ): Promise<Impersonation | undefined> =>
-      ImpersonationApi.get({
-        db_id: databaseId,
-        group_id: groupId,
-      }),
-    [],
-  );
-
   const { groupId, databaseId } = parseParams(params);
 
   const {
@@ -84,6 +65,15 @@ const ImpersonationModalInner = ({
   const attributes = useEnterpriseSelector(getUserAttributes);
   const draftImpersonation = useEnterpriseSelector(
     getImpersonation(databaseId, groupId),
+  );
+
+  const {
+    data: impersonation,
+    isLoading: isImpersonationLoading,
+    error: impersonationError,
+  } = useGetImpersonationQuery(
+    { db_id: databaseId, group_id: groupId },
+    { skip: Boolean(draftImpersonation) },
   );
 
   const selectedAttribute =
@@ -131,10 +121,6 @@ const ImpersonationModalInner = ({
 
   useMount(() => {
     dispatch(fetchUserAttributes());
-
-    if (!draftImpersonation) {
-      fetchImpersonation(groupId, databaseId);
-    }
   });
 
   const isLoading =

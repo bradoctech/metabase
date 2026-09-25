@@ -76,6 +76,16 @@ export interface MetabaseDashboardAttributes {
   "initial-parameters"?: object;
 
   /**
+   * Controlled dashboard filters values, e.g. `{ 'productId': '42' }`.
+   * Setting this attribute supersedes `initial-parameters` as the seed
+   * and stays in sync with subsequent mutations. Pair with the
+   * `parameters-change` DOM event to track edits.
+   *
+   * @remarks Pro/Enterprise, Guest embed
+   */
+  parameters?: object;
+
+  /**
    * List of filter names to hide from the dashboard, e.g. `['productId']`.
    *
    * @remarks Pro/Enterprise
@@ -90,6 +100,13 @@ export interface MetabaseDashboardAttributes {
    * @remarks Pro/Enterprise
    */
   "enable-entity-navigation"?: boolean;
+
+  /**
+   * Optional custom context string passed through to the guest token endpoint.
+   *
+   * @remarks Guest embed
+   */
+  "custom-context"?: string;
 }
 
 /**
@@ -157,6 +174,16 @@ export interface MetabaseQuestionAttributes {
   "initial-sql-parameters"?: object;
 
   /**
+   * Controlled SQL parameter values, e.g. `{ "productId": "42" }`. Setting
+   * this attribute supersedes `initial-sql-parameters` as the seed and
+   * stays in sync with subsequent mutations. Pair with the
+   * `sql-parameters-change` DOM event to track edits.
+   *
+   * @remarks Pro/Enterprise, Guest embed
+   */
+  "sql-parameters"?: object;
+
+  /**
    * List of parameter names to hide from the question.
    *
    * @remarks Pro/Enterprise
@@ -186,6 +213,13 @@ export interface MetabaseQuestionAttributes {
    * @remarks Pro/Enterprise, Guest embed
    */
   "entity-types"?: ("model" | "table")[];
+
+  /**
+   * Optional custom context string passed through to the guest token endpoint.
+   *
+   * @remarks Guest embed
+   */
+  "custom-context"?: string;
 }
 
 /**
@@ -198,8 +232,10 @@ export interface MetabaseQuestionAttributes {
  */
 export interface MetabaseBrowserAttributes {
   /**
-   * Which collection to start from. Use a collection ID (e.g., `14`) to start
-   * in a specific collection, or `"root"` for the top-level "Our Analytics" collection.
+   * Which collection to start from. Values: regular ID, entity ID, `"root"` for
+   * the top-level "Our Analytics" collection, `"personal"` for the viewer's
+   * personal collection, or `"tenant"` for the viewer's tenant collection.
+   * People who aren't tenant members get an error for `"tenant"`.
    */
   "initial-collection": number | string;
 

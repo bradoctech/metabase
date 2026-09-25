@@ -172,7 +172,21 @@ export function UploadSettingsFormView({
       {isH2db && <H2PersistenceWarning isHosted={isHosted} />}
       <Group align="flex-start">
         <Select
-          label={t`Database to use for uploads`}
+          label={
+            <Group gap="xs" wrap="nowrap" align="center">
+              {t`Database to use for uploads`}
+              <Tooltip
+                label={t`PostgreSQL, MySQL, Redshift, ClickHouse, and Snowflake databases are supported for file storage.`}
+              >
+                <Icon
+                  name="info"
+                  size={14}
+                  c="text-secondary"
+                  data-testid="uploads-db-info-icon"
+                />
+              </Tooltip>
+            </Group>
+          }
           value={dbId ? String(dbId) : null}
           placeholder={t`Select a database`}
           disabled={!hasValidDatabases}
@@ -238,7 +252,7 @@ export function UploadSettingsFormView({
               disabled={!hasValidSettings}
               failedText={t`Failed to save upload settings`}
               actionFn={handleEnableUploads}
-              primary
+              variant="filled"
               useLoadingSpinner
               type="submit"
             />
@@ -252,7 +266,8 @@ export function UploadSettingsFormView({
               failedText={t`Failed to disable uploads`}
               actionFn={handleDisableUploads}
               type="button"
-              danger
+              variant="filled"
+              color="feedback-negative"
               useLoadingSpinner
             />
           )
@@ -265,7 +280,7 @@ export function UploadSettingsFormView({
             }
             failedText={t`Failed to enable uploads`}
             actionFn={handleEnableUploads}
-            primary={!!hasValidSettings}
+            variant={hasValidSettings ? "filled" : "default"}
             disabled={!hasValidSettings || !hasValidDatabases}
             useLoadingSpinner
             type="submit"
@@ -274,7 +289,7 @@ export function UploadSettingsFormView({
       </Flex>
       {!hasValidDatabases && <NoValidDatabasesMessage />}
       {errorMessage && (
-        <Text c="danger" mt="md">
+        <Text c="feedback-negative" mt="md">
           {errorMessage}
         </Text>
       )}
@@ -286,7 +301,7 @@ const H2PersistenceWarning = ({ isHosted }: { isHosted: boolean }) => (
   <Stack my="md" maw={620}>
     <Alert icon={<Icon name="warning" />} color="warning">
       <Text>
-        {t`Warning: uploads to the Sample Database are for testing only and may disappear. If you want your data to stick around, you should upload to a PostgreSQL, MySQL, Redshift or Clickhouse database.`}
+        {t`Warning: uploads to the Sample Database are for testing only and may disappear. If you want your data to stick around, you should upload to a PostgreSQL, MySQL, Redshift, ClickHouse, or Snowflake database.`}
       </Text>
       {isHosted && (
         <Tooltip

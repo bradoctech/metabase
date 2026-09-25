@@ -1,12 +1,28 @@
 import { type Context, createContext } from "react";
+import { Route } from "react-router";
 import { routerActions } from "react-router-redux";
 import { connectedReduxRedirect } from "redux-auth-wrapper/history3/redirect";
 
-import { renderWithProviders, screen } from "__support__/ui";
-import { createMockState } from "metabase-types/store/mocks";
+import { renderWithProviders, screen, waitFor } from "__support__/ui";
+import { metabaseReduxContext } from "metabase/redux/context";
+import type { AdminPath } from "metabase/redux/store";
+import {
+  createMockAdminAppState,
+  createMockAdminState,
+  createMockSettingsState,
+  createMockState,
+} from "metabase/redux/store/mocks";
+import { setBasename } from "metabase/utils/basename";
+import { createMockUser } from "metabase-types/api/mocks";
 
-import { MetabaseReduxContext } from "./lib/redux";
-import { isBackendOnlyPath } from "./route-guards";
+import {
+  CanAccessSettings,
+  IsAuthenticated,
+  IsNotAuthenticated,
+  isBackendOnlyPath,
+  toBrowserUrl,
+  toRouterPathname,
+} from "./route-guards";
 
 describe("route-guards", () => {
   describe("patched redux-auth-wrapper", () => {
@@ -20,7 +36,7 @@ describe("route-guards", () => {
       let selectorState: any;
       const RouteGuard = setupRouteGuard({
         // leverage the same context used by the main application
-        context: MetabaseReduxContext,
+        context: metabaseReduxContext,
         authenticatedSelector: (state) => {
           selectorState = state;
           return !!state.auth.VAL_ONLY_IN_THIS_CTX;
@@ -65,11 +81,105 @@ describe("route-guards", () => {
     });
   });
 
+  describe("redirect-after-login flow (UXW-3939)", () => {
+    it("UserIsAuthenticated should preserve original path as ?redirect= when sending logged-out user to /auth/login", async () => {
+      const settings = {
+        "has-user-setup": true,
+      } as any;
+      const state = createMockState({
+        currentUser: undefined,
+        settings: { values: settings } as any,
+      });
+
+      const Dashboard = () => <div>protected dashboard</div>;
+      const LoginPage = () => <div>login page</div>;
+
+      const { history } = renderWithProviders(
+        <>
+          <Route component={IsAuthenticated}>
+            <Route path="/dashboard/:slug" component={Dashboard} />
+          </Route>
+          <Route component={IsNotAuthenticated}>
+            <Route path="/auth/login" component={LoginPage} />
+          </Route>
+        </>,
+        {
+          storeInitialState: state,
+          withRouter: true,
+          initialRoute: "/dashboard/123",
+        },
+      );
+
+      await waitFor(() => {
+        expect(history?.getCurrentLocation().pathname).toBe("/auth/login");
+      });
+
+      const location = history!.getCurrentLocation();
+      expect(location.query).toEqual(
+        expect.objectContaining({ redirect: "/dashboard/123" }),
+      );
+      expect(location.search).toContain("redirect");
+    });
+  });
+
+  describe("CanAccessSettings", () => {
+    const DATABASES_PATH: AdminPath = {
+      name: "Databases",
+      path: "/admin/databases",
+      key: "databases",
+    };
+
+    const Protected = () => <div>protected</div>;
+    const Unauthorized = () => <div>unauthorized</div>;
+
+    const setup = (paths: AdminPath[]) =>
+      renderWithProviders(
+        <>
+          <Route component={CanAccessSettings}>
+            <Route path="/admin/databases" component={Protected} />
+          </Route>
+          <Route path="/unauthorized" component={Unauthorized} />
+        </>,
+        {
+          storeInitialState: createMockState({
+            currentUser: createMockUser({ is_superuser: false }),
+            settings: createMockSettingsState({ "has-user-setup": true }),
+            admin: createMockAdminState({
+              app: createMockAdminAppState({ paths }),
+            }),
+          }),
+          withRouter: true,
+          initialRoute: "/admin/databases",
+        },
+      );
+
+    it("lets a non-admin through when a permission grant left them an admin path", async () => {
+      const { history } = setup([DATABASES_PATH]);
+
+      expect(await screen.findByText("protected")).toBeInTheDocument();
+      expect(history?.getCurrentLocation().pathname).toBe("/admin/databases");
+    });
+
+    it("redirects a non-admin with no admin paths to /unauthorized", async () => {
+      const { history } = setup([]);
+
+      await waitFor(() => {
+        expect(history?.getCurrentLocation().pathname).toBe("/unauthorized");
+      });
+    });
+  });
+
   describe("isBackendOnlyPath", () => {
     it("should return true for /oauth/ paths", () => {
       expect(isBackendOnlyPath("/oauth/authorize")).toBe(true);
       expect(isBackendOnlyPath("/oauth/authorize/decision")).toBe(true);
       expect(isBackendOnlyPath("/oauth/token")).toBe(true);
+    });
+
+    it("should return true for /auth/sso/ paths", () => {
+      expect(isBackendOnlyPath("/auth/sso/slack-connect")).toBe(true);
+      expect(isBackendOnlyPath("/auth/sso/slack-connect/callback")).toBe(true);
+      expect(isBackendOnlyPath("/auth/sso/my-provider")).toBe(true);
     });
 
     it("should return false for frontend paths", () => {
@@ -81,6 +191,68 @@ describe("route-guards", () => {
 
     it("should not match partial prefixes", () => {
       expect(isBackendOnlyPath("/oauthx/foo")).toBe(false);
+    });
+  });
+
+  describe("redirect targets when Metabase is hosted under a subpath (GIT-10551)", () => {
+    const ORIGIN = window.location.origin;
+
+    afterEach(() => {
+      setBasename("");
+    });
+
+    describe("toBrowserUrl", () => {
+      it("resolves against the origin at a root deployment", () => {
+        expect(toBrowserUrl("/oauth/authorize?client_id=abc").href).toBe(
+          `${ORIGIN}/oauth/authorize?client_id=abc`,
+        );
+      });
+
+      it("prefixes the subpath on a basename-relative path", () => {
+        setBasename("/metabase");
+        expect(toBrowserUrl("/oauth/authorize?client_id=abc").href).toBe(
+          `${ORIGIN}/metabase/oauth/authorize?client_id=abc`,
+        );
+      });
+
+      it("normalizes a path without a leading slash", () => {
+        setBasename("/metabase");
+        expect(toBrowserUrl("auth/sso/google").href).toBe(
+          `${ORIGIN}/metabase/auth/sso/google`,
+        );
+      });
+
+      it("handles a nested subpath basename", () => {
+        setBasename("/bi/metabase");
+        expect(toBrowserUrl("/oauth/authorize?client_id=abc").href).toBe(
+          `${ORIGIN}/bi/metabase/oauth/authorize?client_id=abc`,
+        );
+      });
+    });
+
+    describe("toRouterPathname", () => {
+      it("leaves paths untouched at a root deployment", () => {
+        expect(toRouterPathname("/oauth/authorize")).toBe("/oauth/authorize");
+      });
+
+      it("strips the basename so backend-only prefix checks still match", () => {
+        setBasename("/metabase");
+        expect(toRouterPathname("/metabase/oauth/authorize")).toBe(
+          "/oauth/authorize",
+        );
+      });
+
+      it("leaves a basename-relative path alone so the router does not double the subpath", () => {
+        setBasename("/metabase");
+        expect(toRouterPathname("/dashboard/1")).toBe("/dashboard/1");
+      });
+
+      it("does not strip a lookalike path prefix that is not the basename", () => {
+        setBasename("/metabase");
+        expect(toRouterPathname("/metabase-docs/foo")).toBe(
+          "/metabase-docs/foo",
+        );
+      });
     });
   });
 });

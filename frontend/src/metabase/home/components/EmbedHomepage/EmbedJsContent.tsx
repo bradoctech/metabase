@@ -53,7 +53,7 @@ export const EmbedJsContent = ({
       {showImage && (
         <EmbedJsImage
           src="/app/assets/img/embed-js-example.png"
-          alt={t`Modular embedding example`}
+          alt="Modular embedding example"
         />
       )}
       <Group gap="md">
@@ -73,5 +73,5 @@ const EmbedJsImage = styled.img`
   width: 100%;
   margin-bottom: 1rem;
   border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.border};
+  border: 1px solid ${({ theme }) => theme.colors["border-neutral"]};
 `;

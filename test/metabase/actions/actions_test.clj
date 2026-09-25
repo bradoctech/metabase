@@ -1,4 +1,6 @@
 (ns ^:mb/driver-tests metabase.actions.actions-test
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.actions.actions-test]}
+                                                            metabase.test.data/run-mbql-query {:namespaces [metabase.actions.actions-test]}}}}}}
   (:require
    [clojure.java.jdbc :as jdbc]
    [clojure.test :refer :all]
@@ -239,7 +241,6 @@
       (mt/test-drivers (mt/normal-drivers-with-feature :actions)
         (mt/with-actions-test-data-tables #{"venues" "categories"}
           (with-actions-test-data-and-actions-permissively-enabled!
-
             ;; attempting to delete the `Pizza` category should fail because there are several rows in `venues` that have
             ;; this `category_id` -- it's an FK constraint violation.
             (is (thrown-with-msg? Exception (case driver/*driver*
@@ -392,7 +393,6 @@
         (let [db-id    (mt/id)
               table-id (mt/id :categories)]
           (unset-entity-key! table-id)
-
           (is (= 75 (categories-row-count)))
           (is (= {:type                      :data-editing/no-pk
                   :status-code               400
@@ -498,7 +498,6 @@
                                                   {:database (mt/id)
                                                    :table-id table-id
                                                    :row      row}))))))
-
           (testing "rows should be updated in the DB"
             (is (= [[1 "Seed Bowl"]
                     [2 "Millet Treat"]
@@ -516,7 +515,6 @@
                   [2 "American"]
                   [3 "Artisan"]]
                  (first-three-categories)))
-
           (is (= {:type                      :data-editing/no-pk
                   :status-code               400
                   :table-id                  table-id
@@ -535,7 +533,6 @@
                    ::did-not-throw
                    (catch Exception e
                      (or (ex-data e) ::did-not-throw-ex-info)))))
-
           (testing "rows should NOT be updated in the DB"
             (is (= [[1 "African"]
                     [2 "American"]
@@ -774,7 +771,6 @@
                              :mysql    (format "GRANT SELECT ON %s.categories TO '%s'" test-db-name test-user-name))])]
               (when stmt
                 (jdbc/execute! admin-spec [stmt])))
-
             ;; Create connection details for test user (no password)
             (let [test-user-details (cond-> details
                                       (= driver/*driver* :mysql)
@@ -805,7 +801,6 @@
                       (is (= 400 (:status-code result)))
                       (is (= actions.error/violate-permission-constraint (:type first-error)))
                       (is (= "You don't have permission to add data to this table." (:message first-error)))))
-
                   (testing (str "UPDATE permission denied for " driver/*driver*)
                     (let [result (try
                                    (actions/perform-action-v2!
@@ -821,7 +816,6 @@
                       (is (= 400 (:status-code result)))
                       (is (= actions.error/violate-permission-constraint (:type first-error)))
                       (is (= "You don't have permission to update data in this table." (:message first-error)))))
-
                   (testing (str "DELETE permission denied for " driver/*driver*)
                     (let [result (try
                                    (actions/perform-action-v2!
@@ -843,11 +837,11 @@
     (mt/with-actions-test-data-and-actions-enabled
       (let [db-id           (mt/id)
             write-cache-key [db-id :write-data]]
-        (with-redefs [driver.conn/effective-connection-type
-                      (fn [_database]
-                        (if (= driver.conn/*connection-type* :write-data)
-                          :write-data
-                          :default))]
+        (mt/with-dynamic-fn-redefs [driver.conn/connection-pool-type
+                                    (fn [_database]
+                                      (if (= @#'driver.conn/*connection-type* :write-data)
+                                        :write-data
+                                        :default))]
           (try
             (sql-jdbc.conn/invalidate-pool-for-db! (mt/db))
             (testing "write pool does not exist before action execution"
@@ -860,3 +854,25 @@
               (is (contains? @@#'sql-jdbc.conn/pool-cache-key->connection-pool write-cache-key)))
             (finally
               (sql-jdbc.conn/invalidate-pool-for-db! (mt/db)))))))))
+
+(deftest implicit-action-audit-trail-test
+  (testing "an implicit action records one QueryExecution row holding an action descriptor, not SQL"
+    (with-actions-test-data-and-actions-permissively-enabled!
+      (let [since (mt/latest-query-execution-id)
+            _     (actions/perform-action! :model.row/create
+                                           (assoc (mt/mbql-query categories)
+                                                  :create-row {(format-field-name :name) "audited_row"}))
+            rows  (mt/action-executions since)]
+        (is (= 1 (count rows)))
+        (is (=? {:context     :action-execute
+                 :native      false
+                 :action_id   nil
+                 :result_rows 1
+                 :error       nil
+                 :database_id (mt/id)}
+                (first rows)))
+        (testing "the query row holds the internal descriptor"
+          (is (=? {:type     "internal"
+                   :action   "model.row/create"
+                   :database (mt/id)}
+                  (t2/select-one-fn :query :model/Query :query_hash (:hash (first rows))))))))))

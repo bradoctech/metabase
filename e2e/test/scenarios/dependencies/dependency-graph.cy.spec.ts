@@ -6,7 +6,6 @@ import {
   FIRST_COLLECTION_ID,
   SECOND_COLLECTION_ID,
 } from "e2e/support/cypress_sample_instance_data";
-import type { IconName } from "metabase/ui";
 import type {
   CardId,
   CardType,
@@ -14,6 +13,7 @@ import type {
   DashboardId,
   DependencyId,
   DependencyType,
+  IconName,
   MeasureId,
   NativeQuerySnippetId,
   SegmentId,
@@ -67,7 +67,8 @@ describe("scenarios > dependencies > dependency graph", () => {
     H.restore("postgres-writable");
     H.resetTestTable({ type: "postgres", table: TABLE_NAME });
     cy.signInAsAdmin();
-    H.activateToken("bleeding-edge");
+    H.activateToken("pro-self-hosted");
+    H.updateSetting("transforms-enabled", true);
     H.resyncDatabase({ dbId: WRITABLE_DB_ID, tableName: TABLE_NAME });
     H.getTableId({ name: TABLE_NAME }).as(TABLE_ID_ALIAS);
     H.resetSnowplow();
@@ -1100,8 +1101,12 @@ function createTableBasedSegment({ tableId }: { tableId: TableId }) {
     description: "Segment description",
     table_id: tableId,
     definition: {
-      "source-table": tableId,
-      filter: ["=", 1, 1],
+      database: WRITABLE_DB_ID,
+      type: "query",
+      query: {
+        "source-table": tableId,
+        filter: ["=", 1, 1],
+      },
     },
   });
 }
@@ -1118,8 +1123,12 @@ function createSegmentBasedSegment({
     description: "Segment description",
     table_id: tableId,
     definition: {
-      "source-table": tableId,
-      filter: ["segment", segmentId],
+      database: WRITABLE_DB_ID,
+      type: "query",
+      query: {
+        "source-table": tableId,
+        filter: ["segment", segmentId],
+      },
     },
   });
 }
@@ -1205,7 +1214,7 @@ function createDocumentWithTableBasedQuestion({
 }) {
   return H.createDocument({
     name: DOCUMENT_NAME,
-    document: [],
+    document: { type: "doc", content: [] },
     cards: {
       "-1": createMockCard({
         id: -1,
@@ -1228,8 +1237,12 @@ function createTableBasedMeasure({ tableId }: { tableId: TableId }) {
     name: TABLE_BASED_MEASURE_NAME,
     table_id: tableId,
     definition: {
-      "source-table": tableId,
-      aggregation: [["count"]],
+      database: WRITABLE_DB_ID,
+      type: "query",
+      query: {
+        "source-table": tableId,
+        aggregation: [["count"]],
+      },
     },
   });
 }
@@ -1245,8 +1258,12 @@ function createSegmentBaseMeasure({
     name: SEGMENT_BASED_MEASURE_NAME,
     table_id: tableId,
     definition: {
-      "source-table": tableId,
-      aggregation: [["count-where", ["segment", segmentId]]],
+      database: WRITABLE_DB_ID,
+      type: "query",
+      query: {
+        "source-table": tableId,
+        aggregation: [["count-where", ["segment", segmentId]]],
+      },
     },
   });
 }
@@ -1341,8 +1358,12 @@ function createMeasureBasedMeasure({
     name: MEASURE_BASED_MEASURE_NAME,
     table_id: tableId,
     definition: {
-      "source-table": tableId,
-      aggregation: ["+", 1, ["measure", measureId]],
+      database: WRITABLE_DB_ID,
+      type: "query",
+      query: {
+        "source-table": tableId,
+        aggregation: ["+", 1, ["measure", measureId]],
+      },
     },
   });
 }

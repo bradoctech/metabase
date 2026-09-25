@@ -128,7 +128,7 @@ export function DatabaseConnectionStringField({
   return (
     <Textarea
       inputWrapperOrder={["label", "input", "description", "error"]}
-      label={t`Connection string (optional)`}
+      label="Connection string (optional)"
       description={<ConnectionStringDescription status={status} />}
       value={connectionString}
       onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -179,13 +179,13 @@ function ConnectionStringDescription({
           style={styles}
           pos="absolute"
           top={0}
-          c="danger"
+          c="feedback-negative"
           fw="bold"
           fz="sm"
           component="span"
         >
           <Group gap="xs" component="span">
-            <Icon name="warning_round_filled" c="danger" />
+            <Icon name="warning_round_filled" c="feedback-negative" />
             {t`Couldn’t use this connection string.`}
           </Group>
         </Text>
@@ -205,7 +205,7 @@ function ConnectionStringDescription({
           style={styles}
           pos="absolute"
           top={0}
-          c="success"
+          c="feedback-positive"
           fw="bold"
           fz="sm"
           component="span"
@@ -213,7 +213,7 @@ function ConnectionStringDescription({
           <Group gap="xs" component="span">
             <Icon
               name="check_filled"
-              style={{ color: "var(--mb-color-success)" }}
+              style={{ color: "var(--mb-color-feedback-positive)" }}
             />
             {t`Connection details pre-filled below.`}
           </Group>

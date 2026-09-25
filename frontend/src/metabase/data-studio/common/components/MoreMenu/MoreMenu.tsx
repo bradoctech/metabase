@@ -49,7 +49,6 @@ export function MoreMenu({
             <Menu.Item
               component={Link}
               to={previewUrl}
-              target="_blank"
               leftSection={<Icon name="share" />}
             >
               {previewLabel ?? t`Preview`}
@@ -57,7 +56,7 @@ export function MoreMenu({
           )}
           {onRemove && (
             <Menu.Item
-              c="danger"
+              c="feedback-negative"
               leftSection={<Icon name="trash" />}
               onClick={openConfirm}
             >

@@ -15,13 +15,12 @@
 
 (deftest ^:parallel normalize-base-type-test
   (testing "Support normalizing really messed up base types like `:type/creationtime` => `:type/CreationTime` (#63397)"
-    (testing (str "Don't do this normalization in dev, because it's a major bug and we shouldn't encourage people to"
-                  " write messed up code that needs this to be done to fix it")
-      #?(:clj
-         (is (thrown-with-msg?
-              clojure.lang.ExceptionInfo
-              #"Invalid output: \[\"Not a valid base type: :type/creationtime, got: :type/creationtime\"\]"
-              (lib/normalize ::lib.schema.common/base-type "type/creationtime")))))
+    #?(:clj (testing (str "Don't do this normalization in dev, because it's a major bug and we shouldn't encourage people to"
+                          " write messed up code that needs this to be done to fix it")
+              (is (thrown-with-msg?
+                   clojure.lang.ExceptionInfo
+                   #"Invalid output: \[\"Not a valid base type: :type/creationtime, got: :type/creationtime\"\]"
+                   (lib/normalize ::lib.schema.common/base-type "type/creationtime")))))
     (testing "in prod (when Malli enforcement is off) we should be able to fix it"
       (mu/disable-enforcement
         (is (= :type/CreationTime
@@ -45,3 +44,14 @@
   (is (nil? (get (lib.schema.common/unfussy-sorted-map :a 1) "lib/type")))
   (is (= {"a" 1 :b 2}
          (lib.schema.common/unfussy-sorted-map "a" 1 :b 2))))
+
+(deftest ^:parallel coercion-strategy-test
+  (testing "keywords in the :Coercion/* hierarchy are valid"
+    (are [k] (not (me/humanize (mr/explain ::lib.schema.common/coercion-strategy k)))
+      :Coercion/UNIXMilliSeconds->DateTime
+      :Coercion/String->Number))
+  (testing "JSON-roundtripped strings normalize to keywords"
+    (is (= :Coercion/UNIXMilliSeconds->DateTime
+           (lib/normalize ::lib.schema.common/coercion-strategy "Coercion/UNIXMilliSeconds->DateTime"))))
+  (testing "non-coercion keywords are invalid"
+    (is (me/humanize (mr/explain ::lib.schema.common/coercion-strategy :type/DateTime)))))

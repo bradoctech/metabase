@@ -13,16 +13,14 @@ import { t } from "ttag";
 
 import { useLazyMetabotGenerateContentQuery } from "metabase/api";
 import CS from "metabase/css/core/index.css";
-import { trackDocumentAskMetabot } from "metabase/documents/analytics";
-import {
-  createDraftCard,
-  generateDraftCardId,
-  loadMetadataForDocumentCard,
-} from "metabase/documents/documents.slice";
-import { getCurrentDocument } from "metabase/documents/selectors";
-import { useDispatch, useSelector } from "metabase/lib/redux";
 import MetabotThinkingStyles from "metabase/metabot/components/MetabotChat/MetabotThinking.module.css";
-import { useMetabotEnabledEmbeddingAware } from "metabase/metabot/hooks";
+import { MetabotIcon } from "metabase/metabot/components/MetabotIcon";
+import {
+  useMetabotName,
+  useUserMetabotPermissions,
+} from "metabase/metabot/hooks";
+import { useDispatch, useSelector } from "metabase/redux";
+import { useEditorHost } from "metabase/rich_text_editing/tiptap/EditorHost";
 import { Box, Button, Flex, Icon, Text, Tooltip } from "metabase/ui";
 import type { Card, MetabotGenerateContentRequest } from "metabase-types/api";
 
@@ -149,12 +147,14 @@ export const MetabotNode = Node.create<{
 export const MetabotComponent = memo(
   ({ editor, getPos, deleteNode, node, extension }: NodeViewProps) => {
     const dispatch = useDispatch();
-    const document = useSelector(getCurrentDocument);
+    const host = useEditorHost();
+    const document = useSelector(host.selectors.getCurrentDocument);
     const controllerRef = useRef<AbortController | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [errorText, setErrorText] = useState("");
     const [queryMetabot] = useLazyMetabotGenerateContentQuery();
-    const isMetabotEnabled = useMetabotEnabledEmbeddingAware();
+    const { canUseMetabot: isMetabotEnabled } = useUserMetabotPermissions();
+    const metabotName = useMetabotName();
 
     const handleRunMetabot = async () => {
       const serializePrompt =
@@ -181,7 +181,7 @@ export const MetabotComponent = memo(
 
       if (error || !data?.draft_card) {
         setErrorText(
-          data?.error || t`There was a problem connecting to Metabot`,
+          data?.error || t`There was a problem connecting to ${metabotName}`,
         );
         return;
       }
@@ -189,11 +189,11 @@ export const MetabotComponent = memo(
       const nodePosition = getPos();
 
       if (nodePosition == null) {
-        setErrorText(t`Could not find Metabot block`);
+        setErrorText(t`Could not find ${metabotName} block`);
         return;
       }
 
-      const newCardId = generateDraftCardId();
+      const newCardId = host.actions.generateDraftCardId();
       const card: Card = {
         ...data.draft_card,
         id: newCardId,
@@ -223,11 +223,11 @@ export const MetabotComponent = memo(
         archived: false,
       };
 
-      trackDocumentAskMetabot(document);
-      await dispatch(loadMetadataForDocumentCard(card));
+      host.analytics.trackAskMetabot(document);
+      await dispatch(host.actions.loadMetadataForDocumentCard(card));
 
       dispatch(
-        createDraftCard({
+        host.actions.createDraftCard({
           originalCard: card,
           modifiedData: {},
           draftId: newCardId,
@@ -248,7 +248,7 @@ export const MetabotComponent = memo(
         {
           type: "paragraph",
           content: padWithUnstyledText(
-            createTextNode(t`Created with Metabot`, [
+            createTextNode(t`Created with ${metabotName}`, [
               { type: "bold" },
               { type: "italic" },
             ]),
@@ -282,15 +282,15 @@ export const MetabotComponent = memo(
 
     const tooltip = useMemo(() => {
       if (!isMetabotEnabled) {
-        return t`Metabot is disabled`;
+        return t`${metabotName} is disabled`;
       }
       return isLoading ? t`Stop generating` : null;
-    }, [isMetabotEnabled, isLoading]);
+    }, [isMetabotEnabled, isLoading, metabotName]);
 
     return (
       <NodeViewWrapper>
         <Flex
-          bg="background-secondary"
+          bg="background_page-secondary"
           bd="1px solid var(--border-color)"
           className={S.borderRadius}
           pos="relative"
@@ -313,11 +313,11 @@ export const MetabotComponent = memo(
                 onClick={() => deleteNode()}
               >
                 <Icon name="close" data-hide-on-print />
-                <Icon name="metabot" data-show-on-print />
+                <MetabotIcon data-show-on-print />
               </Button>
             ) : (
               <Box p="md">
-                <Icon name="metabot" />
+                <MetabotIcon />
               </Box>
             )}
           </Box>
@@ -327,7 +327,7 @@ export const MetabotComponent = memo(
               hidden={!!node.content.content.length}
               contentEditable={false}
             >
-              {t`Ask Metabot to generate a chart for you, and use @ to select a specific Database to use`}
+              {t`Ask ${metabotName} to generate a chart for you, and use @ to select a specific Database to use`}
             </Box>
             <NodeViewContent
               contentEditable={isLoading ? false : undefined}

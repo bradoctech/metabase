@@ -12,17 +12,20 @@ import {
 import { t } from "ttag";
 
 import {
+  useMetabotName,
+  useUserMetabotPermissions,
+} from "metabase/metabot/hooks";
+import { useSelector } from "metabase/redux";
+import { useEditorHost } from "metabase/rich_text_editing/tiptap/EditorHost";
+import {
   CreateNewQuestionFooter,
   MenuItemComponent,
   SearchResultsFooter,
-} from "metabase/documents/components/Editor/shared/MenuComponents";
+} from "metabase/rich_text_editing/tiptap/extensions/shared/MenuComponents";
 import {
   LoadingSuggestionPaper,
   SuggestionPaper,
-} from "metabase/documents/components/Editor/shared/SuggestionPaper";
-import { getCurrentDocument } from "metabase/documents/selectors";
-import { useSelector } from "metabase/lib/redux";
-import { useMetabotEnabledEmbeddingAware } from "metabase/metabot/hooks";
+} from "metabase/rich_text_editing/tiptap/extensions/shared/SuggestionPaper";
 import { getBrowseAllItemIndex } from "metabase/rich_text_editing/tiptap/extensions/shared/suggestionUtils";
 import type { SuggestionPickerViewMode } from "metabase/rich_text_editing/tiptap/extensions/shared/types";
 import {
@@ -101,8 +104,10 @@ export const CommandSuggestion = forwardRef<
   SuggestionRef,
   CommandSuggestionProps
 >(function CommandSuggestionComponent({ command, editor, query }, ref) {
-  const document = useSelector(getCurrentDocument);
-  const isMetabotEnabled = useMetabotEnabledEmbeddingAware();
+  const host = useEditorHost();
+  const document = useSelector(host.selectors.getCurrentDocument);
+  const { canUseMetabot: isMetabotEnabled } = useUserMetabotPermissions();
+  const metabotName = useMetabotName();
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const [viewMode, setViewMode] = useState<SuggestionPickerViewMode>(null);
@@ -113,8 +118,8 @@ export const CommandSuggestion = forwardRef<
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const allCommandSections: CommandSection[] = useMemo(
-    () => getAllCommandSections(isMetabotEnabled),
-    [isMetabotEnabled],
+    () => getAllCommandSections(isMetabotEnabled, metabotName),
+    [isMetabotEnabled, metabotName],
   );
 
   const allCommandOptions = useMemo(
@@ -162,18 +167,22 @@ export const CommandSuggestion = forwardRef<
           selectItem: true,
           entityId: item.id,
           model: item.model,
-          document,
         });
+        if (document) {
+          host.analytics.trackAddSmartLink(document);
+        }
       } else {
         command({
           embedItem: true,
           entityId: item.id,
           model: item.model,
-          document,
         });
+        if (document) {
+          host.analytics.trackAddCard(document);
+        }
       }
     },
-    [viewMode, command, document],
+    [viewMode, command, document, host],
   );
 
   const onTriggerCreateNewQuestion = useCallback(() => {
@@ -226,8 +235,10 @@ export const CommandSuggestion = forwardRef<
     if (commandName === "metabot") {
       command({
         command: "metabot",
-        document,
       });
+      if (document) {
+        host.analytics.trackAskMetabot(document);
+      }
       return;
     }
 

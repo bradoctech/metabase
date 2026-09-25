@@ -4,12 +4,14 @@
    [metabase-enterprise.advanced-permissions.common :as advanced-permissions.common]
    [metabase-enterprise.impersonation.util-test :as advanced-perms.api.tu]
    [metabase.driver :as driver]
+   [metabase.models.interface :as mi]
    [metabase.permissions.models.data-permissions :as data-perms]
    [metabase.permissions.models.permissions :as perms]
    [metabase.permissions.models.permissions-group :as perms-group]
    [metabase.test :as mt]
    [metabase.test.data.sql :as sql.tx]
    [metabase.test.fixtures :as fixtures]
+   [metabase.upload.impl :as upload]
    [metabase.upload.impl-test :as upload-test]
    [metabase.util :as u]
    [metabase.util.quick-task :as quick-task]
@@ -34,7 +36,6 @@
                    :is_group_manager          false
                    :can_access_db_details     true}
                   (user-permissions :crowberto))))
-
         (testing "non-admin users should only have subscriptions enabled by default"
           (is (=? {:can_access_setting        false
                    :can_access_subscription   true
@@ -43,7 +44,6 @@
                    :is_group_manager          false
                    :can_access_db_details     false}
                   (user-permissions :rasta))))
-
         (testing "can_access_data_model is true if a user has any data model perms"
           (let [[id-1 id-2 id-3 id-4] (map u/the-id (database/tables (mt/db)))]
             (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :unrestricted
@@ -54,7 +54,6 @@
                                                                                                 id-4 :none}}}}}
               (is (partial= {:can_access_data_model true}
                             (user-permissions :rasta))))))
-
         (testing "can_access_db_details is true if a user has any details perms"
           (mt/with-all-users-data-perms-graph! {(mt/id) {:details :yes}}
             (is (partial= {:can_access_db_details true}
@@ -67,7 +66,7 @@
                 (-> (mt/user-http-request user :get 200 "user/current")
                     :permissions))]
         (testing "user with collection permission on published table should have can_create_queries true"
-          (mt/with-temp [:model/Collection collection {}
+          (mt/with-temp [:model/Collection collection {:type          "library-data"}
                          :model/Table      _table     {:db_id         (mt/id)
                                                        :is_published  true
                                                        :collection_id (:id collection)}]
@@ -90,25 +89,37 @@
         (testing "A new database defaults to `:unrestricted` if no other perms are set"
           (mt/with-temp [:model/Database {db-id-2 :id} {}]
             (is (= :unrestricted (perm-value db-id-2)))))
-
         (testing "A new database defaults to `:blocked` if the group has `:blocked` for any other database"
           (data-perms/set-database-permission! group-id db-id :perms/view-data :blocked)
           (mt/with-temp [:model/Database {db-id-2 :id} {}]
             (is (= :blocked (perm-value db-id-2)))))
-
         (testing "A new database defaults to `:blocked` if the group has any connection impersonation"
           (data-perms/set-database-permission! group-id db-id :perms/view-data :unrestricted)
           (mt/with-temp [:model/ConnectionImpersonation _ {:group_id group-id
                                                            :db_id    db-id}
                          :model/Database {db-id-2 :id} {}]
             (is (= :blocked (perm-value db-id-2)))))
-
         (testing "A new database defaults to `:blocked` if the group has a sandbox for any table"
           (mt/with-temp [:model/Table {table-id :id} {:db_id db-id}
                          :model/Sandbox _ {:group_id group-id
                                            :table_id table-id}
                          :model/Database {db-id-2 :id} {}]
             (is (= :blocked (perm-value db-id-2)))))))))
+
+(deftest new-database-view-data-permission-levels-without-premium-features-test
+  (testing "A new database fails CLOSED to :blocked for a sandboxed group even when premium features are unavailable (UXW-4927)"
+    (mt/with-temp [:model/Database         {db-id :id}    {}
+                   :model/PermissionsGroup {group-id :id} {}
+                   :model/Table            {table-id :id} {:db_id db-id}
+                   :model/Sandbox          _              {:group_id group-id :table_id table-id}]
+      ;; New tables/databases must inherit an existing sandbox regardless of whether the sandboxes /
+      ;; advanced-permissions token features are currently readable -- otherwise a transient feature-check
+      ;; failure during sync leaks the new database to the sandboxed group.
+      (doseq [features [#{} #{:advanced-permissions} #{:sandboxes}]]
+        (testing (format "premium features = %s" (pr-str features))
+          (mt/with-premium-features features
+            (is (= {group-id :blocked}
+                   (advanced-permissions.common/new-database-view-data-permission-levels [group-id])))))))))
 
 (deftest new-table-view-data-permission-levels-test
   (mt/with-additional-premium-features #{:sandboxes :advanced-permissions}
@@ -129,7 +140,6 @@
             ;; Check that no DB-level perm is set
             (is (nil? (perm-value nil)))
             (is (= :blocked (perm-value table-id-3)))))
-
         (testing "A new table defaults to `:blocked` if the group has a sandbox for any existing table"
           (data-perms/set-table-permission! group-id table-id-1 :perms/view-data :unrestricted)
           (mt/with-temp [:model/Sandbox _ {:group_id group-id
@@ -139,6 +149,30 @@
             (is (= :unrestricted (perm-value table-id-1)))
             (is (= :blocked (perm-value table-id-3)))))))))
 
+(deftest new-table-view-data-permission-levels-without-premium-features-test
+  (testing "A newly-synced table fails CLOSED to :blocked for a sandboxed group even when premium features are unavailable (UXW-4927)"
+    ;; This is the incident path: a table is discovered during sync while the sandboxes /
+    ;; advanced-permissions token features momentarily read as absent. The new-table default must still
+    ;; block the sandboxed group instead of defaulting it to :unrestricted (a silent, permanent leak).
+    (mt/with-temp [:model/PermissionsGroup {group-id :id}   {}
+                   :model/Database         {db-id :id}      {}
+                   :model/Table            {table-id-1 :id} {:db_id db-id :schema "PUBLIC"}
+                   :model/Sandbox          _                {:group_id group-id :table_id table-id-1}]
+      (let [perm-value (fn [table-id] (t2/select-one-fn :perm_value
+                                                        :model/DataPermissions
+                                                        :db_id     db-id
+                                                        :group_id  group-id
+                                                        :table_id  table-id
+                                                        :perm_type :perms/view-data))]
+        (doseq [features [#{} #{:advanced-permissions} #{:sandboxes}]]
+          (testing (format "premium features = %s" (pr-str features))
+            (mt/with-premium-features features
+              (mt/with-temp [:model/Table {new-table-id :id} {:db_id db-id :schema "PUBLIC"}]
+                (is (nil? (perm-value nil))
+                    "No DB-level perm is written")
+                (is (= :blocked (perm-value new-table-id))
+                    "New table blocks the sandboxed group instead of leaking :unrestricted")))))))))
+
 (deftest new-group-view-data-permission-levels-test
   (mt/with-additional-premium-features #{:sandboxes :advanced-permissions}
     (mt/with-temp [:model/Database {db-id :id} {}]
@@ -146,18 +180,15 @@
         (testing "A new group defaults to `:unrestricted` for a DB if All Users has `:unrestricted`"
           (data-perms/set-database-permission! all-users-group-id db-id :perms/view-data :unrestricted)
           (is (= {db-id :unrestricted} (advanced-permissions.common/new-group-view-data-permission-levels [db-id]))))
-
         (testing "A new group defaults to `:blocked` for a DB if All Users has `:blocked`"
           (data-perms/set-database-permission! all-users-group-id db-id :perms/view-data :blocked)
           (is (= {db-id :blocked} (advanced-permissions.common/new-group-view-data-permission-levels [db-id]))))
-
         (testing "A new group defaults to `:blocked` if All Users has any connection impersonation"
           (data-perms/set-database-permission! all-users-group-id db-id :perms/view-data :unrestricted)
           (advanced-perms.api.tu/with-impersonations! {:impersonations [{:db-id      db-id
                                                                          :attribute  "impersonation_attr"
                                                                          :attributes {"impersonation_attr" "impersonation_role"}}]}
             (is (= {db-id :blocked} (advanced-permissions.common/new-group-view-data-permission-levels [db-id])))))
-
         (testing "A new database defaults to `:blocked` if All Users group has any sandbox"
           (data-perms/set-database-permission! all-users-group-id db-id :perms/view-data :unrestricted)
           (mt/with-temp [:model/Card                   {card-id :id}  {}
@@ -167,6 +198,21 @@
                                                         :card_id              card-id
                                                         :attribute_remappings {"foo" 1}}]
             (is (= {db-id :blocked} (advanced-permissions.common/new-group-view-data-permission-levels [db-id])))))))))
+
+(deftest new-group-view-data-permission-levels-without-premium-features-test
+  (testing "A new group fails CLOSED to :blocked when All Users has a sandbox even when premium features are unavailable (UXW-4927)"
+    (mt/with-temp [:model/Database {db-id :id}    {}
+                   :model/Table    {table-id :id} {:db_id db-id}
+                   :model/Card     {card-id :id}  {}
+                   :model/Sandbox  _              {:table_id             table-id
+                                                   :group_id             (u/the-id (perms-group/all-users))
+                                                   :card_id              card-id
+                                                   :attribute_remappings {"foo" 1}}]
+      (doseq [features [#{} #{:advanced-permissions} #{:sandboxes}]]
+        (testing (format "premium features = %s" (pr-str features))
+          (mt/with-premium-features features
+            (is (= {db-id :blocked}
+                   (advanced-permissions.common/new-group-view-data-permission-levels [db-id])))))))))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                        Data model permission enforcement                                       |
@@ -185,14 +231,12 @@
                                                        :create-queries :query-builder-and-native
                                                        :data-model     {:schemas :all}}}
           (is (partial= {:id (mt/id)} (get-test-db)))))
-
       (testing "A non-admin cannot fetch a DB for which they do not have data model perms if
                include_editable_data_model=true"
         (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :unrestricted
                                                        :create-queries :query-builder-and-native
                                                        :data-model     {:schemas :none}}}
           (is (= nil (get-test-db)))))
-
       (let [[id-1 id-2 id-3 id-4] (map u/the-id (database/tables (mt/db)))]
         (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :unrestricted
                                                        :create-queries :query-builder-and-native
@@ -203,7 +247,6 @@
           (testing "If a non-admin has data model perms for a single table in a DB, the DB is returned when listing
                    all DBs"
             (is (partial= {:id (mt/id)} (get-test-db))))
-
           (testing "if include=tables, only tables with data model perms are included"
             (is (= [id-1] (->> (get-test-db "database?include_editable_data_model=true&include=tables")
                                :tables
@@ -220,7 +263,6 @@
         (testing "Sanity check: a non-admin can fetch a DB when they have 'manage' access"
           (mt/with-all-users-data-perms-graph! {(mt/id) {:details :yes}}
             (is (partial= {:id (mt/id)} (get-test-db)))))
-
         (testing "A non-admin cannot fetch a DB for which they do not not have 'manage' access"
           (mt/with-all-users-data-perms-graph! {(mt/id) {:details :no}}
             (is (= nil (get-test-db)))))))))
@@ -232,7 +274,6 @@
                                                      :create-queries :query-builder-and-native
                                                      :data-model     {:schemas :none}}}
         (mt/user-http-request :rasta :get 403 (format "database/%d?include_editable_data_model=true" (mt/id)))))
-
     (testing "A non-admin with only data model perms for a DB can fetch the DB when include_editable_data_model=true"
       (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :unrestricted
                                                      :create-queries :no
@@ -254,7 +295,6 @@
                                                 (format "database/%d/metadata?include_editable_data_model=true" (mt/id)))
                           :tables)]
           (is (= [id-1] (map :id tables))))))
-
     (testing "A user with data model perms can still fetch a DB name and tables if they have block perms for a DB"
       (let [[id-1 id-2 id-3 id-4] (map u/the-id (database/tables (mt/db)))]
         (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :blocked
@@ -278,7 +318,6 @@
                                                      :create-queries :query-builder-and-native
                                                      :data-model     {:schemas :none}}}
         (mt/user-http-request :rasta :get 403 (format "database/%d/idfields?include_editable_data_model=true" (mt/id)))))
-
     (testing "A non-admin with only data model perms for a DB can fetch id fields when include_editable_data_model=true"
       (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :unrestricted
                                                      :create-queries :no
@@ -302,7 +341,6 @@
             (is (= ["t1" "t3"]
                    (map :name (mt/user-http-request :rasta :get 200 (format "database/%d/schema/%s" db-id "schema1")
                                                     :include_editable_data_model true)))))))
-
       (testing "If include_editable_data_model=true and a non-admin does not have data model perms, it should respond
                 with a 404"
         (mt/with-all-users-data-perms-graph! {db-id {:view-data      :blocked
@@ -311,7 +349,6 @@
           (is (= "Not found."
                  (mt/user-http-request :rasta :get 404 (format "database/%d/schema/%s" db-id "schema1")
                                        :include_editable_data_model true)))))
-
       (testing "If include_editable_data_model=true and a non-admin has data model perms for a single table in a schema,
                 the table is returned"
         (mt/with-all-users-data-perms-graph! {db-id {:view-data      :blocked
@@ -338,7 +375,6 @@
           (is (= ["t1" "t3"]
                  (map :name (mt/user-http-request :rasta :get 200 (format "database/%d/schema/" db-id)
                                                   :include_editable_data_model true))))))
-
       (testing "If include_editable_data_model=true and a non-admin does not have data model perms, it should respond
                 with a 404"
         (mt/with-all-users-data-perms-graph! {db-id {:view-data      :blocked
@@ -347,7 +383,6 @@
           (is (= "Not found."
                  (mt/user-http-request :rasta :get 404 (format "database/%d/schema/" db-id)
                                        :include_editable_data_model true)))))
-
       (testing "If include_editable_data_model=true and a non-admin has data model perms for a single table in an empty
                 string schema, it should return the table"
         (mt/with-all-users-data-perms-graph! {db-id {:view-data      :blocked
@@ -535,6 +570,77 @@
             (is (= expected-target
                    (:target (update-target))))))))))
 
+(deftest update-table-collection-id-needs-more-than-data-model-perms-test
+  (testing "PUT /api/table/:id cannot publish a Table into a collection on data-model permission alone"
+    (mt/with-temp [:model/Database   {db-id :id}              {}
+                   :model/Table      {table-id :id}           {:db_id db-id :schema "PUBLIC" :active true}
+                   :model/Collection {data-collection-id :id} {:type "library-data"}]
+      (mt/with-all-users-data-perms-graph! {db-id {:view-data      :blocked
+                                                   :create-queries :no
+                                                   :data-model     {:schemas {"PUBLIC" {table-id :all}}}}}
+        (testing "sanity: the caller may edit this Table's metadata"
+          (is (=? {:display_name "Renamed"}
+                  (mt/user-http-request :rasta :put 200 (format "table/%d" table-id)
+                                        {:display_name "Renamed"}))))
+        (testing "but publishing it, which is what makes it queryable by readers of the collection, is refused"
+          (is (= "You don't have permissions to do that."
+                 (mt/user-http-request :rasta :put 403 (format "table/%d" table-id)
+                                       {:collection_id data-collection-id})))
+          (is (nil? (t2/select-one-fn :collection_id :model/Table :id table-id))))))))
+
+(deftest update-field-fk-target-needs-perms-on-the-target-test
+  (testing "PUT /api/field/:id cannot point a Field at a target the user has no data model perms for"
+    (mt/with-temp [:model/Database {db-id :id} {}
+                   :model/Table    off-limits-table {:db_id db-id, :schema "schema1"}
+                   :model/Table    editable-table   {:db_id db-id, :schema "schema2"}
+                   :model/Field    off-limits-field {:table_id (:id off-limits-table)}
+                   :model/Field    field            {:table_id      (:id editable-table)
+                                                     :semantic_type :type/FK}]
+      (mt/with-all-users-data-perms-graph! {db-id {:data-model {:schemas {"schema1" {(:id off-limits-table) :none}
+                                                                          "schema2" {(:id editable-table)   :all}}}}}
+        (testing "the write is refused"
+          (is (= "You don't have permissions to do that."
+                 (mt/user-http-request :rasta :put 403 (format "field/%d" (:id field))
+                                       {:fk_target_field_id (:id off-limits-field)}))))
+        (testing "and nothing is persisted"
+          (is (nil? (t2/select-one-fn :fk_target_field_id :model/Field :id (:id field))))))
+      (testing "an admin can still set it"
+        (is (= (:id off-limits-field)
+               (:fk_target_field_id (mt/user-http-request :crowberto :put 200 (format "field/%d" (:id field))
+                                                          {:fk_target_field_id (:id off-limits-field)})))))
+      (testing "and leaving that existing target in place is not an escalation, so unrelated edits still work"
+        (mt/with-all-users-data-perms-graph! {db-id {:data-model {:schemas {"schema1" {(:id off-limits-table) :none}
+                                                                            "schema2" {(:id editable-table)   :all}}}}}
+          (is (= "Renamed"
+                 (:display_name (mt/user-http-request :rasta :put 200 (format "field/%d" (:id field))
+                                                      {:display_name "Renamed"}))))
+          (is (= (:id off-limits-field)
+                 (t2/select-one-fn :fk_target_field_id :model/Field :id (:id field)))))))))
+
+(deftest field-dimension-needs-perms-on-the-human-readable-field-test
+  (testing "POST /api/field/:id/dimension cannot remap to a target the user has no data model perms for"
+    (mt/with-temp [:model/Database {db-id :id} {}
+                   :model/Table    off-limits-table {:db_id db-id, :schema "schema1"}
+                   :model/Table    editable-table   {:db_id db-id, :schema "schema2"}
+                   :model/Field    off-limits-field {:table_id (:id off-limits-table)}
+                   :model/Field    field            {:table_id      (:id editable-table)
+                                                     :semantic_type :type/FK}]
+      (mt/with-all-users-data-perms-graph! {db-id {:data-model {:schemas {"schema1" {(:id off-limits-table) :none}
+                                                                          "schema2" {(:id editable-table)   :all}}}}}
+        (testing "the write is refused"
+          (is (= "You don't have permissions to do that."
+                 (mt/user-http-request :rasta :post 403 (format "field/%d/dimension" (:id field))
+                                       {:type                    "external"
+                                        :name                    "Remapped"
+                                        :human_readable_field_id (:id off-limits-field)}))))
+        (testing "and no Dimension is created"
+          (is (nil? (t2/select-one :model/Dimension :field_id (:id field)))))
+        (testing "an internal remapping, which references no other Field, is still allowed"
+          (is (=? {:type "internal"}
+                  (mt/user-http-request :rasta :post 200 (format "field/%d/dimension" (:id field))
+                                        {:type "internal"
+                                         :name "Remapped"}))))))))
+
 (deftest update-field-test
   (mt/with-temp [:model/Table {table-id :id}                     {:db_id (mt/id) :schema "PUBLIC"}
                  :model/Table {table-id-2 :id}                   {:db_id (mt/id) :schema "PUBLIC"}
@@ -546,42 +652,32 @@
             (mt/with-all-users-data-perms-graph! {db-id {:data-model {:schemas {schema {table-id :all}}}}}
               (mt/with-premium-features #{}
                 (mt/user-http-request :rasta :put 403 endpoint {:name "Field Test 4"}))))
-
           (testing "a non-admin cannot update field metadata if they have no data model permissions for the DB"
             (mt/with-all-users-data-perms-graph! {db-id {:data-model {:schemas :none}}}
               (mt/user-http-request :rasta :put 403 endpoint {:name "Field Test 2"})))
-
           (testing "a non-admin cannot update field metadata if they only have data model permissions for other schemas"
             (mt/with-all-users-data-perms-graph! {db-id {:data-model {:schemas {schema             :none
                                                                                 "different schema" :all}}}}
-
               (mt/user-http-request :rasta :put 403 endpoint {:name "Field Test 2"})))
-
           (testing "a non-admin cannot update field metadata if they only have data model permissions for other tables"
             (mt/with-all-users-data-perms-graph! {db-id {:data-model {:schemas {schema {table-id   :none
                                                                                         table-id-2 :all}}}}}
               (mt/user-http-request :rasta :put 403 endpoint {:name "Field Test 2"})))
-
           (testing "a non-admin can update field metadata if they have data model perms for the DB"
             (mt/with-all-users-data-perms-graph! {db-id {:data-model {:schemas :all}}}
               (mt/user-http-request :rasta :put 200 endpoint {:name "Field Test 2"})))
-
           (testing "a non-admin can update field metadata if they have data model perms for the schema"
             (mt/with-all-users-data-perms-graph! {db-id {:data-model {:schemas {schema :all}}}}
               (mt/user-http-request :rasta :put 200 endpoint {:name "Field Test 3"})))
-
           (testing "a non-admin can update field metadata if they have data model perms for the table"
             (mt/with-all-users-data-perms-graph! {db-id {:data-model {:schemas {schema {table-id :all}}}}}
               (mt/user-http-request :rasta :put 200 endpoint {:name "Field Test 3"})))))
-
       (testing "POST /api/field/:id/rescan_values"
         (testing "A non-admin can trigger a rescan of field values if they have data model perms for the table"
           (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {schema {table-id :none}}}}}
             (mt/user-http-request :rasta :post 403 (format "field/%d/rescan_values" field-id)))
-
           (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {schema {table-id :all}}}}}
             (mt/user-http-request :rasta :post 200 (format "field/%d/rescan_values" field-id))))
-
         (testing "A non-admin with no data access can trigger a re-scan of field values if they have data model perms"
           (t2/delete! :model/FieldValues :field_id (mt/id :venues :price))
           (is (= nil (t2/select-one-fn :values :model/FieldValues, :field_id (mt/id :venues :price))))
@@ -590,15 +686,12 @@
                                                          :data-model     {:schemas {"PUBLIC" {(mt/id :venues) :all}}}}}
             (mt/user-http-request :rasta :post 200 (format "field/%d/rescan_values" (mt/id :venues :price))))
           (is (= [1 2 3 4] (t2/select-one-fn :values :model/FieldValues, :field_id (mt/id :venues :price))))))
-
       (testing "POST /api/field/:id/discard_values"
         (testing "A non-admin can discard field values if they have data model perms for the table"
           (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {schema {table-id :none}}}}}
             (mt/user-http-request :rasta :post 403 (format "field/%d/discard_values" field-id)))
-
           (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {schema {table-id :all}}}}}
             (mt/user-http-request :rasta :post 200 (format "field/%d/discard_values" field-id))))
-
         (testing "A non-admin with no data access can discard field values if they have data model perms"
           (is (= [1 2 3 4] (t2/select-one-fn :values :model/FieldValues, :field_id (mt/id :venues :price))))
           (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :blocked
@@ -635,29 +728,23 @@
           (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas :all}}}
             (mt/with-premium-features #{}
               (mt/user-http-request :rasta :put 403 endpoint {:name "Table Test 2"}))))
-
         (testing "a non-admin cannot update table metadata if they have no data model permissions for the DB"
           (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas :none}}}
             (mt/user-http-request :rasta :put 403 endpoint {:name "Table Test 2"})))
-
         (testing "a non-admin cannot update table metadata if they only have data model permissions for other schemas"
           (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {"PUBLIC"           :none
                                                                                 "different schema" :all}}}}
             (mt/user-http-request :rasta :put 403 endpoint {:name "Table Test 2"})))
-
         (testing "a non-admin cannot update table metadata if they only have data model permissions for other tables"
           (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {"PUBLIC" {table-id   :none
                                                                                           table-id-2 :all}}}}}
             (mt/user-http-request :rasta :put 403 endpoint {:name "Table Test 2"})))
-
         (testing "a non-admin can update table metadata if they have data model perms for the DB"
           (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas :all}}}
             (mt/user-http-request :rasta :put 200 endpoint {:name "Table Test 2"})))
-
         (testing "a non-admin can update table metadata if they have data model perms for the schema"
           (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {"PUBLIC" :all}}}}
             (mt/user-http-request :rasta :put 200 endpoint {:name "Table Test 3"})))
-
         (testing "a non-admin can update table metadata if they have data model perms for the table"
           (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {"PUBLIC" {table-id :all}}}}}
             (mt/user-http-request :rasta :put 200 endpoint {:name "Table Test 3"})))))))
@@ -670,14 +757,12 @@
       (testing "A non-admin can trigger a rescan of field values if they have data model perms for the table"
         (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {"PUBLIC" {table-id :none}}}}}
           (mt/user-http-request :rasta :post 403 (format "table/%d/rescan_values" table-id)))
-
         (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {"PUBLIC" {table-id :all}}}}}
           (mt/user-http-request :rasta :post 200 (format "table/%d/rescan_values" table-id))))
-
       (testing "A non-admin with no data access can trigger a re-scan of field values if they have data model perms"
         (t2/update! :model/FieldValues :field_id (mt/id :venues :price) {:values [10 20 30 40]})
         (is (= [10 20 30 40] (t2/select-one-fn :values :model/FieldValues, :field_id (mt/id :venues :price))))
-        (with-redefs [quick-task/submit-task! (fn [task] (task))]
+        (mt/with-dynamic-fn-redefs [quick-task/submit-task! (fn [task] (task))]
           (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :blocked
                                                          :create-queries :no
                                                          :data-model     {:schemas {"PUBLIC" {(mt/id :venues) :all}}}}}
@@ -690,7 +775,6 @@
       (testing "A non-admin can discard field values if they have data model perms for the table"
         (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {"PUBLIC" {table-id :none}}}}}
           (mt/user-http-request :rasta :post 403 (format "table/%d/discard_values" table-id)))
-
         (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {"PUBLIC" {table-id :all}}}}}
           (mt/user-http-request :rasta :post 200 (format "table/%d/discard_values" table-id)))))))
 
@@ -703,7 +787,6 @@
           (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {"PUBLIC" {table-id :none}}}}}
             (mt/user-http-request :rasta :put 403 (format "table/%d/fields/order" table-id)
                                   [field-2-id field-1-id]))
-
           (mt/with-all-users-data-perms-graph! {(mt/id) {:data-model {:schemas {"PUBLIC" {table-id :all}}}}}
             (is (= {:success true}
                    (mt/user-http-request :rasta :put 200 (format "table/%d/fields/order" table-id)
@@ -725,21 +808,18 @@
         (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :blocked
                                                        :create-queries :no}}
           (mt/user-http-request :rasta :get 403 (format "table/%d?include_editable_data_model=true" table-id))))
-
       (testing "A non-admin without self-service perms for a table can fetch the table if they have data model perms for
                the DB"
         (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :unrestricted
                                                        :create-queries :no
                                                        :data-model     {:schemas :all}}}
           (mt/user-http-request :rasta :get 200 (format "table/%d?include_editable_data_model=true" table-id))))
-
       (testing "A non-admin without self-service perms for a table can fetch the table if they have data model perms for
                the schema"
         (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :unrestricted
                                                        :create-queries :no
                                                        :data-model     {:schemas {"PUBLIC" :all}}}}
           (mt/user-http-request :rasta :get 200 (format "table/%d?include_editable_data_model=true" table-id))))
-
       (testing "A non-admin without self-service perms for a table can fetch the table if they have data model perms for
                the table"
         (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :unrestricted
@@ -757,7 +837,6 @@
                                                        :data-model     {:schemas :none}}}
           (mt/user-http-request :rasta :get 403
                                 (format "table/%d/query_metadata?include_editable_data_model=true" table-id))))
-
       (testing "A non-admin with only data model perms for a table can fetch the query metadata when
                include_editable_data_model=true"
         (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :unrestricted
@@ -797,7 +876,7 @@
   (mt/test-helpers-set-global-values!
     (mt/with-temp [:model/Database {db-id :id} {:engine "h2", :details (:details (mt/db))}]
       ;; Don't actually run the sync task in this test — just test the API-level permission enforcement
-      (with-redefs [quick-task/submit-task! (constantly nil)]
+      (mt/with-dynamic-fn-redefs [quick-task/submit-task! (constantly nil)]
         (testing "A non-admin cannot trigger a sync of the DB schema if they do not have DB details permissions"
           (mt/with-all-users-data-perms-graph! {db-id {:details :no}}
             (mt/user-http-request :rasta :post 403 (format "database/%d/sync_schema" db-id))))
@@ -991,6 +1070,58 @@
                              clojure.lang.ExceptionInfo
                              #"You don't have permissions to do that\."
                              (append-csv!)))))))))))))))
+
+(deftest update-csv-metadata-perms-test
+  (mt/test-drivers (mt/normal-drivers-with-feature :uploads)
+    (doseq [action [:metabase.upload/append :metabase.upload/replace]]
+      (testing (format "%s is a data write, so data-model perms alone must not authorize it" action)
+        (upload-test/with-upload-table!
+          [table (upload-test/create-upload-table!)]
+          (let [append-csv! #(upload-test/update-csv-with-defaults!
+                              action
+                              :table-id (:id table)
+                              :user-id (mt/user->id :rasta))]
+            (testing "data-model perms are metadata access, not data access"
+              (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :blocked
+                                                             :create-queries :no
+                                                             :data-model     {:schemas :all}}}
+                (mt/with-test-user :rasta
+                  (is (mi/can-read? table)
+                      "data-model perms alone make the table readable")
+                  (is (not (mi/can-query? table))
+                      "...but not queryable"))
+                (is (thrown-with-msg?
+                     clojure.lang.ExceptionInfo
+                     #"You don't have permissions to do that\."
+                     (append-csv!))
+                    "so the upload is refused")))
+            (testing "nor is seeing the data enough on its own -- create-queries is the other half of can-query?"
+              (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :unrestricted
+                                                             :create-queries :no}}
+                (mt/with-test-user :rasta
+                  (is (not (mi/can-query? table))))
+                (is (thrown-with-msg?
+                     clojure.lang.ExceptionInfo
+                     #"You don't have permissions to do that\."
+                     (append-csv!)))))))))))
+
+(deftest delete-upload-metadata-perms-test
+  (mt/test-drivers (mt/normal-drivers-with-feature :uploads)
+    (testing "dropping an uploaded table needs data access too, not data-model perms on their own"
+      (upload-test/with-upload-table!
+        [table (upload-test/create-upload-table!)]
+        (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :blocked
+                                                       :create-queries :no
+                                                       :data-model     {:schemas :all}}}
+          (mt/with-test-user :rasta
+            (is (mi/can-read? table)
+                "data-model perms alone make the table readable...")
+            (is (not (mi/can-query? table))
+                "...but not queryable, and dropping it destroys rows they cannot read")
+            (is (thrown-with-msg?
+                 clojure.lang.ExceptionInfo
+                 #"You don't have permissions to do that\."
+                 (upload/delete-upload! table :archive-cards? false)))))))))
 
 (deftest update-csv-block-perms-test
   (mt/test-drivers (mt/normal-drivers-with-feature :uploads)

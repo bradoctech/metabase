@@ -4,7 +4,7 @@ import { c, t } from "ttag";
 import { useSetting } from "metabase/common/hooks";
 import type { ExportFormat } from "metabase/common/types/export";
 import { isEmbeddingSdk } from "metabase/embedding-sdk/config";
-import { useSelector } from "metabase/lib/redux";
+import { useSelector } from "metabase/redux";
 import { getApplicationName } from "metabase/selectors/whitelabel";
 import { Checkbox, SegmentedControl, Stack } from "metabase/ui";
 
@@ -88,7 +88,7 @@ export const ExportSettingsWidget = ({
         onChange={onChangeFormat}
         styles={{
           root: {
-            backgroundColor: "var(--mb-color-background-secondary)",
+            backgroundColor: "var(--mb-color-background_page-secondary)",
           },
         }}
       />

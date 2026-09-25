@@ -4,6 +4,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -25,16 +26,28 @@ import { SdkQuestion } from "embedding-sdk-bundle/components/public/SdkQuestion/
 import { useDashboardLoadHandlers } from "embedding-sdk-bundle/hooks/private/use-dashboard-load-handlers";
 import { useExtractResourceIdFromJwtToken } from "embedding-sdk-bundle/hooks/private/use-extract-resource-id-from-jwt-token";
 import { useSdkBreadcrumbs } from "embedding-sdk-bundle/hooks/private/use-sdk-breadcrumb";
+import { useSdkControlledParameters } from "embedding-sdk-bundle/hooks/private/use-sdk-controlled-parameters";
 import {
   type SdkDashboardDisplayProps,
   useSdkDashboardParams,
 } from "embedding-sdk-bundle/hooks/private/use-sdk-dashboard-params";
 import { useSetupContentTranslations } from "embedding-sdk-bundle/hooks/private/use-setup-content-translations";
+import { useWarnConflictingParameterProps } from "embedding-sdk-bundle/hooks/private/use-warn-conflicting-parameter-props";
+import { getEffectiveParameterValues } from "embedding-sdk-bundle/lib/controlled-parameters";
 import { useSdkDispatch, useSdkSelector } from "embedding-sdk-bundle/store";
-import { getIsGuestEmbed } from "embedding-sdk-bundle/store/selectors";
+import {
+  clearGuestToken,
+  setInitialGuestToken,
+} from "embedding-sdk-bundle/store/guest-embed";
+import {
+  getGuestTokenForMount,
+  getIsGuestEmbed,
+  getSessionTokenState,
+} from "embedding-sdk-bundle/store/selectors";
 import type { MetabaseQuestion } from "embedding-sdk-bundle/types";
 import type {
   DashboardEventHandlersProps,
+  ParameterChangePayload,
   SdkDashboardId,
 } from "embedding-sdk-bundle/types/dashboard";
 import type { MetabasePluginsConfig } from "embedding-sdk-bundle/types/plugins";
@@ -57,13 +70,13 @@ import {
 import { getDashboardComplete, getIsDirty } from "metabase/dashboard/selectors";
 import type { RefreshPeriod } from "metabase/dashboard/types";
 import { EmbeddingEntityContextProvider } from "metabase/embedding/context";
+import EmbedFrameS from "metabase/embedding/theme.module.css";
 import type { ParameterValues } from "metabase/embedding-sdk/types/dashboard";
-import { isStaticEmbeddingEntityLoadingError } from "metabase/lib/errors/is-static-embedding-entity-loading-error";
-import { useSelector } from "metabase/lib/redux";
-import EmbedFrameS from "metabase/public/components/EmbedFrame/EmbedFrame.module.css";
+import { useSelector } from "metabase/redux";
 import { resetErrorPage, setErrorPage } from "metabase/redux/app";
 import { dismissAllUndo } from "metabase/redux/undo";
 import { getErrorPage } from "metabase/selectors/app";
+import { isStaticEmbeddingEntityLoadingError } from "metabase/utils/errors/is-static-embedding-entity-loading-error";
 import type { CardDisplayType } from "metabase-types/api";
 
 import type {
@@ -71,12 +84,34 @@ import type {
   SdkQuestionProps,
 } from "../SdkQuestion";
 
-import {
-  SdkDashboardStyledWrapper,
-  SdkDashboardStyledWrapperWithRef,
-} from "./SdkDashboardStyleWrapper";
+import { SdkDashboardStyledWrapper } from "./SdkDashboardStyleWrapper";
 import { SdkDashboardProvider } from "./context";
 import { useCommonDashboardParams } from "./use-common-dashboard-params";
+
+const MaybeStyledWrapper = ({
+  skip,
+  className,
+  style,
+  fullHeight,
+  children,
+}: {
+  skip: boolean;
+  className?: string;
+  style?: React.CSSProperties;
+  fullHeight?: boolean;
+  children: React.ReactNode;
+}) =>
+  skip ? (
+    <>{children}</>
+  ) : (
+    <SdkDashboardStyledWrapper
+      className={className}
+      style={style}
+      fullHeight={fullHeight}
+    >
+      {children}
+    </SdkDashboardStyledWrapper>
+  );
 
 /**
  * @interface
@@ -125,16 +160,47 @@ export type SdkDashboardProps = PropsWithChildren<
     autoRefreshInterval?: number;
 
     /**
-     * Query parameters for the dashboard. For a single option, use a `string` value, and use a list of strings for multiple options.
+     * Initial values for query parameters, slug-keyed. Applied once on mount; user widget edits afterwards are not reflected back to the host.
+     * <br/>
+     * For each parameter:
+     * <br/>
+     * - set to a value (string for a single option, array of strings for multiple): that value is applied.
+     * <br/>
+     * - set to `null`: strictly cleared, ignoring the parameter's default.
+     * <br/>
+     * - omitted (or set to `undefined`): falls back to the parameter's default (or `null` if it has no default).
+     * <br/>
      * <br/>
      * - Combining {@link SdkDashboardProps.initialParameters | initialParameters} and {@link SdkDashboardDisplayProps.hiddenParameters | hiddenParameters} to filter data on the frontend is a [security risk](https://www.metabase.com/docs/latest/embedding/sdk/authentication.html#security-warning-each-end-user-must-have-their-own-metabase-account).
      * <br/>
      * - Combining {@link SdkDashboardProps.initialParameters | initialParameters} and {@link SdkDashboardDisplayProps.hiddenParameters | hiddenParameters} to declutter the user interface is fine.
      */
     initialParameters?: ParameterValues;
+
+    /**
+     * Controlled parameter values, slug-keyed. On every render, this object replaces the dashboard's parameter values:
+     * <br/>
+     * - a parameter set to a value uses that value.
+     * <br/>
+     * - a parameter set to `null` is cleared, even if it has a default.
+     * <br/>
+     * - a parameter omitted from the object (or set to `undefined`) uses its default (or `null` if it has no default).
+     * <br/>
+     * <br/>
+     * Pair with {@link SdkDashboardProps.onParametersChange | onParametersChange} to stay in sync with user edits.
+     * <br/>
+     * - Combining {@link SdkDashboardProps.parameters | parameters} and {@link SdkDashboardDisplayProps.hiddenParameters | hiddenParameters} to filter data on the frontend is a [security risk](https://www.metabase.com/docs/latest/embedding/sdk/authentication.html#security-warning-each-end-user-must-have-their-own-metabase-account).
+     * <br/>
+     * - Combining {@link SdkDashboardProps.parameters | parameters} and {@link SdkDashboardDisplayProps.hiddenParameters | hiddenParameters} to declutter the user interface is fine.
+     */
+    parameters?: ParameterValues;
+
+    /**
+     * Fires on parameters change. The payload's `source` distinguishes the initial state on load (`'initial-state'`), user edits in the UI (`'manual-change'`), and auto-updates (`'auto-change'`).
+     */
+    onParametersChange?: (payload: ParameterChangePayload) => void;
   } & SdkDashboardDisplayProps &
-    DashboardEventHandlersProps &
-    EditableDashboardOwnProps
+    DashboardEventHandlersProps
 >;
 
 type RenderMode = "dashboard" | "question" | "queryBuilder";
@@ -147,11 +213,14 @@ type RenderMode = "dashboard" | "question" | "queryBuilder";
 export type EditableDashboardOwnProps = {
   /**
    * Additional props to pass to the query builder rendered by `InteractiveQuestion` when creating a new dashboard question.
+   *
+   * Set `dataPicker: "staged"` to always get the staged data picker. By default, Metabase shows a simple dropdown menu with tables and models, and only switches to the staged picker when there are 100 or more data sources. `entityTypes: ["question"]` only takes effect in the staged picker.
    */
-  dataPickerProps?: Pick<SdkQuestionProps, "entityTypes">;
+  dataPickerProps?: Pick<SdkQuestionProps, "entityTypes" | "dataPicker">;
 };
 
 export type SdkDashboardInnerProps = SdkDashboardProps &
+  EditableDashboardOwnProps &
   Partial<
     Pick<
       DashboardContextProps,
@@ -166,7 +235,9 @@ const SdkDashboardInner = ({
   dashboardId: rawDashboardId,
   token: rawToken,
   autoRefreshInterval,
-  initialParameters = {},
+  initialParameters,
+  parameters,
+  onParametersChange,
   withTitle = true,
   withCardTitle = true,
   withDownloads = false,
@@ -194,6 +265,53 @@ const SdkDashboardInner = ({
   onVisualizationChange,
 }: SdkDashboardInnerProps) => {
   const isGuestEmbed = useSdkSelector(getIsGuestEmbed);
+  const dispatch = useSdkDispatch();
+  const [isFirstRender, setIsFirstRender] = useState(true);
+  // Stable per-mount id: keeps this mount's guest token isolated from any
+  // other guest StaticQuestion/StaticDashboard sharing the same MetabaseProvider.
+  const mountId = useId();
+
+  useWarnConflictingParameterProps({
+    initialParameters,
+    parameters,
+    initialParameterPropName: "initialParameters",
+    parameterPropName: "parameters",
+  });
+
+  const effectiveInitialParameters = getEffectiveParameterValues(
+    parameters,
+    initialParameters,
+  );
+
+  useSdkControlledParameters({
+    parameters,
+    onParametersChange,
+  });
+
+  const { error: tokenFetchError } = useSdkSelector(getSessionTokenState);
+  const tokenFromStore = useSdkSelector((state) =>
+    getGuestTokenForMount(state, mountId),
+  );
+
+  // Store token so the refresh handler can check expiry. No need to await — not used here.
+  useEffect(() => {
+    if (rawToken && isGuestEmbed) {
+      dispatch(setInitialGuestToken({ mountId, token: rawToken }));
+    }
+  }, [rawToken, isGuestEmbed, dispatch, mountId]);
+
+  // Own effect: folding this into the one above would clear the token on every
+  // rawToken change, leaving a window with no token for the refresh handler.
+  useEffect(
+    () => () => {
+      dispatch(clearGuestToken(mountId));
+    },
+    [dispatch, mountId],
+  );
+
+  useEffect(() => {
+    setIsFirstRender(false);
+  }, []);
 
   const {
     resourceId: dashboardId,
@@ -202,7 +320,9 @@ const SdkDashboardInner = ({
   } = useExtractResourceIdFromJwtToken({
     isGuestEmbed,
     resourceId: rawDashboardId,
-    token: rawToken ?? undefined,
+    // Skip stale Redux token on first render (e.g. wizard re-issuing a token when toggling parameters); rawToken prop takes precedence.
+    // From the next render onward, tokenFromStore is used and the value is from a refreshed token.
+    token: (!isFirstRender ? tokenFromStore : null) ?? rawToken ?? undefined,
   });
 
   useSetupContentTranslations({ token });
@@ -275,7 +395,6 @@ const SdkDashboardInner = ({
   ]);
 
   const errorPage = useSdkSelector(getErrorPage);
-  const dispatch = useSdkDispatch();
   useEffect(() => {
     if (dashboardId) {
       dispatch(resetErrorPage());
@@ -292,6 +411,11 @@ const SdkDashboardInner = ({
   const isDashboardDirty = useSelector(getIsDirty);
 
   const sdkNavigation = useSdkInternalNavigationOptional();
+  // When this SdkDashboard renders below a nav-stack push, the outer
+  // SdkInternalNavigationProvider already wraps with SdkDashboardStyledWrapper
+  // carrying user style/className. Skip our own wrapper to avoid double
+  // wrapping (which drops user height/sticky/scroll behavior).
+  const skipStyledWrapper = !!sdkNavigation?.hasNavigatedToEntity;
 
   // Initialize navigation stack with dashboard entry when we have the name
   useEffect(() => {
@@ -341,27 +465,60 @@ const SdkDashboardInner = ({
     ],
   );
 
+  // "Edit question" opens the card via adhocQuestionUrl without going through
+  // onNavigateToNewCardFromDashboard, so it never pushes to the navigation stack
+  // and the back button stays hidden. Push a virtual entry here so the question
+  // view renders a back button to the dashboard, matching the drill-in flow.
+  const onEditQuestionWithNav = useCallback(
+    (question: Parameters<typeof onEditQuestion>[0]) => {
+      sdkNavigation?.push({
+        type: "open-card",
+        virtual: true,
+        name: question.displayName() ?? t`Question`,
+        onPop: () => onNavigateBackToDashboard(),
+      });
+      onEditQuestion(question);
+    },
+    [onEditQuestion, sdkNavigation, onNavigateBackToDashboard],
+  );
+
   if (isLocaleLoading) {
     return (
-      <SdkDashboardStyledWrapper className={className} style={style}>
+      <MaybeStyledWrapper
+        skip={skipStyledWrapper}
+        className={className}
+        style={style}
+      >
         <SdkLoader />
-      </SdkDashboardStyledWrapper>
+      </MaybeStyledWrapper>
     );
   }
 
   if (tokenError) {
     return (
-      <SdkDashboardStyledWrapper className={className} style={style}>
+      <MaybeStyledWrapper
+        skip={skipStyledWrapper}
+        className={className}
+        style={style}
+      >
         <SdkError message={tokenError} />;
-      </SdkDashboardStyledWrapper>
+      </MaybeStyledWrapper>
     );
+  }
+
+  if (tokenFetchError) {
+    return <SdkError message={tokenFetchError.message} />;
   }
 
   if (isStaticEmbeddingEntityLoadingError(errorPage, { isGuestEmbed })) {
     return (
-      <SdkDashboardStyledWrapper className={className} style={style}>
+      <MaybeStyledWrapper
+        skip={skipStyledWrapper}
+        className={className}
+        style={style}
+      >
         <SdkError message={errorPage.data ?? t`Something's gone wrong`} />
-      </SdkDashboardStyledWrapper>
+      </MaybeStyledWrapper>
     );
   }
 
@@ -372,19 +529,27 @@ const SdkDashboardInner = ({
 
   if (!dashboardId || isDashboardNotFound) {
     return (
-      <SdkDashboardStyledWrapper className={className} style={style}>
+      <MaybeStyledWrapper
+        skip={skipStyledWrapper}
+        className={className}
+        style={style}
+      >
         <DashboardNotFoundError id={dashboardId ?? ""} />
-      </SdkDashboardStyledWrapper>
+      </MaybeStyledWrapper>
     );
   }
 
   if (errorPage) {
     return (
-      <SdkDashboardStyledWrapper className={className} style={style}>
+      <MaybeStyledWrapper
+        skip={skipStyledWrapper}
+        className={className}
+        style={style}
+      >
         <SdkError
           message={errorPage.data?.message ?? t`Something's gone wrong`}
         />
-      </SdkDashboardStyledWrapper>
+      </MaybeStyledWrapper>
     );
   }
 
@@ -394,7 +559,7 @@ const SdkDashboardInner = ({
         ref={dashboardContextProviderRef}
         dashboardId={dashboardId}
         isGuestEmbed={isGuestEmbed}
-        parameterQueryParams={initialParameters}
+        parameterQueryParams={effectiveInitialParameters}
         navigateToNewCardFromDashboard={
           navigateToNewCardFromDashboard !== undefined
             ? navigateToNewCardFromDashboard
@@ -423,7 +588,7 @@ const SdkDashboardInner = ({
                 dispatch(setEditingDashboard(dashboard));
               },
               confirmButtonProps: {
-                color: "brand",
+                color: "core-brand",
               },
             });
           } else {
@@ -458,7 +623,8 @@ const SdkDashboardInner = ({
       >
         {match({ finalRenderMode, isGuestEmbed })
           .with({ finalRenderMode: "question" }, () => (
-            <SdkDashboardStyledWrapperWithRef
+            <MaybeStyledWrapper
+              skip={skipStyledWrapper}
               className={className}
               style={style}
             >
@@ -471,44 +637,56 @@ const SdkDashboardInner = ({
               >
                 {AdHocQuestionView && <AdHocQuestionView />}
               </SdkAdHocQuestion>
-            </SdkDashboardStyledWrapperWithRef>
+            </MaybeStyledWrapper>
           ))
           .with({ finalRenderMode: "dashboard" }, () => (
             <SdkDashboardProvider
               plugins={plugins}
-              onEditQuestion={onEditQuestion}
+              onEditQuestion={onEditQuestionWithNav}
             >
               {children ?? (
-                <SdkDashboardStyledWrapperWithRef
+                <MaybeStyledWrapper
+                  skip={skipStyledWrapper}
                   className={className}
                   style={style}
                 >
                   <Dashboard className={EmbedFrameS.EmbedFrame} />
                   <AutoRefreshController refreshPeriod={autoRefreshInterval} />
-                </SdkDashboardStyledWrapperWithRef>
+                </MaybeStyledWrapper>
               )}
             </SdkDashboardProvider>
           ))
           .with({ finalRenderMode: "queryBuilder" }, ({ isGuestEmbed }) =>
             isGuestEmbed ? (
-              <SdkDashboardStyledWrapper className={className} style={style}>
+              <MaybeStyledWrapper
+                skip={skipStyledWrapper}
+                className={className}
+                style={style}
+              >
                 <SdkError
                   message={t`You can't save questions in Guest Embed mode`}
                 />
-              </SdkDashboardStyledWrapper>
+              </MaybeStyledWrapper>
             ) : (
-              <DashboardQueryBuilder
-                onCreate={(question) => {
-                  setNewDashboardQuestionId(question.id);
-                  sdkNavigation?.pop(); // onPop handles setRenderMode("dashboard")
-                  dashboardContextProviderRef.current?.refetchDashboard();
-                }}
-                onNavigateBack={() => {
-                  sdkNavigation?.pop(); // onPop handles setRenderMode("dashboard")
-                }}
-                dataPickerProps={dataPickerProps}
-                onVisualizationChange={onVisualizationChange}
-              />
+              <MaybeStyledWrapper
+                skip={skipStyledWrapper}
+                className={className}
+                style={style}
+                fullHeight
+              >
+                <DashboardQueryBuilder
+                  onCreate={(question) => {
+                    setNewDashboardQuestionId(question.id);
+                    sdkNavigation?.pop(); // onPop handles setRenderMode("dashboard")
+                    dashboardContextProviderRef.current?.refetchDashboard();
+                  }}
+                  onNavigateBack={() => {
+                    sdkNavigation?.pop(); // onPop handles setRenderMode("dashboard")
+                  }}
+                  dataPickerProps={dataPickerProps}
+                  onVisualizationChange={onVisualizationChange}
+                />
+              </MaybeStyledWrapper>
             ),
           )
           .exhaustive()}
@@ -594,9 +772,11 @@ function DashboardQueryBuilder({
         name: dashboard.name,
       }}
       entityTypes={dataPickerProps?.entityTypes}
+      dataPicker={dataPickerProps?.dataPicker}
       withChartTypeSelector
-      // The default value is 600px and it cuts off the "Visualize" button.
-      height="700px"
+      // Fill the available space so the query builder matches the dashboard's
+      // sizing instead of a fixed height that leaves whitespace / scrolls.
+      height="100%"
       onVisualizationChange={onVisualizationChange}
     />
   );

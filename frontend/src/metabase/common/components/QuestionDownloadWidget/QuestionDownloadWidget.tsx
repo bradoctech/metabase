@@ -9,8 +9,8 @@ import type {
   ExportFormat,
   TableExportFormat,
 } from "metabase/common/types/export";
+import { exportFormatPng, exportFormats } from "metabase/common/types/export";
 import CS from "metabase/css/core/index.css";
-import { exportFormatPng, exportFormats } from "metabase/lib/urls";
 import { PLUGIN_FEATURE_LEVEL_PERMISSIONS } from "metabase/plugins";
 import {
   Box,
@@ -122,8 +122,7 @@ export const QuestionDownloadWidget = ({
         last_table_download_format:
           newFormat !== "png"
             ? newFormat
-            : (formatPreference.last_table_download_format as TableExportFormat) ||
-              "csv",
+            : formatPreference.last_table_download_format || "csv",
       });
     }
   };
@@ -174,7 +173,7 @@ export const QuestionDownloadWidget = ({
         {showPivotXlsxExportHint && (
           <Flex
             p="md"
-            bg="background-secondary"
+            bg="background_page-secondary"
             align="center"
             justify="space-between"
             className={CS.rounded}
@@ -184,7 +183,7 @@ export const QuestionDownloadWidget = ({
               <Link
                 target="_new"
                 to={pivotExcelExportsDocsLink}
-                style={{ color: "var(--mb-color-brand)" }}
+                style={{ color: "var(--mb-color-core-brand)" }}
               >
                 {t`Read the docs`}
               </Link>

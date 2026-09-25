@@ -1,13 +1,17 @@
 (ns ^:mb/driver-tests metabase.driver.clickhouse-test
   "Tests for specific behavior of the ClickHouse driver."
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.driver.clickhouse-test]}}}}}}
   (:require
    [clojure.java.jdbc :as jdbc]
    [clojure.test :refer :all]
+   [honey.sql :as sql]
    [metabase.driver :as driver]
    [metabase.driver.clickhouse-qp :as clickhouse-qp]
    [metabase.driver.clickhouse-version :as clickhouse-version]
    [metabase.driver.sql-jdbc :as sql-jdbc]
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
+   [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
+   [metabase.driver.sql.query-processor :as sql.qp]
    [metabase.lib-be.core :as lib-be]
    [metabase.lib.card :as lib.card]
    [metabase.lib.core :as lib]
@@ -18,8 +22,12 @@
    [metabase.test :as mt]
    [metabase.test.data.clickhouse :as ctd]
    [metabase.upload.impl-test :as upload-test]
+   [metabase.util.honey-sql-2 :as h2x]
    [taoensso.nippy :as nippy]
-   [toucan2.tools.with-temp :as t2.with-temp]))
+   [toucan2.tools.with-temp :as t2.with-temp])
+  (:import
+   (com.clickhouse.jdbc ConnectionImpl)
+   (java.sql Connection)))
 
 (set! *warn-on-reflection* true)
 
@@ -47,6 +55,40 @@
            (let [details (mt/dbdef->connection-details :clickhouse :db {:database-name "default"})
                  spec    (sql-jdbc.conn/connection-details->spec :clickhouse details)]
              (driver/db-default-timezone :clickhouse spec))))))
+
+(deftest clickhouse-report-timezone-reaches-server-test
+  ;; Regression for #79671.
+  (mt/test-driver :clickhouse
+    (mt/with-report-timezone-id! "America/Santiago"
+      (is (= [["America/Santiago" "America/Santiago"]]
+             (->> "SELECT timezone() AS tz, getSetting('session_timezone') AS s"
+                  (lib/native-query (mt/metadata-provider))
+                  qp/process-query
+                  mt/rows))))))
+
+(deftest ^:synchronized clickhouse-session-timezone-does-not-leak-across-borrows-test
+  (mt/test-driver :clickhouse
+    (sql-jdbc.conn/invalidate-pool-for-db! (mt/db))
+    (let [underlying-conn-ids (atom [])
+          observe (fn [opts]
+                    (sql-jdbc.execute/do-with-connection-with-options
+                     :clickhouse (mt/id) opts
+                     (fn [^Connection conn]
+                       (swap! underlying-conn-ids conj
+                              (System/identityHashCode (.unwrap conn ConnectionImpl)))
+                       (with-open [stmt (.createStatement conn)
+                                   rs   (.executeQuery stmt "SELECT getSetting('session_timezone')")]
+                         (.next rs)
+                         (.getString rs 1)))))]
+      (is (= "America/Santiago" (observe {:session-timezone "America/Santiago"})))
+      (let [result (observe nil)]
+        ;; Guard: the leak is only observable when the pool hands us the same underlying
+        ;; ConnectionImpl. With a freshly invalidated pool and back-to-back borrows this holds;
+        ;; if it stops holding, the test has to be fixed.
+        (is (apply = @underlying-conn-ids)
+            (str "expected both borrows to reuse the same underlying connection: " @underlying-conn-ids))
+        (is (= "" result)
+            "a borrow without :session-timezone must not inherit the previous borrow's timezone")))))
 
 (deftest ^:parallel clickhouse-connection-string
   (testing "connection with no additional options"
@@ -487,17 +529,27 @@
                        (qp/process-query)
                        (mt/rows))))))))))
 
+(defn- check-legacy-dbname [dbname exp-name]
+  (let [details (assoc (:details (mt/db)) :dbname dbname)
+        spec    (sql-jdbc.conn/connection-details->spec :clickhouse details)]
+    (is (true? (driver/can-connect? :clickhouse details)))
+    (is (= (format "//localhost:8123/%s" exp-name)
+           (:subname spec)))))
+
 (deftest ^:parallel handle-db-names-with-spaces-test
   (mt/test-driver :clickhouse
-    (are [dbname exp-name] (let [details (assoc (:details (mt/db)) :dbname dbname)
-                                 spec   (sql-jdbc.conn/connection-details->spec :clickhouse details)]
-                             (is (true? (driver/can-connect? :clickhouse details)))
-                             (is (= (format "//localhost:8123/%s" exp-name)
-                                    (:subname spec))))
+    (are [dbname exp-name] (check-legacy-dbname dbname exp-name)
       "test_data default fake_db" "test_data"
-      "test_data" "test_data"
-      "" ""
-      nil "default")))
+      "test_data"                 "test_data"
+      ""                          ""
+      nil                         "default")))
+
+(deftest ^:parallel handle-db-names-with-commas-test
+  (mt/test-driver :clickhouse
+    (are [dbname exp-name] (check-legacy-dbname dbname exp-name)
+      "test_data, fake_db" "test_data"
+      "test_data,fake_db"  "test_data"
+      "test_data,"         "test_data")))
 
 ;; TODO (lbrdnk 2026-01-23): Excplicit exceptions from [[metabase.driver.util/parsed-query]] are shutdown
 ;;                           at the moment to avoid potential log flooding. We should revisit this during further
@@ -519,3 +571,64 @@
                                     (driver/native-result-metadata :clickhouse broken-query)))
               (is (thrown-with-msg? Exception #"SQL parsing failed."
                                     (driver/validate-native-query-fields :clickhouse broken-query)))))))))
+
+(deftest ^:parallel value-clause-collection-guard-test
+  (testing "the :clickhouse [driver :value] override must not compile a collection into SQL"
+    ;; the :type/IPAddress branch builds the SQL from the value itself instead of recursing through ->honeysql, so it
+    ;; never hit the guard on the base [:sql :value] method. The value slot is schema-typed `any?`, so a hand-written
+    ;; clause carries a Honey SQL form like `[{:raw "..."}]` past query validation.
+    (driver/the-initialized-driver :clickhouse)
+    (doseq [[label value] {"map inside a vector"   [{:raw "1) UNION SELECT 1 -- "}]
+                           "sub-select in vector"  [{:select [:password] :from [:core_user]}]
+                           "honeysql op in vector" [[:raw "1) UNION SELECT 1 -- "]]
+                           "bare map"              {:raw "1) UNION SELECT 1 -- "}}]
+      (testing label
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"\QUnexpected collection in a :value clause\E"
+             (sql.qp/->honeysql :clickhouse [:value value {:base_type :type/IPAddress}]))))))
+  (testing "ordinary literals still compile"
+    (is (= [:'toIPv4 "1.2.3.4"]
+           (sql.qp/->honeysql :clickhouse [:value "1.2.3.4" {:base_type :type/IPAddress}])))))
+
+(deftest ^:parallel set-role-statement-escape-quotes-test
+  (are [role sql] (= sql
+                     (sql-jdbc/set-role-statement :clickhouse nil role))
+    "x"                             "SET ROLE \"x\""
+    ;; don't re-quote something that already has quotes
+    "\"x\""                         "SET ROLE \"x\""
+    ;; split on commas and quote separately
+    "x,y"                           "SET ROLE \"x\",\"y\""
+    ;; default database role, don't quote
+    "NONE"                          "SET ROLE NONE"
+    ;; escape double-quotes in the role
+    "x\"; SELECT sleep(10); --"     "SET ROLE \"x\"\"; SELECT sleep(10); --\""
+    "\"x\"; SELECT sleep(10); --\"" "SET ROLE \"x\"\"; SELECT sleep(10); --\""))
+
+(deftest ^:parallel add-interval-honeysql-form-rejects-hostile-unit-test
+  (testing "the ClickHouse INTERVAL sink refuses a unit outside its closed allow-list"
+    (let [hostile (keyword "day) FROM t2 UNION SELECT pw FROM secrets --")]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid temporal unit"
+           (sql.qp/add-interval-honeysql-form :clickhouse :some_col 1 hostile))))
+    (testing "and still compiles a legitimate unit to the expected INTERVAL token"
+      (is (re-find #"INTERVAL 1 day"
+                   (pr-str (sql.qp/add-interval-honeysql-form :clickhouse :some_col 1 :day)))))))
+(deftest ^:parallel percentile-compiles-field-through-honeysql-test
+  (testing "the ClickHouse quantile sink formats both the field and the percentile through ->honeysql, so a value spliced into either slot from a source card is quoted/parameterized instead of emitted as raw SQL"
+    (letfn [(compile-percentile [field p]
+              (sql/format {:select [[(sql.qp/->honeysql :clickhouse [:percentile field p])]]}
+                          {:dialect (sql.qp/quote-style :clickhouse), :quoted true}))]
+      (testing "a legitimate field is emitted as a quoted identifier and the literal percentile is inlined"
+        (is (= ["SELECT quantile(0.7)(`orders`.`total`)"]
+               (compile-percentile (h2x/identifier :field "orders" "total") 0.7))))
+      (testing "the percentile argument may itself be an expression (allowed by the aggregation schema)"
+        (is (= ["SELECT quantile((`toFloat64`(0.5) + `toFloat64`(0.2)))(`orders`.`total`)"]
+               (compile-percentile (h2x/identifier :field "orders" "total") [:+ 0.5 0.2]))))
+      (testing "a hostile string in the field slot becomes a bound parameter, never raw SQL"
+        (let [hostile "x) FROM secret -- "
+              [sql & params] (compile-percentile hostile 0.7)]
+          (is (= "SELECT quantile(0.7)(?)" sql))
+          (is (= [hostile] params))
+          (is (not (re-find #"FROM secret" sql))))))))

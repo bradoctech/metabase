@@ -1,8 +1,8 @@
 import { createSelector } from "@reduxjs/toolkit";
 
+import type { State } from "metabase/redux/store";
 import { getSetting } from "metabase/selectors/settings";
 import { remoteSyncApi } from "metabase-enterprise/api";
-import type { State } from "metabase-types/store";
 
 import { initialState } from "./sync-task-slice";
 import type { RemoteSyncStoreState } from "./types";
@@ -40,9 +40,19 @@ export const getIsError = createSelector(
   (currentTask) => currentTask?.status === "errored",
 );
 
+export const getIsSuccess = createSelector(
+  getCurrentTask,
+  (currentTask) => currentTask?.status === "successful",
+);
+
 export const getErrorMessage = createSelector(
   getCurrentTask,
   (currentTask) => currentTask?.error_message ?? "",
+);
+
+export const getTaskOutcome = createSelector(
+  getCurrentTask,
+  (currentTask) => currentTask?.outcome ?? null,
 );
 
 export const getHasPendingMutation = createSelector(

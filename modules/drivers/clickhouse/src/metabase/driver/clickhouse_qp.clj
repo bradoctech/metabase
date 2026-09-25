@@ -3,6 +3,7 @@
   (:refer-clojure :exclude [some])
   (:require
    [clojure.string :as str]
+   [honey.sql :as sql]
    [java-time.api :as t]
    [metabase.driver-api.core :as driver-api]
    [metabase.driver.clickhouse-nippy]
@@ -30,7 +31,18 @@
    [java.util Arrays UUID]))
 ;; (set! *warn-on-reflection* true) ;; isn't enabled because of Arrays/toString call
 
-(defmethod sql.qp/quote-style :clickhouse [_] :mysql)
+;; ClickHouse applies string-literal escape rules to quoted identifiers, so a backslash escapes the next character --
+;; including the backtick HoneySQL closes an identifier with. The stock `:mysql` dialect doubles backticks but passes
+;; backslashes through, which leaves the closing backtick escapable and the identifier able to break out into raw SQL.
+;; Register a ClickHouse dialect that doubles backslashes first, so each is a literal by the time the backtick lands.
+(sql/register-dialect!
+ ::clickhouse
+ (update (sql/get-dialect :mysql) :quote
+         (fn [mysql-quote]
+           (fn [s]
+             (mysql-quote (str/replace s "\\" "\\\\"))))))
+
+(defmethod sql.qp/quote-style :clickhouse [_] ::clickhouse)
 
 ;; without try, there might be test failures when QP is not yet initialized
 ;; e.g., when a test is preparing the dataset
@@ -66,16 +78,36 @@
                               without-low-car)]
       without-nullable)))
 
+(def ^:private date-granular-truncation-units
+  "Temporal truncation units whose ClickHouse result is a `Date` (not a `DateTime`)."
+  #{:week :month :quarter :year})
+
+(defmethod sql.qp/->honeysql [:clickhouse :field]
+  [driver [_ _id-or-name opts :as clause]]
+  ;; MBQL preserves a column's `:effective-type` through temporal truncation, but ClickHouse's
+  ;; `toStartOfWeek`/`Month`/`Quarter`/`Year` return `Date`, not `DateTime`. When such a ref reaches an
+  ;; outer stage, downgrade a DateTime-derived effective type to `:type/Date` so `in-report-timezone`
+  ;; doesn't wrap a `Date` in `toTimeZone` (ClickHouse rejects that with Code 43). See #79648.
+  (let [{:keys [inherited-temporal-unit effective-type base-type]} opts
+        clause (cond-> clause
+                 (and (contains? date-granular-truncation-units inherited-temporal-unit)
+                      (isa? (or effective-type base-type) :type/DateTime))
+                 (assoc 2 (assoc opts :effective-type :type/Date :base-type :type/Date)))]
+    ((get-method sql.qp/->honeysql [:sql :field]) driver clause)))
+
 (defn- in-report-timezone
   [expr]
   (let [report-timezone (get-report-timezone-id-safely)
-        lower           (u/lower-case-en (h2x/database-type expr))
-        db-type         (remove-low-cardinality-and-nullable lower)]
-    (if (and report-timezone (string? db-type) (str/starts-with? db-type "datetime"))
-      (let [timezone (extract-datetime-timezone db-type)]
-        (if (not (= timezone (u/lower-case-en report-timezone)))
-          [:'toTimeZone expr (h2x/literal report-timezone)]
-          expr))
+        db-type (-> (h2x/database-type expr)
+                    remove-low-cardinality-and-nullable)
+        report-tz-db-tz-differ (and (string? db-type)
+                                    (str/starts-with? db-type "datetime")
+                                    (not= (extract-datetime-timezone db-type)
+                                          (u/lower-case-en report-timezone)))
+        no-db-type-dt-eff-type (and (not db-type)
+                                    (isa? (h2x/effective-type expr) :type/DateTime))]
+    (if (and report-timezone (or report-tz-db-tz-differ no-db-type-dt-eff-type))
+      [:'toTimeZone expr (h2x/literal report-timezone)]
       expr)))
 
 (defmethod sql.qp/date [:clickhouse :default]
@@ -209,9 +241,9 @@
        expr
        [:'toIntervalSecond
         [:'minus
-         [:'timeZoneOffset [:'toTimeZone expr target-timezone]]
-         [:'timeZoneOffset [:'toTimeZone expr source-timezone]]]]]
-      [:'toTimeZone expr target-timezone])))
+         [:'timeZoneOffset [:'toTimeZone expr (sql.qp/->honeysql driver target-timezone)]]
+         [:'timeZoneOffset [:'toTimeZone expr (sql.qp/->honeysql driver source-timezone)]]]]]
+      [:'toTimeZone expr (sql.qp/->honeysql driver target-timezone)])))
 
 (defmethod sql.qp/current-datetime-honeysql-form :clickhouse
   [_]
@@ -286,13 +318,28 @@
   [driver [_ field]]
   [:'log10 (sql.qp/->honeysql driver field)])
 
+(defn- format-quantile
+  "Emit ClickHouse's parametric aggregate `quantile(<p>)(<field>)`. Both arguments are formatted through
+  `sql/format-expr`, so a value spliced into either slot from a source card is quoted or parameterized instead of
+  being written verbatim as SQL."
+  [_fn [p field]]
+  (let [[p-sql & p-args]         (sql/format-expr p {:nested true})
+        [field-sql & field-args] (sql/format-expr field {:nested true})]
+    (into [(format "quantile(%s)(%s)" p-sql field-sql)]
+          cat
+          [p-args field-args])))
+
+(sql/register-fn! ::quantile #'format-quantile)
+
 (defmethod sql.qp/->honeysql [:clickhouse :percentile]
   [driver [_ field p]]
-  [:raw "quantile(" (sql.qp/->honeysql driver p) ")(" (sql.qp/->honeysql driver field) ")"])
+  [::quantile (sql.qp/->honeysql driver p) (sql.qp/->honeysql driver field)])
 
 (defmethod sql.qp/->honeysql [:clickhouse :regex-match-first]
   [driver [_ arg pattern]]
-  [:'extract (sql.qp/->honeysql driver arg) pattern])
+  ;; compile the pattern through ->honeysql so a non-string pattern (e.g. a stored [:raw ...] form spliced in from a
+  ;; source card) is rejected at multimethod dispatch instead of being emitted verbatim as SQL.
+  [:'extract (sql.qp/->honeysql driver arg) (sql.qp/->honeysql driver pattern)])
 
 (defmethod sql.qp/->honeysql [:clickhouse :split-part]
   [driver [_ text divider position]]
@@ -300,7 +347,6 @@
     [:case
      [:< position 1]
      ""
-
      :else
      [:'arrayElement
       [:'splitByString (sql.qp/->honeysql driver divider) [:'assumeNotNull (sql.qp/->honeysql driver text)]]
@@ -354,6 +400,7 @@
   [driver value]
   (let [[_ value {base-type :base_type}] value]
     (when (some? value)
+      (sql.qp/check-value-literal driver value)
       (condp #(isa? %2 %1) base-type
         :type/IPAddress [:'toIPv4 value]
         (sql.qp/->honeysql driver value)))))
@@ -428,9 +475,18 @@
   [:sum [:case (sql.qp/->honeysql driver pred) (sql.qp/->honeysql driver field)
          :else 0]])
 
+(def ^:private clickhouse-interval-units
+  "Allow-list of the temporal-interval units ClickHouse's `INTERVAL` accepts. The unit is interpolated into `[:raw …]`,
+  which does no escaping, so it must be checked against this closed set before `(name unit)` is emitted."
+  #{:millisecond :second :minute :hour :day :week :month :quarter :year})
+
 (defmethod sql.qp/add-interval-honeysql-form :clickhouse
   [_ dt amount unit]
-  (h2x/+ dt [:raw (format "INTERVAL %d %s" (int amount) (name unit))]))
+  (when-not (contains? clickhouse-interval-units unit)
+    (throw (ex-info (str "Invalid temporal unit: " (pr-str unit)) {:unit unit})))
+  (let [type-info (h2x/type-info dt)]
+    (cond-> (h2x/+ dt [:raw (format "INTERVAL %d %s" (int amount) (name unit))])
+      type-info (h2x/with-type-info type-info))))
 
 (defn- clickhouse-string-fn
   [fn-name field value options]
@@ -547,9 +603,9 @@
     (when-let [zdt (.getObject rs i ZonedDateTime)]
       (let [db-type (remove-low-cardinality-and-nullable (.getColumnTypeName rsmeta i))]
         (if (= db-type "datetime64(3, 'gmt0')")
-              ;; a hack for some MB test assertions only; GMT0 is a legacy tz
+          ;; a hack for some MB test assertions only; GMT0 is a legacy tz
           (.toLocalDateTime ^ZonedDateTime (zdt-in-report-timezone zdt))
-              ;; this is the normal behavior
+          ;; this is the normal behavior
           (.toOffsetDateTime (.withZoneSameInstant
                               ^ZonedDateTime (zdt-in-report-timezone zdt)
                               (java.time.ZoneId/of "UTC"))))))))
@@ -595,7 +651,7 @@
         (ipv4-column->string rs i)
         (= normalized-db-type "ipv6")
         (ipv6-column->string rs i)
-            ;; _
+        ;; _
         :else (.getObject rs i)))))
 
 (defmethod sql-jdbc.execute/read-column-thunk [:clickhouse Types/VARCHAR]

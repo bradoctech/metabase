@@ -74,7 +74,7 @@
                      :filters [[:= {} [:expression {:base-type :type/Integer :effective-type :type/Integer} "math"] 2]]}]}
           (lib/query
            meta/metadata-provider
-           (lib.convert/->pMBQL {:type :query
+           (lib.convert/->mbql5 {:type :query
                                  :database (meta/id)
                                  :query {:source-table (meta/id :venues)
                                          :expressions {"math" [:+ 1 1]}
@@ -86,7 +86,7 @@
                                                (lib/expression-ref $q "CC"))]))
           query (lib/join (lib.tu/venues-query) clause)
           ;; Make a legacy query but don't put types in :field and :expression
-          converted-query (lib.convert/->pMBQL
+          converted-query (lib.convert/->mbql5
                            (walk/postwalk
                             (fn [node]
                               (if (map? node)
@@ -101,7 +101,6 @@
                                                  ;; tech debt issue: #39376
                                                  #_{:base-type :type/Integer}
                                                  "CC"]]]}]}]}
-
               (lib/query meta/metadata-provider converted-query))))))
 
 (deftest ^:parallel stage-count-test
@@ -152,7 +151,7 @@
           false (mock-db-native-perms nil))))))      ; native-permissions not found on the database
 
 (deftest ^:parallel convert-from-legacy-preserve-info-test
-  (testing ":info key should be converted when converting from legacy to pMBQL"
+  (testing ":info key should be converted when converting from legacy to MBQL 5"
     (is (=? {:lib/type     :mbql/query
              :lib/metadata lib.metadata.protocols/cached-metadata-provider?
              :database     (meta/id)
@@ -235,11 +234,11 @@
                           (lib/append-stage)
                           (lib/aggregate (lib/count))))))
 
-(deftest ^:parallel can-save-test
+(deftest ^:parallel can-save?-test
   (mu/disable-enforcement
     #_{:clj-kondo/ignore [:equals-true]}
     (are [can-save? card-type query]
-         (= can-save? (lib.query/can-save query card-type))
+         (= can-save? (lib.query/can-save? query card-type))
       true  :question (lib.tu/venues-query)
       false :question (assoc (lib.tu/venues-query) :database nil)           ; database unknown - no permissions
       true  :question (lib/native-query meta/metadata-provider "SELECT")
@@ -605,9 +604,44 @@
                    "query"    {"source-table" 2
                                "expressions"  {"booking" ["sum" ["field" 3 {"base-type" "type/BigInteger"}]]}}}
             mp    (lib.tu/mock-metadata-provider {})]
-        (is (= {:lib/type               :mbql/query,
+        (is (= {:lib/type               :mbql/query
                 :stages                 [{:lib/type :mbql.stage/mbql, :source-table 2}]
                 :database               1
                 :lib.convert/converted? true
                 :lib/metadata           (lib.metadata.cached-provider/cached-metadata-provider mp)}
                (lib.query/query mp query)))))))
+
+(deftest ^:parallel query-from-legacy-inner-query-test
+  (is (=? {:lib/type :mbql/query
+           :database 1
+           :stages   [{:lib/type      :mbql.stage/native
+                       :native        "SELECT * FROM table WHERE {{checkin_date}};"
+                       :template-tags [{:dimension    [:field {} 2]
+                                        :display-name "Checkin Date"
+                                        :name         "checkin_date"
+                                        :type         :dimension
+                                        :widget-type  :date/all-options}]}]}
+          (lib.query/query-from-legacy-inner-query
+           meta/metadata-provider
+           1
+           {:native        "SELECT * FROM table WHERE {{checkin_date}};"
+            :template-tags {"checkin_date" {:name         "checkin_date"
+                                            :display-name "Checkin Date"
+                                            :type         :dimension
+                                            :widget-type  :date/all-options
+                                            :dimension    [:field 2 nil]}}}))))
+
+#?(:clj
+   (deftest ^:synchronized query-from-legacy-error-containment-test
+     (let [legacy {:database (meta/id), :type :query, :query {:source-table (meta/id :venues)}}]
+       (testing "an AssertionError thrown while converting a legacy query is contained (wrapped)"
+         ;; ->mbql5 is a multimethod, which with-dynamic-fn-redefs refuses; plain with-redefs is required here.
+         #_{:clj-kondo/ignore [:metabase/prefer-with-dynamic-fn-redefs]}
+         (with-redefs [lib.convert/->mbql5 (fn [& _] (throw (AssertionError. "boom")))]
+           (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Error creating query from legacy query"
+                                 (lib/query meta/metadata-provider legacy)))))
+       (testing "a fatal Error thrown while converting a legacy query propagates unwrapped"
+         #_{:clj-kondo/ignore [:metabase/prefer-with-dynamic-fn-redefs]}
+         (with-redefs [lib.convert/->mbql5 (fn [& _] (throw (Error. "boom")))]
+           (is (thrown? Error
+                        (lib/query meta/metadata-provider legacy))))))))

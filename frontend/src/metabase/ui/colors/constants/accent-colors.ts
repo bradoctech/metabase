@@ -8,14 +8,14 @@ import { spColors } from "./sp-colors";
 const baseColors = getBaseColorsForThemeDefinitionOnly();
 
 export const DEFAULT_ACCENT_COLORS: ChartColorV2[] = [
-  "#509EE3", // accent0 - blue
-  "#88BF4D", // accent1 - green
-  "#A989C5", // accent2 - purple
-  "#EF8C8C", // accent3 - red
-  "#F9D45C", // accent4 - yellow
-  "#F2A86F", // accent5 - orange
-  "#98D9D9", // accent6 - cyan
-  "#7172AD", // accent7 - indigo
+  spColors.black.base, // accent0 — sp-black
+  spColors.red[40], // accent1 — sp-red
+  spColors.yellow.base, // accent2 — sp-yellow
+  spColors.blue.base, // accent3 — sp-blue
+  spColors.green.base, // accent4 — sp-green
+  spColors.sky.base, // accent5 — sp-sky
+  spColors.navy.base, // accent6 — sp-navy
+  spColors.olive.base, // accent7 — sp-olive
 ];
 
 export const LIGHT_THEME_ACCENT_COLORS: ChartColorV2[] = [

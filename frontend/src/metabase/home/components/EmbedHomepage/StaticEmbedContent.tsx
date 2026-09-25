@@ -34,7 +34,7 @@ export const StaticEmbedContent = ({
     {showImage && (
       <StaticEmbedImage
         src="/app/assets/img/static-embedding-example.png"
-        alt={t`Static embedding example`}
+        alt="Static embedding example"
       />
     )}
     <Group gap="md">
@@ -57,5 +57,5 @@ const StaticEmbedImage = styled.img`
   width: 100%;
   margin-bottom: 1rem;
   border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.colors.border};
+  border: 1px solid ${({ theme }) => theme.colors["border-neutral"]};
 `;

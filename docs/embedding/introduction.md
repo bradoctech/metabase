@@ -7,8 +7,6 @@ redirect_from:
 
 # Embedding introduction
 
-{% include shared/in-page-promo-embedding-workshop.html %}
-
 You can embed Metabase tables, charts, and dashboards—even Metabase's query builder—in your website or application. Here are the different ways you can embed Metabase:
 
 - [Modular embedding](#modular-embedding)
@@ -35,8 +33,6 @@ Here's a basic breakdown of what each auth type enables:
 | [Query builder](../questions/query-builder/editor.md) | ✅  | ❌    |
 | Browser to navigate collections                       | ✅  | ❌    |
 | Metabot AI chat                                       | ✅  | ❌    |
-
-Currently, you can't embed [documents](../documents/introduction.md).
 
 ### SSO embeds
 
@@ -71,7 +67,7 @@ If you'd like to share your data with the good people of the internet, admins ca
 | Export results\*                                                                                                     | ✅                                   | ✅                                    | ✅                                    | ✅                                  | ✅                                     |
 | [Locked filters](./static-embedding-parameters.md#restricting-data-in-a-static-embed-with-locked-parameters)         | ❌                                   | ❌                                    | ✅                                    | ❌                                  | ❌                                     |
 | [Data segregation](../permissions/embedding.md)                                                                      | ✅                                   | ✅                                    | ❌                                    | ✅                                  | ❌                                     |
-| [Drill-through menu](https://www.metabase.com/learn/metabase-basics/querying-and-dashboards/questions/drill-through) | ✅                                   | ✅                                    | ❌                                    | ✅                                  | ❌                                     |
+| [Drill-through menu](../questions/visualizations/drill-through.md) | ✅                                   | ✅                                    | ❌                                    | ✅                                  | ❌                                     |
 | [Query builder](../questions/query-builder/editor.md)                                                                | ✅                                   | ✅                                    | ❌                                    | ✅                                  | ❌                                     |
 | [Basic appearance customization](../configuring-metabase/appearance.md)\*\*                                          | ✅                                   | ✅                                    | ✅                                    | ✅                                  | ✅                                     |
 | [Advanced theming](./appearance.md)                                                                                  | ✅                                   | ✅                                    | ❌                                    | ❌                                  | ❌                                     |
@@ -95,6 +91,17 @@ The modular embeds that you can set up in the [in-app wizard](./modular-embeddin
 ## Resources for AI agents
 
 If you're using an AI agent to help you embed Metabase in your app, check out [AI agent resources](./ai-agent-resources.md).
+
+## Tracking embed usage
+
+{% include plans-blockquote.html feature="Tracking embed usage" %}
+
+[Usage Analytics](../usage-and-performance-tools/usage-analytics.md) tracks embed usage, including embedding context, authentication methods, hostname, and other metadata. Check out the [Embedding usage dashboard](../usage-and-performance-tools/usage-analytics-reference.md#embedding-usage).
+
+## Embedding limitations
+
+- Currently, you can't embed [documents](../documents/introduction.md) (though you can create [public documents](./public-links.md)).
+- Embeds don't render [custom visualizations](../questions/visualizations/custom.md): any card that uses one falls back to the default visualization (a table).
 
 ## Further reading
 

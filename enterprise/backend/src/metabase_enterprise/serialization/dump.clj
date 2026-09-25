@@ -1,6 +1,7 @@
 (ns metabase-enterprise.serialization.dump
   "Serialize entities into a directory structure of YAMLs."
   (:require
+   [clojure.core.memoize :as memoize]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
    [metabase.util.yaml :as yaml]))
@@ -23,7 +24,7 @@
                        (compare (getter k1) (getter k2)))))
     (sorted-map)))
 
-(def ^:private serialization-sorted-map (memoize serialization-sorted-map*))
+(def ^:private serialization-sorted-map (memoize/memo serialization-sorted-map*))
 
 (defn serialization-deep-sort
   "Provide a deterministic sort for maps before serialization."
@@ -35,13 +36,12 @@
      (map? m)  (into (serialization-sorted-map path)
                      (for [[k v] m]
                        [k (serialization-deep-sort v (conj path k))]))
-     (and (sequential? m)
-          (map? (first m))) (mapv #(serialization-deep-sort % path) m)
+     (sequential? m) (mapv #(serialization-deep-sort % path) m)
      :else                  m)))
 
 (defn yaml-content
-  "Serialize `obj` to a YAML string with deterministic key ordering."
-  ^String [obj]
+  "Generate the YAML string version of the object"
+  [obj]
   (yaml/generate-string (serialization-deep-sort obj)
                         {:dumper-options {:flow-style :block :split-lines false}}))
 

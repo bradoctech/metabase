@@ -1,6 +1,6 @@
 import yaml from "js-yaml";
 
-import type { Collection } from "metabase-types/api";
+import type { Collection, RemoteSyncTask } from "metabase-types/api";
 
 import { openCollectionItemMenu } from "./e2e-collection-helpers";
 import {
@@ -238,6 +238,41 @@ export const getSwitchBranchOption = () => {
   return popover().findByRole("option", { name: /Switch branch/ });
 };
 
+// Mantine combobox options can drop a synthetic `.click()` if the dropdown's
+// state machine isn't fully wired yet (e.g. right after the menu opens — the
+// dropdown is visible but the option's handler isn't attached). `realClick`
+// dispatches native mouse events that Mantine processes reliably, and we then
+// verify the menu closed; if not, re-click once with a synthetic click.
+//
+// We detect "menu still open" by looking for the main-menu options
+// (Pull/Push/Switch branch) — neither "any popover visible" nor the controls'
+// `data-expanded` attribute distinguishes the main menu from follow-up popovers
+// like the branch picker that opens after clicking "Switch branch".
+const MAIN_MENU_OPTION_RE = /Pull changes|Push changes|Switch branch/;
+const clickGitSyncOption = (
+  getOption: () => Cypress.Chainable<JQuery<HTMLElement>>,
+) => {
+  // Clicks are swallowed while `data-combobox-disabled` is set (cleared once the git round-trips resolve)
+  getOption().should("not.have.attr", "data-combobox-disabled");
+  getOption().realClick();
+  cy.get("body").then(($body) => {
+    const mainMenuStillOpen =
+      $body
+        .find('[role="option"]:visible')
+        .filter((_, el) => MAIN_MENU_OPTION_RE.test(el.textContent || ""))
+        .length > 0;
+    if (mainMenuStillOpen) {
+      cy.log("git-sync menu didn't close — re-clicking option");
+      getOption().click();
+    }
+  });
+};
+
+export const clickPullOption = () => clickGitSyncOption(getPullOption);
+export const clickPushOption = () => clickGitSyncOption(getPushOption);
+export const clickSwitchBranchOption = () =>
+  clickGitSyncOption(getSwitchBranchOption);
+
 // Enable tenants feature for testing
 export const enableTenants = () => {
   cy.request("PUT", "/api/setting/use-tenants", { value: true });
@@ -255,14 +290,17 @@ export const createSharedTenantCollection = (name: string) => {
 export const interceptTask = () =>
   cy.intercept("/api/ee/remote-sync/current-task").as("currentTask");
 
+const TASK_POLL_LIMIT = 30;
+
 export const waitForTask = (
   { taskName }: { taskName: "import" | "export" },
   retries = 0,
 ): Cypress.Chainable => {
-  if (retries > 3) {
+  if (retries > TASK_POLL_LIMIT) {
     throw Error(`Too many retries waiting for ${taskName}`);
   }
-  return cy.wait("@currentTask").then(({ response }) => {
+
+  return cy.wait("@currentTask", { timeout: 10000 }).then(({ response }) => {
     const { body } = response || {};
     if (body?.sync_task_type !== taskName) {
       return waitForTask({ taskName });
@@ -272,36 +310,38 @@ export const waitForTask = (
   });
 };
 
-// Poll for task completion by actively querying the endpoint
-// Use this when the app isn't loaded yet (e.g., in setup helpers before cy.visit)
+// Poll for a task's terminal state by actively querying the endpoint; `until` is the expected status.
+// Use this when the app isn't loaded yet, or to confirm server-side settling independently of the UI.
 export const pollForTask = (
-  { taskName }: { taskName: "import" | "export" },
+  {
+    taskName,
+    until = "successful",
+  }: { taskName: "import" | "export"; until?: "successful" | "conflict" },
   retries = 0,
 ): Cypress.Chainable => {
-  if (retries > 30) {
+  if (retries > TASK_POLL_LIMIT) {
     throw Error(`Too many retries waiting for ${taskName}`);
   }
 
   return cy
-    .request("GET", "/api/ee/remote-sync/current-task")
+    .request<RemoteSyncTask | null>("GET", "/api/ee/remote-sync/current-task")
     .then((response) => {
       const { body } = response;
 
       // No task exists yet, keep waiting
       if (!body) {
         cy.wait(500);
-        return pollForTask({ taskName }, retries + 1);
+        return pollForTask({ taskName, until }, retries + 1);
       }
 
       // Wrong task type, keep waiting
       if (body.sync_task_type !== taskName) {
         cy.wait(500);
-        return pollForTask({ taskName }, retries + 1);
+        return pollForTask({ taskName, until }, retries + 1);
       }
 
-      // Task hasn't completed successfully yet
-      if (body.status !== "successful") {
-        // Check if it errored
+      // Task hasn't reached the expected terminal status yet
+      if (body.status !== until) {
         if (body.status === "errored") {
           throw Error(
             `Task ${taskName} failed: ${body.error_message || "Unknown error"}`,
@@ -314,11 +354,23 @@ export const pollForTask = (
           );
         }
 
+        if (body.status === "successful") {
+          throw Error(
+            `Task ${taskName} completed without the expected ${until}`,
+          );
+        }
+
+        if (body.status === "cancelled" || body.status === "timed-out") {
+          throw Error(
+            `Task ${taskName} ended with status ${body.status}: ${body.error_message || "Unknown error"}`,
+          );
+        }
+
         cy.wait(500);
-        return pollForTask({ taskName }, retries + 1);
+        return pollForTask({ taskName, until }, retries + 1);
       }
 
-      // Success!
+      // Reached the expected terminal status!
       return cy.wrap(body);
     });
 };

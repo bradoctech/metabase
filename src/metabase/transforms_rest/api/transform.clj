@@ -16,7 +16,9 @@
    [metabase.util.malli.registry :as mr]
    [metabase.util.malli.schema :as ms]
    [ring.util.response :as response]
-   [toucan2.core :as t2]))
+   [toucan2.core :as t2])
+  (:import
+   (java.time OffsetDateTime)))
 
 (comment metabase.transforms-rest.api.transform-job/keep-me
          metabase.transforms-rest.api.transform-tag/keep-me)
@@ -65,6 +67,7 @@
    [:user_id [:maybe pos-int?]]
    [:transform_name {:optional true} [:maybe :string]]
    [:transform_entity_id {:optional true} [:maybe :string]]
+   [:job_run_id {:optional true} [:maybe pos-int?]]
    [:checkpoint_filter_field_id {:optional true} [:maybe pos-int?]]
    [:checkpoint_lo_value {:optional true} [:maybe :string]]
    [:checkpoint_hi_value {:optional true} [:maybe :string]]
@@ -77,6 +80,7 @@
    [:description [:maybe :string]]
    [:source :any]
    [:target :any]
+   [:table_dependencies {:optional true} [:maybe [:sequential :map]]]
    [:source_type :keyword]
    [:source_database_id {:optional true} [:maybe pos-int?]]
    [:source_readable {:optional true} [:maybe :boolean]]
@@ -91,10 +95,14 @@
    [:last_run {:optional true} [:maybe TransformLastRunResponse]]
    [:tag_ids {:optional true} [:sequential pos-int?]]
    [:table {:optional true} [:maybe :map]]
+   [:target_table_id {:optional true} [:maybe pos-int?]]
    [:owner_user_id {:optional true} [:maybe pos-int?]]
    [:owner_email {:optional true} [:maybe :string]]
    [:owner {:optional true} [:maybe OwnerResponse]]
-   [:last_checkpoint_value {:optional true} [:maybe :string]]])
+   [:last_checkpoint_value {:optional true} [:maybe :string]]
+   [:can_read {:optional true} :boolean]
+   [:can_write {:optional true} :boolean]
+   [:can_execute {:optional true} :boolean]])
 
 (def ^:private TransformRunResponse
   [:map {:closed true}
@@ -109,6 +117,7 @@
    [:user_id [:maybe pos-int?]]
    [:transform_name {:optional true} [:maybe :string]]
    [:transform_entity_id {:optional true} [:maybe :string]]
+   [:job_run_id {:optional true} [:maybe pos-int?]]
    [:checkpoint_filter_field_id {:optional true} [:maybe pos-int?]]
    [:checkpoint_lo_value {:optional true} [:maybe :string]]
    [:checkpoint_hi_value {:optional true} [:maybe :string]]
@@ -163,11 +172,10 @@
             [:collection_id {:optional true} [:maybe ms/PositiveInt]]
             [:owner_user_id {:optional true} [:maybe ms/PositiveInt]]
             [:owner_email {:optional true} [:maybe :string]]]]
+  (transforms.core/check-feature-enabled! body)
   (api/create-check :model/Transform body)
   (transforms.core/check-database-feature body)
-  (transforms.core/check-feature-enabled! body)
   (transforms.core/validate-incremental-column-type! body)
-
   (api/check (not (transforms-base.u/target-table-exists? body))
              403
              (deferred-tru "A table with that name already exists."))
@@ -186,39 +194,11 @@
                     [:id ms/PositiveInt]]]
   (api/read-check :model/Transform id)
   (let [id->transform (t2/select-pk->fn identity :model/Transform)
-        global-ordering (transforms.core/transform-ordering (vals id->transform))
-        dep-ids         (get global-ordering id)
+        {graph :dependencies} (transforms.core/transform-ordering #{id} (vals id->transform))
+        dep-ids         (get graph id)
         dependencies    (map id->transform dep-ids)]
-    (->> (t2/hydrate dependencies :creator :owner)
+    (->> (t2/hydrate dependencies :creator :owner :can_read :can_write :can_execute)
          transforms.u/add-source-readable)))
-
-(def ^:private MergeHistoryEntry
-  [:map
-   [:id ms/PositiveInt]
-   [:workspace_merge_id ms/PositiveInt]
-   [:commit_message :string]
-   [:workspace_id [:maybe ms/PositiveInt]]
-   [:workspace_name :string]
-   [:merging_user_id ms/PositiveInt]
-   [:created_at :any]])
-
-(api.macros/defendpoint :get "/:id/merge-history"
-  :- [:sequential MergeHistoryEntry]
-  "Get merge history for a transform. Returns all merge events that affected this transform,
-   ordered by created_at descending (newest first)."
-  [{:keys [id]} :- [:map [:id ms/PositiveInt]]]
-  (api/check-superuser)
-  (api/check-404 (t2/select-one :model/Transform id))
-  (t2/select [:model/WorkspaceMergeTransform
-              :id
-              :workspace_merge_id
-              :commit_message
-              :workspace_id
-              :workspace_name
-              :merging_user_id
-              :created_at]
-             {:where    [:= :transform_id id]
-              :order-by [[:created_at :desc]]}))
 
 (api.macros/defendpoint :get "/run" :- [:map {:closed true}
                                         [:data [:sequential TransformRunResponse]]
@@ -229,7 +209,7 @@
   [_route-params
    query-params :-
    [:map
-    [:sort-column    {:optional true} [:enum "transform-name" "start-time" "end-time" "status" "run-method" "transform-tags"]]
+    [:sort-column    {:optional true} [:enum "transform-name" "start-time" "end-time" "status" "run-method" "transform-tags" "duration"]]
     [:sort-direction {:optional true} [:enum "asc" "desc"]]
     [:transform-ids {:optional true} [:maybe (ms/QueryVectorOf ms/IntGreaterThanOrEqualToZero)]]
     [:statuses {:optional true} [:maybe (ms/QueryVectorOf [:enum "started" "succeeded" "failed" "timeout"])]]
@@ -242,16 +222,16 @@
   (-> (transforms.core/paged-runs (assoc query-params
                                          :offset (request/offset)
                                          :limit  (request/limit)))
-      (update :data #(map transforms-base.u/localize-run-timestamps %))))
+      (update :data #(map transforms-base.u/present-run %))))
 
 (api.macros/defendpoint :get "/run/:run-id" :- TransformRunResponse
   "Get a transform run by ID."
   [{:keys [run-id]} :- [:map
                         [:run-id ms/PositiveInt]]]
   (api/check-data-analyst)
-  (let [run (api/check-404 (t2/select-one :model/TransformRun :id run-id))]
-    (-> (t2/hydrate run [:transform :collection :transform_tag_ids])
-        transforms-base.u/localize-run-timestamps)))
+  (-> (api/read-check :model/TransformRun run-id)
+      (t2/hydrate [:transform :collection :transform_tag_ids])
+      transforms-base.u/present-run))
 
 (api.macros/defendpoint :put "/:id" :- TransformResponse
   "Update a transform."
@@ -293,7 +273,10 @@
         run       (api/check-404 (transforms.core/running-run-for-transform-id id))]
     (transforms.core/mark-cancel-started-run! (:id run))
     (when (transforms-base.u/python-transform? transform)
-      (transforms.core/cancel-run! (:id run))))
+      ;; The cancelation row was just inserted with DB `current_timestamp`; `now` is within a
+      ;; few ms of that and fine for the latency histogram, and avoids the perf/complexity cost of
+      ;; getting the exact timestamp back out of the DB.
+      (transforms.core/cancel-run! run (OffsetDateTime/now))))
   nil)
 
 (api.macros/defendpoint :post "/:id/reset-checkpoint" :- :nil
@@ -308,6 +291,9 @@
    The transform must already be fetched and validated."
   [transform]
   (transforms.core/check-feature-enabled! transform)
+  (api/check (not (transforms.core/transform-locked? transform))
+             [402 {:message    (deferred-tru "Transforms are temporarily locked because the trial quota has been reached.")
+                   :error-code "metabase_transforms_locked"}])
   (let [start-promise (promise)]
     (u.jvm/in-virtual-thread*
      (transforms.core/execute! transform {:start-promise start-promise
@@ -330,7 +316,7 @@
   "Run a transform."
   [{:keys [id]} :- [:map
                     [:id ms/PositiveInt]]]
-  (run-transform! (api/write-check :model/Transform id)))
+  (run-transform! (api/read-check :model/Transform id)))
 
 (def ^{:arglists '([request respond raise])} routes
   "`/api/transform` routes."

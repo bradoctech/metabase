@@ -6,7 +6,7 @@ import { DatabaseConnectionHealthInfo } from "metabase/admin/databases/component
 import { useListDatabasesQuery } from "metabase/api";
 import { ForwardRefLink } from "metabase/common/components/Link";
 import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
-import { useSelector } from "metabase/lib/redux";
+import { useSelector } from "metabase/redux";
 import { getUserIsAdmin } from "metabase/selectors/user";
 import { Box, Flex, Icon, Menu, Text, UnstyledButton } from "metabase/ui";
 import * as Urls from "metabase-enterprise/urls";
@@ -57,7 +57,7 @@ export const DestinationDatabasesList = ({
             {destinationDatabases.length > previewCount && (
               <Text
                 component={Link}
-                c="brand"
+                c="core-brand"
                 td="underline"
                 to={Urls.viewDestinationDatabases(primaryDatabaseId)}
               >

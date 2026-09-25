@@ -5,7 +5,7 @@
    [clojure.set :as set]
    [honey.sql.helpers :as sql.helpers]
    [medley.core :as m]
-   [metabase.analytics.core :as analytics]
+   [metabase.analytics-interface.core :as analytics]
    [metabase.api.common :as api]
    [metabase.app-db.core :as app-db]
    [metabase.audit-app.core :as audit]
@@ -15,15 +15,16 @@
    [metabase.config.core :as config]
    [metabase.content-verification.core :as moderation]
    [metabase.dashboards.autoplace :as autoplace]
+   [metabase.embedding.settings :as embed.settings]
    [metabase.events.core :as events]
+   [metabase.graph.core :as graph]
    [metabase.lib-be.core :as lib-be]
+   [metabase.lib-be.schema :as lib-be.schema]
    [metabase.lib.core :as lib]
-   [metabase.lib.metadata.protocols :as lib.metadata.protocols]
    [metabase.lib.schema :as lib.schema]
    [metabase.lib.schema.id :as lib.schema.id]
    [metabase.lib.schema.metadata :as lib.schema.metadata]
    [metabase.lib.schema.template-tag :as lib.schema.template-tag]
-   [metabase.lib.types.isa :as lib.types]
    [metabase.metrics.core :as metrics]
    [metabase.models.interface :as mi]
    [metabase.models.serialization :as serdes]
@@ -38,17 +39,15 @@
    [metabase.queries.models.parameter-card :as parameter-card]
    [metabase.queries.models.query :as query]
    [metabase.queries.schema :as queries.schema]
-   [metabase.query-permissions.core :as query-perms]
-   [metabase.query-processor.util :as qp.util]
    [metabase.search.core :as search]
+   [metabase.settings.core :as setting]
+   [metabase.staleness.core :as staleness]
    [metabase.util :as u]
    [metabase.util.embed :refer [maybe-populate-initially-published-at]]
    [metabase.util.honey-sql-2 :as h2x]
    [metabase.util.i18n :refer [tru]]
-   [metabase.util.json :as json]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
-   [metabase.warehouse-schema.models.field-values :as field-values]
    [methodical.core :as methodical]
    [toucan2.core :as t2]
    [toucan2.pipeline :as t2.pipeline]
@@ -112,6 +111,7 @@
 
 (t2/deftransforms :model/Card
   {:dataset_query          lib-be/transform-query
+   :public_uuid            (mi/transform-encrypted-text "report_card.public_uuid")
    :display                mi/transform-keyword
    :embedding_params       mi/transform-json
    :query_type             mi/transform-keyword
@@ -135,20 +135,16 @@
    ;; Cards in audit collection should not be writable.
    (and
     (not (and
-        ;; We want to make sure there's an existing audit collection before doing the equality check below.
-        ;; If there is no audit collection, this will be nil:
+          ;; We want to make sure there's an existing audit collection before doing the equality check below.
+          ;; If there is no audit collection, this will be nil:
           (some? (:id (audit/default-audit-collection)))
-        ;; Is a direct descendant of audit collection
+          ;; Is a direct descendant of audit collection
           (= (:collection_id instance) (:id (audit/default-audit-collection)))))
     (mi/current-user-has-full-permissions? (mi/perms-objects-set instance :write))))
   ([_ pk]
    (mi/can-write? (t2/select-one :model/Card :id pk))))
 
-(defmethod mi/can-read? :model/Card
-  ([instance]
-   (perms/can-read-audit-helper :model/Card instance))
-  ([_ pk]
-   (mi/can-read? (t2/select-one :model/Card :id pk))))
+(perms/define-collection-based-visibility! :model/Card)
 
 (defn model?
   "Returns true if `card` is a model."
@@ -178,25 +174,31 @@
    (fn []
      (let [card-ids       (map u/the-id cards)
            all-dashboards (t2/query {:union-all [;; First get dashboards from direct card connections
+                                                 ^:allow-subquery
                                                  {:nest
+                                                  ^:allow-subquery
                                                   {:select   [[:dc.card_id :card_id]
                                                               :d.name
                                                               :d.collection_id
                                                               :d.description
                                                               :d.id
-                                                              :d.archived]
+                                                              :d.archived
+                                                              :d.enable_embedding]
                                                    :from     [[:report_dashboardcard :dc]]
                                                    :join     [[:report_dashboard :d] [:= :dc.dashboard_id :d.id]]
                                                    :where    [:in :dc.card_id [:inline card-ids]]
                                                    :order-by [[:d.id :asc]]}}
                                                  ;; Then get dashboards from series
+                                                 ^:allow-subquery
                                                  {:nest
+                                                  ^:allow-subquery
                                                   {:select   [[:dcs.card_id :card_id]
                                                               :d.name
                                                               :d.collection_id
                                                               :d.description
                                                               :d.id
-                                                              :d.archived]
+                                                              :d.archived
+                                                              :d.enable_embedding]
                                                    :from     [[:dashboardcard_series :dcs]]
                                                    :join     [[:report_dashboardcard :dc] [:= :dc.id :dcs.dashboardcard_id]
                                                               [:report_dashboard :d] [:= :d.id :dc.dashboard_id]]
@@ -214,67 +216,9 @@
    {:default []}))
 
 (mu/defn- source-card-id :- [:maybe ::lib.schema.id/card]
-  [query :- [:maybe ::queries.schema/query]]
+  [query :- [:maybe [:or ::lib.schema/query ::lib-be.schema/empty-query]]]
   (some-> query not-empty lib/primary-source-card-id))
 
-(mu/defn- card->integer-table-ids :- [:maybe [:set {:min 1} ::lib.schema.id/table]]
-  "Return integer source table ids for card's :dataset_query."
-  [card :- [:maybe ::queries.schema/card]]
-  (some-> card :dataset_query not-empty lib/all-source-table-ids))
-
-(mu/defn- prefetch-tables-for-cards!
-  "Collect tables from `dataset-cards` and prefetch metadata. Should be used only with metadata provider caching
-  enabled, as per https://github.com/metabase/metabase/pull/45050. Returns `nil`."
-  [cards-with-non-empty-queries :- [:maybe
-                                    [:sequential
-                                     [:merge
-                                      ::queries.schema/card
-                                      [:map
-                                       [:dataset_query ::lib.schema/query]]]]]]
-  (let [db-id->table-ids (-> (group-by :database_id cards-with-non-empty-queries)
-                             (update-vals (partial into #{} (comp (mapcat card->integer-table-ids)
-                                                                  (remove nil?)))))]
-    (doseq [[db-id table-ids] db-id->table-ids
-            :let  [mp (lib-be/application-database-metadata-provider db-id)]
-            :when (seq table-ids)]
-      (lib.metadata.protocols/metadatas mp {:lib/type :metadata/table, :id (set table-ids)}))))
-
-(mu/defn with-can-run-adhoc-query
-  "Adds `:can_run_adhoc_query` to each card."
-  [cards :- [:maybe [:sequential ::queries.schema/card]]]
-  ;; TODO: for metrics, we can get (some-fn :source_model_id :source_question_id)
-  (let [cards-with-non-empty-queries (filter (comp seq :dataset_query) cards)
-        source-card-ids              (into #{}
-                                           (keep (comp source-card-id :dataset_query))
-                                           cards-with-non-empty-queries)]
-    ;; Prefetching code should not propagate any exceptions.
-    (when (lib-be/metadata-provider-cache)
-      (try
-        (prefetch-tables-for-cards! cards-with-non-empty-queries)
-        (catch Throwable t
-          (log/errorf t "Failed prefetching cards `%s`." (pr-str (map :id cards-with-non-empty-queries))))))
-    (query-perms/with-card-instances (when (seq source-card-ids)
-                                       (t2/select-fn->fn :id identity [:model/Card :id :collection_id :card_schema]
-                                                         :id [:in source-card-ids]))
-      (perms/prime-db-cache (into #{} (map :database_id cards)))
-      (mi/instances-with-hydrated-data
-       cards :can_run_adhoc_query
-       (fn []
-         (into {}
-               (map
-                (fn [{card-id :id :keys [dataset_query]}]
-                  [card-id (query-perms/can-run-query? dataset_query)]))
-               cards-with-non-empty-queries))
-       :id
-       {:default false}))))
-
-(methodical/defmethod t2/batched-hydrate [:model/Card :can_run_adhoc_query]
-  "Hydrate can_run_adhoc_query onto cards"
-  [_model _k cards]
-  (with-can-run-adhoc-query cards))
-
-;; note: perms lookup here in the course of fetching a card/model should hit a cache pre-warmed by
-;; the `:can_run_adhoc_query` above
 (methodical/defmethod t2/batched-hydrate [:model/Card :can_manage_db]
   "Hydrate can_manage_db onto cards. Indicates whether the current user has access to the database admin page for the
   database powering this card."
@@ -366,12 +310,22 @@
            (when table-id
              {:table_id table-id}))))))))
 
-;;; TODO -- move this to [[metabase.query-processor.card]] or MLv2 so the logic can be shared between the backend and
+;;; TODO -- move this to [[metabase.query-processor.card]] or Lib so the logic can be shared between the backend and
 ;;; frontend (?)
 ;;;
 ;;; NOTE: this should mirror `getTemplateTagParameters` in frontend/src/metabase-lib/parameters/utils/template-tags.ts
 ;;; If this function moves you should update the comment that links to this one (#40013)
 ;;;
+(mu/defn parameter-template-tag? :- :boolean
+  "Whether a parameter is created for this template tag, as opposed to tags that splice content into the query itself,
+  like snippets, card references, and tables."
+  [{tag-type :type, widget-type :widget-type} :- [:maybe ::lib.schema.template-tag/template-tag]]
+  (boolean
+   (and tag-type
+        (or (contains? lib.schema.template-tag/raw-value-template-tag-types tag-type)
+            (= tag-type :temporal-unit)
+            (and (= tag-type :dimension) widget-type (not= widget-type :none))))))
+
 ;;; TODO -- does this belong HERE or in the `parameters` module?
 (mu/defn template-tag-parameters :- ::parameters.schema/parameters
   "Transforms native query's `template-tags` into `parameters`.
@@ -379,19 +333,18 @@
   should always be there. Apparently lots of e2e tests are sloppy about this so this is included as a convenience."
   [card :- [:maybe ::queries.schema/card]]
   (for [{tag-type :type, widget-type :widget-type, :as tag} (some-> card :dataset_query not-empty lib/all-template-tags)
-        :when                         (and tag-type
-                                           (or (contains? lib.schema.template-tag/raw-value-template-tag-types tag-type)
-                                               (and (= tag-type :dimension) widget-type (not= widget-type :none))))]
+        :when                         (parameter-template-tag? tag)]
     {:id       (:id tag)
      :type     (or widget-type (case tag-type
+                                 :temporal-unit :temporal-unit
                                  :date    :date/single
                                  :text    :string/=
                                  :number  :number/=
                                  :boolean :boolean/=
-                                ;; fallback; should be unreachable since :when filters
-                                ;; to raw-value-template-tag-types
+                                 ;; fallback; should be unreachable since :when filters
+                                 ;; to raw-value-template-tag-types
                                  :string/=))
-     :target   (if (= tag-type :dimension)
+     :target   (if (contains? #{:dimension :temporal-unit} tag-type)
                  [:dimension [:template-tag (:name tag)]]
                  [:variable  [:template-tag (:name tag)]])
      :name     (:display-name tag)
@@ -444,6 +397,19 @@
       (when (seq (set/difference template-tag-types #{:card :snippet}))
         (throw (ex-info (tru "A model made from a native SQL question cannot have a variable or field filter.")
                         {:status-code 400})))))
+  nil)
+
+(mu/defn- assert-not-native-audit-db-query
+  "Throw if the card has a native query against the audit DB. The audit DB connects on the application database's
+  datasource, so a native query against it reads the app DB directly. This invariant binds even superusers (it is
+  not a data permission), so it lives in the model layer to cover every save path -- create, copy, update, and
+  serdes import. MBQL cards over audit views are the Usage Analytics content and stay allowed."
+  [{query :dataset_query, :as _card} :- [:maybe ::queries.schema/card]]
+  (when (and (seq query)
+             (= (:database query) audit/audit-db-id)
+             (lib/any-native-stage? query))
+    (throw (ex-info (tru "You cannot save a native query that targets the audit database.")
+                    {:status-code 400})))
   nil)
 
 (defn- dashboard-internal-card? [card]
@@ -520,6 +486,7 @@
       (check-field-filter-fields-are-from-correct-database card)
       ;; TODO: add a check to see if all id in :parameter_mappings are in :parameters (#40013)
       (assert-valid-type card)
+      (assert-not-native-audit-db-query card)
       (params/assert-valid-parameters card)
       (params/assert-valid-parameter-mappings card)
       (collection/check-collection-namespace :model/Card (:collection_id card)))))
@@ -529,15 +496,30 @@
   metabase-enterprise.sandbox.models.sandbox
   [_ _])
 
+(defenterprise pre-delete-check-sandbox-constraints
+  "Checks additional sandboxing constraints for Metabase Enterprise Edition. The OSS implementation is a no-op."
+  metabase-enterprise.sandbox.models.sandbox
+  [_])
+
+(defn- value-field-gone?
+  [metadata-columns value-field]
+  (or (nil? value-field)
+      (empty? metadata-columns)
+      (nil? (lib/find-matching-column (lib/->mbql5 value-field) metadata-columns))))
+
 (defn- update-parameters-using-card-as-values-source
   "Update the config of parameter on any Dashboard/Card use this `card` as values source .
 
   Remove parameter.values_source_type and set parameter.values_source_type to nil ( the default type ) when:
   - card is archived
   - card.result_metadata changes and the parameter values source field can't be found anymore"
-  [{:keys [id]} changes]
+  [{:keys [id database_id]} changes]
   (when (some #{:archived :result_metadata} (keys changes))
-    (let [parameter-cards (t2/select :model/ParameterCard :card_id id)]
+    (let [parameter-cards  (t2/select :model/ParameterCard :card_id id)
+          metadata-columns (when-let [result-metadata (:result_metadata changes)]
+                             (lib/->card-metadata-columns
+                              (lib-be/application-database-metadata-provider database_id)
+                              result-metadata))]
       (doseq [[[po-type po-id] param-cards]
               (group-by (juxt :parameterized_object_type :parameterized_object_id) parameter-cards)]
         (let [model                  (case po-type :card 'Card :dashboard 'Dashboard)
@@ -554,11 +536,10 @@
                                               (filter (fn [param-card]
                                                         ;; if can't find the value-field in result_metadata, then we should
                                                         ;; remove it
-                                                        ;; existing usage -- do not use this in new code
-                                                        #_{:clj-kondo/ignore [:deprecated-var]}
-                                                        (nil? (qp.util/field->field-info
-                                                               (get-in (param-id->parameter (:parameter_id param-card)) [:values_source_config :value_field])
-                                                               (:result_metadata changes)))))
+                                                        (value-field-gone?
+                                                         metadata-columns
+                                                         (get-in (param-id->parameter (:parameter_id param-card))
+                                                                 [:values_source_config :value_field]))))
                                               (map :parameter_id)
                                               set))
 
@@ -602,6 +583,9 @@
   ;; TODO - don't we need to be doing the same permissions check we do in `pre-insert` if the query gets changed? Or
   ;; does that happen in the `PUT` endpoint? (#40013)
   (u/prog1 card
+    ;; reject an edit that turns this card into a native audit-DB query (same invariant as pre-insert)
+    (when (:dataset_query changes)
+      (assert-not-native-audit-db-query changes))
     (let [;; Fetch old card data if necessary, and share the data between multiple checks.
           old-card-info (when (or (contains? changes :type)
                                   (:dataset_query changes)
@@ -620,7 +604,7 @@
                         "Is Now:" new-param-field-ids
                         "Newly Added:" newly-added-param-field-ids)
               ;; Now update the FieldValues for the Fields referenced by this Card.
-              (field-values/update-field-values-for-on-demand-dbs! newly-added-param-field-ids)))))
+              ((requiring-resolve 'metabase.sync.field-values/update-field-values-for-on-demand-dbs!) newly-added-param-field-ids)))))
       ;; updating a model dataset query to not support implicit actions will disable implicit actions if they exist
       (when (and (:dataset_query changes)
                  (= (:type old-card-info) :model)
@@ -645,16 +629,28 @@
       (pre-update-check-sandbox-constraints card changes)
       (assert-valid-type card))))
 
+(defn- metadata-provider-fetch?
+  "Whether `card` was selected as one of the lib metadata-provider models (`:metadata/card`, `:metadata/metric`, ...)
+  rather than as `:model/Card`. Those models `derive` from `:model/Card`, so this after-select runs for them too."
+  [card]
+  (= "metadata" (some-> (t2/model card) namespace)))
+
 (defn- add-query-description-to-metric-card
   "Add `:query_description` key to returned card.
 
   Some users were missing description that was present in v1 metric API responses. This new key compensates for that.
 
   This function is used in `t2/define-after-select :model/Card`. Metadata provider caching should be considered when
-  fetching multiple metric cards having common database, as done in eg. dashboard API context."
+  fetching multiple metric cards having common database, as done in eg. dashboard API context.
+
+  Metadata-provider fetches must be skipped: nothing consumes `:query_description` on lib metadata, and computing it
+  resolves the metric's own `:metric` refs through the metadata provider, whose card fetches re-enter this
+  after-select — with a cycle in the metric reference graph the recursion is unbounded and overflows the stack
+  (#74954)."
   [card]
   (if-not (and (map? card)
                (= :metric (:type card))
+               (not (metadata-provider-fetch? card))
                (-> card :dataset_query not-empty)
                (-> card :database_id))
     card
@@ -733,20 +729,17 @@
   Always returns `card`."
   [card]
   (when (= (:dataset_query card) {})
-    (log/infof "Card %d has a blank :dataset_query - this indicates a Metabase issue. Legacy MBQL: %s"
-               (:id card) (:legacy_query card))
+    (log/infof "Card %d has a blank :dataset_query - this indicates a Metabase issue."
+               (:id card))
     (let [uniques (swap! unique-cards-with-blank-dataset-query conj (:id card))]
-      (analytics/set! :metabase-card/unique-cards-failed-conversion (count uniques))))
+      (analytics/set-gauge! :metabase-card/unique-cards-failed-conversion (count uniques))))
   ;; Always returns the original card.
   card)
 
-(defn- mbql5-conversion-clean-callback [untransformed-card pre-cleaning-query post-cleaning-query]
+(defn- mbql5-conversion-clean-callback [untransformed-card _pre-cleaning-query _post-cleaning-query]
   (analytics/inc! :metabase-card/conversions-requiring-cleaning)
-  (log/infof "MBQL 4->5 conversion for Card %d had real 'clean' changes from %s into %s; :legacy_query is %s"
-             (:id untransformed-card)
-             (pr-str (dissoc pre-cleaning-query :lib/metadata))
-             (pr-str (dissoc post-cleaning-query :lib/metadata))
-             (:legacy_query untransformed-card)))
+  (log/infof "MBQL 4->5 conversion for Card %d had real 'clean' changes"
+             (:id untransformed-card)))
 
 ;; Uses [[lib/with-card-clean-hook]] to bind a callback which logs the impact of the cleaning process during
 ;; `transform-out`, so that we can log whenever a card gets converted and [[lib.convert/clean]] makes material
@@ -787,12 +780,13 @@
         (assoc :metabase_version config/mb-version-string
                :card_schema current-schema-version)
         queries.schema/normalize-card
-      ;; Must have an entity_id before populating the metadata. TODO (Cam 7/11/25) -- actually, this is no longer true,
-      ;; since we're removing `:ident`s; we can probably remove this now.
+        ;; Must have an entity_id before populating the metadata. TODO (Cam 7/11/25) -- actually, this is no longer true,
+        ;; since we're removing `:ident`s; we can probably remove this now.
         (u/assoc-default :entity_id (u/generate-nano-id))
         card.metadata/populate-result-metadata
         pre-insert
-        populate-query-fields)
+        populate-query-fields
+        public-sharing/add-public-uuid-prefix)
     (collection/check-allowed-content (:type <>) (:collection_id <>))))
 
 (t2/define-after-insert :model/Card
@@ -800,7 +794,7 @@
   (u/prog1 card
     (when-let [field-ids (seq (params/card->template-tag-field-ids card))]
       (log/info "Card references Fields in params:" field-ids)
-      (field-values/update-field-values-for-on-demand-dbs! field-ids))
+      ((requiring-resolve 'metabase.sync.field-values/update-field-values-for-on-demand-dbs!) field-ids))
     (parameter-card/upsert-or-delete-from-parameters! "card" (:id card) (:parameters card))))
 
 (defn- apply-dashboard-question-updates [card changes]
@@ -837,11 +831,14 @@
         ;; populate-query-fields must run before pre-update in case source_card_id should be nilled
         populate-query-fields
         (pre-update changes)
-        maybe-populate-initially-published-at)))
+        maybe-populate-initially-published-at
+        public-sharing/add-public-uuid-prefix-if-changed)))
 
 ;; Cards don't normally get deleted (they get archived instead) so this mostly affects tests
 (t2/define-before-delete :model/Card
-  [{:keys [id] :as _card}]
+  [{:keys [id] :as card}]
+  ;; additional checks (Enterprise Edition only)
+  (pre-delete-check-sandbox-constraints card)
   ;; delete any ParameterCard that the parameters on this card linked to
   (parameter-card/delete-all-for-parameterized-object! "card" id)
   ;; delete any ParameterCard linked to this card
@@ -853,9 +850,10 @@
   ;; return empty by the time the actual DELETE executes.
   (when-let [notification-ids (seq (t2/select-pks-set :model/Notification
                                                       :payload_type :notification/card
-                                                      :payload_id [:in {:select [:id]
-                                                                        :from   [:notification_card]
-                                                                        :where  [:= :card_id id]}]))]
+                                                      :payload_id [:in ^:allow-subquery
+                                                                   {:select [:id]
+                                                                    :from   [:notification_card]
+                                                                    :where  [:= :card_id id]}]))]
     (t2/delete! :model/Notification :id [:in notification-ids])))
 
 (defmethod serdes/hash-fields :model/Card
@@ -868,7 +866,7 @@
 
 ;;; ----------------------------------------------- Creating Cards ----------------------------------------------------
 
-(defn- autoplace-dashcard-for-card! [dashboard-id maybe-dashboard-tab-id card]
+(defn- autoplace-dashcard-for-card! [dashboard-id maybe-dashboard-tab-id card size]
   (let [dashboard (t2/hydrate (t2/select-one :model/Dashboard dashboard-id) :dashcards [:tabs :tab-cards])
         {:keys [dashcards tabs]} dashboard
         tabs (remove #(when maybe-dashboard-tab-id (not= maybe-dashboard-tab-id (:id %))) tabs)
@@ -878,7 +876,11 @@
             cards-on-first-tab (or (when first-tab
                                      (:cards first-tab))
                                    dashcards)
-            new-spot (autoplace/get-position-for-new-dashcard cards-on-first-tab (:display card))]
+            new-spot (if-let [{:keys [size_x size_y]} size]
+                       (autoplace/get-position-for-new-dashcard
+                        cards-on-first-tab size_x size_y autoplace/default-grid-width)
+                       (autoplace/get-position-for-new-dashcard
+                        cards-on-first-tab (:display card)))]
         (t2/insert! :model/DashboardCard (assoc new-spot
                                                 :dashboard_tab_id (some-> first-tab :id)
                                                 :card_id (:id card)
@@ -926,15 +928,13 @@
                        old-archived
                        archived-update)
         archived-after? (boolean new-archived)]
-
     ;; you can't specify the dashboard_tab_id if not on a dashboard
     (api/check-400
      (not (and dashboard-tab-id
                (not new-dashboard-id))))
     ;; we'll end up unarchived and a dashboard card => make sure we autoplace
     (when (and on-dashboard-after? (not archived-after?))
-      (autoplace-dashcard-for-card! new-dashboard-id dashboard-tab-id card-before-update))
-
+      (autoplace-dashcard-for-card! new-dashboard-id dashboard-tab-id card-before-update nil))
     (when (and
            ;; we start out as a DQ, and
            on-dashboard-before?
@@ -949,7 +949,6 @@
             (and (not on-dashboard-after?)
                  delete-old-dashcards?)))
       (autoremove-dashcard-for-card! card-id old-dashboard-id))
-
     ;; we're moving from a collection to a dashboard, and the user has told us to remove the dashcards for other
     ;; dashboards
     (when (and on-dashboard-after?
@@ -993,7 +992,9 @@
                                                  :entity_id (u/generate-nano-id))
                                                 (cond-> (nil? type)
                                                   (assoc :type :question))
-                                                (m/update-existing :dataset_query lib-be/normalize-query))
+                                                ;; Strict so a malformed query throws here instead of being silently
+                                                ;; coerced to `{}`. See #74615.
+                                                (m/update-existing :dataset_query #(lib-be/normalize-query nil % {:strict? true})))
          {:keys [metadata metadata-future]} (card.metadata/maybe-async-result-metadata
                                              ;; 1. This function is called when storing metadata.
                                              ;; 2. The metadata for storage shouldn't have remaps.
@@ -1013,7 +1014,7 @@
                                                   (collections/check-non-remote-synced-dependencies <>))))]
      (let [{:keys [dashboard_id]} card]
        (when (and dashboard_id autoplace-dashboard-questions?)
-         (autoplace-dashcard-for-card! dashboard_id (:dashboard_tab_id input-card-data) card)))
+         (autoplace-dashcard-for-card! dashboard_id (:dashboard_tab_id input-card-data) card (:size input-card-data))))
      (when-not delay-event?
        (events/publish-event! :event/card-create {:object card :user-id (:id creator)}))
      (when metadata-future
@@ -1075,6 +1076,20 @@
     :database_id
     :query_type ;; these first three may not even be changeable
     :dataset_query})
+
+(defn maybe-unverify!
+  "Drop `card`'s verified badge when `updates` change something important about its query. Every path that can change
+  a Card's query has to call this, not just `PUT /api/card/:id`."
+  [card updates actor]
+  (when (and (card-is-verified? card)
+             (changed? card (select-keys updates card-compare-keys)))
+    ;; this is an enterprise feature but we don't care if enterprise is enabled here. If there is a review we need
+    ;; to remove it regardless if enterprise edition is present at the moment.
+    (moderation/create-review! {:moderated_item_id   (:id card)
+                                :moderated_item_type "card"
+                                :moderator_id        (:id actor)
+                                :status              nil
+                                :text                (tru "Unverified due to edit")})))
 
 (mu/defn- mbql-clause->identifier-for-parameter-updates
   "Get the unique key used to power the parameter mapping update stuff added in #49308. Key is an MBQL-5-style clause
@@ -1173,6 +1188,35 @@
             (doseq [[id update] updates]
               (t2/update! :model/DashboardCard :id id update))))))))
 
+(deftype SourceCardDependentsGraph []
+  graph/Graph
+  (children-of [_this key-seq]
+    (if (empty? key-seq)
+      {}
+      (let [deps (t2/select [:model/Card :id :source_card_id :card_schema] :source_card_id [:in key-seq])]
+        (u/group-by :source_card_id :id conj #{} deps)))))
+
+(defn- dependent-cards-to-update
+  [root-card-id old-db-id]
+  (let [all-dep-ids (graph/transitive (->SourceCardDependentsGraph) [root-card-id])]
+    (when (seq all-dep-ids)
+      (into []
+            (filter (fn [{:keys [dataset_query]}] (= (:database dataset_query) old-db-id)))
+            (t2/select [:model/Card :id :dataset_query :card_schema] :id [:in all-dep-ids])))))
+
+(defn- cascade-database-change-to-dependents!
+  "When a card's `database_id` changes, update all cards that use it as a `:source-card` (transitively) so their
+  `dataset_query` `:database` key stays in sync. Without this dependent cards would fail with 'Card does not exist'
+   because the metadata provider filters cards by database (#74561)."
+  [card-before-update card-updates]
+  (let [card-id   (:id card-before-update)
+        old-db-id (-> card-before-update :dataset_query :database)
+        new-db-id (-> card-updates :dataset_query :database)]
+    (when (and old-db-id new-db-id (not= old-db-id new-db-id))
+      (let [cards-to-update (dependent-cards-to-update card-id old-db-id)]
+        (doseq [{dep-id :id, dep-query :dataset_query} cards-to-update]
+          (t2/update! :model/Card dep-id {:dataset_query (assoc dep-query :database new-db-id)}))))))
+
 (defn update-card!
   "Update a Card. Metadata is fetched asynchronously. If it is ready before [[metadata-sync-wait-ms]] elapses it will be
   included, otherwise the metadata will be saved to the database asynchronously."
@@ -1180,7 +1224,6 @@
   ;; don't block our precious core.async thread, run the actual DB updates on a separate thread
   (t2/with-transaction [_conn]
     (api/maybe-reconcile-collection-position! card-before-update card-updates)
-
     (autoplace-or-remove-dashcards-for-card! card-before-update card-updates delete-old-dashcards?)
     (let [updated-fields (u/select-keys-when card-updates
                                              ;; `collection_id` and `description` can be `nil` (in order to unset them).
@@ -1189,31 +1232,20 @@
                                              :non-nil #{:dataset_query :display :name :visualization_settings :archived
                                                         :enable_embedding :type :parameters :parameter_mappings :embedding_params
                                                         :result_metadata :collection_preview :verified-result-metadata?})]
-
       (assert-is-valid-dashboard-internal-update card-updates card-before-update)
-
-      (when (and (card-is-verified? card-before-update)
-                 (changed? card-before-update (select-keys updated-fields card-compare-keys)))
-        ;; this is an enterprise feature but we don't care if enterprise is enabled here. If there is a review we need
-        ;; to remove it regardless if enterprise edition is present at the moment.
-        (moderation/create-review! {:moderated_item_id   (:id card-before-update)
-                                    :moderated_item_type "card"
-                                    :moderator_id        (:id actor)
-                                    :status              nil
-                                    :text                (tru "Unverified due to edit")}))
+      (maybe-unverify! card-before-update updated-fields actor)
       ;; Invalidate the cache for card
       (cache/invalidate-config! {:questions [(:id card-before-update)]
                                  :with-overrides? true})
       ;; ok, now save the Card
       (t2/update! :model/Card (:id card-before-update) updated-fields))
+    ;; Update all transitively dependent cards if the database was changed (#74561)
+    (cascade-database-change-to-dependents! card-before-update card-updates)
     ;; ok, now update dependent dashcard parameters
     (try
       (update-associated-parameters! card-before-update card-updates)
       (catch Throwable e
-        (log/error e "Update of dependent card parameters failed!")
-        (log/debug e
-                   "`card-before-update`:" (pr-str card-before-update)
-                   "`card-updates`:" (pr-str card-updates))))
+        (log/errorf "Update of dependent card parameters failed!: %s" (ex-message e))))
     (collection/check-for-remote-sync-update card-before-update))
   ;; Fetch the updated Card from the DB
   (let [card (t2/select-one :model/Card :id (:id card-before-update))]
@@ -1242,7 +1274,7 @@
 (mu/defn fully-parameterized?
   "Given a Card, returns `true` if its query is fully parameterized."
   [{query :dataset_query, :as _card} :- [:map
-                                         [:dataset_query [:maybe ::queries.schema/query]]]]
+                                         [:dataset_query [:maybe [:or ::lib.schema/query ::lib-be.schema/empty-query]]]]]
   (if (empty? query)
     true
     (lib/fully-parameterized-query? query)))
@@ -1258,16 +1290,38 @@
 ;;; ------------------------------------------------- Serialization --------------------------------------------------
 
 (defn- export-result-metadata [card _k metadata]
-  (if (and (seq metadata) (model? card))
-    (let [native?   (lib/native? (:dataset_query card))
-          keep-keys (into #{:name}
+  (cond
+    (empty? metadata)
+    ::serdes/skip
+
+    ;; Native cards — models included — keep their result_metadata. Unlike MBQL cards, their columns can't be
+    ;; re-derived from the query at import time without executing the SQL, and downstream questions that join them
+    ;; depend on this metadata to resolve join columns. We whitelist the portable keys (dropping computed `:lib/*`,
+    ;; `:fingerprint`, etc.) rather than the model soft-key set, since native columns also need their structural
+    ;; type info preserved. This must precede the model branch, whose soft-key set omits type info.
+    (lib/native? (:dataset_query card))
+    (let [keep-keys #{:name :base_type :effective_type :field_ref :database_type
+                      :display_name :semantic_type :description :visibility_type :settings
+                      :fk_target_field_id :id :table_id}]
+      (mapv (fn [m]
+              (-> (select-keys m keep-keys)
+                  (m/update-existing :table_id           serdes/*export-table-fk*)
+                  (m/update-existing :id                 serdes/*export-field-fk*)
+                  (m/update-existing :field_ref          serdes/export-mbql)
+                  (m/update-existing :fk_target_field_id serdes/*export-field-fk*)))
+            metadata))
+
+    (model? card)
+    (let [keep-keys (into #{:name}
                           (map u/->snake_case_en)
-                          (lib/model-preserved-keys native?))]
+                          (lib/model-preserved-keys false))]
       (mapv (fn [m]
               (-> (select-keys m keep-keys)
                   (m/update-existing :fk_target_field_id serdes/*export-field-fk*)
                   (m/update-existing :id serdes/*export-field-fk*)))
             metadata))
+
+    :else
     ::serdes/skip))
 
 (defn- import-result-metadata [metadata]
@@ -1283,15 +1337,7 @@
 (defn- result-metadata-deps [metadata]
   (when (seq metadata)
     (-> (reduce into #{} (for [m metadata]
-                           (conj (serdes/mbql-deps (:field_ref m))
-                                 (when (:table_id m)
-                                   (serdes/table->path (:table_id m)))
-                                 (when (:id m)
-                                   (serdes/field->path (:id m)))
-                                 (when (and (:fk_target_field_id m)
-                                            ;; FIXME: remove that check after v52
-                                            (not (number? (:fk_target_field_id m))))
-                                   (serdes/field->path (:fk_target_field_id m))))))
+                           (serdes/mbql-deps (:field_ref m))))
         (disj nil))))
 
 (defmethod serdes/storage-path "Card" [card ctx]
@@ -1314,9 +1360,12 @@
 (defmethod serdes/make-spec "Card"
   [_model-name _opts]
   {:copy [:archived :archived_directly :collection_position :collection_preview :description :display
-          :embedding_params :enable_embedding :embedding_type :entity_id :metabase_version :public_uuid :query_type :type :name
+          :embedding_params :enable_embedding :embedding_type :entity_id :public_uuid :type :name
           :card_schema]
-   :skip [;; cache invalidation is instance-specific
+   :skip [;; instance-specific build version; serializing it produces spurious remote-sync diffs, and the
+          ;; serialized representation is versioned by :card_schema instead
+          :metabase_version
+          ;; cache invalidation is instance-specific
           :cache_invalidated_at
           ;; those are instance-specific analytic columns
           :view_count :last_used_at :initially_published_at
@@ -1327,12 +1376,26 @@
           ;; dimensions are computed from the query and reconciled on read, not serialized
           :dimensions :dimension_mappings
           ;; temporary column to power rollback from v57 to v56; we can remove it in v58
-          :legacy_query]
+          :legacy_query
+          ;; always derivable from dataset_query by populate-query-fields; nil when not derivable
+          :query_type
+          ;; always re-derived from dataset_query by populate-query-fields on import
+          :table_id :source_card_id
+          ;; always re-derived from public_uuid on import
+          :public_uuid_prefix]
    :transform
    {:created_at             (serdes/date)
-    :database_id            (serdes/fk :model/Database)
-    :table_id               (serdes/fk :model/Table)
-    :source_card_id         (serdes/fk :model/Card)
+    ;; database_id is usually derivable from dataset_query, but must be kept when the query
+    ;; is empty (e.g. a native card with no query yet) and database_id is the only reference.
+    :database_id            (let [{:keys [import]} (serdes/fk :model/Database)]
+                              {::serdes/fk true
+                               :export-with-context
+                               (fn [{:keys [dataset_query database_id]} _k _v]
+                                 (if (and (seq dataset_query) (get dataset_query :database))
+                                   ::serdes/skip
+                                   (when database_id
+                                     (serdes/*export-database-fk* database_id))))
+                               :import import})
     :collection_id          (serdes/fk :model/Collection)
     :dashboard_id           (serdes/fk :model/Dashboard)
     :document_id            (serdes/fk :model/Document)
@@ -1350,14 +1413,15 @@
 
 (defmethod serdes/dependencies "Card"
   [{:keys [collection_id database_id dataset_query parameters parameter_mappings
-           result_metadata table_id source_card_id visualization_settings
+           result_metadata source_card_id visualization_settings
            dashboard_id document_id]}]
   (set
    (concat
     (mapcat serdes/mbql-deps parameter_mappings)
     (serdes/parameters-deps parameters)
     (when database_id [[{:model "Database" :id database_id}]])
-    (when table_id #{(serdes/table->path table_id)})
+    ;; Note: `table_id` is intentionally not a dependency — the Database (above) is, and a missing Table is
+    ;; synthesized as an inactive row on import.
     (when source_card_id #{[{:model "Card" :id source_card_id}]})
     (when collection_id #{[{:model "Collection" :id collection_id}]})
     (when dashboard_id #{[{:model "Dashboard" :id dashboard_id}]})
@@ -1386,34 +1450,6 @@
 
 ;;;; ------------------------------------------------- Search ----------------------------------------------------------
 
-(mu/defn- dataset-query->dimensions :- [:maybe [:sequential ::lib.schema.metadata/column]]
-  "Extract dimensions (non-aggregation columns) from a dataset query."
-  [dataset-query-str :- [:maybe :string]]
-  (when dataset-query-str
-    ;; In production the :database should be always present and correct. That is not the case for some test mocks.
-    ;; As e.g. in [[metabase-enterprise.semantic-search.test-util/do-with-indexable-documents!]]. Hence the thorough
-    ;; checking.
-    (when-some [query (not-empty ((:out lib-be/transform-query) dataset-query-str))]
-      (let [columns (lib/returned-columns query)]
-        ;; Dimensions are columns that are not aggregations
-        (remove (comp #{:source/aggregations} :lib/source) columns)))))
-
-(defn- extract-temporal-info
-  "Compute has-temporal-dim and non-temporal-dim-ids in a single dataset-query->dimensions call.
-  Returns a map with snake_case keys so the ingestion layer can merge them directly into the document,
-  avoiding the cost of calling dataset-query->dimensions twice per card. See PR 60912.
-  Short-circuits for native queries: they have no returnable column metadata so temporal dims are always absent."
-  [{:keys [dataset_query query_type]}]
-  (if (= query_type "native")
-    {:has_temporal_dim false :non_temporal_dim_ids "[]"}
-    (let [dimensions   (dataset-query->dimensions dataset_query)
-          non-temp-ids (->> dimensions
-                            (remove lib.types/temporal?)
-                            (keep :id)
-                            sort)]
-      {:has_temporal_dim     (boolean (some lib.types/temporal? dimensions))
-       :non_temporal_dim_ids (json/encode (or (seq non-temp-ids) []))})))
-
 (defn- maybe-extract-native-query
   "Return the native SQL text (truncated to `max-searchable-value-length`) if `dataset_query` is native; else nil.
   Uses `query_type` to short-circuit without parsing JSON for non-native cards."
@@ -1431,9 +1467,10 @@
                   :collection-id        true
                   :creator-id           true
                   :dashboard-id         true
-                  :dashboardcard-count  {:select [:%count.*]
-                                         :from   [:report_dashboardcard]
-                                         :where  [:= :report_dashboardcard.card_id :this.id]}
+                  :dashboardcard-count  ^:allow-subquery
+                  {:select [:%count.*]
+                   :from   [:report_dashboardcard]
+                   :where  [:= :report_dashboardcard.card_id :this.id]}
                   :database-id          true
                   :last-viewed-at       :last_used_at
                   :native-query         {:fn maybe-extract-native-query
@@ -1447,17 +1484,15 @@
                   :created-at           true
                   :updated-at           true
                   :display-type         :this.display
-                  :temporal-info        {:fn       extract-temporal-info
-                                         :fields   [:dataset_query :query_type]
-                                         :provides [:has-temporal-dim :non-temporal-dim-ids]}}
+                  :collection-type      :collection.type
+                  :collection-location  :collection.location
+                  :root-collection-type {:fn collection/root-collection-type}}
    :search-terms [:name :description]
    :render-terms {:archived-directly          true
                   :collection-authority_level :collection.authority_level
-                  :collection-location        :collection.location
                   :collection-name            :collection.name
                   ;; This is used for legacy ranking, in future it will be replaced by :pinned
                   :collection-position        true
-                  :collection-type            :collection.type
                   ;; This field can become stale, unless we change to calculate it just-in-time.
                   :display                    true
                   :moderated-status           :mr.status}
@@ -1494,3 +1529,39 @@
 
 (search/define-spec "metric"
   (-> (base-search-spec) (sql.helpers/where [:= :this.type "metric"])))
+
+(defmethod staleness/find-stale-query :model/Card
+  [_model args]
+  ^:allow-subquery
+  {:select [:report_card.id
+            [(h2x/literal "Card") :model]
+            [:report_card.name :name]
+            :last_used_at]
+   :from :report_card
+   :left-join [:moderation_review [:and
+                                   [:= :moderation_review.moderated_item_id :report_card.id]
+                                   [:= :moderation_review.moderated_item_type (h2x/literal "card")]
+                                   [:= :moderation_review.most_recent true]
+                                   [:= :moderation_review.status (h2x/literal "verified")]]
+               :pulse_card [:= :pulse_card.card_id :report_card.id]
+               :pulse [:and
+                       [:= :pulse_card.pulse_id :pulse.id]
+                       [:= :pulse.archived false]]
+               :sandboxes [:= :sandboxes.card_id :report_card.id]
+               :collection [:= :collection.id :report_card.collection_id]]
+   :where [:and
+           [:= :sandboxes.id nil]
+           [:= :pulse.id nil]
+           [:= :moderation_review.id nil]
+           [:= :report_card.archived false]
+           [:<= :report_card.last_used_at (-> args :cutoff-date)]
+           ;; find things only in regular collections, not the `instance-analytics` collection.
+           [:= :collection.type nil]
+           (when (embed.settings/some-embedding-enabled?)
+             [:= :report_card.enable_embedding false])
+           (when (setting/get :enable-public-sharing)
+             [:= :report_card.public_uuid nil])
+           [:or
+            (when (contains? (:collection-ids args) nil)
+              [:is :report_card.collection_id nil])
+            [:in :report_card.collection_id (-> args :collection-ids)]]]})

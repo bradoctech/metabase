@@ -2,8 +2,8 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 
 import { render, renderWithProviders, screen, within } from "__support__/ui";
-import { registerVisualization } from "metabase/visualizations";
 import { QuestionChartSettings } from "metabase/visualizations/components/ChartSettings";
+import { registerVisualizations } from "metabase/visualizations/register";
 import type { Series } from "metabase-types/api";
 import {
   createMockCard,
@@ -115,12 +115,27 @@ describe("Scalar", () => {
     // as the ScalarValue component handles sizing to fit
     expect(styles.textOverflow).not.toBe("ellipsis");
   });
+
+  it("lets Unicode subscript descenders render past the line box (metabase#72443)", () => {
+    render(
+      <Scalar
+        {...mockedProps}
+        series={series(344)}
+        rawSeries={series(344)}
+        settings={settings}
+        visualizationIsClickable={() => false}
+        width={230}
+      />,
+    );
+    expect(screen.getByTestId("scalar-container")).toHaveStyle({
+      overflowY: "visible",
+    });
+  });
 });
 
 describe("scalar viz settings", () => {
   beforeAll(() => {
-    // @ts-expect-error: incompatible prop types with registerVisualization
-    registerVisualization(Scalar);
+    registerVisualizations();
   });
 
   it("should render the field to show input in the formatting section if there are 2 or more columns", async () => {
@@ -148,8 +163,8 @@ describe("scalar viz settings", () => {
     renderWithProviders(<QuestionChartSettings series={series} />);
 
     expect(
-      await screen.findByRole("radio", { name: "Formatting" }),
-    ).toBeChecked();
+      await screen.findByRole("tab", { name: "Formatting" }),
+    ).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByText("Field to show")).toBeInTheDocument();
 
     const getFieldSelect = async () =>
@@ -184,8 +199,8 @@ describe("scalar viz settings", () => {
     renderWithProviders(<QuestionChartSettings series={series} />);
 
     expect(
-      await screen.findByRole("radio", { name: "Formatting" }),
-    ).toBeChecked();
+      await screen.findByRole("tab", { name: "Formatting" }),
+    ).toHaveAttribute("aria-selected", "true");
 
     expect(
       screen.queryByTestId("chart-settings-widget-scalar.field"),

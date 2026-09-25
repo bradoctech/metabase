@@ -13,10 +13,10 @@ import { CopyButton } from "metabase/common/components/CopyButton";
 import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
 import { PasswordReveal } from "metabase/common/components/PasswordReveal";
 import { useToast } from "metabase/common/hooks/use-toast";
-import { useDispatch, useSelector } from "metabase/lib/redux";
-import { generatePassword } from "metabase/lib/security";
-import MetabaseSettings from "metabase/lib/settings";
+import { useDispatch, useSelector } from "metabase/redux";
 import { Button, Flex, Modal, Text, TextInput } from "metabase/ui";
+import { generatePassword } from "metabase/utils/password";
+import MetabaseSettings from "metabase/utils/settings";
 import type { User } from "metabase-types/api";
 
 import { clearTemporaryPassword, storeTemporaryPassword } from "../people";
@@ -78,7 +78,7 @@ const UserPasswordResetModalInner = ({
         opened
         title={t`Password reset link for ${user.common_name}`}
         onConfirm={onClose}
-        confirmButtonProps={{ color: "brand", variant: "filled" }}
+        confirmButtonProps={{ color: "core-brand", variant: "filled" }}
         confirmButtonText={t`Done`}
         closeButtonText={null}
         onClose={onClose}
@@ -103,7 +103,7 @@ const UserPasswordResetModalInner = ({
         opened
         title={t`${user.common_name}'s password has been reset`}
         onConfirm={onClose}
-        confirmButtonProps={{ color: "brand", variant: "filled" }}
+        confirmButtonProps={{ color: "core-brand", variant: "filled" }}
         confirmButtonText={t`Done`}
         closeButtonText={null}
         onClose={onClose}
@@ -130,11 +130,11 @@ const UserPasswordResetModalInner = ({
           <Button onClick={onClose}>{t`Cancel`}</Button>
           <Button
             variant="filled"
-            color="brand"
+            color="core-brand"
             onClick={handleGetResetLink}
           >{t`Get reset link`}</Button>
           <Button
-            color="danger"
+            color="feedback-negative"
             variant="filled"
             onClick={handleResetConfirm}
           >{t`Reset password`}</Button>

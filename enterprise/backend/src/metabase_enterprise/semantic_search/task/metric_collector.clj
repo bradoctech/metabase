@@ -7,7 +7,7 @@
    [metabase-enterprise.semantic-search.dlq :as semantic.dlq]
    [metabase-enterprise.semantic-search.env :as semantic.env]
    [metabase-enterprise.semantic-search.util :as semantic.u]
-   [metabase.analytics.core :as analytics]
+   [metabase.analytics-interface.core :as analytics]
    [metabase.task.core :as task]
    [metabase.util.log :as log]
    [next.jdbc :as jdbc]
@@ -38,7 +38,7 @@
     (if (semantic.u/table-exists? pgvector gate-table-name)
       (let [table-size (row-count pgvector gate-table-name)]
         (log/debugf "Setting `semantic-gate-size` metric to %d" table-size)
-        (analytics/set! :metabase-search/semantic-gate-size table-size)
+        (analytics/set-gauge! :metabase-search/semantic-gate-size table-size)
         nil)
       (log/warn "Gate table does not exist. Index may not have been initialized."))))
 
@@ -60,12 +60,14 @@
       (when (semantic.u/table-exists? pgvector dlq-table-name)
         (let [table-size (row-count pgvector dlq-table-name)]
           (log/debugf "Setting `semantic-dlq-size` metric to %d" table-size)
-          (analytics/set! :metabase-search/semantic-dlq-size table-size)
+          (analytics/set-gauge! :metabase-search/semantic-dlq-size table-size)
           nil)))
     (log/warn "DLQ table does not exist. Index may not have been initialized.")))
 
 (defn- collect-metrics! []
-  (when (semantic.u/semantic-search-available?)
+  ;; Active, not merely available: on an available-but-inactive instance the index tables never exist,
+  ;; and the collectors would warn about them on every run.
+  (when (semantic.u/semantic-search-active?)
     (let [pgvector (semantic.env/get-pgvector-datasource!)
           index-metadata (semantic.env/get-index-metadata)]
       (collect-gate-size! pgvector)
@@ -80,7 +82,7 @@
 
 (defmethod task/init! ::SemanticMetricCollector
   [_]
-  (when (semantic.u/semantic-search-available?)
+  (when (semantic.u/semantic-search-configured?)
     (let [job (jobs/build
                (jobs/of-type SemanticMetricCollector)
                (jobs/with-identity collector-job-key))

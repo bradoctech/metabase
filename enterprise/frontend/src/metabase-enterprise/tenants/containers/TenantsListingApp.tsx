@@ -7,7 +7,7 @@ import {
   type ActiveStatus,
 } from "metabase/admin/people/constants";
 import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
-import { useSelector } from "metabase/lib/redux";
+import { useSelector } from "metabase/redux";
 import { getUserIsAdmin } from "metabase/selectors/user";
 import { Box, Group, Tabs, Title } from "metabase/ui";
 import { useListTenantsQuery } from "metabase-enterprise/api";
@@ -15,8 +15,6 @@ import { useListTenantsQuery } from "metabase-enterprise/api";
 import { EditUserStrategySettingsButton } from "../EditUserStrategySettingsButton";
 import { TenantsDocsButton } from "../TenantsDocsButton";
 import { TenantsListing } from "../components/TenantsListing";
-
-import S from "./TenantsListingApp.module.css";
 
 export const TenantsListingApp = ({
   children,
@@ -70,8 +68,13 @@ export const TenantsListingApp = ({
       </Group>
 
       {isAdmin && hasDeactivatedTenants && (
-        <Tabs value={status} onChange={handleTabChange} pl="md">
-          <Tabs.List className={S.tabs}>
+        <Tabs
+          value={status}
+          onChange={handleTabChange}
+          pl="md"
+          listBorder={false}
+        >
+          <Tabs.List>
             <Tabs.Tab value={ACTIVE_STATUS.active}>{t`Active`}</Tabs.Tab>
 
             <Tabs.Tab

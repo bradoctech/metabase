@@ -3,14 +3,14 @@ import { t } from "ttag";
 
 import { Input } from "metabase/common/components/Input";
 import { useDebouncedValue } from "metabase/common/hooks/use-debounced-value";
-import { useTranslateContent } from "metabase/i18n/hooks";
-import { SEARCH_DEBOUNCE_DURATION } from "metabase/lib/constants";
-import { isNotNull } from "metabase/lib/types";
+import { useTranslateContent } from "metabase/content-translation/hooks";
 import {
   type UpdateQueryHookProps,
   useBreakoutQueryHandlers,
 } from "metabase/query_builder/hooks";
 import { Box, DelayGroup } from "metabase/ui";
+import { SEARCH_DEBOUNCE_DURATION } from "metabase/utils/constants";
+import { isNotNull } from "metabase/utils/types";
 import * as Lib from "metabase-lib";
 
 import BreakoutColumnListS from "./BreakoutColumnList.module.css";
