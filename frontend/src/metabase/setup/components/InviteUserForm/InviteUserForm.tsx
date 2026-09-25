@@ -3,10 +3,9 @@ import { t } from "ttag";
 import * as Yup from "yup";
 
 import { FormInput } from "metabase/common/components/FormInput";
-import { FormSubmitButton } from "metabase/common/components/FormSubmitButton";
-import { Form, FormProvider } from "metabase/forms";
-import * as Errors from "metabase/lib/errors";
-import type { InviteInfo, UserInfo } from "metabase-types/store";
+import { Form, FormProvider, FormSubmitButton } from "metabase/forms";
+import type { InviteInfo, UserInfo } from "metabase/redux/store";
+import * as Errors from "metabase/utils/errors";
 
 import S from "./InviteUserForm.module.css";
 
@@ -67,7 +66,7 @@ export const InviteUserForm = ({
           title={t`Email`}
           placeholder={"nicetoseeyou@email.com"}
         />
-        <FormSubmitButton title={t`Send invitation`} primary />
+        <FormSubmitButton label={t`Send invitation`} variant="filled" />
       </Form>
     </FormProvider>
   );

@@ -5,6 +5,7 @@ import { setupEnterpriseOnlyPlugin } from "__support__/enterprise";
 import { setupTenantEntpoints } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
 import { renderWithProviders, screen, waitFor } from "__support__/ui";
+import { createMockState } from "metabase/redux/store/mocks";
 import type { Tenant } from "metabase-types/api";
 import {
   createMockGroup,
@@ -12,7 +13,6 @@ import {
   createMockTokenFeatures,
   createMockUser,
 } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { UserForm } from "./UserForm";
 
@@ -39,6 +39,8 @@ interface SetupOpts {
   initialValues?: typeof USER;
   external?: boolean;
   tenants?: Tenant[];
+  hideNameFields?: boolean;
+  hideAttributes?: boolean;
 }
 
 const setup = ({
@@ -46,6 +48,8 @@ const setup = ({
   initialValues = USER,
   external = false,
   tenants = [] as Tenant[],
+  hideNameFields = false,
+  hideAttributes = false,
 }: SetupOpts = {}) => {
   const onSubmit = jest.fn();
   const onCancel = jest.fn();
@@ -75,6 +79,8 @@ const setup = ({
       onCancel={onCancel}
       initialValues={initialValues}
       external={external}
+      hideNameFields={hideNameFields}
+      hideAttributes={hideAttributes}
     />,
     {
       storeInitialState: state,
@@ -102,6 +108,13 @@ describe("UserForm", () => {
       expect(await screen.findByText("foo")).toBeInTheDocument();
 
       expect(screen.queryByText("Attributes")).not.toBeInTheDocument();
+    });
+
+    it("should not show validation errors before fields are touched (UXW-3719)", async () => {
+      setup({ initialValues: {} as typeof USER });
+
+      expect(await screen.findByLabelText(/Email/)).toBeInTheDocument();
+      expect(screen.queryByText(/required/i)).not.toBeInTheDocument();
     });
 
     it("should allow you to add groups", async () => {
@@ -378,6 +391,27 @@ describe("UserForm", () => {
           expect.anything(),
         );
       });
+    });
+  });
+
+  describe("trimmed variant (invite flow)", () => {
+    it("hides the name fields when hideNameFields is set", async () => {
+      setup({ hideNameFields: true });
+
+      expect(await screen.findByLabelText(/Email/)).toBeInTheDocument();
+      expect(screen.queryByLabelText("First name")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Last name")).not.toBeInTheDocument();
+    });
+
+    it("hides the Attributes field when hideAttributes is set", async () => {
+      setup({
+        enterprisePlugins: ["sandboxes", "tenants"],
+        initialValues: { ...USER, login_attributes: { team: "engineering" } },
+        hideAttributes: true,
+      });
+
+      expect(await screen.findByLabelText(/Email/)).toBeInTheDocument();
+      expect(screen.queryByText("Attributes")).not.toBeInTheDocument();
     });
   });
 });

@@ -9,9 +9,8 @@ import {
 } from "__support__/server-mocks/user";
 import { mockSettings } from "__support__/settings";
 import { renderWithProviders, screen } from "__support__/ui";
-import type { UserListResult } from "metabase-types/api";
+import { createMockState } from "metabase/redux/store/mocks";
 import { createMockSettings, createMockUser } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { UserPasswordResetModal } from "./UserPasswordResetModal";
 
@@ -24,7 +23,7 @@ const TEST_USER = createMockUser({
 });
 
 function setup({ emailConfigured = false } = {}) {
-  setupUserEndpoints(TEST_USER as unknown as UserListResult);
+  setupUserEndpoints(TEST_USER);
   setupPasswordResetUrlEndpoint(TEST_USER.id);
   setupForgotPasswordEndpoint();
   setupUpdatePasswordEndpoint(TEST_USER.id);

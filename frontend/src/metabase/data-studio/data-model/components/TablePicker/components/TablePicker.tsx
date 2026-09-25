@@ -4,7 +4,6 @@ import { usePrevious } from "react-use";
 import { t } from "ttag";
 
 import { useDebouncedValue } from "metabase/common/hooks/use-debounced-value";
-import { SEARCH_DEBOUNCE_DURATION } from "metabase/lib/constants";
 import { PLUGIN_LIBRARY } from "metabase/plugins";
 import {
   Badge,
@@ -19,6 +18,7 @@ import {
   Tooltip,
   rem,
 } from "metabase/ui";
+import { SEARCH_DEBOUNCE_DURATION } from "metabase/utils/constants";
 
 import { useSelection } from "../../../pages/DataModel/contexts/SelectionContext";
 import type { RouteParams } from "../../../pages/DataModel/types";
@@ -55,6 +55,7 @@ export function TablePicker({
     ownerEmail: null,
     ownerUserId: null,
     unusedOnly: null,
+    publishedOnly: null,
   });
   const [isOpen, { toggle, close }] = useDisclosure();
   const filtersCount = getFiltersCount(filters);
@@ -115,7 +116,7 @@ export function TablePicker({
 
                     {filtersCount > 0 && (
                       <Badge
-                        bg="brand"
+                        bg="core-brand"
                         circle
                         size="8"
                         pos="absolute"
@@ -133,6 +134,7 @@ export function TablePicker({
           <Popover.Dropdown>
             <FilterPopover
               filters={filters}
+              isLibraryEnabled={isLibraryEnabled}
               onSubmit={(newFilters) => {
                 setFilters(newFilters);
                 close();

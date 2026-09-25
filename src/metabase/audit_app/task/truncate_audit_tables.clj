@@ -25,6 +25,7 @@
      {:delete-from (keyword table-name)
       :where [:in
               :id
+              ^:allow-subquery
               {:select [:id]
                :from (keyword table-name)
                :where [:<=
@@ -59,7 +60,7 @@
                   (log/infof "%s cleanup successful, %d rows were deleted" table-name total-rows-deleted)
                   (log/infof "%s cleanup successful, no rows were deleted" table-name)))))
           (catch Throwable e
-            (log/errorf e "%s cleanup failed" table-name)))))))
+            (log/errorf "%s cleanup failed: %s" table-name (ex-message e))))))))
 
 (defenterprise audit-models-to-truncate
   "List of models to truncate. OSS implementation only truncates `query_execution` table."

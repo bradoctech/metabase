@@ -5,7 +5,10 @@
    [metabase.permissions.models.collection-permission-graph-revision :as collection-permission-graph-revision]
    [metabase.permissions.util :as perms.u]
    [metabase.test :as mt]
+   [metabase.test.fixtures :as fixtures]
    [toucan2.core :as t2]))
+
+(use-fixtures :once (fixtures/initialize :db))
 
 (def ^:private valid-paths
   [;; execution permissions
@@ -163,7 +166,6 @@
               "/download/limited/"
               "/download/db/1/schema/PUBLIC/table/1/query/"
               "/download/db/1/schema/PUBLIC/table/1/query/segmented/"]}]
-
       (testing reason
         (doseq [path paths]
           (testing (str "\n" (pr-str path))
@@ -242,7 +244,6 @@
               "Should set before to empty map")
           (is (= {} (:after latest-revision))
               "Should set after to empty map")))))
-
   (testing "increment-implicit-perms-revision! should do nothing when no current user is set"
     (let [initial-count (t2/count :model/CollectionPermissionGraphRevision)
           remark "Test remark without user"]
@@ -251,7 +252,6 @@
       (let [final-count (t2/count :model/CollectionPermissionGraphRevision)]
         (is (= initial-count final-count)
             "Should not insert any revision record when no current user is set"))))
-
   (testing "increment-implicit-perms-revision! should increment ID correctly"
     (let [initial-latest-id (collection-permission-graph-revision/latest-id)
           remark "Test ID increment"]

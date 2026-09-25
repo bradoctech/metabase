@@ -40,7 +40,6 @@
                                                       :database (mt/id)}}]
                       (mt/user-http-request :lucky :post "transform"
                                             transform-payload)))]
-
             (testing "without any feature flags"
               (mt/with-premium-features #{}
                 (testing "creating python transform without any features fails"
@@ -55,7 +54,6 @@
                                                          :schema   (get-test-schema)
                                                          :name     "gadget_products"
                                                          :database (mt/id)}}))))))
-
             (testing "with only transforms-basic feature flag (no transforms-python)"
               (mt/with-premium-features #{:transforms-basic}
                 (testing "creating python transform without transforms-python feature fails"
@@ -70,7 +68,6 @@
                                                          :schema   (get-test-schema)
                                                          :name     "gadget_products"
                                                          :database (mt/id)}}))))))
-
             (testing "with transforms-python feature flag"
               (mt/with-premium-features #{:transforms-basic :transforms-python}
                 (with-transform-cleanup! [table-name "gadget_products"]
@@ -204,8 +201,14 @@
       Closeable
       (close [_]
         (reset! stopped? true)
-        (future-cancel fut)
-        (assert (not= :timeout (try (deref fut 1000 :timeout) (catch Throwable _))) "Observation thread did not exit!")))))
+        ;; Join instead of cancelling: interrupting does not abort an in-flight HTTP request, and cancelling
+        ;; makes deref throw CancellationException immediately, so close would return while a poll is still
+        ;; running. That poll then lands after the transform is cleaned up and fails the enclosing test with
+        ;; an unrelated 404.
+        (let [exited? (not= :timeout (try (deref fut 5000 :timeout) (catch Throwable _ nil)))]
+          (when-not exited?
+            (future-cancel fut))
+          (assert exited? "Observation thread did not exit!"))))))
 
 (deftest python-transform-logging-test
   (mt/with-premium-features #{:transforms-basic}
@@ -215,7 +218,6 @@
                            (for [s program] (str "  " s))
                            ["  return pd.DataFrame({'x': [42]})"])
                    (str/join "\n")))
-
             (create-transform [{:keys [program]} target]
               {:post [(integer? %)]}
               (:id (mt/user-http-request :crowberto :post 200 "transform"
@@ -225,7 +227,6 @@
                                                    :source-database (mt/id)
                                                    :source-tables   [(transforms.tu/default-source-table-entry)]}
                                           :target (assoc target :database (mt/id))})))
-
             (block-on-run [{:keys [expect-status]} target transform-id]
               (try
                 (transforms.tu/test-run transform-id)
@@ -235,7 +236,6 @@
                     (throw e))))
               (when (= :succeeded expect-status)
                 (transforms.tu/wait-for-table (:name target) 5000)))
-
             (run-scenario [scenario schema]
               (with-redefs [transforms-python.execute/python-message-loop-sleep-duration (Duration/ofMillis fast-log-polling-ms)
                             transforms-python.base/transfer-file-to-db                   (if-some [e (:writeback-ex scenario)]
@@ -355,7 +355,6 @@
                                             :source-database (mt/id)
                                             :source-tables   [(transforms.tu/source-table-entry "transforms_customers" (mt/id :transforms_customers))]}
                                    :target (assoc target :database (mt/id))}))
-
           ;; using clojure-ey coordination with promises (I know j.u.c could be better here)
           ;; goal is blocking at the right point during the run so that we can test the cancellation behaviour
           ;; for a particular stage during the run or area of interest (e.g. during a table copy out to shared storage)
@@ -363,7 +362,6 @@
           (await-signal [wait-signal]
             (when-not (deref wait-signal 5000 nil)
               (throw (ex-info "Expected delivery of wait signal within a reasonable amount of time" {}))))
-
           (rf-proxy [ready-signal
                      wait-signal
                      rf]
@@ -374,7 +372,6 @@
                (deliver ready-signal true)
                (await-signal wait-signal)
                (rf w e))))
-
           (blocking-redefs [{:keys [block]} ready-signal wait-signal]
             (case block
               :read
@@ -392,7 +389,6 @@
                    (await-signal wait-signal)
                    (apply f args))})
               nil))
-
           (run-scenario [{:keys [expect-script] :as scenario} target]
             (let [ready-signal    (promise)                 ; test blocks: until the run is ready to be cancelled
                   wait-signal     (promise)                 ; run blocks:  until the test has cancelled
@@ -427,7 +423,6 @@
                             last-run   (get-last-run transform-id)]
                         {:messages     @message-observer
                          :last-run     last-run})))))))]
-
     (let [blocking-script
           ["import time"
            "import pandas as pd"
@@ -463,7 +458,6 @@
             :expect-script true
             :expect-write  true                             ; note: the cancellation signal is currently ignored during the write phase
             :expect-status :canceled}]]
-
       (doseq [{:keys [desc expect-status expect-script expect-write] :as scenario} scenarios]
         (mt/test-drivers (-> (mt/normal-drivers-with-feature :transforms/python)
                              ; these drivers cause timing issues, could be fixed if we change timeout / time variables in test
@@ -480,7 +474,6 @@
                         (let [scenario-result (run-scenario scenario target)
                               {:keys [messages last-run]} scenario-result]
                           (is (= (name expect-status) (:status last-run)))
-
                           (when (some? expect-script)
                             (if expect-script
                               (testing "script should have started"
@@ -488,11 +481,9 @@
                               (testing "script should not have started"
                                 (is (not-any? #(str/includes? % "script started") messages))
                                 (is (not (str/includes? (str (:message last-run)) "script started"))))))
-
                           (when (some? expect-write)
                             (testing "table existence"
                               (is (= expect-write (driver/table-exists? driver/*driver* (mt/db) target)))))))))
-
                   ; todo We have not yet covered the case where we rerun the same transform while there might be some hangover.
                   ;      Cancellation addresses the transform and not the run, there is shared mutable state and races on it are possible
                   (testing "the runner is not blocked for a new run"
@@ -522,7 +513,6 @@
             (with-transform-cleanup! [{table-name :name :as target} {:type   "table"
                                                                      :schema schema
                                                                      :name   "schema_change_test"}]
-
               (let [initial-transform {:name   "Schema Change Integration Test"
                                        :source {:type            "python"
                                                 :source-database (mt/id)
@@ -534,13 +524,11 @@
                                        :target (assoc target :database (mt/id))}
                     ;; Create initial transform via API
                     {transform-id :id} (mt/user-http-request :crowberto :post 200 "transform" initial-transform)]
-
                 ;; Run initial transform and validate
                 (transforms.tu/test-run transform-id)
                 (transforms.tu/wait-for-table table-name 10000)
                 (let [initial-rows (transforms.tu/table-rows table-name)]
                   (is (= [["Alice" 25] ["Bob" 30]] initial-rows) "Initial data should be Alice and Bob with ages"))
-
                 ;; Update transform with different schema via API endpoint
                 (let [updated-transform (assoc initial-transform
                                                :source {:type            "python"
@@ -553,15 +541,15 @@
                       update-response (mt/user-http-request :crowberto :put 200 (format "transform/%d" transform-id)
                                                             updated-transform)]
                   (is (some? update-response) "Transform update should succeed"))
-
                 ;; Run updated transform and validate schema change
                 (transforms.tu/test-run transform-id)
-                (transforms.tu/wait-for-transform-completion transform-id 10000)
-
+                ;; test-run returns immediately for a rerun (:table is already set), so this wait
+                ;; covers the whole second execution. 10s was flaky on Redshift (GDGT-2818).
+                (transforms.tu/wait-for-transform-completion transform-id 30000)
                 ;; Sync runs after succeed-started-run! and activates new fields
                 ;; before retiring old ones (non-transactional). Waiting for "age"
                 ;; to be deactivated guarantees "friend" is already active too.
-                (transforms.tu/wait-for-field-inactive table-name "age" 10000)
+                (transforms.tu/wait-for-field-inactive table-name "age" 30000)
                 (let [updated-rows (transforms.tu/table-rows table-name)]
                   (is (= [["Alice" "Bob"] ["Bob" "Alice"]] updated-rows)
                       "Updated data should show Alice/Bob with friends instead of ages"))))))))))
@@ -589,7 +577,6 @@
               (testing "Transform is created successfully"
                 (is (integer? (:id response)))
                 (is (= "python" (:source_type response))))
-
               ;; currently not allowed and used on UI so we're still converting this back to integer
               #_(testing "Source tables are preserved in response"
                   (is (map? (get-in response [:source :source-tables :input])))

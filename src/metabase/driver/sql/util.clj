@@ -78,7 +78,7 @@
 
       :else
       (do
-        (log/errorf "Don't know how to alias %s, expected an h2x/identifier" (pr-str col))
+        (log/errorf "Don't know how to alias %s, expected an h2x/identifier" (class col))
         [col col]))))
 
 (defn select-clause-deduplicate-aliases
@@ -104,6 +104,7 @@
         :else
         (recur (conj already-seen alias) (conj acc [col alias]) more)))))
 
+;;; TODO (Cam 2026-04-27) -- rename this to `escape-single-quotes` to make it clearer what we're escaping
 (defn escape-sql
   "Escape single quotes in a SQL string. `escape-style` is either `:ansi` (escape a single quote with two single quotes)
   or `:backslashes` (escape a single quote with a backslash).
@@ -149,7 +150,7 @@
   This function fixes that by removing whitespace from matching double-curly brace substrings."
   [sql]
   (when (string? sql)
-    (let [rgx #"\{\s*\{\s*[^\}]+\s*\}\s*\}"]
+    (let [rgx #"\{\s*\{[^\{\}]+\}\s*\}"]
       (str/replace sql rgx (fn [match] (str/replace match #"\s*" ""))))))
 
 (def dialects

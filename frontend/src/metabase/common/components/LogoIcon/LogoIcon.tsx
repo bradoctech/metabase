@@ -1,7 +1,7 @@
-import { getSubpathSafeUrl } from "metabase/lib/urls";
+import { getSubpathSafeUrl } from "metabase/urls";
 import { PLUGIN_LOGO_ICON_COMPONENTS } from "metabase/plugins";
 
-/** Served from `resources/frontend_client/app/assets/img/logo.svg` */
+/** Served from `resources/frontend_client/app/assets/img/logo.svg` (brasão SP) */
 const RESOURCE_LOGO_PATH = "app/assets/img/logo.svg";
 
 interface LogoIconProps {

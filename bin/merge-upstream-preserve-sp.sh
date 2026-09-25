@@ -189,8 +189,9 @@ should_restore_path() {
       ;;
   esac
 
-  # Other fork-diverged paths: restore SP (legacy 61 behavior) unless manual.
-  is_listed "$path" "$LIST_FILE" && return 0
+  # Do NOT restore every BASE…SP drifted path. That reverts legitimate upstream
+  # upgrades (61.x: honey_sql_2/typed? private broke honeysql_guard boot).
+  # Only curated restore-ours + safe asset/docs patterns above.
   return 1
 }
 
@@ -239,7 +240,8 @@ cmd_restore() {
     fi
   done < <(git diff --name-only --diff-filter=U 2>/dev/null || true)
 
-  git add -A 2>/dev/null || true
+  # Do not `git add -A` — that can stage unresolved dual/behavior files that
+  # still contain conflict markers. Only paths restored above were staged.
   echo "    Restored ~$restored paths; skipped $skipped_manual manual paths"
   echo "    Unmerged remaining: $(git diff --name-only --diff-filter=U 2>/dev/null | wc -l)"
 }

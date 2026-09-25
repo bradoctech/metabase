@@ -1,3 +1,8 @@
+# Catch-all filter — emits the full changed-files list as `all_changed_files`
+# so create-test-plan in run-tests.yml can reuse dorny's diff.
+all_changed:
+  - "**"
+
 default: &default
   - "locales/**"
   - "bin/**/!(*.md)"
@@ -77,18 +82,30 @@ frontend_loki_ci: &frontend_loki_ci
   - ".loki/**"
   - ".storybook/**"
 
+frontend_unit_infra: &frontend_unit_infra
+  - *frontend_configs
+  - *frontend_ci
+  - "jest.config.js"
+  - "jest.tz.unit.conf.json"
+  - "frontend/test/**"
+  - "frontend/**/__mocks__/**"
+
+frontend_loki_infra: &frontend_loki_infra
+  - *frontend_configs
+  - *shared_ci
+  - *frontend_loki_ci
+
+# e2e harness/support code (commands, support file, runner). Not in the
+# instrumented bundle, so it maps to no covered module — a change here forces a
+# full e2e run (see create-test-plan / e2eInfraTouched).
+e2e_infra: &e2e_infra
+  - *shared_e2e
+
 backend_ci: &backend_ci
   - *shared_ci
   - ".github/actions/test-driver/**"
   - ".github/workflows/backend.yml"
   - ".github/workflows/drivers.yml"
-
-backend_presto_kerberos:
-  - "**/presto_jdbc/**"
-  - "**/presto-jdbc/**" # the driver module has a hyphen. underscores are classpaths
-  - "**/presto_jdbc.clj"
-  - "**/presto_jdbc_test.clj"
-  - ".github/workflows/presto-kerberos-integration-test.yml"
 
 backend_sources: &backend_sources
   - *shared_sources
@@ -118,6 +135,12 @@ sources: &sources
   - *shared_sources
   - *frontend_sources
   - *backend_sources
+
+custom_viz_all:
+  - ".github/workflows/run-tests.yml"
+  - ".github/workflows/frontend.yml"
+  - ".github/actions/prepare-node-bun/**"
+  - "enterprise/frontend/src/custom-viz/**"
 
 e2e_ci: &e2e_ci
   - *shared_ci
@@ -154,8 +177,10 @@ embedding_sdk_host_sample_apps:
   - "e2e/test-host-app/**/*.cy.*.{js,ts}"
 
 snowplow: &snowplow
-  - ".github/workflows/snowplow.yml"
+  - ".github/workflows/lint.yml"
   - "snowplow/**"
+  - "bin/lint-snowplow-schemas.bb"
+  - "bin/lint-snowplow-schemas-test.bb"
 
 e2e_all:
   - *default
@@ -169,6 +194,9 @@ documentation:
   - "docs/**"
   - "**/*.md"
 
+docs:
+  - "docs/**"
+
 embedding_documentation:
   - ".typedoc/**"
   - "docs/embedding/**"
@@ -178,7 +206,7 @@ yaml:
   - "**/*.yaml"
 
 codeql:
-  - ".github/workflows/codeql.yml"
+  - ".github/workflows/lint.yml"
   - "frontend/src/**"
   - "enterprise/frontend/src/**"
 
@@ -186,13 +214,8 @@ i18n:
   - *default
   - ".github/actions/prepare-frontend/**"
   - ".github/actions/prepare-backend/**"
-  - ".github/workflows/i18n.yml"
+  - ".github/workflows/lint.yml"
   - *sources
-
-visualizations:
-  - "frontend/src/metabase/visualizations/**"
-  - "frontend/src/metabase/static-viz/**"
-  - "src/metabase/pulse/**"
 
 cljs:
   - *shared_sources
@@ -205,7 +228,7 @@ serialization_baseline:
   - "test_resources/serialization_baseline/**"
 
 openapi:
-  - ".github/workflows/openapi.yml"
+  - ".github/workflows/lint.yml"
   - "src/metabase/api/**"
   - "src/metabase/api_routes/**"
   - "src/metabase/*_rest/api.clj"

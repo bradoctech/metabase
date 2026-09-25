@@ -4,12 +4,11 @@ import { t } from "ttag";
 import _ from "underscore";
 
 import Styles from "metabase/css/core/index.css";
-import { ALTKEY, METAKEY } from "metabase/lib/browser";
 import { shortcuts as ALL_SHORTCUTS } from "metabase/palette/shortcuts";
 import type { ShortcutDef, ShortcutGroup } from "metabase/palette/types";
 import {
   Group,
-  Kbd,
+  KeyboardShortcut,
   Modal,
   type ModalProps,
   ScrollArea,
@@ -97,27 +96,40 @@ export const PaletteShortcutsModal = ({
                       {context}
                     </Text>
                   ) : null,
-                  ...shortcutContexts[context].map((shortcut: ShortcutDef) => (
-                    <Group
-                      key={shortcut.id}
-                      justify="space-between"
-                      style={{ borderRadius: "0.5rem" }}
-                      p="sm"
-                      my="sm"
-                    >
-                      <Text>{shortcut.name}</Text>
-                      <Group gap="0.25rem">
-                        {(shortcut.shortcutDisplay || shortcut.shortcut).map(
-                          (shortcutKeys) => (
-                            <Shortcut
-                              key={shortcutKeys}
-                              shortcut={shortcutKeys}
-                            />
-                          ),
-                        )}
+                  ...shortcutContexts[context].map((shortcut: ShortcutDef) => {
+                    const keysList =
+                      shortcut.shortcutDisplay || shortcut.shortcut;
+                    return (
+                      <Group
+                        key={shortcut.id}
+                        justify="space-between"
+                        style={{ borderRadius: "0.5rem" }}
+                        p="sm"
+                        my="sm"
+                      >
+                        <Text>{shortcut.name}</Text>
+                        <Group gap="sm" align="baseline">
+                          {keysList.map((shortcutKeys, index) => (
+                            <Group
+                              key={`${index}-${shortcutKeys}`}
+                              gap={2}
+                              align="baseline"
+                              wrap="nowrap"
+                            >
+                              {shortcutKeys === ELLIPSIS ? (
+                                <Text>{ELLIPSIS}</Text>
+                              ) : (
+                                <KeyboardShortcut shortcut={shortcutKeys} />
+                              )}
+                              {index < keysList.length - 1 && (
+                                <Text c="text-secondary">,</Text>
+                              )}
+                            </Group>
+                          ))}
+                        </Group>
                       </Group>
-                    </Group>
-                  )),
+                    );
+                  }),
                 ]);
               })()}
             </ScrollArea>
@@ -126,25 +138,4 @@ export const PaletteShortcutsModal = ({
       </Tabs>
     </Modal>
   );
-};
-
-const Shortcut = (props: { shortcut: string }) => {
-  if (props.shortcut === ELLIPSIS) {
-    return props.shortcut;
-  }
-
-  const string = props.shortcut
-    .replace("$mod", METAKEY)
-    .replace("Alt", ALTKEY)
-    .replace(" ", " > ")
-    .replace(/\+/g, " + ");
-  const result = string.split(" ").map((x) => {
-    if (x === "+" || x === ">") {
-      return x;
-    }
-
-    return <Kbd key={x}>{x}</Kbd>;
-  });
-
-  return <Group gap="0.5rem">{result}</Group>;
 };

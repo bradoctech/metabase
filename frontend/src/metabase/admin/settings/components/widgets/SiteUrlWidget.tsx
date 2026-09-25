@@ -4,8 +4,8 @@ import { t } from "ttag";
 import { useAdminSetting } from "metabase/api/utils";
 import { InputWithSelectPrefix } from "metabase/common/components/InputWithSelectPrefix";
 import { useHasTokenFeature } from "metabase/common/hooks";
-import type { GenericErrorResponse } from "metabase/lib/errors";
 import { Box, Text } from "metabase/ui";
+import type { GenericErrorResponse } from "metabase/utils/errors";
 
 import { SettingHeader } from "../SettingHeader";
 
@@ -57,7 +57,7 @@ export function SiteUrlWidget() {
           placeholder={"http://example.com"}
         />
         {errorMessage && (
-          <Text size="sm" color="danger" mt="sm">
+          <Text size="sm" color="feedback-negative" mt="sm">
             {errorMessage}
           </Text>
         )}

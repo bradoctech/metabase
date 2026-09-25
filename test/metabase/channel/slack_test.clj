@@ -85,7 +85,6 @@
 (deftest conversations-list-test
   (testing "conversations-list"
     (test-auth! conversations-endpoint slack/conversations-list)
-
     (testing ":private_channel flag determines the \"types\" param sent to slack"
       (are [opts conversation-types]
            (let [request (atom nil)]
@@ -102,7 +101,6 @@
         {}                        "public_channel"
         {:private-channels false} "public_channel"
         {:private-channels true}  "public_channel,private_channel"))
-
     (testing "should be able to fetch channels and paginate"
       (http-fake/with-fake-routes {conversations-endpoint (comp mock-200-response mock-conversations-response-body)}
         (let [expected-result (map slack/channel-transform
@@ -148,7 +146,6 @@
 (deftest users-list-test
   (testing "users-list"
     (test-auth! users-endpoint slack/users-list)
-
     (testing "should be able to fetch list of users and page"
       (http-fake/with-fake-routes {users-endpoint (comp mock-200-response mock-users-response-body)}
         (let [expected-result (map slack/user-transform
@@ -181,6 +178,134 @@
           (is (= {:url "https://files.slack.com/files-pri/DDDDDDDDD-EEEEEEEEE/wow.gif"
                   :id "DDDDDDDDD-EEEEEEEEE"}
                  (slack/upload-file! image-bytes filename))))))))
+
+(deftest upload-file-to-channel!-test
+  (testing "upload-file-to-channel! shares the file into the given channel via channel_id"
+    (let [file-bytes   (.getBytes "fake-pdf")
+          filename     "dashboard.pdf"
+          upload-url   "https://files.slack.com/upload/v1/CwABAAAAWgoAAZnBg"
+          complete-req (atom nil)
+          join-req     (atom nil)
+          fake-routes  {#"^https://slack.com/api/files\.getUploadURLExternal.*"
+                        (fn [_] (mock-200-response {:ok         true
+                                                    :upload_url upload-url
+                                                    :file_id    "DDDDDDDDD-EEEEEEEEE"}))
+
+                        upload-url
+                        (fn [_] (mock-200-response "OK"))
+
+                        #"^https://slack.com/api/files\.completeUploadExternal.*"
+                        (fn [req]
+                          (reset! complete-req req)
+                          (mock-200-response (slurp "./test_resources/slack_upload_file_response.json")))}]
+      (http-fake/with-fake-routes
+        (assoc fake-routes
+               #"^https://slack.com/api/conversations\.join.*"
+               (fn [req]
+                 (reset! join-req req)
+                 (mock-200-response (slurp "./test_resources/slack_conversations_join_response.json"))))
+        (mt/with-temporary-setting-values [slack-app-token "test-token"]
+          (is (= "https://files.slack.com/files-pri/DDDDDDDDD-EEEEEEEEE/wow.gif"
+                 (slack/upload-file-to-channel! file-bytes filename "C0CHANNEL" "*Aviary KPIs*")))
+          (testing "joins the channel first (file sharing requires membership)"
+            (is (= "C0CHANNEL"
+                   (:channel (parse-query-string (:query-string @join-req))))))
+          (testing "shares the file into the channel with its caption as the message comment"
+            (let [params (parse-query-string (:query-string @complete-req))]
+              (is (= "C0CHANNEL" (:channel_id params)))
+              (is (= "*Aviary KPIs*" (:initial_comment params))))))))))
+
+(deftest upload-file-to-channel!-user-dm-test
+  (testing "upload-file-to-channel! opens a DM and shares the file there when the target is a user ID"
+    ;; `files.completeUploadExternal` rejects user IDs (`U…`; its `channel_id` must match `^[CGDZ][A-Z0-9]{8,}$`), so
+    ;; a file shared with a user must target the DM channel (`D…`). We resolve it via `chat.postMessage` (which needs
+    ;; only `chat:write`) rather than `conversations.open` (which needs `im:write`).
+    (let [file-bytes   (.getBytes "fake-pdf")
+          filename     "dashboard.pdf"
+          upload-url   "https://files.slack.com/upload/v1/CwABAAAAWgoAAZnBg"
+          complete-req (atom nil)
+          post-req     (atom nil)
+          open-called? (atom false)
+          join-called? (atom false)
+          fake-routes  {#"^https://slack.com/api/chat\.postMessage.*"
+                        (fn [req]
+                          (reset! post-req req)
+                          (mock-200-response {:ok true :channel "D0DM45678"}))
+
+                        #"^https://slack.com/api/conversations\.open.*"
+                        (fn [_] (reset! open-called? true) (mock-200-response {:ok true :channel {:id "D0DM45678"}}))
+
+                        #"^https://slack.com/api/conversations\.join.*"
+                        (fn [_] (reset! join-called? true)
+                          (mock-200-response (slurp "./test_resources/slack_conversations_join_response.json")))
+
+                        #"^https://slack.com/api/files\.getUploadURLExternal.*"
+                        (fn [_] (mock-200-response {:ok         true
+                                                    :upload_url upload-url
+                                                    :file_id    "DDDDDDDDD-EEEEEEEEE"}))
+
+                        upload-url
+                        (fn [_] (mock-200-response "OK"))
+
+                        #"^https://slack.com/api/files\.completeUploadExternal.*"
+                        (fn [req]
+                          (reset! complete-req req)
+                          (mock-200-response (slurp "./test_resources/slack_upload_file_response.json")))}]
+      (http-fake/with-fake-routes fake-routes
+        (mt/with-temporary-setting-values [slack-app-token "test-token"]
+          (is (= "https://files.slack.com/files-pri/DDDDDDDDD-EEEEEEEEE/wow.gif"
+                 (slack/upload-file-to-channel! file-bytes filename "U0USER123" "*Aviary KPIs*")))
+          (testing "opens the DM by posting the caption to the user ID via chat.postMessage"
+            (let [b    (:body @post-req)
+                  body (if (string? b) b (slurp b))]
+              (is (re-find #"channel=U0USER123" body))
+              (is (re-find #"Aviary" body))))
+          (testing "uses neither conversations.open (needs im:write) nor conversations.join (DMs need no membership)"
+            (is (false? @open-called?))
+            (is (false? @join-called?)))
+          (testing "shares the file into the resolved DM channel, not the raw user ID"
+            (let [params (parse-query-string (:query-string @complete-req))]
+              (is (= "D0DM45678" (:channel_id params)))
+              (testing "without a duplicate initial_comment (the caption was the chat.postMessage)"
+                (is (nil? (:initial_comment params)))))))))))
+
+(deftest upload-file-to-channel!-resolves-display-name-test
+  (testing "a legacy display name (\"@bob\") with no stored ID resolves to its user ID via the cache, then DMs the user"
+    ;; Subscriptions created before channel-ID storage (GDGT-232) fall back to the display-name `:value`; "@bob" must
+    ;; resolve to its `U…` ID through find-cached-slack-channel-or-username before the user-vs-channel routing.
+    (let [file-bytes   (.getBytes "fake-pdf")
+          filename     "dashboard.pdf"
+          upload-url   "https://files.slack.com/upload/v1/CwABAAAAWgoAAZnBg"
+          complete-req (atom nil)
+          post-req     (atom nil)
+          fake-routes  {#"^https://slack.com/api/chat\.postMessage.*"
+                        (fn [req]
+                          (reset! post-req req)
+                          (mock-200-response {:ok true :channel "D0BOBDM12"}))
+
+                        #"^https://slack.com/api/files\.getUploadURLExternal.*"
+                        (fn [_] (mock-200-response {:ok true :upload_url upload-url :file_id "DDDDDDDDD-EEEEEEEEE"}))
+
+                        upload-url
+                        (fn [_] (mock-200-response "OK"))
+
+                        #"^https://slack.com/api/files\.completeUploadExternal.*"
+                        (fn [req]
+                          (reset! complete-req req)
+                          (mock-200-response (slurp "./test_resources/slack_upload_file_response.json")))}]
+      (http-fake/with-fake-routes fake-routes
+        (mt/with-temporary-setting-values [slack-app-token                     "test-token"
+                                           slack-cached-channels-and-usernames {:channels [{:display-name "@bob"
+                                                                                            :name         "bob"
+                                                                                            :id           "U0BOB1234"
+                                                                                            :type         "user"}]}]
+          (slack/upload-file-to-channel! file-bytes filename "@bob" "*Aviary KPIs*")
+          (testing "posts the DM opener to the resolved user ID, not the raw \"@bob\""
+            (let [b    (:body @post-req)
+                  body (if (string? b) b (slurp b))]
+              (is (re-find #"channel=U0BOB1234" body))))
+          (testing "shares the file into the resulting DM channel"
+            (is (= "D0BOBDM12" (:channel_id (parse-query-string (:query-string @complete-req)))))))))))
 
 (deftest post-chat-message!-test
   (testing "post-chat-message!"
@@ -216,7 +341,6 @@
                   (is (= (t2/select-fn-set :email :model/User :is_superuser true)
                          (set (keys recipient->emails)))))
                 (is (false? (channel.settings/slack-token-valid?))))))
-
           (testing "If `slack-token-valid?` is already false, no email should be sent"
             (mt/reset-inbox!)
             (try
@@ -224,7 +348,6 @@
               (catch Throwable e
                 (is (= :slack/invalid-token (:error-type (ex-data e))))
                 (is (= {} (mt/summarize-multipart-email #"Your Slack connection stopped working.")))))))
-
         (testing "No email is sent during token validation checks, even if `slack-token-valid?` is currently true"
           (mt/with-temporary-setting-values [slack-token-valid? true]
             (http-fake/with-fake-routes {conversations-endpoint (fn [_] (mock-200-response {:ok false, :error "account_inactive"}))}

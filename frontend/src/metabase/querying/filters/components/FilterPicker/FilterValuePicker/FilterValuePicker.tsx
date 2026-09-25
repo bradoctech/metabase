@@ -7,7 +7,6 @@ import {
   useGetRemappedFieldValueQuery,
   useSearchFieldValuesQuery,
 } from "metabase/api";
-import { parseNumber } from "metabase/lib/number";
 import {
   FieldValuePicker,
   type UseGetFieldValuesArgs,
@@ -16,6 +15,7 @@ import {
 } from "metabase/querying/common/components/FieldValuePicker";
 import { getChainFilterConstraints } from "metabase/querying/filters/utils/chain-filter-constraints";
 import type { ComboboxProps } from "metabase/ui";
+import { parseNumber } from "metabase/utils/number";
 import * as Lib from "metabase-lib";
 
 import {

@@ -1,6 +1,6 @@
 import type { EChartsType } from "echarts/core";
 import {
-  type MouseEvent as ReactMouseEvent,
+  type MouseEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -10,12 +10,11 @@ import {
 import React from "react";
 import { useSet } from "react-use";
 
-import { isWebkit } from "metabase/lib/browser";
+import { isWebkit } from "metabase/utils/browser";
 import { ChartRenderingErrorBoundary } from "metabase/visualizations/components/ChartRenderingErrorBoundary";
 import { DataPointsVisiblePopover } from "metabase/visualizations/components/DataPointsVisiblePopover/DataPointsVisiblePopover";
 import { ResponsiveEChartsRenderer } from "metabase/visualizations/components/EChartsRenderer";
 import { LegendCaption } from "metabase/visualizations/components/legend/LegendCaption";
-// import { X_AXIS_DATA_KEY } from "metabase/visualizations/echarts/cartesian/constants/dataset";
 import { getLegendItems } from "metabase/visualizations/echarts/cartesian/model/legend";
 import { getOriginalAxisLabel } from "metabase/visualizations/echarts/cartesian/option/utils";
 import {
@@ -28,7 +27,6 @@ import {
   CartesianChartRoot,
 } from "metabase/visualizations/visualizations/CartesianChart/CartesianChart.styled";
 import { useChartEvents } from "metabase/visualizations/visualizations/CartesianChart/use-chart-events";
-// import type { RowValue } from "metabase-types/api";
 
 import { useChartDebug } from "./use-chart-debug";
 import { useModelsAndOption } from "./use-models-and-option";
@@ -94,7 +92,11 @@ function CartesianChartInner(props: VisualizationProps) {
   useChartDebug({ isQueryBuilder, rawSeries, option, chartModel });
 
   const chartRef = useRef<EChartsType>();
-  const [chartDom, setChartDom] = useState<HTMLElement | null>(null);
+  // Mirror the ECharts instance into state so that effects depending on it
+  // (e.g. brush setup) re-run once it becomes available. With the lazily loaded
+  // EChartsRenderer, `onInit` fires after the surrounding effects have already
+  // run, and a ref assignment alone would not re-trigger them.
+  const [chartInstance, setChartInstance] = useState<EChartsType>();
 
   const description = settings["card.description"];
 
@@ -106,7 +108,9 @@ function CartesianChartInner(props: VisualizationProps) {
 
   const handleInit = useCallback((chart: EChartsType) => {
     chartRef.current = chart;
-    setChartDom(chart.getDom());
+    setChartInstance(chart);
+
+    // HACK: clip paths cause glitches in Safari on multiseries line charts on dashboards (metabase#51383)
     if (isWebkit()) {
       chartRef.current.on("finished", () => {
         const svg = containerRef.current?.querySelector("svg");
@@ -119,7 +123,7 @@ function CartesianChartInner(props: VisualizationProps) {
   }, []);
 
   const handleToggleSeriesVisibility = useCallback(
-    (event: ReactMouseEvent, seriesIndex: number) => {
+    (event: MouseEvent, seriesIndex: number) => {
       const seriesModel = chartModel.seriesModels[seriesIndex];
       const willShowSeries = hiddenSeries.has(seriesModel.dataKey);
       const hasMoreVisibleSeries =
@@ -139,6 +143,7 @@ function CartesianChartInner(props: VisualizationProps) {
     option,
     renderingContext,
     props,
+    chartInstance,
   );
 
   const [axisLabelTooltip, setAxisLabelTooltip] = useState<{
@@ -148,12 +153,12 @@ function CartesianChartInner(props: VisualizationProps) {
   } | null>(null);
 
   useEffect(() => {
-    const el = chartDom;
+    const el = chartInstance?.getDom();
     if (!el) {
       return;
     }
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleMouseMove = (e: globalThis.MouseEvent) => {
       const target = e.target as Element;
       const textEl =
         target.tagName === "text"
@@ -186,7 +191,7 @@ function CartesianChartInner(props: VisualizationProps) {
       el.removeEventListener("mousemove", handleMouseMove);
       el.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, [chartDom]);
+  }, [chartInstance]);
 
   const handleResize = useCallback((width: number, height: number) => {
     setChartSize({ width, height });
@@ -243,6 +248,7 @@ function CartesianChartInner(props: VisualizationProps) {
       >
         <ResponsiveEChartsRenderer
           ref={containerRef}
+          display={card.display}
           option={option}
           eventHandlers={eventHandlers}
           onResize={handleResize}

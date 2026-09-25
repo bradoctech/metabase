@@ -3,12 +3,12 @@ import type { MouseEvent } from "react";
 import { Fragment, useMemo } from "react";
 import { t } from "ttag";
 
-import { Ellipsified } from "metabase/common/components/Ellipsified";
 import { EmptyState } from "metabase/common/components/EmptyState";
 import CS from "metabase/css/core/index.css";
 import QueryBuilderS from "metabase/css/query_builder.module.css";
-import { displayNameForColumn, formatValue } from "metabase/lib/formatting";
-import { Box } from "metabase/ui";
+import { Box, Ellipsified } from "metabase/ui";
+import { displayNameForColumn } from "metabase/utils/formatting";
+import { formatValue } from "metabase/visualizations/lib/formatting";
 import type { ClickObject } from "metabase-lib";
 import { findColumnIndexesForColumnSettings } from "metabase-lib/v1/queries/utils/dataset";
 import { TYPE } from "metabase-lib/v1/types/constants";
@@ -25,7 +25,7 @@ import type {
 } from "metabase-types/api";
 
 import { ExpandableString } from "./ExpandableString";
-import { FitImage } from "./ObjectDetailsTable.styled";
+import S from "./ObjectDetailsTable.module.css";
 import type { OnVisualizationClickType } from "./types";
 
 export interface DetailsTableCellProps {
@@ -122,7 +122,16 @@ export function DetailsTableCell({
       </span>
       {isImage && (
         <div>
-          <FitImage src={value} alt={value} />
+          <Box
+            component="img"
+            className={S.fitImage}
+            src={value}
+            alt={value}
+            maw="100%"
+            mah="18rem"
+            my="md"
+            mx="auto"
+          />
         </div>
       )}
     </div>

@@ -1,22 +1,23 @@
 import { routerActions } from "react-router-redux";
 import { connectedReduxRedirect } from "redux-auth-wrapper/history3/redirect";
 
-import { getAdminPaths } from "metabase/admin/app/selectors";
-import { canAccessDataStudio } from "metabase/data-studio/selectors";
-import { isSameOrSiteUrlOrigin } from "metabase/lib/dom";
-import { MetabaseReduxContext } from "metabase/lib/redux";
+import { canAccessDataStudio } from "metabase/common/data-studio/selectors";
 import { PLUGIN_FEATURE_LEVEL_PERMISSIONS } from "metabase/plugins";
+import { metabaseReduxContext } from "metabase/redux";
+import type { State } from "metabase/redux/store";
+import { getAdminPaths } from "metabase/selectors/admin";
+import { getCanAccessOnboardingPage } from "metabase/selectors/onboarding";
 import { getSetting } from "metabase/selectors/settings";
-import type { State } from "metabase-types/store";
+import { getBasename } from "metabase/utils/basename";
+import { isSameOrSiteUrlOrigin } from "metabase/utils/dom";
 
-import { getCanAccessOnboardingPage } from "./home/selectors";
 import { getIsEmbeddingIframe } from "./selectors/embed";
 import { canAccessTransforms } from "./transforms/selectors";
 
 type Props = { children: React.ReactElement };
 
 /** Paths that are handled by the backend server, not the frontend SPA router. */
-export const BACKEND_ONLY_PATH_PREFIXES = ["/oauth/"];
+export const BACKEND_ONLY_PATH_PREFIXES = ["/oauth/", "/auth/sso/"];
 
 export const isBackendOnlyPath = (path: string): boolean =>
   BACKEND_ONLY_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
@@ -30,6 +31,33 @@ const getRedirectUrl = () => {
     : "/";
 };
 
+/**
+ * A redirect target's pathname arrives in one of two shapes: basename-relative
+ * (`/oauth/x`) — the convention for every SPA path, including the backend's
+ * login redirect (the server sits behind the prefix-stripping proxy and never
+ * sees the subpath) — or, parsed out of an absolute URL, already carrying the
+ * subpath (`/metabase/oauth/x`). Strip the basename so the SPA router (which
+ * prepends it itself) and prefix checks like `isBackendOnlyPath` both see a
+ * router path.
+ */
+export const toRouterPathname = (pathname: string) => {
+  const basename = getBasename();
+  return basename && pathname.startsWith(`${basename}/`)
+    ? pathname.slice(basename.length)
+    : pathname;
+};
+
+/**
+ * The inverse: join the basename back on for a full-page redirect, producing
+ * the browser-real URL. String-join, not URL resolution: a leading "/" is
+ * *root*-relative and would discard the basename from a URL base.
+ */
+export const toBrowserUrl = (path: string) =>
+  new URL(
+    `${getBasename()}/${path.replace(/^\//, "")}`,
+    window.location.origin,
+  );
+
 const MetabaseIsSetup = connectedReduxRedirect<Props, State>({
   // eslint-disable-next-line metabase/no-literal-metabase-strings -- Not a user facing string
   wrapperDisplayName: "MetabaseIsSetup",
@@ -37,7 +65,7 @@ const MetabaseIsSetup = connectedReduxRedirect<Props, State>({
   allowRedirectBack: false,
   authenticatedSelector: (state) => getSetting(state, "has-user-setup"),
   redirectAction: routerActions.replace,
-  context: MetabaseReduxContext,
+  context: metabaseReduxContext,
 });
 
 const AvailableInEmbedding = connectedReduxRedirect<Props, State>({
@@ -46,7 +74,7 @@ const AvailableInEmbedding = connectedReduxRedirect<Props, State>({
   allowRedirectBack: false,
   authenticatedSelector: (state) => !getIsEmbeddingIframe(state),
   redirectAction: routerActions.replace,
-  context: MetabaseReduxContext,
+  context: metabaseReduxContext,
 });
 
 const UserIsAuthenticated = connectedReduxRedirect<Props, State>({
@@ -54,7 +82,7 @@ const UserIsAuthenticated = connectedReduxRedirect<Props, State>({
   redirectPath: "/auth/login",
   authenticatedSelector: (state) => !!state.currentUser,
   redirectAction: routerActions.replace,
-  context: MetabaseReduxContext,
+  context: metabaseReduxContext,
 });
 
 const UserIsAdmin = connectedReduxRedirect<Props, State>({
@@ -64,7 +92,7 @@ const UserIsAdmin = connectedReduxRedirect<Props, State>({
   authenticatedSelector: (state) =>
     Boolean(state.currentUser && state.currentUser.is_superuser),
   redirectAction: routerActions.replace,
-  context: MetabaseReduxContext,
+  context: metabaseReduxContext,
 });
 
 const UserIsNotAuthenticated = connectedReduxRedirect<Props, State>({
@@ -78,16 +106,19 @@ const UserIsNotAuthenticated = connectedReduxRedirect<Props, State>({
     pathname: string;
     query?: Record<string, string>;
   }) => {
-    if (isBackendOnlyPath(location.pathname)) {
+    const pathname = toRouterPathname(location.pathname);
+    if (isBackendOnlyPath(pathname)) {
       const params = new URLSearchParams(location.query);
       const qs = params.toString();
-      const url = qs ? `${location.pathname}?${qs}` : location.pathname;
-      window.location.replace(url);
+      const path = qs ? `${pathname}?${qs}` : pathname;
+      // Absolute, basename-joined: a root-relative replace would drop the
+      // subpath when Metabase is hosted under one.
+      window.location.replace(toBrowserUrl(path).href);
       return routerActions.replace("/");
     }
-    return routerActions.replace(location);
+    return routerActions.replace({ ...location, pathname });
   },
-  context: MetabaseReduxContext,
+  context: metabaseReduxContext,
 });
 
 const UserCanAccessSettings = connectedReduxRedirect<Props, State>({
@@ -96,7 +127,7 @@ const UserCanAccessSettings = connectedReduxRedirect<Props, State>({
   allowRedirectBack: false,
   authenticatedSelector: (state) => (getAdminPaths(state)?.length ?? 0) > 0,
   redirectAction: routerActions.replace,
-  context: MetabaseReduxContext,
+  context: metabaseReduxContext,
 });
 
 const UserCanAccessOnboarding = connectedReduxRedirect<Props, State>({
@@ -105,7 +136,7 @@ const UserCanAccessOnboarding = connectedReduxRedirect<Props, State>({
   allowRedirectBack: false,
   authenticatedSelector: (state) => getCanAccessOnboardingPage(state),
   redirectAction: routerActions.replace,
-  context: MetabaseReduxContext,
+  context: metabaseReduxContext,
 });
 
 const UserCanAccessDataModel = connectedReduxRedirect<Props, State>({
@@ -115,7 +146,7 @@ const UserCanAccessDataModel = connectedReduxRedirect<Props, State>({
   authenticatedSelector: (state) =>
     PLUGIN_FEATURE_LEVEL_PERMISSIONS.canAccessDataModel(state),
   redirectAction: routerActions.replace,
-  context: MetabaseReduxContext,
+  context: metabaseReduxContext,
 });
 
 const UserCanAccessDataStudio = connectedReduxRedirect<Props, State>({
@@ -124,7 +155,7 @@ const UserCanAccessDataStudio = connectedReduxRedirect<Props, State>({
   allowRedirectBack: false,
   authenticatedSelector: (state) => canAccessDataStudio(state),
   redirectAction: routerActions.replace,
-  context: MetabaseReduxContext,
+  context: metabaseReduxContext,
 });
 
 const UserCanAccessTransforms = connectedReduxRedirect<Props, State>({
@@ -133,7 +164,7 @@ const UserCanAccessTransforms = connectedReduxRedirect<Props, State>({
   allowRedirectBack: false,
   authenticatedSelector: (state) => canAccessTransforms(state),
   redirectAction: routerActions.replace,
-  context: MetabaseReduxContext,
+  context: metabaseReduxContext,
 });
 
 export const IsAuthenticated = MetabaseIsSetup(

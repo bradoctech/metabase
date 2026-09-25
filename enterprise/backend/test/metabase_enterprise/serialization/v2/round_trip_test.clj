@@ -25,7 +25,7 @@
    [clojure.java.io :as io]
    [clojure.set :as set]
    [clojure.string :as str]
-   [clojure.test :refer [deftest is testing use-fixtures]]
+   [clojure.test :refer [deftest is testing]]
    [clojure.walk :as walk]
    [metabase-enterprise.serialization.v2.extract :as extract]
    [metabase-enterprise.serialization.v2.ingest :as ingest]
@@ -38,17 +38,11 @@
    [metabase.search.test-util :as search.tu]
    [metabase.test :as mt]
    [metabase.util.log :as log]
-   [metabase.util.yaml :as yaml]
-   [metabase.warehouses.models.database :as models.database])
+   [metabase.util.yaml :as yaml])
   (:import
    (java.io File)
    (java.nio.file Files Path StandardCopyOption)
    (java.nio.file.attribute FileAttribute)))
-
-#_{:clj-kondo/ignore [:metabase/validate-deftest]}
-(use-fixtures :each (fn [thunk]
-                      (mt/with-dynamic-fn-redefs [models.database/assert-not-h2! (constantly nil)]
-                        (thunk))))
 
 (set! *warn-on-reflection* true)
 
@@ -78,14 +72,26 @@
        (map (partial strip-base-path dir))
        (into (sorted-set))))
 
+(def ^:private slug-id-prefix-re
+  #"#\d+-")
+
+(defn- replace-entropy
+  [s]
+  ;; Template tag slugs have the form `#1-my-card-name`, where `1` is the record ID. Record IDs depend on
+  ;; import order which is non-deterministic. Replace them with a deterministic placeholder.
+  (str/replace s slug-id-prefix-re "#<some-id>-"))
+
 (defn read-yaml
   "Reads a YAML file and returns Clojure data, with ignored fields removed."
   [file]
   (walk/postwalk
    (fn [x]
-     (if-not (map? x)
-       x
-       (reduce dissoc x ignored-fields)))
+     (cond
+       (map? x) (reduce dissoc x ignored-fields)
+       (string? x) (replace-entropy x)
+       ;; template tags are stored as a map keyed by tag name, so the slug also shows up as a key
+       (simple-keyword? x) (keyword (replace-entropy (name x)))
+       :else x))
    (yaml/parse-string (slurp file))))
 
 (defn non-empty-diff [diff]

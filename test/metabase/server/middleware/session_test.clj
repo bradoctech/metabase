@@ -15,8 +15,11 @@
    [metabase.session.core :as session]
    [metabase.test :as mt]
    [metabase.test.fixtures :as fixtures]
+   [metabase.util.encryption :as encryption]
+   [metabase.util.encryption-test :as encryption-test]
    [metabase.util.honey-sql-2 :as h2x]
    [metabase.util.i18n :as i18n]
+   [metabase.util.password :as u.password]
    [metabase.util.secret :as u.secret]
    [ring.mock.request :as ring.mock]
    [toucan2.core :as t2]))
@@ -87,8 +90,8 @@
                     :cookies {session-cookie {:value "cookie-session"}})))))))
 
 (deftest ^:parallel both-header-and-cookie-test
-  (testing "if both header and cookie session-keys exist, then we expect the cookie to take precedence"
-    (is (= "cookie-session"
+  (testing "if both header and cookie session-keys exist, then we expect the header to take precedence"
+    (is (= "foobar"
            (:metabase-session-key
             (wrapped-handler
              (assoc (ring.mock/header (ring.mock/request :get "/anyurl") session-header "foobar")
@@ -107,6 +110,92 @@
               :uri                 "/anyurl"}
              (select-keys (wrapped-handler request) [:anti-csrf-token :cookies :metabase-session-key :uri]))))))
 
+(defn- with-session-for
+  "Insert a session with `session-key` for `user-kw`, run `thunk`, then clean up."
+  [user-kw session-key thunk]
+  (let [session-id (session/generate-session-id)]
+    (try
+      (t2/insert! :model/Session {:id         session-id
+                                  :key_hashed (session/hash-session-key session-key)
+                                  :user_id    (mt/user->id user-kw)})
+      (thunk)
+      (finally
+        (t2/delete! :model/Session :id session-id)))))
+
+(deftest session-header-takes-precedence-over-cookie-test
+  (init-status/set-complete!)
+  (testing "the X-Metabase-Session header wins over a session cookie that also resolves"
+    (let [cookie-session-key (str (random-uuid))
+          header-session-key (str (random-uuid))]
+      (with-session-for
+        :crowberto cookie-session-key
+        (fn []
+          (with-session-for
+            :lucky header-session-key
+            (fn []
+              (let [request (-> (ring.mock/request :get "/anyurl")
+                                (ring.mock/header session-header header-session-key)
+                                (assoc :cookies {session-cookie {:value cookie-session-key}}))
+                    request' (#'mw.session/merge-current-user-info (wrapped-handler request))]
+                (is (= (mt/user->id :lucky)
+                       (:metabase-user-id request')))
+                (testing "\nthe request carries the header's session, not the cookie's"
+                  (is (= header-session-key (:metabase-session-key request')))
+                  (is (nil? (:metabase-session-type request'))))))))))))
+
+(deftest stale-cookie-does-not-shadow-session-header-test
+  (init-status/set-complete!)
+  (testing "a session cookie that no longer resolves should not shadow a valid X-Metabase-Session header"
+    (let [header-session-key (str (random-uuid))
+          stale-cookie-key   (str (random-uuid))]
+      (with-session-for
+        :lucky header-session-key
+        (fn []
+          (let [request (-> (ring.mock/request :get "/anyurl")
+                            (ring.mock/header session-header header-session-key)
+                            (assoc :cookies {session-cookie {:value stale-cookie-key}}))
+                request' (#'mw.session/merge-current-user-info (wrapped-handler request))]
+            (is (= (mt/user->id :lucky)
+                   (:metabase-user-id request')))
+            (is (= header-session-key (:metabase-session-key request')))))))))
+
+(deftest stale-session-header-does-not-fall-back-to-cookie-test
+  (init-status/set-complete!)
+  (testing "a session header that no longer resolves does not borrow the cookie's identity"
+    (let [cookie-session-key (str (random-uuid))
+          stale-header-key   (str (random-uuid))]
+      (with-session-for
+        :crowberto cookie-session-key
+        (fn []
+          (let [request (-> (ring.mock/request :get "/anyurl")
+                            (ring.mock/header session-header stale-header-key)
+                            (assoc :cookies {session-cookie {:value cookie-session-key}}))
+                request' (#'mw.session/merge-current-user-info (wrapped-handler request))]
+            (is (nil? (:metabase-user-id request')))))))))
+
+(deftest cookie-used-when-no-session-header-test
+  (init-status/set-complete!)
+  (testing "with no header on the request the session cookie still authenticates"
+    (let [cookie-session-key (str (random-uuid))]
+      (with-session-for
+        :crowberto cookie-session-key
+        (fn []
+          (let [request (assoc (ring.mock/request :get "/anyurl")
+                               :cookies {session-cookie {:value cookie-session-key}})
+                request' (#'mw.session/merge-current-user-info (wrapped-handler request))]
+            (is (= (mt/user->id :crowberto)
+                   (:metabase-user-id request')))
+            (is (= :normal (:metabase-session-type request')))))))))
+
+(deftest no-valid-session-key-test
+  (init-status/set-complete!)
+  (testing "when neither the cookie nor the header resolves, the request stays unauthenticated"
+    (let [request (-> (ring.mock/request :get "/anyurl")
+                      (ring.mock/header session-header (str (random-uuid)))
+                      (assoc :cookies {session-cookie {:value (str (random-uuid))}}))
+          request' (#'mw.session/merge-current-user-info (wrapped-handler request))]
+      (is (nil? (:metabase-user-id request'))))))
+
 (deftest current-user-info-for-api-key-test
   (mt/with-temp [:model/ApiKey _ {:name                  "An API Key"
                                   :user_id               (mt/user->id :lucky)
@@ -117,20 +206,54 @@
       (let [req {:headers {"x-api-key" "mb_foobar123"}}]
         (testing "No premium features, do not include :is-group-manager?"
           (mt/with-premium-features #{}
-            (is (= (merge req {:metabase-user-id  (mt/user->id :lucky)
-                               :is-superuser?     false
-                               :is-data-analyst?  false
-                               :user-locale       nil})
+            (is (= (merge req {:metabase-user-id        (mt/user->id :lucky)
+                               :is-superuser?           false
+                               :is-data-analyst?        false
+                               :user-locale             nil
+                               :embedding/auth-method   "api-key"})
                    (#'mw.session/merge-current-user-info req)))))
         (testing "Include :is-group-manager? if we have EE + :advanced-permissions "
           (when config/ee-available?
             (mt/with-premium-features #{:advanced-permissions}
-              (is (= (merge req {:metabase-user-id  (mt/user->id :lucky)
-                                 :is-superuser?     false
-                                 :is-data-analyst?  false
-                                 :is-group-manager? false
-                                 :user-locale       nil})
+              (is (= (merge req {:metabase-user-id        (mt/user->id :lucky)
+                                 :is-superuser?           false
+                                 :is-data-analyst?        false
+                                 :is-group-manager?       false
+                                 :user-locale             nil
+                                 :embedding/auth-method   "api-key"})
                      (#'mw.session/merge-current-user-info req))))))))))
+
+(deftest api-key-hash-encrypted-at-rest-test
+  ;; isolated app DB: runs with an encryption key active, so nothing here may touch the shared test DB
+  (mt/with-temp-empty-app-db [_conn :h2]
+    (mdb/setup-db! :create-sample-content? false)
+    (encryption-test/with-secret-key "0B9cD6++AME+A7/oR7Y2xvPRHX3cHA2z7w+LbObd/9Y="
+      (mt/with-temp [:model/ApiKey {api-key-id :id} {:name                  "Encrypted API Key"
+                                                     :user_id               (mt/user->id :lucky)
+                                                     :creator_id            (mt/user->id :lucky)
+                                                     :updated_by_id         (mt/user->id :lucky)
+                                                     ::api-key/unhashed-key (u.secret/secret "mb_encrypted123")}]
+        (testing "the stored bcrypt hash is encrypted at rest"
+          ;; select from the raw table to bypass the model's decrypting :out transform
+          (let [raw (t2/select-one-fn :key :api_key :id api-key-id)]
+            (is (encryption/possibly-encrypted-string? raw)
+                "raw column value should be ciphertext")
+            (is (not (encryption/possibly-encrypted-string? (encryption/maybe-decrypt raw)))
+                "it should decrypt to the (plaintext) bcrypt hash")))
+        (testing "a valid key still authenticates (middleware decrypts the raw hash before the bcrypt compare)"
+          (is (= (mt/user->id :lucky)
+                 (:metabase-user-id (#'mw.session/merge-current-user-info {:headers {"x-api-key" "mb_encrypted123"}})))))
+        (testing "a plaintext bcrypt hash injected via direct SQL is rejected, even though it is a correct hash of the key"
+          (t2/query {:update :api_key
+                     :set    {:key (u.password/hash-bcrypt "mb_encrypted123")}
+                     :where  [:= :id api-key-id]})
+          (is (nil? (:metabase-user-id (#'mw.session/merge-current-user-info {:headers {"x-api-key" "mb_encrypted123"}})))
+              "strict decrypt rejects the unencrypted hash")
+          ;; restore a properly-encrypted hash so `with-temp` cleanup (whose before-delete reads the row) doesn't hit the
+          ;; strict decrypt on the corrupted plaintext value
+          (t2/query {:update :api_key
+                     :set    {:key (encryption/maybe-encrypt (u.password/hash-bcrypt "mb_encrypted123"))}
+                     :where  [:= :id api-key-id]}))))))
 
 (deftest ^:parallel current-user-info-for-api-key-test-1b
   (testing "Various invalid API keys do not modify the request"
@@ -238,7 +361,8 @@
               :is-superuser? false,
               :is-group-manager? false,
               :user-locale nil
-              :is-data-analyst? false}
+              :is-data-analyst? false
+              :auth-provider nil}
              (#'mw.session/current-user-info-for-session test-session-key nil)))
       (finally
         (t2/delete! :model/Session :id test-session-id)))))
@@ -253,7 +377,8 @@
               :is-superuser? true,
               :is-group-manager? false,
               :user-locale nil
-              :is-data-analyst? false}
+              :is-data-analyst? false
+              :auth-provider nil}
              (#'mw.session/current-user-info-for-session test-session-key nil)))
       (finally
         (t2/delete! :model/Session :id test-session-id)))))
@@ -273,11 +398,10 @@
           (mt/with-premium-features #{}
             (is (= false
                    (:is-group-manager? (#'mw.session/current-user-info-for-session test-session-key nil))))))
-
         (testing "is `true` if advanced-permisison is enabled"
           ;; a trick to run this test in OSS because even if advanced-permisison is enabled but EE ns is not evailable
           ;; `enable-advanced-permissions?` will still return false
-          (with-redefs [premium-features/enable-advanced-permissions? (fn [& _args] true)]
+          (mt/with-dynamic-fn-redefs [premium-features/enable-advanced-permissions? (fn [& _args] true)]
             (is (true?
                  (:is-group-manager? (#'mw.session/current-user-info-for-session test-session-key nil)))))))
       (finally
@@ -294,7 +418,6 @@
              (#'mw.session/current-user-info-for-session test-session-key nil)))
       (finally
         (t2/delete! :model/Session :id test-session-id)))
-
     (testing "...but if we do specifiy the token, they should come back"
       (try
         (t2/insert! :model/Session {:id              test-session-id
@@ -305,11 +428,11 @@
                 :is-superuser? false,
                 :is-group-manager? false,
                 :user-locale nil
-                :is-data-analyst? false}
+                :is-data-analyst? false
+                :auth-provider nil}
                (#'mw.session/current-user-info-for-session test-session-key test-anti-csrf-token)))
         (finally
           (t2/delete! :model/Session :id test-session-id)))
-
       (testing "(unless the token is wrong)"
         (try
           (t2/insert! :model/Session {:id              test-session-id
@@ -353,6 +476,36 @@
              (#'mw.session/current-user-info-for-session test-session-key nil)))
       (finally
         (t2/delete! :model/Session :id test-session-id)))))
+
+(deftest auth-provider-via-left-join-test
+  (testing "session LEFT JOIN on auth_identity returns correct provider for each auth method"
+    (mt/with-temp [:model/User {user-id :id} {}]
+      ;; "password" is excluded - its before-insert hook requires credentials, and it's already
+      ;; tested via auth-method-test in view_log_test.clj. "api-key" is tested above in
+      ;; current-user-info-for-api-key-test (different code path, no auth_identity).
+      (doseq [provider ["jwt" "saml" "google" "ldap" "oidc"
+                        "custom-oidc" "slack-connect" "support-access-grant"]]
+        (testing (str "provider: " provider)
+          (let [ai         (first (t2/insert-returning-instances! (t2/table-name :model/AuthIdentity)
+                                                                  {:user_id     user-id
+                                                                   :provider    provider
+                                                                   :provider_id (str user-id "-" provider)
+                                                                   :created_at  :%now
+                                                                   :updated_at  :%now}))
+                session-key (session/generate-session-key)
+                session-id  (session/generate-session-id)]
+            (try
+              (t2/insert! (t2/table-name :model/Session)
+                          {:id                session-id
+                           :key_hashed        (session/hash-session-key session-key)
+                           :user_id           user-id
+                           :auth_identity_id  (:id ai)
+                           :created_at        :%now})
+              (is (= provider
+                     (:auth-provider (#'mw.session/current-user-info-for-session session-key nil))))
+              (finally
+                (t2/delete! :model/Session :id session-id)
+                (t2/delete! :model/AuthIdentity :id (:id ai))))))))))
 
 ;; create a simple example of our middleware wrapped around a handler that simply returns our bound variables for users
 (defn- user-bound-handler [request]
@@ -401,7 +554,6 @@
     (testing "No Session"
       (is (= nil
              (session-locale nil))))
-
     (testing "w/ Session"
       (testing "for user with no `:locale`"
         (mt/with-temp [:model/User {user-id :id}]
@@ -411,11 +563,9 @@
             (t2/insert! :model/Session {:id session-id :key_hashed session-key-hashed, :user_id user-id})
             (is (= nil
                    (session-locale session-key)))
-
             (testing "w/ X-Metabase-Locale header"
               (is (= "es_MX"
                      (session-locale session-key :headers {"x-metabase-locale" "es-mx"})))))))
-
       (testing "for user *with* `:locale`"
         (mt/with-temp [:model/User {user-id :id} {:locale "es-MX"}]
           (let [session-id (session/generate-session-id)
@@ -424,7 +574,6 @@
             (t2/insert! :model/Session {:id session-id :key_hashed session-key-hashed, :user_id user-id, :created_at :%now})
             (is (= "es_MX"
                    (session-locale session-key)))
-
             (testing "w/ X-Metabase-Locale header"
               (is (= "en_GB"
                      (session-locale session-key :headers {"x-metabase-locale" "en-GB"}))))))))))
@@ -448,7 +597,6 @@
                                                       :path      "/"
                                                       :expires   "Sat, 1 Jan 2022 01:00:00 GMT"}}}
                    (mw.session/reset-session-timeout* request response request-time)))))
-
         (testing "with embedded sessions"
           (let [request {:cookies               {request/metabase-embedded-session-cookie {:value "8df268ab-00c0-4b40-9413-d66b966b696a"}
                                                  request/metabase-session-timeout-cookie  {:value "alive"}}
@@ -487,3 +635,29 @@
                       {:id session-id :key_hashed key-hashed :user_id user-id :created_at :%now
                        :last_active_at (h2x/add-interval-honeysql-form (mdb/db-type) :%now -600 :second)})
           (is (some? (#'mw.session/current-user-info-for-session session-key nil))))))))
+
+(deftest auth-method-test
+  (testing "auth-method prefers route-based override on special routes"
+    (let [f #'mw.session/auth-method]
+      (are [session-info api-key-info oauth-info mcp-ui-info embedding-route expected]
+           (= expected (f session-info api-key-info oauth-info mcp-ui-info embedding-route))
+        ;; session-based auth on non-special routes
+        {:auth-provider "password"} nil nil nil nil            "password"
+        {:auth-provider "saml"}     nil nil nil nil            "saml"
+        {:auth-provider "jwt"}      nil nil nil nil            "jwt"
+        {:auth-provider "ldap"}     nil nil nil nil            "ldap"
+        {}                          nil nil nil nil            "session"
+        ;; api-key on non-special route
+        nil                         {}  nil nil nil            "api-key"
+        ;; oauth bearer on non-special route
+        nil                         nil {:metabase-user-id 1} nil nil "oauth"
+        ;; mcp-ui credential on non-special route
+        nil                         nil nil {:metabase-user-id 1} nil "mcp-ui"
+        ;; route override: special routes win over credentials
+        nil                         {}  nil nil "guest-embed"  "guest"   ; api-key + embed -> guest
+        nil                         nil nil nil "guest-embed"  "guest"   ; anon guest embed
+        nil                         nil nil nil "public"       "public"
+        nil                         nil nil nil "metabot"      "metabot"
+        nil                         nil nil nil "agent-api"    "agent-api"
+        ;; fully anonymous, non-special route
+        nil                         nil nil nil nil            nil))))

@@ -6,7 +6,7 @@ import {
   isValidElement,
 } from "react";
 
-import { Badge } from "metabase/common/components/Badge";
+import { Breadcrumb } from "metabase/common/components/Breadcrumb";
 import { Box, Flex } from "metabase/ui";
 import type { ColorName } from "metabase/ui/colors/types";
 
@@ -14,14 +14,8 @@ import type { DataSourcePart } from "../QuestionDataSource/utils";
 
 import HeaderBreadcrumbsS from "./HeaderBreadcrumbs.module.css";
 
-const HeaderBadge = (props: ComponentProps<typeof Badge>) => (
-  <Badge
-    classNames={{
-      root: HeaderBreadcrumbsS.HeaderBadge,
-      icon: HeaderBreadcrumbsS.HeaderBadgeIcon,
-    }}
-    {...props}
-  />
+const HeaderBreadcrumb = (props: ComponentProps<typeof Breadcrumb>) => (
+  <Breadcrumb className={HeaderBreadcrumbsS.HeaderBreadcrumb} {...props} />
 );
 
 function getBadgeInactiveColor({
@@ -31,7 +25,7 @@ function getBadgeInactiveColor({
   variant: "head" | "subhead";
   isLast: boolean;
 }) {
-  return isLast && variant === "head" ? "sp-gray-medium" : "sp-gray-medium";
+  return isLast && variant === "head" ? "text-primary" : "text-disabled";
 }
 
 interface HeadBreadcrumbsProps {
@@ -61,8 +55,8 @@ export function HeadBreadcrumbs({
       })}
       {...rest}
     >
-      {parts.map((part, index) => {
-        const isLast = index === parts.length - 1;
+      {parts.filter(isRenderableDataSourcePart).map((part, index, visible) => {
+        const isLast = index === visible.length - 1;
         const badgeInactiveColor =
           inactiveColor || getBadgeInactiveColor({ variant, isLast });
         return (
@@ -70,13 +64,13 @@ export function HeadBreadcrumbs({
             {isDataSourceReactElement(part) ? (
               part
             ) : (
-              <HeaderBadge
+              <HeaderBreadcrumb
                 to={part.href}
+                color={badgeInactiveColor}
                 icon={part.icon}
-                inactiveColor={badgeInactiveColor}
               >
                 {part.name}
-              </HeaderBadge>
+              </HeaderBreadcrumb>
             )}
             {!isLast &&
               (isDividerReactElement(divider) ? (
@@ -103,10 +97,18 @@ function isDataSourceReactElement(part: DataSourcePart): part is ReactElement {
   return isValidElement(part);
 }
 
+function isRenderableDataSourcePart(
+  part: DataSourcePart | null | undefined | false,
+): part is DataSourcePart {
+  return (
+    isDataSourceReactElement(part) || (part != null && typeof part === "object")
+  );
+}
+
 function isDividerReactElement(
   divider?: string | ReactElement,
 ): divider is ReactElement {
   return isValidElement(divider);
 }
 
-HeadBreadcrumbs.Badge = HeaderBadge;
+HeadBreadcrumbs.Breadcrumb = HeaderBreadcrumb;

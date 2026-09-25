@@ -13,9 +13,9 @@ import { LeaveRouteConfirmModal } from "metabase/common/components/LeaveConfirmM
 import { DelayedLoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper/DelayedLoadingAndErrorWrapper";
 import { DatabaseForm } from "metabase/databases/components/DatabaseForm";
 import type { DatabaseFormConfig } from "metabase/databases/types";
-import { useDispatch } from "metabase/lib/redux";
-import * as Urls from "metabase/lib/urls";
+import { useDispatch } from "metabase/redux";
 import { Box, Flex, ScrollArea, Title } from "metabase/ui";
+import * as Urls from "metabase/urls";
 import type { Database, DatabaseData } from "metabase-types/api";
 
 const FORM_CONFIG: DatabaseFormConfig = {
@@ -86,7 +86,7 @@ function WritableConnectionInfoPageBody({
     <Flex
       direction="row"
       h="100%"
-      bg="background-secondary"
+      bg="background_page-secondary"
       data-testid="writable-connection-info-page"
     >
       <Box h="100%" w="100%" component={ScrollArea}>

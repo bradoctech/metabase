@@ -279,7 +279,7 @@
                           [:or [:> $id 10] [:< $id 20]]
                           [:not [:> $id 10]]]]
         (is (=? {:base-type :type/Boolean}
-                (expression-metadata :people "expression" (lib.convert/->pMBQL expression))))))))
+                (expression-metadata :people "expression" (lib.convert/->mbql5 expression))))))))
 
 (deftest ^:parallel converted-timezone-test
   (testing "col-info for convert-timezone should have a `converted-timezone` property"
@@ -349,7 +349,7 @@
 
   ([query ag-clause]
    (let [query (-> query
-                   (lib/aggregate (lib/->pMBQL ag-clause)))]
+                   (lib/aggregate (lib/->mbql5 ag-clause)))]
      (-> (column-info query {:cols []})
          first))))
 
@@ -517,7 +517,7 @@
                  [:sum [:expression "double-price"]])))))))
 
 (defn- infered-col-type [expr]
-  (let [metadata (expression-metadata :checkins "expression" (lib.convert/->pMBQL expr))]
+  (let [metadata (expression-metadata :checkins "expression" (lib.convert/->mbql5 expr))]
     (select-keys metadata [:base-type :effective-type :semantic-type])))
 
 (defn- expression-type
@@ -857,9 +857,9 @@
                               {:name "a", :base-type :type/*, :effective-type :type/*}
                               {:name "a", :base-type :type/Integer}]
             :let             [expected-base-type (if (= (:base-type initial-metadata) :type/Integer)
-                                       ;; if the initial driver type comes back as something other than `:type/*`, we
-                                       ;; should use that. Otherwise if it comes back as `:type/*` use the type
-                                       ;; calculated by Lib.
+                                                   ;; if the initial driver type comes back as something other than `:type/*`, we
+                                                   ;; should use that. Otherwise if it comes back as `:type/*` use the type
+                                                   ;; calculated by Lib.
                                                    :type/Integer
                                                    :type/BigInteger)]]
       ;; should work with and without rows
@@ -1070,7 +1070,6 @@
                                                                     (meta/id :orders :product-id)]
                                                                    [:field {:join-alias "PRODUCTS__via__PRODUCT_ID"}
                                                                     (meta/id :products :id)]]]
-                                            :lib/options         {:lib/uuid "14b26511-68b9-48d6-9968-b115a5089009"}
                                             :fk-field-id         (meta/id :orders :product-id)}]
                             :aggregation  [[:count {:lib/uuid "3a14967e-bd6c-4cdd-a837-b6d098ef513b", :name "count"}]
                                            [:sum {:name "sum"}
@@ -1173,3 +1172,52 @@
                 :lib/desired-column-alias "Total_number_of_people_from_each_state_separated_by_state_and_then_we_do_a_count_2"}]
               (map #(select-keys % [:lib/source-column-alias :lib/desired-column-alias])
                    (result-metadata/returned-columns query initial-cols)))))))
+
+(deftest ^:parallel explicit-join-in-card-plus-outer-implicit-join-stay-separate-test
+  (testing "#33972 an implicitly-joined Products.Category carried by a source card and an outer explicit Products.Category join stay distinct"
+    (let [card-q (as-> (lib/query meta/metadata-provider (meta/table-metadata :orders)) q
+                   (lib/aggregate q (lib/count))
+                   (lib/breakout q (m/find-first #(= (:id %) (meta/id :products :category))
+                                                 (lib/breakoutable-columns q))))
+          mp     (lib.tu/metadata-provider-with-card-from-query 1 card-q)
+          outer  (-> (lib/query mp (lib.metadata/card mp 1))
+                     (lib/join (-> (lib/join-clause (meta/table-metadata :products)
+                                                    [(lib/= (meta/field-metadata :orders :product-id)
+                                                            (meta/field-metadata :products :id))])
+                                   (lib/with-join-alias "Products")
+                                   (lib/with-join-fields [(meta/field-metadata :products :category)]))))
+          cols   (lib/visible-columns outer)]
+      (is (= 2 (count (filter #(= (:id %) (meta/id :products :category)) cols)))))))
+
+(deftest ^:parallel super-broken-legacy-field-ref-do-not-generate-expression-refs-with-field-ids-test
+  (testing "Do not generate [:expression <field-id>] legacy refs even if expression metadata includes Field ID"
+    (let [query (-> (lib/query meta/metadata-provider (meta/table-metadata :venues))
+                    (lib/expression "my_expression" (lib/ref (meta/field-metadata :venues :name)))
+                    (as-> $query (lib/with-fields $query [(lib/expression-ref $query "my_expression")])))
+          col   (-> (first (lib/returned-columns query))
+                    (assoc :qp/implicit-field? true))]
+      (is (=? {:id (meta/id :venues :name)}
+              col)
+          "column metadata should include original Field ID (#70233)")
+      (is (= [:expression "my_expression"]
+             (#'result-metadata/super-broken-legacy-field-ref query col))))))
+
+(deftest ^:parallel do-not-persist-field-id-for-plain-field-expressions-test
+  (testing (str "Even though Lib metadata for a plain-field expression includes the wrapped Field's ID/Table ID so "
+                "numeric :field ID refs can resolve against it later in the same query (#70233), that ID/Table ID "
+                "must not leak into *persisted* results metadata: once a Card is used as the source table for "
+                "another query its columns come back with :lib/source :source/card, not :source/expressions, so "
+                "the shared ID gets confused with the real underlying Field (#70233)")
+    (let [query         (-> (lib/query meta/metadata-provider (meta/table-metadata :venues))
+                            (lib/expression "my_expression" (lib/ref (meta/field-metadata :venues :name)))
+                            (as-> $query (lib/with-fields $query (lib/visible-columns $query))))
+          lib-col       (m/find-first #(= (:lib/expression-name %) "my_expression") (lib/returned-columns query))
+          cols          (column-info query nil)
+          persisted-col (m/find-first #(= (:name %) "my_expression") cols)]
+      (is (=? {:id (meta/id :venues :name)} lib-col)
+          "sanity check: Lib metadata still includes the Field ID (#70233)")
+      (is (=? {:name     "my_expression"
+               :id       (symbol "nil #_\"key is not present.\"")
+               :table-id (symbol "nil #_\"key is not present.\"")}
+              persisted-col)
+          "the wrapped Field's ID must not leak into persisted result metadata"))))

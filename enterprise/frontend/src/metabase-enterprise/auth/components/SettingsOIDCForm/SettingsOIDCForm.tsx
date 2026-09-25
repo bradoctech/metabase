@@ -26,7 +26,7 @@ import {
   FormSubmitButton,
   FormTextInput,
 } from "metabase/forms";
-import { useSelector } from "metabase/lib/redux";
+import { useSelector } from "metabase/redux";
 import { getApplicationName } from "metabase/selectors/whitelabel";
 import { Button, Flex, Stack, Text } from "metabase/ui";
 import {
@@ -488,7 +488,7 @@ export function SettingsOIDCForm() {
                         </Button>
                         <Button
                           variant="filled"
-                          color="danger"
+                          color="feedback-negative"
                           onClick={deleteModal.open}
                         >
                           {t`Delete configuration`}

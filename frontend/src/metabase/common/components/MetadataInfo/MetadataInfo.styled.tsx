@@ -2,10 +2,10 @@
 import styled from "@emotion/styled";
 
 import { LoadingSpinner as LoadingSpinnerBase } from "metabase/common/components/LoadingSpinner";
-import { isReducedMotionPreferred } from "metabase/lib/dom";
 import { Icon } from "metabase/ui";
 import type { ColorName } from "metabase/ui/colors/types";
 import { color } from "metabase/ui/utils/colors";
+import { isReducedMotionPreferred } from "metabase/utils/dom";
 
 const TRANSITION_DURATION = () => (isReducedMotionPreferred() ? "0" : "0.25s");
 
@@ -38,7 +38,7 @@ export const LabelContainer = styled.div<{ color?: ColorName }>`
   column-gap: 0.3em;
   font-size: 1em;
   font-weight: normal;
-  color: ${({ color: _color = "brand" }) => color(_color)};
+  color: ${({ color: _color = "core-brand" }) => color(_color)};
   margin-bottom: 0.5rem;
 `;
 
@@ -71,7 +71,7 @@ export const LoadingSpinner = styled(LoadingSpinnerBase)`
   flex-grow: 1;
   align-self: center;
   justify-content: center;
-  color: var(--mb-color-brand);
+  color: var(--mb-color-core-brand);
 `;
 
 export const Table = styled.table`

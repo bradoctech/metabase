@@ -2,7 +2,7 @@
 
 frontend/src/metabase-types/api/field.ts
 frontend/src/metabase/api/field.ts
-frontend/src/metabase/common/components/AdminContentTable/AdminContentTable.tsx
+frontend/src/metabase/admin/components/AdminContentTable/AdminContentTable.tsx
 frontend/src/metabase/data-grid/components/DataGrid/DataGrid.module.css
 frontend/src/metabase/data-grid/components/DataGrid/DataGrid.tsx
 frontend/src/metabase/data-grid/components/DataGridHeader/DataGridHeader.tsx
