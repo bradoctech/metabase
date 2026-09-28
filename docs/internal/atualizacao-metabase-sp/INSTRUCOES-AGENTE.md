@@ -158,6 +158,9 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 - Restore stuck **nunca** deve sobrescrever paths em `restore-ours` / `dual-changed` / `behavior-manual` (login EDD-577 foi perdido assim).
 - Arquivo **híbrido** (ns/API de uma major + body de outra): sintoma ClassNotFound, import inválido, `hasSchema is not a function`. Preferir body upstream + reaplicar SP só no curated.
 - Worktree temporária (`update_with_upstream`) ok localmente; **publicar só `EDD-1355`**.
+- "SP" = só `lists/*.txt` + manifesto. Não usar "arquivos tocados por commits EDD-*" como filtro: commits de upgrade (`fix[EDD-1355]` etc.) tocaram arquivos upstream e esconderam stuck da 0.62 (upsells de transforms-python, drivers).
+- Stuck pode vir de etapas anteriores: comparar blob também com `saopaulo-pre-62x` / `saopaulo-pre-61x`.
+- **Dev passar ≠ build passar.** O deploy (`bin/build-and-push-docker.sh` → `./bin/build.sh`) quebrou com o dev OK: `starburst.clj` 0.62 usava `driver/describe-table-fks` (removido no 63) e o FE de produção falhou com `ESModulesLinkingError` (imports de caminhos 0.62). Antes do PR para `saopaulo`, rodar o build de produção ou o mínimo do runbook (carregar todos os namespaces com `-M:drivers:ee` + `build-release:js` + `build-static-viz`).
 
 #### Frontend / UI
 

@@ -167,8 +167,21 @@ Script: `bin/merge-upstream-preserve-sp.sh`
 4. `git add` dos arquivos resolvidos e concluir o merge (`git commit` se o merge ainda estiver aberto).
 5. `./bin/merge-upstream-preserve-sp.sh verify`
 6. **Pós-verify (lição 63):** varrer stuck (WT == tip pré-merge ≠ upstream, fora das listas) e órfãos (sumiu no upstream, fora das listas). Não restaurar curated.
-7. Validar Trilhas com [checklist-smoke-test.md](./checklist-smoke-test.md).
-8. Atualizar o manifesto com conflitos reais (entrada da EDD-1362 e da 1356 v2).
+   - Considerar SP **somente** o que está em `lists/*.txt` + manifesto. Arquivos tocados apenas por commits de upgrade (`EDD-1355`/`1356`/`1359`/`1362`) **não** são customização SP e costumam carregar conteúdo da versão anterior.
+   - Checar também stuck de etapas anteriores (blob igual a `saopaulo-pre-62x` / `saopaulo-pre-61x`), não só da etapa atual.
+7. **Validar o build de produção (lição 63):** o dev (`--hot` + rspack serve) não compila drivers nem namespaces não carregados e trata import quebrado como aviso; o build de produção quebra. Antes de abrir PR para `saopaulo`:
+   - Ideal: `./bin/build.sh` completo (mesmo `MB_EDITION` do deploy) ou `bin/build-and-push-docker.sh`.
+   - Mínimo, se faltar RAM/tempo (WSL ~8 GiB; rodar um por vez, com BE/FE dev parados):
+     ```bash
+     # BE: carregar todos os namespaces de drivers + EE (e depois src/) com os aliases do build
+     clojure -M:drivers:ee /tmp/load_all.clj   # script: (doseq [n nss] (try (require n) (catch Throwable e (println "FAIL" n (.getMessage e)))))
+     # FE: bundle principal de produção (EE) e static-viz
+     MB_EDITION=ee WEBPACK_BUNDLE=production NODE_OPTIONS=--max-old-space-size=4096 RSPACK_WORKER_THREADS=1 bun run build-release:js
+     NODE_OPTIONS=--max-old-space-size=3072 RSPACK_WORKER_THREADS=1 bun run build-static-viz
+     ```
+   - Critério: zero `FAIL` no carregamento e zero `ERROR in` no rspack (avisos de tamanho de bundle são normais).
+8. Validar Trilhas com [checklist-smoke-test.md](./checklist-smoke-test.md).
+9. Atualizar o manifesto com conflitos reais (entrada da EDD-1362 e da 1356 v2).
 
 ---
 
