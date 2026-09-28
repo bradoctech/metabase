@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { t } from "ttag";
 import _ from "underscore";
 
@@ -24,7 +24,7 @@ import {
 import S from "./Header.module.css";
 
 interface HeaderProps {
-  onSave: (visualization: VisualizerVizDefinition) => void | Promise<void>;
+  onSave: (visualization: VisualizerVizDefinition) => void;
   onClose: () => void;
   saveLabel?: string;
   allowSaveWhenPristine?: boolean;
@@ -49,19 +49,12 @@ export function Header({
 
   const dispatch = useDispatch();
 
-  const [isSaving, setIsSaving] = useState(false);
-
-  const handleSave = async () => {
+  const handleSave = () => {
     trackVisualizerSaveClicked();
 
-    setIsSaving(true);
-    try {
-      await onSave(
-        _.pick(visualizerState, ["display", "columnValuesMapping", "settings"]),
-      );
-    } finally {
-      setIsSaving(false);
-    }
+    onSave(
+      _.pick(visualizerState, ["display", "columnValuesMapping", "settings"]),
+    );
   };
 
   const handleChangeTitle = useCallback(
@@ -123,7 +116,6 @@ export function Header({
       <Button
         variant="filled"
         size="sm"
-        loading={isSaving}
         disabled={!saveButtonEnabled}
         onClick={handleSave}
       >

@@ -2,7 +2,7 @@ const { H } = cy;
 import { SAMPLE_DB_ID } from "e2e/support/cypress_data";
 import { SAMPLE_DATABASE } from "e2e/support/cypress_sample_database";
 import type { StructuredQuestionDetails } from "e2e/support/helpers";
-import { uuid } from "metabase/lib/uuid";
+import { uuid } from "metabase/utils/uuid";
 import type {
   Aggregation,
   Breakout,

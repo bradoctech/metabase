@@ -243,7 +243,7 @@
   ;; check whether we can connect by seeing whether listing datasets succeeds
   (let [[success? datasets] (try [true (list-datasets details)]
                                  (catch Exception e
-                                   (log/error e "Exception caught in :bigquery-cloud-sdk can-connect?")
+                                   (log/errorf "Exception caught in :bigquery-cloud-sdk can-connect?: %s" (ex-message e))
                                    [false nil]))]
     (cond
       (not success?)
@@ -579,7 +579,7 @@
                                 :where     [:in :c.table_name table-names]
                                 :order-by  [:c.table_name]})
                (catch Throwable e
-                 (log/warnf e "error in describe-fields for dataset: %s" dataset-id)))]
+                 (log/warnf "error in describe-fields for dataset %s: %s" dataset-id (ex-message e))))]
     (eduction
      (partition-by :table_name)
      (mapcat #(describe-dataset-table dataset-id %))
@@ -599,7 +599,7 @@
                                :from [[(information-schema-table project-id dataset-id "TABLES") :t]]
                                :order-by [:table_name]}))
     (catch Throwable e
-      (log/warnf e "error in list-table-names for dataset: %s" dataset-id))))
+      (log/warnf "error in list-table-names for dataset %s: %s" dataset-id (ex-message e)))))
 
 (defmethod driver/describe-fields :bigquery-cloud-sdk
   [driver database & {:keys [schema-names table-names]}]
@@ -979,7 +979,7 @@
              (let [acc' (try
                           (rf acc (.next it))
                           (catch Throwable e
-                            (log/errorf e "error in reducible-bigquery-results! %d rows" n)
+                            (log/errorf "error in reducible-bigquery-results! %d rows: %s" n (ex-message e))
                             (throw e)))]
                (recur page it acc' (inc n)))
 
@@ -1007,7 +1007,7 @@
                                  (.cancel client job-id)
                                  (catch Throwable e
                                    ;; Just log exception if it can't be cancelled.
-                                   (log/debugf e "Could not cancel job-id: %s" job-id)))
+                                   (log/debugf "Could not cancel job-id %s: %s" job-id (ex-message e))))
         ^Schema schema (some-> page .getSchema)
         parsers (some-> schema get-field-parsers)
         columns (for [column (some-> schema .getFields fields->metabase-field-info)]
@@ -1066,7 +1066,7 @@
         :cancel (try
                   (.cancel client job-id)
                   (catch Throwable t
-                    (log/warnf t "Couldn't cancel job %s" job-id))
+                    (log/warnf "Couldn't cancel job %s: %s" job-id (ex-message t)))
                   (finally
                     (throw-cancelled sql parameters)))
         :ready  (bigquery-execute-response result job client respond cancel-chan)))))
@@ -1102,7 +1102,7 @@
     (binding [bigquery.common/*bigquery-timezone-id* (effective-query-timezone-id database)]
       (log/tracef "Running BigQuery query in %s timezone" bigquery.common/*bigquery-timezone-id*)
       (let [sql (if (:include-user-id-and-hash (driver.conn/effective-details database) true)
-                  (str "-- " (driver-api/query->remark :bigquery-cloud-sdk outer-query) "\n" sql)
+                  (str sql "\n\n-- " (driver-api/query->remark :bigquery-cloud-sdk outer-query))
                   sql)]
         (*process-native* respond database sql params (driver-api/canceled-chan))))))
 
@@ -1137,6 +1137,11 @@
                               ;; tests expect the converted values.
                               :set-timezone                     true
                               :split-part                       true
+                              ;; This driver reports inaccurate `:rows-affected` counts; the transforms layer
+                              ;; falls back to a native `COUNT(*)` on the CTAS path.
+                              ;; TODO: fix `execute-raw-queries!` to return accurate row counts for DDL
+                              ;; statements by using a different driver-native API for affected-row counts.
+                              :transforms/accurate-rows-affected false
                               :transforms/python                true
                               :transforms/table                 true
                               ;; Workspace isolation using service account impersonation
@@ -1350,16 +1355,16 @@
       (doall
        (for [query queries]
          (let [[sql params] (if (string? query) [query] query)
-               _ (log/debugf "Executing BigQuery DDL: %s" sql)
+               _ (log/debug "Executing BigQuery DDL")
                job-config (-> (QueryJobConfiguration/newBuilder sql)
                               (bigquery.params/set-parameters! params)
                               (.setUseLegacySql false)
                               (.build))
                table-result (.query client job-config (into-array BigQuery$JobOption []))]
-           (or (and table-result (.getTotalRows table-result))
-               0))))
+           {:rows-affected (or (and table-result (.getTotalRows table-result))
+                               0)})))
       (catch Exception e
-        (log/error e "Error executing BigQuery DDL")
+        (log/errorf "Error executing BigQuery DDL: %s" (ex-message e))
         (throw e)))))
 
 (defmethod driver/drop-transform-target! [:bigquery-cloud-sdk :table]

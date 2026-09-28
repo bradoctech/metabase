@@ -61,14 +61,6 @@
   [_driver]
   ["KerberosUseCanonicalHostname" "externalAuthenticationRedirectHandlers" "hostnameInCertificate"])
 
-(defmethod driver/host-carrying-parameters :starburst
-  [_driver]
-  ["httpProxy" "socksProxy"])
-
-(defmethod driver/non-host-parameters :starburst
-  [_driver]
-  ["KerberosUseCanonicalHostname" "externalAuthenticationRedirectHandlers" "hostnameInCertificate"])
-
 (set! *warn-on-reflection* true)
 
 (prefer-method driver/database-supports? [:starburst :set-timezone] [:sql-jdbc :set-timezone])
@@ -128,8 +120,8 @@
 ;;; The Starburst JDBC driver DOES NOT support the `.getImportedKeys` method so just return `nil` here so the
 ;;; implementation doesn't try to use it.
 #_{:clj-kondo/ignore [:deprecated-var]}
-(defmethod driver/describe-table-fks :starburst
-  [_driver _database _table]
+(defmethod driver/describe-fks :starburst
+  [_driver _database & {:as _options}]
   ;; starburst does not support finding foreign key metadata tables, but some connectors support foreign keys.
   ;; We have this return nil to avoid running unnecessary queries during fks sync.
   nil)
@@ -476,8 +468,8 @@
       ;; included in trino-jdbc. We check the vendor-specific error code instead.
       ;; See HiveMetadata.java and UnknownTableTypeException.java in trinodb/trino
       (when (= 133001 (.getErrorCode e))
-        (log/debugf e "Table %s.%s is not accessible through this catalog (mixed catalog table type)"
-                    table-schema table-name))
+        (log/debugf "Table %s.%s is not accessible through this catalog (mixed catalog table type): %s"
+                    table-schema table-name (ex-message e)))
       false)))
 
 (defn- describe-schema
@@ -502,10 +494,33 @@
     (let [sql (describe-catalog-sql driver catalog)
           rs (sql-jdbc.execute/execute-statement! driver stmt sql)]
       (into []
-            (map (fn [{:keys [schema] :as _full}]
-                   (when-not (contains? excluded-schemas schema)
-                     (describe-schema driver conn catalog schema))))
+            (keep (fn [{:keys [schema] :as _full}]
+                    (when-not (contains? excluded-schemas schema)
+                      (describe-schema driver conn catalog schema))))
             (jdbc/reducible-result-set rs {})))))
+
+(defn- table-comments
+  "Returns a map of `[schema table-name] -> comment` for tables in `catalog`, with an optional `schema` filter."
+  [driver ^Connection conn catalog schema]
+  (if (str/blank? catalog)
+    {}
+    (try
+      (let [sql (str "SELECT schema_name AS schema, table_name AS name, comment
+                      FROM system.metadata.table_comments
+                      WHERE catalog_name = ?"
+                     (when schema " AND schema_name = ?"))]
+        (with-open [^PreparedStatement stmt (.prepareStatement conn sql)]
+          (.setString stmt 1 catalog)
+          (when schema (.setString stmt 2 schema))
+          (let [rs (sql-jdbc.execute/execute-prepared-statement! driver stmt)]
+            (into {}
+                  (keep (fn [{:keys [schema name comment]}]
+                          (when-not (str/blank? comment)
+                            [[schema name] comment])))
+                  (jdbc/reducible-result-set rs {})))))
+      (catch Throwable e
+        (log/debugf "Failed to read table comments from system.metadata.table_comments: %s" (ex-message e))
+        {}))))
 
 (defmethod driver/describe-database* :starburst
   [driver database]
@@ -516,9 +531,16 @@
      nil
      (fn [^Connection conn]
        (let [schemas (if schema
-                       #{(describe-schema driver conn catalog schema)}
-                       (all-schemas driver conn catalog))]
-         {:tables (reduce set/union #{} schemas)})))))
+                       [(describe-schema driver conn catalog schema)]
+                       (all-schemas driver conn catalog))
+             tables (reduce set/union #{} schemas)
+             comments (table-comments driver conn catalog schema)]
+         {:tables (into #{}
+                        (map (fn [{:keys [schema name] :as table}]
+                               (let [table-comment (get comments [schema name])]
+                                 (cond-> table
+                                   (not (str/blank? table-comment)) (assoc :description table-comment)))))
+                        tables)})))))
 
 (defmethod driver/describe-table :starburst
   [driver database {schema :schema, table-name :name}]
@@ -535,11 +557,12 @@
             :name   table-name
             :fields (into
                      #{}
-                     (map-indexed (fn [idx {:keys [column type] :as _col}]
-                                    {:name              column
-                                     :database-type     type
-                                     :base-type         (starburst-type->base-type type)
-                                     :database-position idx}))
+                     (map-indexed (fn [idx {:keys [column type comment], :as _col}]
+                                    (cond-> {:name              column
+                                             :database-type     type
+                                             :base-type         (starburst-type->base-type type)
+                                             :database-position idx}
+                                      (not (str/blank? comment)) (assoc :field-comment comment))))
                      (jdbc/reducible-result-set rs {}))}))))))
 
 (defmethod driver/db-default-timezone :starburst
@@ -595,7 +618,7 @@
        (try
          (.setReadOnly conn true)
          (catch Throwable e
-           (log/warn e "Error setting starburst connection to read-only")))
+           (log/warnf "Error setting starburst connection to read-only: %s" (ex-message e))))
        ;; as with statement and prepared-statement, cannot set holdability on the connection level
        conn
        (catch Throwable e
@@ -779,7 +802,7 @@
       (try
         (.setFetchDirection stmt ResultSet/FETCH_FORWARD)
         (catch Throwable e
-          (log/debug e "Error setting prepared statement fetch direction to FETCH_FORWARD")))
+          (log/debugf "Error setting prepared statement fetch direction to FETCH_FORWARD: %s" (ex-message e))))
       (if (.useExplicitPrepare ^TrinoConnection (.unwrap conn TrinoConnection))
         (proxy-prepared-statement driver conn stmt params)
         (proxy-optimized-prepared-statement driver conn stmt params))
@@ -796,7 +819,7 @@
     (try
       (.setFetchDirection stmt ResultSet/FETCH_FORWARD)
       (catch Throwable e
-        (log/debug e "Error setting statement fetch direction to FETCH_FORWARD")))
+        (log/debugf "Error setting statement fetch direction to FETCH_FORWARD: %s" (ex-message e))))
     (proxy [java.sql.Statement] []
       (execute [sql]
         (try
@@ -1022,3 +1045,9 @@
 (defmethod sql.qp/->honeysql [:starburst ::sql.qp/cast-to-text]
   [driver [_ expr]]
   (sql.qp/->honeysql driver [::sql.qp/cast expr "varchar"]))
+
+;; starburst returns line numbers in error messages which will be off by 1 if
+;; the remark is prepended (#64133)
+(defmethod sql-jdbc.execute/inject-remark :starburst
+  [_ sql remark]
+  (str sql "\n\n-- " remark))

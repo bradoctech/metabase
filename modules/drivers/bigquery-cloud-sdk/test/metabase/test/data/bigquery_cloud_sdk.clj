@@ -610,8 +610,7 @@
 
 (defmethod tx/destroy-db! :bigquery-cloud-sdk
   [_ db-def]
-  (when-not (= "test-data" (:database-name db-def))
-    (destroy-dataset! (test-dataset-id db-def))))
+  (destroy-dataset! (test-dataset-id db-def)))
 
 (defmethod tx/aggregate-column-info :bigquery-cloud-sdk
   ([driver aggregation-type]

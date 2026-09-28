@@ -2576,7 +2576,7 @@ LIMIT
       getTransformsList()
         .findByText("Original Name")
         .closest('[role="row"]')
-        .findByRole("button", { name: "Collection menu" })
+        .findByRole("button", { name: "Collection options" })
         .click();
 
       H.popover().findByText("Edit collection details").click();
@@ -2626,7 +2626,7 @@ LIMIT
       getTransformsList()
         .findByText("Archive Me")
         .closest('[role="row"]')
-        .findByRole("button", { name: "Collection menu" })
+        .findByRole("button", { name: "Collection options" })
         .click();
 
       H.popover().findByText("Archive").click();
@@ -2639,7 +2639,9 @@ LIMIT
         cy.button("Archive").click();
       });
 
-      H.undoToast().findByText("Collection archived").should("be.visible");
+      H.undoToast()
+        .findByText('"Archive Me" has been archived')
+        .should("be.visible");
 
       cy.log("verify collection and its children are no longer visible");
       getTransformsList().within(() => {
@@ -2745,6 +2747,20 @@ LIMIT
       cy.findByTestId("transform-history-list")
         .findByText(/reverted to an earlier version/)
         .should("be.visible");
+
+      cy.log("Surface backend error when a revert fails (UXW-310)");
+      cy.intercept("POST", "/api/revision/revert", {
+        statusCode: 500,
+        body: { message: "Cannot revert: missing transform" },
+      }).as("failedRevert");
+
+      cy.findByTestId("transform-history-list")
+        .findAllByTestId("question-revert-button")
+        .first()
+        .click();
+      cy.wait("@failedRevert");
+
+      H.undoToast().should("contain.text", "Cannot revert: missing transform");
     });
   });
 

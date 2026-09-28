@@ -111,7 +111,7 @@ export function ConversationsTable({
             {conversations.length === 0 && (
               <tr>
                 <td colSpan={9}>
-                  <Flex c="text-tertiary" justify="center">
+                  <Flex c="text-disabled" justify="center">
                     {t`No conversations found`}
                   </Flex>
                 </td>

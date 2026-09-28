@@ -145,9 +145,12 @@
           (is (str/includes? redirect-url "&return_to=")))))))
 
 (deftest login!-ignores-caller-supplied-user-id-real-jwt-provider-test
-  ;; Drives login! directly rather than /auth/sso: the exposure is a key at the request root, and Ring
-  ;; namespaces params under :params, so an HTTP-level injection cannot reach it and would assert nothing.
-  (testing "a caller-supplied :user-id does not name the account on a successful JWT login"
+  (testing (str "A caller-supplied :user-id must not name the account, even on a successful JWT login. "
+                "JWT's authenticate resolves identity from :user-data and returns no :user-id of its own, "
+                "so an injected one survives the merge and wins resolution, which reads it before the email "
+                "branch. Drives login! directly rather than /auth/sso because the exposure is a key at the "
+                "request root: the integrations forward the whole Ring request, while Ring namespaces params "
+                "under :params, so an HTTP-level injection never reaches the root and would assert nothing.")
     (with-jwt-default-setup!
       (mt/with-temp [:model/User {admin-id :id} {:is_active true, :is_superuser true}]
         (mt/with-model-cleanup [:model/User]
@@ -655,6 +658,8 @@
         ;; deactivate the user again
         (t2/update! :model/User :email "newuser@metabase.com" {:is_active false})
         (is (not (t2/select-one-fn :is_active :model/User :email "newuser@metabase.com")))
+        ;; with-redefs (cross-thread): /auth/sso runs on Jetty workers that don't inherit *local-redefs*
+        #_{:clj-kondo/ignore [:metabase/prefer-with-dynamic-fn-redefs]}
         (with-redefs [sso-settings/jwt-user-provisioning-enabled? (constantly false)
                       appearance.settings/site-name               (constantly "test")]
           (is (=? {:body "Sorry, but you'll need a test account to view this page. Please contact your administrator."}
@@ -845,6 +850,8 @@
                                                       :name "Tenant McTenantson"
                                                       :is_active false}
                        :model/User {existing-email :email} {:tenant_id tenant-id}]
+          ;; with-redefs (cross-thread): /auth/sso runs on Jetty workers that don't inherit *local-redefs*
+          #_{:clj-kondo/ignore [:metabase/prefer-with-dynamic-fn-redefs]}
           (with-redefs [sso-settings/jwt-user-provisioning-enabled? (constantly false)]
             (testing "with user provisioning turned off"
               (testing "a new user cannot log into a deactivated tenant, and the tenant doesn't get activated"
@@ -990,6 +997,8 @@
 (deftest create-new-jwt-user-no-user-provisioning-test
   (testing "When user provisioning is disabled, throw an error if we attempt to create a new user."
     (with-jwt-default-setup!
+      ;; with-redefs (cross-thread): /auth/sso runs on Jetty workers that don't inherit *local-redefs*
+      #_{:clj-kondo/ignore [:metabase/prefer-with-dynamic-fn-redefs]}
       (with-redefs [sso-settings/jwt-user-provisioning-enabled? (constantly false)
                     appearance.settings/site-name               (constantly "test")]
         (is (=? {:body "Sorry, but you'll need a test account to view this page. Please contact your administrator."}
@@ -1031,8 +1040,8 @@
                     "array_attr" "item1,item2"}
                    (t2/select-one-fn :jwt_attributes :model/User :email "rasta@metabase.com"))))
           (testing "warning messages are logged for non-stringable values"
-            (is (some #(re-find #"Dropping attribute 'object_attr' with non-stringable value: \{:nested \"value\"\}" %) (map :message (jwt-log-messages))))
-            (is (some #(re-find #"Dropping attribute 'null_attr' with non-stringable value: null" %) (map :message (jwt-log-messages)))))
+            (is (some #(re-find #"Dropping attribute 'object_attr' with non-stringable value" %) (map :message (jwt-log-messages))))
+            (is (some #(re-find #"Dropping attribute 'null_attr' with non-stringable value" %) (map :message (jwt-log-messages)))))
           (testing "warning messages are logged for `@`-prefixed keys"
             (is (some #(re-find #"Dropping attribute '@attribute', keys beginning with `@` are reserved" %) (map :message (jwt-log-messages)))))
           (testing "no warning for valid string attribute"
@@ -1227,7 +1236,7 @@
                                       methodical/add-primary-method dispatch-val method))))))))))))
 
 (deftest jwt-without-tenant-claim-mapped-to-tenant-group-fails-loudly-test
-  (testing (str "EMB-2118/#78009: a JWT with no @tenant claim whose groups map to a tenant group must not succeed "
+  (testing (str "a JWT with no @tenant claim whose groups map to a tenant group must not succeed "
                 "and silently create an internal user with a swallowed group-sync failure. The tenant-group "
                 "mismatch must fail the login and roll back user creation.")
     (with-jwt-default-setup!

@@ -30,7 +30,7 @@ jest.mock("metabase/analytics");
 jest.mock("metabase/common/analytics");
 
 jest.mock("@uiw/react-codemirror", () => {
-  const { forwardRef, useState } = jest.requireActual("react");
+  const { forwardRef } = jest.requireActual("react");
 
   const MockEditor = forwardRef((props, ref) => {
     const {
@@ -45,23 +45,14 @@ jest.mock("@uiw/react-codemirror", () => {
       onStatistics,
       ...rest
     } = props;
-    const [value, setValue] = useState(props.value ?? "");
-    const [syncedValue, setSyncedValue] = useState(props.value);
-    if (props.value !== syncedValue) {
-      setSyncedValue(props.value);
-      setValue(props.value ?? "");
-    }
     return (
       // @ts-expect-error: some props types are different on CodeMirror
       <textarea
         ref={ref}
         {...rest}
-        value={value}
-        onChange={(evt) => {
-          setValue(evt.target.value);
-          // @ts-expect-error: We cannot provide the update argument to onChange
-          props.onChange?.(evt.target.value, undefined);
-        }}
+        value={props.value ?? ""}
+        // @ts-expect-error: We cannot provide the update argument to onChange
+        onChange={(evt) => props.onChange?.(evt.target.value, undefined)}
         autoFocus
         disabled={editable === false}
       />

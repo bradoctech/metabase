@@ -23,6 +23,10 @@ process.env.MB_CUSTOM_VIZ_PLUGIN_DEV_MODE_ENABLED =
 // Expose the `en-ZZ` pseudo-locale in the Cypress backend's language pickers and API validation.
 process.env.MB_ENABLE_TEST_LOCALES = "true";
 
+// Use the H2 sample database in E2E tests. Production ships SQLite, but the test suite was written
+// against the H2 sample data; this defers migrating the tests to SQLite until after the release.
+process.env.MB_SAMPLE_DATABASE_ENGINE = "h2";
+
 // The warehouses the E2E suite connects to are all on localhost, so the warehouse network policy has to be off.
 // It otherwise defaults to `external-only` whenever `is-hosted?` is true, which any spec calling
 // `setTokenFeatures("all")` (or activating a cloud token) makes true -- and those specs would then be unable to

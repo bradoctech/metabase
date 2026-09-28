@@ -30,6 +30,7 @@
    [metabase-enterprise.advanced-config.file :as advanced-config.file]
    [metabase-enterprise.workspaces.config :as ws.config]
    [metabase-enterprise.workspaces.core :as ws]
+   [metabase-enterprise.workspaces.provisioning :as provisioning]
    [metabase-enterprise.workspaces.table-remapping :as ws.table-remapping]
    [metabase.driver :as driver]
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
@@ -71,7 +72,11 @@
    `{:tables #{}}` even when USAGE/SELECT grants are intact (root cause
    pending investigation; see that test's docstring). Don't add drivers
    to the smaller test without first fixing the underlying sync visibility."
-  #{:postgres :sqlserver :clickhouse :mysql :redshift})
+  #{:postgres :sqlserver :clickhouse :mysql :redshift
+    ;; currently this is very flaky in CI causing the entire bigquery driver
+    ;; to be quarantined. for now we disable just this one test so we can
+    ;; bring back the rest of it, but this still needs investigation.
+    #_:bigquery-cloud-sdk})
 
 (defn- three-slot-driver?
   "True when the driver emits `db.schema.table` (SQL Server / BigQuery).
@@ -87,6 +92,19 @@
    inside the driver's `grant!` impl; only the schema is supplied here."
   [_driver _admin-details main-schema]
   main-schema)
+
+(defn- add-database!
+  "Test helper: insert a WorkspaceDatabase row for `workspace-id` and provision it
+   (blocking). Replaces the removed production add-database! for test setup."
+  [workspace-id database-id input-schemas]
+  (t2/with-transaction [_conn]
+    (let [wsd-id (t2/insert-returning-pk! :model/WorkspaceDatabase
+                                          {:workspace_id     workspace-id
+                                           :database_id      database-id
+                                           :input_schemas    input-schemas
+                                           :database_details {}
+                                           :output_namespace ""})]
+      (provisioning/provision-single! wsd-id))))
 
 ;;; -------------------- driver-branched helpers --------------------
 ;;;
@@ -339,8 +357,8 @@
                         ;; multimethods, but through `provisioning/provision-single!`, which writes
                         ;; the resulting `:database_details` and `:output_namespace` back to the
                         ;; `WorkspaceDatabase` row — the inputs `build-workspace-config` reads.
-                        (ws/add-database! ws-id (:id ws-db)
-                                          [(workspace-input-schema admin-driver admin-details main-schema)])
+                        (add-database! ws-id (:id ws-db)
+                                       [(workspace-input-schema admin-driver admin-details main-schema)])
                         ;; Sanity check: provisioning must have populated :output_namespace and flipped
                         ;; status to :provisioned. If empty, the workspace driver impl is broken.
                         (let [wsd (-> (ws/get-workspace ws-id) :databases first)]
@@ -634,7 +652,14 @@
                                               (str "no app-db Table row should point at a table in the isolation DB " isolation-schema
                                                    " (leaked: " (pr-str (map :name leaked)) ")")))
                                         (is (= [] (filter #(= iso-tbl-schema (:schema %)) (map #(select-keys % [:schema :name]) tables)))
-                                            "no app-db Table row points at the isolation schema")))))))))
+                                            "no app-db Table row points at the isolation schema"))))
+                                  (testing "DELETE /api/transform/:id/table succeeds for the workspace user"
+                                    (let [outcome (try (mt/user-http-request :crowberto :delete 204
+                                                                             (format "transform/%d/table" (:id transform)))
+                                                       ::ok
+                                                       (catch Throwable t [::failed (ex-message t)]))]
+                                      (is (= ::ok outcome)
+                                          (str "deleting the transform output table failed; outcome=" (pr-str outcome))))))))))
                         (finally
                           ;; Clear the `instance-workspace` setting (populated by `apply-workspace-section!`
                           ;; via `initialize!` above) and tear down the WorkspaceDatabase. The
@@ -710,8 +735,8 @@
               (let [{ws-id :id} (ws/create-workspace! {:name       (str "ws-native-repro-" run-id)
                                                        :creator_id (mt/user->id :crowberto)})]
                 (try
-                  (ws/add-database! ws-id (:id ws-db)
-                                    [(workspace-input-schema admin-driver admin-details main-schema)])
+                  (add-database! ws-id (:id ws-db)
+                                 [(workspace-input-schema admin-driver admin-details main-schema)])
                   (let [cfg-map  (ws.config/build-workspace-config ws-id)
                         yaml-str (ws.config/config->yaml cfg-map)
                         reparsed (yaml/parse-string yaml-str)]

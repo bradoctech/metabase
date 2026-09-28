@@ -201,7 +201,7 @@ export function compileFormatter(
       }),
     ).clamp(true);
     return (value) => {
-      if (!isNumber(value) || value < lowerBound || value > upperBound) {
+      if (!isNumber(value)) {
         return null;
       }
       if (matchOnlyWithinRange && (value < lowerBound || value > upperBound)) {

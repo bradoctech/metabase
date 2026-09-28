@@ -92,7 +92,7 @@
         clause (cond-> clause
                  (and (contains? date-granular-truncation-units inherited-temporal-unit)
                       (isa? (or effective-type base-type) :type/DateTime))
-                 (assoc 2 (assoc opts :effective-type :type/Date :base-type :type/Date)))]
+                 (update 2 assoc :effective-type :type/Date :base-type :type/Date))]
     ((get-method sql.qp/->honeysql [:sql :field]) driver clause)))
 
 (defn- in-report-timezone

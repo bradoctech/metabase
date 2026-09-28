@@ -88,7 +88,10 @@ describe("issue 45255", () => {
     // Can reorder (empty)
     H.getDraggableElements().eq(2).should("have.text", "(empty)");
     H.getDraggableElements().first().as("dragElement");
-    H.moveDnDKitElementByAlias("@dragElement", { vertical: 100 });
+    H.moveDnDKitElementByAlias("@dragElement", {
+      vertical: 100,
+      useMouseEvents: true,
+    });
     H.getDraggableElements().eq(1).should("have.text", "(empty)");
 
     // Has (empty) in the chart
@@ -547,12 +550,12 @@ describe("issue 55853", () => {
         const axisTitle: Array<{ text: string; element: HTMLElement }> = [];
 
         $texts.each((i, el) => {
-          const text = (el as HTMLElement).textContent?.trim() || "";
+          const text = el.textContent?.trim() || "";
           if (text.includes("%") && text !== "value") {
-            percentTexts.push({ text, element: el as HTMLElement });
+            percentTexts.push({ text, element: el });
           }
           if (text === "value") {
-            axisTitle.push({ text, element: el as HTMLElement });
+            axisTitle.push({ text, element: el });
           }
         });
 
@@ -751,10 +754,11 @@ describe("UXW-2696", () => {
     H.popover().findByText("Edit Visualization").click();
 
     H.getDocumentSidebar().within(() => {
-      cy.findByRole("radio", { name: /axes/i }).click({ force: true });
-      cy.findByRole("switch", { name: /auto y-axis range/i }).should(
-        "not.have.attr",
+      cy.findByRole("tab", { name: /axes/i }).click({ force: true });
+      cy.findByLabelText("Auto y-axis range").should(
+        "have.attr",
         "data-checked",
+        "false",
       );
 
       cy.findByLabelText("Min").clear().type("70");
@@ -794,10 +798,11 @@ describe("UXW-2696", () => {
       H.showDashcardVisualizerModalSettings(0, { isVisualizerCard: false });
 
       H.modal().within(() => {
-        cy.findByRole("radio", { name: /axes/i }).click({ force: true });
-        cy.findByRole("switch", { name: /auto y-axis range/i }).should(
-          "not.have.attr",
+        cy.findByRole("tab", { name: /axes/i }).click({ force: true });
+        cy.findByLabelText("Auto y-axis range").should(
+          "have.attr",
           "data-checked",
+          "false",
         );
 
         assertNoPoints(false);

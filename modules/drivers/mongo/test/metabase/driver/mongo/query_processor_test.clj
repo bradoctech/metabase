@@ -24,11 +24,11 @@
 
 (deftest ^:parallel query->collection-name-test
   (testing "query->collection-name"
-    (testing "should be able to extract :collection from :source-query")
-    (is (= "checkins"
-           (#'mongo.qp/query->collection-name {:query {:source-query
-                                                       {:collection "checkins"
-                                                        :native     []}}})))
+    (testing "should be able to extract :collection from :source-query"
+      (is (= "checkins"
+             (#'mongo.qp/query->collection-name {:query {:source-query
+                                                         {:collection "checkins"
+                                                          :native     []}}}))))
     (testing "should work for nested-nested queries"
       (is (= "checkins"
              (#'mongo.qp/query->collection-name {:query {:source-query {:source-query
@@ -255,7 +255,25 @@
                   compiled (mongo.qp/mbql->native query)
                   let-lhs (-> compiled (get-in [:query 0 "$lookup" :let]) keys first)]
               (is (and (not (str/includes? let-lhs "."))
-                       (str/includes? let-lhs "source_categories"))))))))))
+                       (str/includes? let-lhs "source_categories")))))
+          (testing "Nested fields projected from a joined collection return their real values (#81546)"
+            (let [query (lib/query
+                         (mt/metadata-provider)
+                         (mt/mbql-query tips
+                           {:fields   [$_id
+                                       $tips.venue.categories
+                                       &Tips.$tips.venue.categories]
+                            :joins    [{:alias        "Tips"
+                                        :source-table $$tips
+                                        :condition    [:= $_id &Tips.$_id]
+                                        :fields       :none}]
+                            :order-by [[:asc $_id]]
+                            :limit    3}))
+                  rows  (mt/rows (qp/process-query query))]
+              (is (= [[1 ["Gluten-Free" "Café"]       ["Gluten-Free" "Café"]]
+                      [2 ["Homestyle" "Eatery"]       ["Homestyle" "Eatery"]]
+                      [3 ["Cage-Free" "Coffee House"] ["Cage-Free" "Coffee House"]]]
+                     rows)))))))))
 
 (deftest ^:parallel multiple-distinct-count-test
   (mt/test-driver :mongo
@@ -435,7 +453,7 @@
   (mt/test-driver :mongo
     (mt/with-metadata-provider (mt/id)
       (testing "Mixed integer and date arithmetic works with Mongo 5+"
-        (with-redefs [mongo.qp/get-mongo-version (constantly {:version "5.2.13", :semantic-version [5 2 13]})]
+        (mt/with-dynamic-fn-redefs [mongo.qp/get-mongo-version (constantly {:version "5.2.13", :semantic-version [5 2 13]})]
           (mt/with-clock #t "2022-06-21T15:36:00+02:00[Europe/Berlin]"
             (is (= {"$expr"
                     {"$lt"
@@ -466,7 +484,7 @@
   (mt/test-driver :mongo
     (mt/with-metadata-provider (mt/id)
       (testing "Date arithmetic fails with Mongo 4-"
-        (with-redefs [mongo.qp/get-mongo-version (constantly {:version "4", :semantic-version [4]})]
+        (mt/with-dynamic-fn-redefs [mongo.qp/get-mongo-version (constantly {:version "4", :semantic-version [4]})]
           (is (thrown-with-msg?
                clojure.lang.ExceptionInfo
                #"Date arithmetic not supported in versions before 5"
@@ -819,6 +837,24 @@
                     :effective_type           :type/Integer}]
                   :rows [[14 37.65 0 1] [nil 37.65 1 1] [14 nil 2 1] [nil nil 3 1]]}}
                 (qp.pivot/run-pivot-query pivot-query)))))))
+
+(deftest ^:parallel nested-native-card-recompile-no-bson-wrappers-test
+  (mt/test-driver :mongo
+    (testing "a nested query over a converted-to-native Mongo card compiles to a Bson-wrapper-free pipeline (#38181, #40557)"
+      (let [mp     (mt/metadata-provider)
+            ;; compiled mongo pipelines are vectors; a real saved native mongo query stores the JSON text
+            native (json/encode
+                    (:query (qp.compile/compile
+                             (-> (lib/query mp (lib.metadata/table mp (mt/id :venues)))
+                                 (lib/with-fields [(lib.metadata/field mp (mt/id :venues :price))])))))]
+        (mt/with-temp [:model/Card {card-id :id}
+                       {:dataset_query (-> (lib/native-query mp native)
+                                           (lib/with-native-extras {:collection "venues"}))}]
+          (let [compiled (qp.compile/compile (lib/query (mt/metadata-provider)
+                                                        (lib.metadata/card (mt/metadata-provider) card-id)))]
+            ;; match the entire `BsonXxx` wrapper-class family, not just a hand-picked subset.
+            (is (not (re-find #"Bson[A-Z]\w*"
+                              (pr-str (:query compiled)))))))))))
 
 (deftest ^:parallel escape-regex-literal-test
   (are [in out] (= out (#'mongo.qp/escape-regex-literal in))

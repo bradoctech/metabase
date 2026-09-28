@@ -43,8 +43,7 @@ describe("Remote Sync", () => {
           query: {
             "source-table": PRODUCTS_ID,
           },
-          collection_id: (syncedCollection as unknown as Collection)
-            .id as number,
+          collection_id: (syncedCollection as unknown as Collection).id,
         });
       });
 
@@ -58,7 +57,7 @@ describe("Remote Sync", () => {
 
       H.collectionTable().findByText(REMOTE_QUESTION_NAME).should("exist");
 
-      H.getPushOption().click();
+      H.clickPushOption();
 
       H.modal()
         .button(/Push changes/)
@@ -85,7 +84,7 @@ describe("Remote Sync", () => {
         },
       );
 
-      H.getPullOption().click();
+      H.clickPullOption();
 
       H.waitForTask({ taskName: "import" });
       H.expectUnstructuredSnowplowEvent({
@@ -168,16 +167,16 @@ describe("Remote Sync", () => {
         return doc;
       });
 
-      H.getPushOption().click();
+      H.clickPushOption();
 
-      // Attempt to push changes
-      cy.findByRole("dialog", { name: "Push to Git" })
-        .button(/Push changes/)
-        .click();
-
-      // push local changes to a different branch, because the remote is ahead of us
-      cy.findByRole("dialog", { name: /branch is behind/ }).within(() => {
-        cy.findByRole("radio", { name: /Create a new branch/ }).click();
+      // The remote has advanced, so pushing runs the preflight and opens the conflict modal directly
+      // (no commit-message step first). The modal title mentions the remote branch whether the merge
+      // is clean ("The remote branch has new changes…") or conflicting ("…conflict with the remote
+      // branch…"). Push our changes to a new branch instead, because the remote is ahead of us.
+      cy.findByRole("dialog", { name: /remote branch/ }).within(() => {
+        cy.findByRole("radio", {
+          name: /Create a new branch and push changes there/,
+        }).click();
         cy.findByPlaceholderText("your-branch-name").type(NEW_BRANCH);
         cy.button("Push changes").click();
       });
@@ -195,7 +194,7 @@ describe("Remote Sync", () => {
         cy.findByText("Remote Sync Test Question");
       });
 
-      H.getSwitchBranchOption().click();
+      H.clickSwitchBranchOption();
       H.popover().findByRole("option", { name: "main" }).click();
 
       H.waitForTask({ taskName: "import" });
@@ -215,7 +214,7 @@ describe("Remote Sync", () => {
 
       const createNewBranch = (newBranchName: string) => {
         branchCount++;
-        H.getSwitchBranchOption().click();
+        H.clickSwitchBranchOption();
         H.popover()
           .findByPlaceholderText("Find or create a branch...")
           .type(newBranchName);
@@ -235,7 +234,7 @@ describe("Remote Sync", () => {
       };
 
       const switchToExistingBranch = (branch: string) => {
-        H.getSwitchBranchOption().click();
+        H.clickSwitchBranchOption();
         H.popover()
           .findByPlaceholderText("Find or create a branch...")
           .type(branch);
@@ -243,7 +242,7 @@ describe("Remote Sync", () => {
       };
 
       const pushUpdates = () => {
-        H.getPushOption().click();
+        H.clickPushOption();
 
         H.modal()
           .button(/Push changes/)
@@ -379,7 +378,7 @@ describe("Remote Sync", () => {
         H.moveCollectionItemToSyncedCollection("Orders");
 
         H.goToSyncedCollection();
-        H.getPullOption().click();
+        H.clickPullOption();
       });
 
       it("can force push changes", () => {
@@ -412,9 +411,10 @@ describe("Remote Sync", () => {
             cy.findByText(REMOTE_QUESTION_NAME).should("exist");
           });
 
-          H.modal().findByText("Pushing to Git").should("not.exist");
+          // waitForTask above already closed the sync confirmation modal.
+          H.modal().should("not.exist");
 
-          H.getSwitchBranchOption().click();
+          H.clickSwitchBranchOption();
           H.popover().findByRole("option", { name: "main" }).click();
 
           H.waitForTask({ taskName: "import" }).then(() => {
@@ -495,7 +495,9 @@ describe("Remote Sync", () => {
         .findByText("Success")
         .should("exist");
 
-      H.modal().should("not.exist", { timeout: 10000 });
+      // Read-only setup runs an initial import; close its confirmation modal (GHY-3747).
+      H.closeSyncResultModal();
+      H.modal().should("not.exist");
       H.goToMainApp();
 
       // In read-only mode, git sync controls should not be visible in app bar
@@ -510,7 +512,7 @@ describe("Remote Sync", () => {
       cy.visit("/admin/settings/remote-sync");
       cy.button("Set up remote sync").should("be.disabled");
 
-      cy.findByRole("switch", { name: "Auto-sync with git" }).click({
+      cy.findByRole("switch", { name: /Auto-sync with git/ }).click({
         force: true,
       });
 
@@ -761,7 +763,9 @@ describe("Remote Sync", () => {
       it("should disable sync toggles in read-only mode", () => {
         H.copySyncedCollectionFixture();
         H.commitToRepo();
-        H.configureGit("read-only");
+        // Wait for the read-only import to finish before creating the tenant collection: racing
+        // their two implicit collection-permission revision bumps triggers a primary-key 500.
+        H.configureGitAndPullChanges("read-only");
 
         // Create a tenant collection
         H.createSharedTenantCollection("Read Only Tenant Collection");
@@ -840,7 +844,7 @@ describe("Remote Sync", () => {
             H.getSyncStatusIndicators().should("have.length.greaterThan", 0);
 
             // Push changes
-            H.getPushOption().click();
+            H.clickPushOption();
             H.modal()
               .button(/Push changes/)
               .click();
@@ -936,8 +940,7 @@ describe("Remote Sync", () => {
         cy.findByText("Batman's Existing Transform").should("be.visible");
       });
 
-      H.getPullOption().should("not.have.attr", "data-combobox-disabled");
-      H.getPullOption().click();
+      H.clickPullOption();
 
       cy.wait("@pullImport");
       H.pollForTask({ taskName: "import", until: "conflict" });
@@ -963,6 +966,7 @@ describe("Remote Sync", () => {
       cy.log("wait for the forced import to replace local state");
       cy.wait("@pullImport");
       H.pollForTask({ taskName: "import" });
+      H.closeSyncResultModal();
 
       cy.findByRole("treegrid").within(() => {
         cy.log("check remote transform was pulled in");
@@ -977,7 +981,16 @@ describe("Remote Sync", () => {
     it("can push to a new branch", () => {
       cy.intercept("POST", "/api/ee/remote-sync/export").as("exportChanges");
       H.DataStudio.Transforms.visit();
-      H.getPullOption().should("not.be.disabled").click();
+      H.clickPullOption();
+
+      cy.log(
+        "wait for the conflict modal to finish rendering before interacting",
+      );
+      H.modal()
+        .findByRole("heading", {
+          name: /Your local data will be overwritten by the remote branch/,
+        })
+        .should("be.visible");
 
       cy.log("choose the new branch option and push");
       cy.findByLabelText(/Create a new branch and push changes there/)

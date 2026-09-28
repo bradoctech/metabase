@@ -11,7 +11,7 @@ describe("scenarios > data studio > data model > measures", () => {
     H.restore();
     H.resetSnowplow();
     cy.signInAsAdmin();
-    H.activateToken("bleeding-edge");
+    H.activateToken("pro-self-hosted");
 
     cy.intercept("POST", "/api/measure").as("createMeasure");
     cy.intercept("PUT", "/api/measure/*").as("updateMeasure");
@@ -319,7 +319,7 @@ describe("scenarios > data studio > data model > measures", () => {
         aggregation: ["count"],
       });
       cy.get<number>("@measureId").then((measureId) => {
-        // Fetch the measure to get the current pMBQL definition
+        // Fetch the measure to get the current MBQL 5 definition
         cy.request("GET", `/api/measure/${measureId}`).then(({ body }) => {
           const currentDefinition = body.definition;
 
@@ -340,7 +340,7 @@ describe("scenarios > data studio > data model > measures", () => {
           });
 
           cy.log("update measure aggregation");
-          // Update aggregation in the pMBQL definition
+          // Update aggregation in the MBQL 5 definition
           const updatedDefinition = {
             ...currentDefinition,
             stages: [

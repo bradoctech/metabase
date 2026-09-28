@@ -3,7 +3,7 @@ import { match } from "ts-pattern";
 import { t } from "ttag";
 
 import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
-import { PageContainer } from "metabase/data-studio/common/components/PageContainer";
+import { PageContainer } from "metabase/common/data-studio/components/PageContainer";
 import { TransformDisconnectedDatabaseBanner } from "metabase/transforms/components/TransformDisconnectedDatabaseBanner";
 import { TransformHeader } from "metabase/transforms/components/TransformHeader";
 import { useTransformPermissions } from "metabase/transforms/hooks/use-transform-permissions";
@@ -57,7 +57,7 @@ export const TransformInspectPage = ({
         ))
         .with({ hasSucceeded: false }, () => (
           <>
-            <Alert color="brand" icon={<Icon name="info" />}>
+            <Alert color="core-brand" icon={<Icon name="info" />}>
               <Text>{t`To inspect the transform you need to run it first.`}</Text>
             </Alert>
             <RunSection

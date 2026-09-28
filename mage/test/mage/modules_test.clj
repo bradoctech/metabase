@@ -11,7 +11,7 @@
 (defn- make-ctx
   "Create a context map with sensible defaults, overridable by opts."
   [opts]
-  (merge {:is-master-or-release false
+  (merge {:force-run false
           :pr-labels #{}
           :skip false
           :particular-driver-changed? #{}}
@@ -56,8 +56,19 @@
       (is (nil? (#'mage.modules/parse-only-driver blank))))))
 
 ;;; =============================================================================
-;;; Driver directory -> test job mapping
+;;; Priority 5: Driver's own files changed
 ;;; =============================================================================
+
+(deftest particular-driver-changes-run-that-driver
+  (testing "a driver runs when its own files changed, even with nothing else affected"
+    (doseq [driver [:mysql :mongo :snowflake :databricks]]
+      (let [result (mage.modules/driver-decision driver
+                                                 (make-ctx {:particular-driver-changed? #{driver}})
+                                                 false   ; driver-deps-affected?
+                                                 #{})]   ; updated
+        (is (true? (:should-run result))
+            (str driver " should run when its own files changed"))
+        (is (= "driver files changed" (:reason result)))))))
 
 (deftest driver-directory-names-map-to-test-jobs
   (testing "a driver directory maps to the driver keyword(s) whose jobs it feeds"
@@ -67,7 +78,7 @@
         "mongo should map to multiple test jobs")))
 
 ;;; =============================================================================
-;;; Priority 1: Global skip
+;;; Priority 2: Global skip
 ;;; =============================================================================
 
 (deftest global-skip-skips-all-drivers
@@ -82,14 +93,14 @@
         (is (= "workflow skip (no backend changes)" (:reason result)))))))
 
 ;;; =============================================================================
-;;; Priority 2: H2 and Postgres always run
+;;; Priority 3: H2 and Postgres always run
 ;;; =============================================================================
 
 (deftest h2-and-postgres-always-run
   (testing "H2 and Postgres always run when not globally skipped"
     (doseq [driver [:h2 :postgres]]
       (let [result (mage.modules/driver-decision driver
-                                                 (make-ctx {:is-master-or-release false})
+                                                 (make-ctx {:force-run false})
                                                  false ; driver module not affected
                                                  #{})] ; updated
         (is (true? (:should-run result))
@@ -108,7 +119,7 @@
         (is (= "workflow skip (no backend changes)" (:reason result)))))))
 
 ;;; =============================================================================
-;;; Priority 3: ci:run-all-drivers / ci:run-<driver> labels
+;;; Priority 4: ci:run-all-drivers / ci:run-<driver> labels
 ;;; =============================================================================
 
 (deftest ci-run-all-drivers-forces-run
@@ -140,20 +151,19 @@
       (is (false? (:should-run result))))))
 
 ;;; =============================================================================
-;;; Priority 4: Master/release branch
+;;; Priority 1: Global force-run
 ;;; =============================================================================
 
-(deftest master-branch-runs-all-drivers
-  (testing "All drivers run on master/release branch"
-    ;; H2/Postgres hit priority 2 first, others hit priority 4
-    (doseq [driver [:mysql :mongo :athena :bigquery :snowflake]]
+(deftest force-run-runs-all-drivers
+  (testing "All drivers run on a force-run, even when the workflow says skip"
+    (doseq [driver [:h2 :postgres :mysql :mongo :athena :bigquery :snowflake]]
       (let [result (mage.modules/driver-decision driver
-                                                 (make-ctx {:is-master-or-release true})
+                                                 (make-ctx {:force-run true :skip true})
                                                  false ; even if not affected
                                                  #{})] ; updated
         (is (true? (:should-run result))
-            (str driver " should run on master"))
-        (is (= "master/release branch" (:reason result)))))))
+            (str driver " should run on a force-run"))
+        (is (= "force-run (master/release branch or ci:run-all label)" (:reason result)))))))
 
 ;;; =============================================================================
 ;;; Priority 10: Driver deps affected (self-hosted only)
@@ -161,7 +171,7 @@
 
 (deftest driver-deps-affected-runs-self-hosted-drivers
   (testing "Self-hosted drivers run when driver module is affected"
-    ;; H2/Postgres hit priority 2 first, others hit priority 10
+    ;; H2/Postgres hit priority 3 first, others hit priority 10
     (doseq [driver [:mysql :mongo :oracle :sqlserver]]
       (let [result (mage.modules/driver-decision driver
                                                  (make-ctx {})
@@ -172,7 +182,7 @@
         (is (= "driver module affected by shared code changes" (:reason result)))))))
 
 ;;; =============================================================================
-;;; Priority 5-9: Cloud driver special rules
+;;; Priority 6-9: Cloud driver special rules
 ;;; =============================================================================
 
 (deftest cloud-driver-with-label-runs
@@ -185,15 +195,6 @@
         (is (true? (:should-run result))
             (str driver " should run with label"))
         (is (= "ci:run-all-cloud-drivers label" (:reason result)))))))
-
-(deftest cloud-driver-with-file-changes-runs
-  (testing "Cloud driver runs when its files changed"
-    (let [result (mage.modules/driver-decision :athena
-                                               (make-ctx {:particular-driver-changed? #{:athena}})
-                                               false
-                                               #{})] ; updated
-      (is (true? (:should-run result)))
-      (is (re-find #"driver files changed" (:reason result))))))
 
 (deftest modules-can-trigger-cloud-drivers
   (doseq [module '#{query-processor transforms
@@ -237,7 +238,7 @@
 
 (deftest self-hosted-driver-not-affected-skips
   (testing "Self-hosted driver skips when driver module not affected"
-    ;; H2/Postgres always run (priority 2), so test other self-hosted drivers
+    ;; H2/Postgres always run (priority 3), so test other self-hosted drivers
     (doseq [driver [:mysql :mongo :oracle :sqlserver]]
       (let [result (mage.modules/driver-decision driver
                                                  (make-ctx {})
@@ -302,7 +303,8 @@
           ;; 2026-03-10 Bumped to 40 for lib-metric + metrics (Metrics Explorer #68961)
           ;;            Added premium-features to driver-affecting-overrides (#69561)
           ;; 2026-04-07 Bumped to 41 due to agent-lib addition (Metabot MBQL improvements #71524)
-          max-allowed-count 41]
+          ;; 2026-06-04 Bumped to 42 due to run-tracking addition (Zombie transform reaper #75194)
+          max-allowed-count 42]
       (is (<= (count modules-triggering-drivers) max-allowed-count)
           (format "Too many modules trigger driver tests! Expected <= %d, got %d.
                    Modules triggering driver tests: %s

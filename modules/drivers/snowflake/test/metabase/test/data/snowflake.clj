@@ -94,7 +94,7 @@
 (defmethod sql.tx/create-db-sql :snowflake
   [driver dbdef]
   (let [db (sql.tx/qualify-and-quote driver (qualified-db-name dbdef))]
-    (format "CREATE DATABASE IF NOT EXISTS %s;" db)))
+    (format "DROP DATABASE IF EXISTS %s; CREATE DATABASE %s;" db db)))
 
 (defn- no-db-connection-spec
   "Connection spec for connecting to our Snowflake instance without specifying a DB."
@@ -120,14 +120,10 @@
         ;; tracked UNION ALL untracked
         ;; NB. currently appears that the second half never shows anything; all
         ;; datasets currently appear to be tracked.
-        query "(select name from metabase_test_tracking.PUBLIC.datasets
-                where accessed_at < dateadd(day, ?, current_timestamp()))
-               UNION All
-               (select database_name from metabase_test_tracking.information_schema.databases d
-                where d.database_name not in (select name from metabase_test_tracking.PUBLIC.datasets)
-                and d.database_name like 'sha_%'
-                and created < dateadd(day, ?, current_timestamp()))"]
-    (into [] (map :name) (jdbc/reducible-query (no-db-connection-spec) [query days-ago days-ago]))))
+        query "select name from metabase_test_tracking.PUBLIC.datasets
+                where accessed_at < dateadd(day, ?, current_timestamp())"]
+    (into [] (map :name) (jdbc/reducible-query (no-db-connection-spec)
+                                               [query days-ago]))))
 
 (defn- orphan-isolation-schemas
   "Return a collection of schema names with mb__isolation_ prefix that are more than 3 hours old,
@@ -208,14 +204,14 @@
   "Open a write-capable Snowflake connection + Statement, call `f` with the stmt,
   close everything. Centralizes the boilerplate so the per-resource drop fns
   don't repeat it."
-  [f]
+  [f & args]
   (sql-jdbc.execute/do-with-connection-with-options
    :snowflake
    (no-db-connection-spec)
    {:write? true}
    (fn [^java.sql.Connection conn]
      (with-open [stmt (.createStatement conn)]
-       (f stmt)))))
+       (apply f stmt args)))))
 
 (defn- drop-old-datasets!
   "Drop test datasets (databases) prefixed by `sha_` that too old."
@@ -317,7 +313,6 @@
 (defonce ^:private deleted-old-test-data?
   (atom false))
 
-#_{:clj-kondo/ignore [:unused-private-var]}
 (defn- delete-old-test-data-if-needed!
   "Call [[delete-old-test-data!]], only if we haven't done so already."
   []
@@ -339,15 +334,7 @@
   ;; qualify the DB name with the unique prefix
   (let [db-def (assoc db-def :database-name (qualified-db-name db-def))]
     ;; clean up any old test data (datasets and isolation schemas)
-    ;; disabling this temporarily as it has caused very difficult-to-debug failures
-    ;; in CI. even tho the datasets *have* been accessed recently, they are still
-    ;; being deleted and reinserted, with race conditions that cause some data to be
-    ;; inserted three times. this does mean that if datasets change, old versions
-    ;; will not be cleaned up automatically and will need to be manually GCed.
-    ;; local testing shows that identifying old datasets works correctly, but
-    ;; sometimes randomly in CI it seems to decide that datasets are old and
-    ;; deletes them even tho they are not old.
-    ;; (delete-old-test-data-if-needed!)
+    (delete-old-test-data-if-needed!)
     ;; Snowflake by default uses America/Los_Angeles timezone. See https://docs.snowflake.com/en/sql-reference/parameters#timezone.
     ;; We expect UTC in tests. Hence fixing [[metabase.query-processor.timezone/database-timezone-id]] (PR #36413)
     ;; produced lot of failures. Following expression addresses that, setting timezone for the test user.
@@ -357,6 +344,8 @@
 
 (defmethod tx/destroy-db! :snowflake
   [_driver dbdef]
+  (when (= "test-data" (:database-name dbdef))
+    (throw (Exception. "tried to delete test-data dataset.")))
   (let [database-name (qualified-db-name dbdef)
         sql           (format "DROP DATABASE \"%s\";" database-name)]
     (log/infof "[Snowflake] %s" sql)
@@ -437,6 +426,25 @@
               ^ResultSet rs (sql-jdbc.execute/execute-prepared-statement! driver stmt)]
     (some-> rs resultset-seq first)))
 
+(defn- dataset-rows-ok?! [conn {:keys [table-definitions] :as dataset}]
+  ;; sometimes for unknown reasons we get datasets double- or triple-inserted
+  ;; and we have not been able to determine why. if a dataset has too many rows,
+  ;; treat it as if it hasn't been loaded and force it to be reloaded.
+  (with-open [^PreparedStatement stmt (sql-jdbc.execute/prepared-statement
+                                       :snowflake conn
+                                       (format "SHOW TABLES IN DATABASE \"%s\""
+                                               (qualified-db-name dataset)) [])
+              ^ResultSet rs (sql-jdbc.execute/execute-prepared-statement! :snowflake stmt)]
+    (let [table-names (set (map :table-name table-definitions))
+          db-tables (->> (resultset-seq rs)
+                         ;; there are some other tables of unknown source in there
+                         ;; like "g_inspector_ji_f9f65557_e249_4543_ab34_9e"
+                         (filter #(table-names (:name %))))
+          db-row-counts (zipmap (map :name db-tables) (map :rows db-tables))
+          dataset-row-counts (zipmap (map :table-name table-definitions)
+                                     (map (comp count :rows) table-definitions))]
+      (= db-row-counts dataset-row-counts))))
+
 (defmethod tx/dataset-already-loaded? :snowflake
   [driver db-def]
   ;; check and see if ANY tables are loaded for the current catalog
@@ -445,7 +453,8 @@
    (sql-jdbc.conn/connection-details->spec driver (tx/dbdef->connection-details driver :server db-def))
    {:write? false}
    (fn [^java.sql.Connection conn]
-     (database-exists?! conn driver db-def))))
+     (and (database-exists?! conn driver db-def)
+          (dataset-rows-ok?! conn db-def)))))
 
 (defmethod tx/track-dataset :snowflake
   [driver db-def]
@@ -583,6 +592,10 @@
 (defmethod driver/database-supports? [:snowflake :test/use-fake-sync]
   [_driver _feature _database]
   (not (tx/on-master-or-release-branch?)))
+
+;; too much contention here causing unreliable tests
+(defmethod driver/database-supports? [:snowflake :test/dynamic-dataset-loading]
+  [_driver _feature _database] false)
 
 (defmethod tx/fake-sync-schema :snowflake
   [_driver]

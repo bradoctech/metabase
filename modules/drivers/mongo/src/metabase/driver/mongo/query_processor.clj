@@ -179,13 +179,6 @@
   [^String path]
   (str/split path #"\."))
 
-(defn- raw-path->components
-  "Split a `parent.child.leaf`-style Mongo path string into a vector of path components. The Mongo driver
-  treats `.` as the unambiguous nested-key separator everywhere (sync, projection, ordering); literal dots in
-  document field names aren't supported."
-  [^String path]
-  (str/split path #"\."))
-
 (mu/defn field->name
   "Return a single string name for column metadata `col` For nested fields, this creates a combined qualified name."
   ([col]
@@ -223,10 +216,12 @@
   x)
 
 (defmethod ->rvalue :expression
-  [[_ expression-name]]
-  (let [expression-value (driver-api/expression-with-name (:query *query*) expression-name)]
-    (cond->> (->rvalue expression-value)
-      (driver-api/is-clause? :value expression-value) (array-map $literal))))
+  [[_ expression-name {:keys [temporal-unit]}]]
+  (let [expression-value (driver-api/expression-with-name (:query *query*) expression-name)
+        rvalue           (cond->> (->rvalue expression-value)
+                           (driver-api/is-clause? :value expression-value) (array-map $literal))]
+    (cond-> rvalue
+      temporal-unit (with-rvalue-temporal-bucketing temporal-unit))))
 
 (def ^:private base64-decoder "
 function(bin) {
@@ -1732,8 +1727,7 @@ function(bin) {
 
 (defn- log-aggregation-pipeline [form]
   (when-not driver-api/*disable-qp-logging*
-    (log/tracef "\nMongo aggregation pipeline:\n%s\n"
-                (u/pprint-to-str 'green (perf/postwalk #(if (symbol? %) (symbol (name %)) %) form)))))
+    (log/tracef "Compiled Mongo aggregation pipeline with %d stage(s)" (count form))))
 
 (defn simple-mbql->native
   "Compile a simple (non-nested) MBQL query."
@@ -1780,14 +1774,18 @@ function(bin) {
 ;;; until we get around to fixing that let's just walk the query and replace all the non-add-alias-info keys with the
 ;;; values added by add-alias-info.
 (defn- HACK-update-aliases [form]
-  (letfn [(prepend-nfc-path [{nfc-path      driver-api/qp.add.nfc-path,
+  (letfn [(raw-mongo-path [id-or-name]
+            (when (pos-int? id-or-name)
+              (field->name (driver-api/field (driver-api/metadata-provider) id-or-name))))
+          (prepend-nfc-path [raw-path
+                             {nfc-path      driver-api/qp.add.nfc-path,
                               source-alias  driver-api/qp.add.source-alias,
                               desired-alias driver-api/qp.add.desired-alias,
                               :as           opts}]
             (when (seq nfc-path)
               (let [nfc-path-str (str/join \. nfc-path)]
                 (-> opts
-                    (assoc driver-api/qp.add.source-alias  (str nfc-path-str \. source-alias)
+                    (assoc driver-api/qp.add.source-alias  (or raw-path (str nfc-path-str \. source-alias))
                            driver-api/qp.add.desired-alias (str nfc-path-str \. desired-alias))
                     (dissoc driver-api/qp.add.nfc-path)))))
           (update-name [{field-name :name, source-alias driver-api/qp.add.source-alias, :as opts}]
@@ -1803,20 +1801,20 @@ function(bin) {
                        source-table
                        (not= join-alias source-table))
               (assoc opts :join-alias source-table)))
-          (update-opts [opts]
+          (update-opts [raw-path opts]
             (reduce
              (fn
                [opts f]
                (or (f opts)
                    opts))
              opts
-             [prepend-nfc-path
+             [(partial prepend-nfc-path raw-path)
               update-join-alias
               update-name
               remove-bad-join-alias
               update-join-alias]))
           (update-field-ref [[_tag id-or-name {source-alias driver-api/qp.add.source-alias, :as opts}]]
-            (let [opts (update-opts opts)]
+            (let [opts (update-opts (raw-mongo-path id-or-name) opts)]
               (if (and (string? id-or-name)
                        source-alias)
                 [:field source-alias opts]

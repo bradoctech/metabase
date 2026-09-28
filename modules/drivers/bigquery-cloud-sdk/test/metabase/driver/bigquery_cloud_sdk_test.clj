@@ -23,6 +23,7 @@
    ^{:clj-kondo/ignore [:deprecated-namespace]} [metabase.query-processor.store :as qp.store]
    [metabase.query-processor.test :as qp]
    [metabase.sync.core :as sync]
+   [metabase.sync.field-values :as sync.field-values]
    [metabase.test :as mt]
    [metabase.test.data.bigquery-cloud-sdk :as bigquery.tx]
    [metabase.test.data.impl :as data.impl]
@@ -146,8 +147,8 @@
       (testing "can-connect? returns false for bogus credentials"
         (is (false? (driver/can-connect? :bigquery-cloud-sdk (assoc db-details :project-id fake-proj-id)))))
       (testing "can-connect? returns true for a valid dataset-id even with no tables"
-        (with-redefs [bigquery/describe-database-tables (fn [& _]
-                                                          [])]
+        (mt/with-dynamic-fn-redefs [bigquery/describe-database-tables (fn [& _]
+                                                                        [])]
           (is (true? (driver/can-connect? :bigquery-cloud-sdk db-details)))))
       (testing "can-connect? returns an appropriate exception message if no datasets are found"
         (is (thrown-with-msg? Exception
@@ -322,6 +323,27 @@
           (is (every? #(= expected-size %) @sizes))
           (is (= expected-reqs @requests))
           (is (>= expected-size 1000)))))))
+
+(deftest ^:synchronized later-page-fetch-failure-test
+  (let [row        (field-value-list [(prim-cell "x")])
+        schema     (Schema/of (u/varargs Field [(Field/of "c0" LegacySQLTypeName/STRING no-fields)]))
+        ;; A non-blank token promises another page, so `adaptive-query-next-page` has to fetch one.
+        first-page (mock-query-page "tok" schema [row])
+        consume    #(#'bigquery/bigquery-execute-response
+                     first-page nil nil
+                     (fn [_cols reducible] (into [] reducible))
+                     nil)]
+    (testing "a later page that comes back nil is reported, not silently truncated (#47339)"
+      (with-redefs [bigquery/query-results-page (fn [_job _opts] nil)]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"Cannot get next page from BigQuery"
+                              (consume)))))
+    (testing "a later page that throws surfaces the original error"
+      (with-redefs [bigquery/query-results-page (fn [_job _opts]
+                                                  (throw (ex-info "onoes BigQuery failed to fetch a later page" {})))]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"onoes BigQuery failed to fetch a later page"
+                              (consume)))))))
 
 ;; These look like the macros from metabase.query-processor.expressions-test
 ;; but conform to bigquery naming rules
@@ -872,6 +894,32 @@
               (finally
                 (drop-table-if-exists! table-name)))))))))
 
+(deftest ^:synchronized sync-fields-grouped-by-table!-on-partitioned-bigquery-table-test
+  (testing "Partitioned BigQuery tables that require a partition filter can't go through
+            run-distinct-batch directly (it bypasses the metadata-from-qp middleware that
+            injects the partition filter). sync-fields-grouped-by-table! should detect this
+            via can-batch-distinct? and fall back to the per-field path, which does go through
+            the middleware. The distinct values must still come back correctly."
+    (mt/test-driver :bigquery-cloud-sdk
+      (mt/dataset native-dataset
+        (let [category-field-id (u/auto-retry 1
+                                  (try (mt/id :fv_partitioned_table :category)
+                                       (catch Exception e
+                                         (sync/sync-database! (mt/db) {:scan :schema})
+                                         (throw e))))
+              category-field    (t2/select-one :model/Field :id category-field-id)
+              table             (t2/select-one :model/Table :id (:table_id category-field))]
+          (testing "Dispatcher identifies this as a non-batch-able table"
+            (is (false? (#'sync.field-values/can-batch-distinct? table))))
+          (testing "Distinct values come back correctly via the fallback per-field path"
+            (t2/update! :model/Field category-field-id {:has_field_values :list})
+            (t2/delete! :model/FieldValues :field_id category-field-id)
+            (sync.field-values/sync-fields-grouped-by-table! [category-field])
+            (is (= #{"coffee" "tea" "matcha"}
+                   (set (:values (t2/select-one :model/FieldValues
+                                                :field_id category-field-id
+                                                :type :full)))))))))))
+
 (deftest search-field-from-table-requires-a-filter-test
   (testing "#40673"
     (mt/test-driver
@@ -1138,17 +1186,17 @@
                                       "decimal_col"    (bigdec decimal-val)
                                       "bignumeric_col" (bigdec bignumeric-val)
                                       "bigdecimal_col" (bigdec bigdecimal-val)}]
-              (testing (format "filtering against %s" col-nm))
-              (is (= 1
-                     (-> (mt/first-row
-                          (mt/run-mbql-query nil
-                            {:source-table (mt/id tbl-nm)
-                             :aggregation  [[:count]]
-                             :parameters   [{:name   col-nm
-                                             :type   :number/=
-                                             :target [:field (mt/id tbl-nm col-nm)]
-                                             :value  [param-v]}]}))
-                         first))))))))))
+              (testing (format "filtering against %s" col-nm)
+                (is (= 1
+                       (-> (mt/first-row
+                            (mt/run-mbql-query nil
+                              {:source-table (mt/id tbl-nm)
+                               :aggregation  [[:count]]
+                               :parameters   [{:name   col-nm
+                                               :type   :number/=
+                                               :target [:field (mt/id tbl-nm col-nm)]
+                                               :value  [param-v]}]}))
+                           first)))))))))))
 
 (deftest sync-table-with-array-test
   (mt/test-driver
@@ -1210,14 +1258,14 @@
 (deftest retry-certain-exceptions-test
   (mt/test-driver :bigquery-cloud-sdk
     (let [fake-execute-called (atom false)
-          orig-fn             @#'bigquery/execute-bigquery]
+          orig-fn             (mt/original-fn #'bigquery/execute-bigquery)]
       (testing "Retry functionality works as expected"
-        (with-redefs [bigquery/execute-bigquery (fn [& args]
-                                                  (if-not @fake-execute-called
-                                                    (do (reset! fake-execute-called true)
-                                                        ;; simulate a transient error being thrown
-                                                        (throw (ex-info "Transient error" {:retryable? true})))
-                                                    (apply orig-fn args)))]
+        (mt/with-dynamic-fn-redefs [bigquery/execute-bigquery (fn [& args]
+                                                                (if-not @fake-execute-called
+                                                                  (do (reset! fake-execute-called true)
+                                                                      ;; simulate a transient error being thrown
+                                                                      (throw (ex-info "Transient error" {:retryable? true})))
+                                                                  (apply orig-fn args)))]
           ;; run any other test that requires a successful query execution
           (table-rows-sample-test)
           ;; make sure that the fake exception was thrown, and thus the query execution was retried
@@ -1226,14 +1274,14 @@
 (deftest not-retry-cancellation-exception-test
   (mt/test-driver :bigquery-cloud-sdk
     (let [fake-execute-called (atom false)
-          orig-fn        @#'bigquery/execute-bigquery]
+          orig-fn        (mt/original-fn #'bigquery/execute-bigquery)]
       (testing "Should not retry query on cancellation"
-        (with-redefs [bigquery/execute-bigquery (fn [& args]
-                                                  (if (not @fake-execute-called)
-                                                    (do (reset! fake-execute-called true)
-                                                        ;; Simulate a cancellation happening
-                                                        (throw (ex-info "Query cancelled" {::bigquery/cancelled? true})))
-                                                    (apply orig-fn args)))]
+        (mt/with-dynamic-fn-redefs [bigquery/execute-bigquery (fn [& args]
+                                                                (if (not @fake-execute-called)
+                                                                  (do (reset! fake-execute-called true)
+                                                                      ;; Simulate a cancellation happening
+                                                                      (throw (ex-info "Query cancelled" {::bigquery/cancelled? true})))
+                                                                  (apply orig-fn args)))]
           (try
             (qp/process-query {:native {:query "SELECT CURRENT_TIMESTAMP() AS notRetryCancellationExceptionTest"} :database (mt/id)
                                :type     :native})
@@ -1283,43 +1331,18 @@
             (is (< count-after (+ count-before 5))
                 "unbounded thread growth!")))))))
 
-(deftest later-page-fetch-returns-nil-test
-  (mt/test-driver :bigquery-cloud-sdk
-    (testing "BigQuery query whose later page fetch returns nil is caught, not silently truncated"
-      ;; The query path pages via `query-results-page` (`.getQueryResults`), so simulate BigQuery returning nil
-      ;; for a later page even though the page token reported there was more.
-      (let [page-counter (atom 3)
-            orig-fetch   (mt/original-fn #'bigquery/query-results-page)]
-        (mt/with-dynamic-fn-redefs [bigquery/query-results-page (fn [job options]
-                                                                  (if (zero? @page-counter)
-                                                                    nil
-                                                                    (orig-fetch job options)))]
-          (binding [bigquery/*page-size*     10 ; small pages so there are several
-                    bigquery/*page-callback* (fn []
-                                               (let [pages (swap! page-counter #(max (dec %) 0))]
-                                                 (log/debugf "*page-callback counting down: %d to go" pages)))]
-            (mt/dataset test-data
-              (is (thrown-with-msg?
-                   clojure.lang.ExceptionInfo
-                   #"Cannot get next page from BigQuery"
-                   (mt/process-query (mt/query orders)))))))))))
-
 (deftest later-page-fetch-throws-test
   (mt/test-driver :bigquery-cloud-sdk
-    (testing "BigQuery query whose later page fetch throws is caught, with no thread leaks"
-      (let [count-before (count (future-thread-names))
-            page-counter (atom 3)
-            orig-fetch   (mt/original-fn #'bigquery/query-results-page)]
-        (mt/with-dynamic-fn-redefs [bigquery/query-results-page (fn [job options]
-                                                                  (if (zero? @page-counter)
-                                                                    (throw (ex-info "onoes BigQuery failed to fetch a later page" {}))
-                                                                    (orig-fetch job options)))]
+    ;; That the error surfaces at all is [[later-page-fetch-failure-test]]'s job, on mock pages. This one runs a real
+    ;; query for what that harness cannot see: the threads `execute-bigquery` starts around the fetch.
+    (testing "BigQuery query whose later page fetch throws leaks no threads"
+      (let [count-before (count (future-thread-names))]
+        ;; `query-results-page` serves only pages *after* the first -- `execute-bigquery` fetches the initial page
+        ;; from `.getQueryResults` itself -- so its first call is already a later page.
+        (mt/with-dynamic-fn-redefs [bigquery/query-results-page (fn [_job _options]
+                                                                  (throw (ex-info "onoes BigQuery failed to fetch a later page" {})))]
           (dotimes [_ 10]
-            (reset! page-counter 3)
-            (binding [bigquery/*page-size*     100 ; small pages so there are several
-                      bigquery/*page-callback* (fn []
-                                                 (let [pages (swap! page-counter #(max (dec %) 0))]
-                                                   (log/debugf "*page-callback counting down: %d to go" pages)))]
+            (binding [bigquery/*page-size* 100] ; small first page so there is a second one
               (mt/dataset test-data
                 (is (thrown-with-msg? Exception #"onoes BigQuery failed to fetch a later page"
                                       (mt/process-query (mt/query orders))))))))
@@ -1413,10 +1436,10 @@
                                              :db_id (u/the-id db)}]
         (let [db-id      (u/the-id db)
               call-count (atom 0)
-              orig-fn    @#'bigquery/convert-dataset-id-to-filters!]
-          (with-redefs [bigquery/convert-dataset-id-to-filters! (fn [database dataset-id]
-                                                                  (swap! call-count inc)
-                                                                  (orig-fn database dataset-id))]
+              orig-fn    (mt/original-fn #'bigquery/convert-dataset-id-to-filters!)]
+          (mt/with-dynamic-fn-redefs [bigquery/convert-dataset-id-to-filters! (fn [database dataset-id]
+                                                                                (swap! call-count inc)
+                                                                                (orig-fn database dataset-id))]
             ;; fetch the Database from app DB a few more times to ensure the normalization changes are only called once
             (doseq [_ (range 5)]
               (is (nil? (get-in (t2/select-one :model/Database :id db-id) [:details :dataset-id]))))

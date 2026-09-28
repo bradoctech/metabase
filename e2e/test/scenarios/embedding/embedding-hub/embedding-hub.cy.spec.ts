@@ -3,7 +3,8 @@ import { ALL_EXTERNAL_USERS_GROUP_ID } from "e2e/support/cypress_sample_instance
 
 const { H } = cy;
 
-const { STATIC_ORDERS_ID, STATIC_PEOPLE_ID } = SAMPLE_DB_TABLES;
+const { STATIC_ORDERS_ID } = SAMPLE_DB_TABLES;
+const NON_SAMPLE_DB_NAME = "QA Postgres12";
 
 describe("scenarios - embedding hub", () => {
   describe("checklist", () => {
@@ -26,7 +27,7 @@ describe("scenarios - embedding hub", () => {
         .should("exist");
     });
 
-    it('"Create a dashboard" card should work correctly', () => {
+    it('"Create a dashboard" card should save the x-ray and show a success toast without leaving the guide', () => {
       cy.visit("/admin/embedding/setup-guide");
 
       cy.log("Find and click on 'Create a dashboard' card");
@@ -42,11 +43,17 @@ describe("scenarios - embedding hub", () => {
         H.pickEntity({ path: ["Databases", "Sample Database", "Accounts"] });
       });
 
-      cy.log("Should navigate to auto dashboard creation");
-      cy.url().should("include", "/auto/dashboard/table/");
+      cy.log("Should show a success toast with a link to the new dashboard");
+      H.undoToast()
+        .findByText("Your dashboard was saved", { timeout: 30_000 })
+        .should("be.visible");
+      H.undoToast().findByText("See it").should("be.visible");
+
+      cy.log("Should remain on the setup guide");
+      cy.url().should("include", "/admin/embedding/setup-guide");
     });
 
-    it('"Connect a database" card should work correctly', () => {
+    it('"Connect a database" card should pass from param in navigation URL', () => {
       cy.visit("/admin/embedding/setup-guide");
 
       cy.log("Find and click on 'Connect a database' card");
@@ -58,6 +65,13 @@ describe("scenarios - embedding hub", () => {
       cy.findByRole("dialog").within(() => {
         cy.findByRole("heading", { name: "Add data" }).should("be.visible");
       });
+
+      cy.log("Select a database engine");
+      cy.findByRole("dialog").findByText("PostgreSQL").click();
+
+      cy.log("Should navigate with from param");
+      cy.url().should("include", "/admin/databases/create");
+      cy.url().should("include", "returnToEmbeddingSetupGuide=");
     });
 
     it("Uploading CSVs to sample database should mark the 'Add Data' step as done", () => {
@@ -148,18 +162,24 @@ describe("scenarios - embedding hub", () => {
         .findByText("Get embed snippet")
         .click();
 
-      cy.log("choose dashboard experience");
       H.modal()
         .first()
         .within(() => {
+          cy.log("switch to guest auth");
+          cy.findByLabelText("Guest").click();
+          cy.log("choose dashboard experience");
           cy.findByText("Dashboard").click();
-          cy.findByText("Next").click();
+          cy.log("pick a dashboard");
+          cy.findByTestId("embed-browse-entity-button").click();
         });
 
-      cy.log("pick a dashboard");
-      H.modal().first().findByTestId("embed-browse-entity-button").click();
       H.entityPickerModal().findByText("Test Dashboard").click();
-      H.modal().first().findByText("Next").click();
+
+      H.modal()
+        .first()
+        .within(() => {
+          cy.findByText("Next").click();
+        });
 
       cy.log("publish the embed");
       H.publishChanges("dashboard");
@@ -254,7 +274,7 @@ describe("scenarios - embedding hub", () => {
     it("should link to user strategy when tenants are disabled", () => {
       H.restore("setup");
       cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
+      H.activateToken("pro-self-hosted");
 
       cy.visit("/admin/embedding/setup-guide");
 
@@ -269,7 +289,7 @@ describe("scenarios - embedding hub", () => {
     it("should link to tenants page when tenants are enabled", () => {
       H.restore("setup");
       cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
+      H.activateToken("pro-self-hosted");
 
       H.updateSetting("use-tenants", true);
       cy.visit("/admin/embedding/setup-guide");
@@ -300,7 +320,7 @@ describe("scenarios - embedding hub", () => {
     it("permissions setup page should mark steps as completed", () => {
       H.restore("setup");
       cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
+      H.activateToken("pro-self-hosted");
 
       cy.visit("/admin/embedding/setup-guide/permissions");
 
@@ -360,7 +380,7 @@ describe("scenarios - embedding hub", () => {
     it('"Enable tenants and create shared collection" button should enable tenants and create a shared collection', () => {
       H.restore("setup");
       cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
+      H.activateToken("pro-self-hosted");
 
       cy.log("create an x-ray dashboard via the embedding setup guide");
       cy.visit("/admin/embedding/setup-guide");
@@ -377,10 +397,6 @@ describe("scenarios - embedding hub", () => {
       });
 
       cy.log("wait for x-ray dashboard to generate and save it");
-      H.main()
-        .findByText("A look at", { exact: false, timeout: 30_000 })
-        .should("be.visible");
-      cy.button("Save this").click();
       H.undoToast().should("contain", "Your dashboard was saved");
 
       cy.visit("/admin/embedding/setup-guide/permissions");
@@ -428,6 +444,7 @@ describe("scenarios - embedding hub", () => {
         .should("be.visible");
 
       cy.log("x-ray dashboard should be pre-selected, move it");
+      cy.intercept("PUT", "/api/dashboard/*").as("moveDashboard");
       H.main()
         .findByRole("button", {
           name: "Move to shared collection",
@@ -435,6 +452,8 @@ describe("scenarios - embedding hub", () => {
         })
         .should("be.enabled")
         .click();
+
+      cy.wait("@moveDashboard").its("response.statusCode").should("eq", 200);
 
       cy.log(
         "x-rayed dashboard should have been moved to the shared collection",
@@ -480,7 +499,7 @@ describe("scenarios - embedding hub", () => {
     it("enable-tenants step should not be marked as completed when tenants are enabled but no shared collection exists", () => {
       H.restore("setup");
       cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
+      H.activateToken("pro-self-hosted");
 
       cy.log("enable tenants via setting without creating a shared collection");
       H.updateSetting("use-tenants", true);
@@ -507,7 +526,7 @@ describe("scenarios - embedding hub", () => {
     it('"Enable tenants and create shared collection" button should be disabled when already set up', () => {
       H.restore("setup");
       cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
+      H.activateToken("pro-self-hosted");
 
       cy.log("enable tenants and create a shared collection");
       H.updateSetting("use-tenants", true);
@@ -535,7 +554,7 @@ describe("scenarios - embedding hub", () => {
     it("selecting database routing strategy should show documentation link in step 3", () => {
       H.restore("setup");
       cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
+      H.activateToken("pro-self-hosted");
 
       cy.visit("/admin/embedding/setup-guide/permissions");
 
@@ -575,7 +594,7 @@ describe("scenarios - embedding hub", () => {
       beforeEach(() => {
         H.restore("setup");
         cy.signInAsAdmin();
-        H.activateToken("bleeding-edge");
+        H.activateToken("pro-self-hosted");
 
         cy.log("enable tenants and create shared collection");
         H.updateSetting("use-tenants", true);
@@ -782,9 +801,9 @@ describe("scenarios - embedding hub", () => {
       });
 
       it("shows autocomplete suggestions for organization_id based on selected field values", () => {
-        H.restore("setup");
+        H.restore("postgres-12");
         cy.signInAsAdmin();
-        H.activateToken("bleeding-edge");
+        H.activateToken("pro-self-hosted");
 
         cy.visit("/admin/embedding/setup-guide/permissions");
 
@@ -822,7 +841,7 @@ describe("scenarios - embedding hub", () => {
 
         cy.log("pick orders table");
         H.main().findByText("Pick a table").click();
-        H.miniPicker().findByText("Sample Database").click();
+        H.miniPicker().findByText(NON_SAMPLE_DB_NAME).click();
         H.miniPicker().findByText("Orders").click();
 
         H.main().findByPlaceholderText("Pick a column").click();
@@ -845,9 +864,9 @@ describe("scenarios - embedding hub", () => {
     // are only populated when the user goes through the "Select data" step
     // in the UI. Without it, the data permissions description won't show.
     it("shows RLS data permissions description in summary", () => {
-      H.restore("setup");
+      H.restore("postgres-12");
       cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
+      H.activateToken("pro-self-hosted");
 
       cy.visit("/admin/embedding/setup-guide/permissions");
 
@@ -885,7 +904,7 @@ describe("scenarios - embedding hub", () => {
 
       cy.log("pick Orders table and User ID column");
       H.main().findByText("Pick a table").click();
-      H.miniPicker().findByText("Sample Database").click();
+      H.miniPicker().findByText(NON_SAMPLE_DB_NAME).click();
       H.miniPicker().findByText("Orders").click();
 
       H.main().findByPlaceholderText("Pick a column").click();
@@ -928,9 +947,9 @@ describe("scenarios - embedding hub", () => {
     });
 
     it("should create sandboxes for multiple tables via row-level security setup", () => {
-      H.restore("setup");
+      H.restore("postgres-12");
       cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
+      H.activateToken("pro-self-hosted");
 
       cy.intercept("PUT", "/api/permissions/graph").as(
         "updatePermissionsGraph",
@@ -988,8 +1007,10 @@ describe("scenarios - embedding hub", () => {
 
       cy.log("Our analytics should be hidden in the table picker");
       H.miniPicker().findByText("Our analytics").should("not.exist");
+      cy.log("Sample Database should be hidden in the table picker");
+      H.miniPicker().findByText("Sample Database").should("not.exist");
 
-      H.miniPicker().findByText("Sample Database").click();
+      H.miniPicker().findByText(NON_SAMPLE_DB_NAME).click();
       H.miniPicker().findByText("Orders").click();
 
       H.main().findByPlaceholderText("Pick a column").click();
@@ -999,7 +1020,7 @@ describe("scenarios - embedding hub", () => {
       H.main().findByText("Add table").click();
       H.main().findAllByText("Pick a table").first().click();
 
-      H.miniPicker().findByText("Sample Database").click();
+      H.miniPicker().findByText(NON_SAMPLE_DB_NAME).click();
 
       cy.log("orders should be hidden as it's already selected");
       H.miniPicker().findByText("Orders").should("not.exist");
@@ -1027,57 +1048,60 @@ describe("scenarios - embedding hub", () => {
       // 1. The admin permissions UI is complex and would add significant test time
       // 2. This test focuses on the onboarding flow, not the permissions UI
       cy.log("access policies should be created");
-      cy.request("GET", "/api/mt/gtap").should((response) => {
-        const policies = response.body;
-        expect(policies.length).to.be.at.least(2);
+      H.getTableId({ databaseId: WRITABLE_DB_ID, name: "orders" }).then(
+        (ordersTableId) => {
+          H.getTableId({ databaseId: WRITABLE_DB_ID, name: "people" }).then(
+            (peopleTableId) => {
+              cy.request("GET", "/api/mt/gtap").should((response) => {
+                const policies = response.body;
+                expect(policies.length).to.be.at.least(2);
 
-        const orderPolicy = policies.find(
-          (policy: { table_id: number }) =>
-            policy.table_id === STATIC_ORDERS_ID,
-        );
+                const orderPolicy = policies.find(
+                  (policy: { table_id: number }) =>
+                    policy.table_id === ordersTableId,
+                );
 
-        const peoplePolicy = policies.find(
-          (policy: { table_id: number }) =>
-            policy.table_id === STATIC_PEOPLE_ID,
-        );
+                const peoplePolicy = policies.find(
+                  (policy: { table_id: number }) =>
+                    policy.table_id === peopleTableId,
+                );
 
-        expect(orderPolicy).to.exist;
-        expect(peoplePolicy).to.exist;
+                expect(orderPolicy).to.exist;
+                expect(peoplePolicy).to.exist;
 
-        expect(orderPolicy.attribute_remappings).to.have.property(
-          "organization_id",
-        );
+                expect(orderPolicy.attribute_remappings).to.have.property(
+                  "organization_id",
+                );
 
-        expect(peoplePolicy.attribute_remappings).to.have.property(
-          "organization_id",
-        );
-      });
+                expect(peoplePolicy.attribute_remappings).to.have.property(
+                  "organization_id",
+                );
+              });
 
-      cy.request(
-        "GET",
-        `/api/permissions/graph/group/${ALL_EXTERNAL_USERS_GROUP_ID}`,
-      ).should((response) => {
-        const graph = response.body;
+              cy.request(
+                "GET",
+                `/api/permissions/graph/group/${ALL_EXTERNAL_USERS_GROUP_ID}`,
+              ).should((response) => {
+                const graph = response.body;
 
-        const permissions = graph.groups[ALL_EXTERNAL_USERS_GROUP_ID!][1];
-        expect(permissions).to.exist;
+                const permissions =
+                  graph.groups[ALL_EXTERNAL_USERS_GROUP_ID!][WRITABLE_DB_ID];
+                expect(permissions).to.exist;
 
-        // deep.equal ensures only the selected tables have permissions —
-        // non-selected tables should be blocked (omitted from the response)
-        expect(permissions["view-data"]).to.deep.equal({
-          PUBLIC: {
-            [STATIC_ORDERS_ID]: "sandboxed",
-            [STATIC_PEOPLE_ID]: "sandboxed",
-          },
-        });
+                expect(permissions["view-data"].public).to.deep.equal({
+                  [ordersTableId]: "sandboxed",
+                  [peopleTableId]: "sandboxed",
+                });
 
-        expect(permissions["create-queries"]).to.deep.equal({
-          PUBLIC: {
-            [STATIC_ORDERS_ID]: "query-builder",
-            [STATIC_PEOPLE_ID]: "query-builder",
-          },
-        });
-      });
+                expect(permissions["create-queries"].public).to.deep.equal({
+                  [ordersTableId]: "query-builder",
+                  [peopleTableId]: "query-builder",
+                });
+              });
+            },
+          );
+        },
+      );
 
       H.main()
         .findByRole("listitem", {
@@ -1089,9 +1113,9 @@ describe("scenarios - embedding hub", () => {
     });
 
     it("should update existing sandboxes when changing column selection", () => {
-      H.restore("setup");
+      H.restore("postgres-12");
       cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
+      H.activateToken("pro-self-hosted");
 
       cy.intercept("PUT", "/api/permissions/graph").as(
         "updatePermissionsGraph",
@@ -1117,21 +1141,42 @@ describe("scenarios - embedding hub", () => {
       });
 
       cy.log("create an existing sandbox for Orders table via API");
-      cy.request("GET", "/api/permissions/group").then((response) => {
-        const allExternalUsersGroup = response.body.find(
-          (g: { magic_group_type: string }) =>
-            g.magic_group_type === "all-external-users",
-        );
+      H.getTableId({ databaseId: WRITABLE_DB_ID, name: "orders" }).then(
+        (ordersTableId) => {
+          cy.wrap(ordersTableId).as("ordersTableId");
 
-        cy.request("POST", "/api/mt/gtap", {
-          table_id: STATIC_ORDERS_ID,
-          group_id: allExternalUsersGroup.id,
-          card_id: null,
-          attribute_remappings: {
-            organization_id: ["dimension", ["field", 2, null]], // USER_ID field
-          },
-        });
-      });
+          H.getFieldId({ tableId: ordersTableId, name: "user_id" }).then(
+            (userIdFieldId) => {
+              H.getFieldId({ tableId: ordersTableId, name: "product_id" }).then(
+                (productIdFieldId) => {
+                  cy.wrap(productIdFieldId).as("productIdFieldId");
+
+                  cy.request("GET", "/api/permissions/group").then(
+                    (response) => {
+                      const allExternalUsersGroup = response.body.find(
+                        (g: { magic_group_type: string }) =>
+                          g.magic_group_type === "all-external-users",
+                      );
+
+                      cy.request("POST", "/api/mt/gtap", {
+                        table_id: ordersTableId,
+                        group_id: allExternalUsersGroup.id,
+                        card_id: null,
+                        attribute_remappings: {
+                          organization_id: [
+                            "dimension",
+                            ["field", userIdFieldId, null],
+                          ],
+                        },
+                      });
+                    },
+                  );
+                },
+              );
+            },
+          );
+        },
+      );
 
       cy.visit("/admin/embedding/setup-guide/permissions");
 
@@ -1162,7 +1207,7 @@ describe("scenarios - embedding hub", () => {
 
       cy.log("Select the same Orders table");
       H.main().findByText("Pick a table").click();
-      H.miniPicker().findByText("Sample Database").click();
+      H.miniPicker().findByText(NON_SAMPLE_DB_NAME).click();
       H.miniPicker().findByText("Orders").click();
 
       cy.log("select Product ID column instead of User ID");
@@ -1177,23 +1222,26 @@ describe("scenarios - embedding hub", () => {
       H.undoToast().should("not.exist");
 
       cy.log("sandbox should be updated and not created");
-      cy.request("GET", "/api/mt/gtap").should((response) => {
-        const policies = response.body;
+      cy.get<number>("@ordersTableId").then((ordersTableId) => {
+        cy.get<number>("@productIdFieldId").then((productIdFieldId) => {
+          cy.request("GET", "/api/mt/gtap").should((response) => {
+            const policies = response.body;
 
-        const orderPolicies = policies.filter(
-          (policy: { table_id: number }) =>
-            policy.table_id === STATIC_ORDERS_ID,
-        );
+            const orderPolicies = policies.filter(
+              (policy: { table_id: number }) =>
+                policy.table_id === ordersTableId,
+            );
 
-        // should only have one sandbox for Orders table
-        expect(orderPolicies.length).to.equal(1);
+            // should only have one sandbox for Orders table
+            expect(orderPolicies.length).to.equal(1);
 
-        const [orderPolicy] = orderPolicies;
-        const tenantFieldRef = orderPolicy.attribute_remappings.organization_id;
+            const [orderPolicy] = orderPolicies;
+            const tenantFieldRef =
+              orderPolicy.attribute_remappings.organization_id;
 
-        // attribute_remappings should reference field 3 (PRODUCT_ID),
-        // not field 2 (USER_ID)
-        expect(tenantFieldRef[1][1]).to.equal(3);
+            expect(tenantFieldRef[1][1]).to.equal(productIdFieldId);
+          });
+        });
       });
 
       H.main()
@@ -1211,7 +1259,7 @@ describe("scenarios - embedding hub", () => {
       () => {
         H.restore("postgres-writable");
         cy.signInAsAdmin();
-        H.activateToken("bleeding-edge");
+        H.activateToken("pro-self-hosted");
 
         cy.log(
           'reset "multi_schema" fixture: creates Domestic and Wild schemas, each with tables',
@@ -1352,7 +1400,7 @@ describe("scenarios - embedding hub", () => {
     beforeEach(() => {
       H.restore("setup");
       cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
+      H.activateToken("pro-self-hosted");
 
       H.updateSetting("use-tenants", true);
 
@@ -1662,7 +1710,7 @@ describe("scenarios - embedding hub", () => {
     beforeEach(() => {
       H.restore("setup");
       cy.signInAsAdmin();
-      H.activateToken("bleeding-edge");
+      H.activateToken("pro-self-hosted");
 
       H.updateSetting("use-tenants", true);
 
@@ -1781,7 +1829,18 @@ describe("scenarios - embedding hub", () => {
         .findByRole("listitem", { name: "Set up JWT authentication" })
         .should("have.attr", "data-completed", "true");
 
-      H.main().findByRole("button", { name: "Next" }).click();
+      cy.log("valid signing key should be shown");
+      H.main().within(() => {
+        cy.findByText(
+          /This example code for Node.js sets up an endpoint using Express/,
+        ).should("be.visible");
+
+        cy.log("express.js code snippet should be shown inline");
+        cy.contains("METABASE_JWT_SHARED_SECRET").should("exist");
+        cy.contains("METABASE_INSTANCE_URL").should("exist");
+
+        cy.findByRole("button", { name: "Next" }).scrollIntoView().click();
+      });
 
       cy.log("step 2 should be complete");
       H.main()

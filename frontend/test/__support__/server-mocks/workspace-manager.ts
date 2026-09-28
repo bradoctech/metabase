@@ -1,7 +1,6 @@
 import fetchMock from "fetch-mock";
 
 import type {
-  DatabaseId,
   DeleteWorkspaceResponse,
   Workspace,
   WorkspaceId,
@@ -38,37 +37,4 @@ export function setupDeleteWorkspaceEndpoint(
 
 export function setupDeleteWorkspaceEndpointError(workspaceId: WorkspaceId) {
   fetchMock.delete(`${BASE_URL}/${workspaceId}`, { status: 500 });
-}
-
-export function setupCreateWorkspaceDatabaseEndpoint(workspace: Workspace) {
-  fetchMock.post(`${BASE_URL}/${workspace.id}/database`, workspace);
-}
-
-export function setupUpdateWorkspaceDatabaseEndpoint(
-  workspace: Workspace,
-  databaseId: DatabaseId,
-) {
-  fetchMock.put(
-    `${BASE_URL}/${workspace.id}/database/${databaseId}`,
-    workspace,
-  );
-}
-
-export function setupDeleteWorkspaceDatabaseEndpoint(
-  workspace: Workspace,
-  databaseId: DatabaseId,
-) {
-  fetchMock.delete(
-    `${BASE_URL}/${workspace.id}/database/${databaseId}`,
-    workspace,
-  );
-}
-
-export function setupDeleteWorkspaceDatabaseEndpointError(
-  workspaceId: WorkspaceId,
-  databaseId: DatabaseId,
-) {
-  fetchMock.delete(`${BASE_URL}/${workspaceId}/database/${databaseId}`, {
-    status: 500,
-  });
 }

@@ -560,7 +560,10 @@ describe("scenarios > question > custom column > aggregation", () => {
       .should("have.length", 2)
       .last()
       .as("dragElement");
-    H.moveDnDKitElementByAlias("@dragElement", { horizontal: -400 });
+    H.moveDnDKitElementByAlias("@dragElement", {
+      horizontal: -400,
+      useMouseEvents: true,
+    });
 
     cy.log("The values should not have changed, but the order should have");
     H.visualize();
@@ -1064,7 +1067,10 @@ describe("scenarios > question > custom column > aggregation", () => {
         .should("have.length", 2)
         .last()
         .as("dragElement");
-      H.moveDnDKitElementByAlias("@dragElement", { horizontal: -400 });
+      H.moveDnDKitElementByAlias("@dragElement", {
+        horizontal: -400,
+        useMouseEvents: true,
+      });
 
       H.visualize();
       H.assertTableData({

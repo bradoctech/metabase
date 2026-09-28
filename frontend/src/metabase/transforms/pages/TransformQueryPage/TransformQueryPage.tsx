@@ -33,7 +33,6 @@ import type {
   UpdateTransformRequest,
 } from "metabase-types/api";
 
-import { TransformDisconnectedDatabaseBanner } from "../../components/TransformDisconnectedDatabaseBanner";
 import {
   buildIncrementalSource,
   buildIncrementalTarget,

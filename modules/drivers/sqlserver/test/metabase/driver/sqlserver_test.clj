@@ -185,7 +185,6 @@
                                  config/local-process-uuid)
             :database           "birddb"
             :encrypt            false
-            :instanceName       nil
             :loginTimeout       10
             :password           "toucans"
             :port               1433
@@ -199,7 +198,19 @@
                                                     :db                 "birddb"
                                                     :host               "localhost"
                                                     :port               1433
-                                                    :additional-options "trustServerCertificate=false"})))))
+                                                    :additional-options "trustServerCertificate=false"}))))
+  (testing "instanceName is omitted when no instance is supplied — mssql-jdbc treats an empty string as a named instance, which breaks Microsoft Fabric and Synapse serverless endpoints (#81270)"
+    (doseq [instance [nil "" "   "]]
+      (testing (pr-str instance)
+        (is (not (contains? (sql-jdbc.conn/connection-details->spec :sqlserver
+                                                                    {:user "cam", :password "toucans", :db "birddb",
+                                                                     :host "localhost", :port 1433, :instance instance})
+                            :instanceName))))))
+  (testing "instanceName is passed through when the user supplies one"
+    (is (= "MYINSTANCE"
+           (:instanceName (sql-jdbc.conn/connection-details->spec :sqlserver
+                                                                  {:user "cam", :password "toucans", :db "birddb",
+                                                                   :host "localhost", :instance "MYINSTANCE"}))))))
 
 (deftest ^:parallel reject-details-with-dangerous-additional-options-test
   (mt/test-driver :sqlserver
@@ -283,34 +294,34 @@
 (deftest ^:parallel dont-add-top-clauses-for-top-level-test
   (mt/test-driver :sqlserver
     (testing (str "We don't need to add TOP clauses for top-level order by. Normally we always add one anyway because "
-                  "of the max-results stuff, but make sure our impl doesn't add one when it's not in the source MBQL"))
-    ;; in order to actually see how things would work without the implicit max-results limit added we'll preprocess
-    ;; the query, strip off the `:limit` that got added, and then feed it back to the QP where we left off
-    (let [preprocessed (-> (mt/mbql-query venues
-                             {:source-query {:source-table $$venues
-                                             :fields       [$name]
-                                             :order-by     [[:asc $id]]}
-                              :order-by     [[:asc $id]]})
-                           qp.preprocess/preprocess
-                           (lib/limit nil))]
-      (mt/with-metadata-provider (mt/id)
-        (is (= {:query  ["SELECT"
-                         "  \"__mb_source\".\"name\" AS \"name\""
-                         "FROM"
-                         "  ("
-                         "    SELECT"
-                         "      TOP(1048575) \"dbo\".\"venues\".\"name\" AS \"name\""
-                         "    FROM"
-                         "      \"dbo\".\"venues\""
-                         "    ORDER BY"
-                         "      \"dbo\".\"venues\".\"id\" ASC"
-                         "  ) AS \"__mb_source\""
-                         "ORDER BY"
-                         "  \"__mb_source\".\"id\" ASC"]
-                :params nil}
-               (-> (driver/mbql->native :sqlserver preprocessed)
-                   (update :query (fn [sql]
-                                    (str/split-lines (driver/prettify-native-form :sqlserver sql)))))))))))
+                  "of the max-results stuff, but make sure our impl doesn't add one when it's not in the source MBQL")
+      ;; in order to actually see how things would work without the implicit max-results limit added we'll preprocess
+      ;; the query, strip off the `:limit` that got added, and then feed it back to the QP where we left off
+      (let [preprocessed (-> (mt/mbql-query venues
+                               {:source-query {:source-table $$venues
+                                               :fields       [$name]
+                                               :order-by     [[:asc $id]]}
+                                :order-by     [[:asc $id]]})
+                             qp.preprocess/preprocess
+                             (lib/limit nil))]
+        (mt/with-metadata-provider (mt/id)
+          (is (= {:query  ["SELECT"
+                           "  \"__mb_source\".\"name\" AS \"name\""
+                           "FROM"
+                           "  ("
+                           "    SELECT"
+                           "      TOP(1048575) \"dbo\".\"venues\".\"name\" AS \"name\""
+                           "    FROM"
+                           "      \"dbo\".\"venues\""
+                           "    ORDER BY"
+                           "      \"dbo\".\"venues\".\"id\" ASC"
+                           "  ) AS \"__mb_source\""
+                           "ORDER BY"
+                           "  \"__mb_source\".\"id\" ASC"]
+                  :params nil}
+                 (-> (driver/mbql->native :sqlserver preprocessed)
+                     (update :query (fn [sql]
+                                      (str/split-lines (driver/prettify-native-form :sqlserver sql))))))))))))
 
 (deftest ^:parallel max-results-should-actually-work-test
   (mt/test-driver :sqlserver
@@ -326,6 +337,29 @@
                                  :order-by     [[:asc $id]]
                                  :limit        5}
                   :limit        3}))))))))
+
+(deftest ^:parallel page-adds-order-by-when-none-present-test
+  (testing "Regression for #81988."
+    (testing "no existing ORDER BY -> synthetic ORDER BY (SELECT NULL) added"
+      (is (= {:order-by [[{:select [nil]}]]
+              :offset   [:inline 0]
+              :fetch    [:inline 200]}
+             (sql.qp/apply-top-level-clause :sqlserver :page {}
+                                            {:page {:page 1 :items 200}}))))
+    (testing "existing ORDER BY preserved"
+      (let [existing-order-by [[[:field "id" nil] :asc]]]
+        (is (= {:order-by existing-order-by
+                :offset   [:inline 0]
+                :fetch    [:inline 200]}
+               (sql.qp/apply-top-level-clause :sqlserver :page
+                                              {:order-by existing-order-by}
+                                              {:page {:page 1 :items 200}})))))
+    (testing "later pages compute OFFSET from (page - 1) * items"
+      (is (= {:order-by [[{:select [nil]}]]
+              :offset   [:inline 400]
+              :fetch    [:inline 200]}
+             (sql.qp/apply-top-level-clause :sqlserver :page {}
+                                            {:page {:page 3 :items 200}}))))))
 
 (deftest ^:parallel locale-bucketing-test
   (mt/test-driver :sqlserver
@@ -1091,3 +1125,18 @@
       "50% off [x]"   "50[%] off [[]x]"
       ;; `[` is escaped first, so the brackets the other replacements introduce are not re-escaped
       "x[%]y"         "x[[][%]]y")))
+
+(deftest cancelation-poisons-connection-test
+  (testing "discarding the Connection a query canceled on leaves the pool able to serve later queries (#39018)"
+    (mt/test-driver :sqlserver
+      (is (true? (sql-jdbc.execute/cancelation-poisons-connection? :sqlserver))
+          "SQL Server does not recover from a cancelation on its own, so the Connection must not be recycled")
+      (letfn [(rows [table n]
+                (let [mp (mt/metadata-provider)]
+                  (cond-> (lib/query mp (lib.metadata/table mp (mt/id table)))
+                    n    (lib/limit n)
+                    true (-> qp/process-query mt/rows))))]
+        ;; stopping at the limit leaves the statement producing, which is what triggers the cancel-and-discard
+        (is (= 4 (count (rows :venues 4))))
+        (testing "and a later query reading every row still succeeds"
+          (is (= 1000 (count (rows :checkins nil)))))))))
