@@ -11,8 +11,6 @@ Also known as: parameters for signed embeds, or standalone embeds.
 
 Parameters are pieces of information that are passed between Metabase and your website via the [embedding URL](./static-embedding.md#adding-the-embedding-url-to-your-website). You can use parameters to specify how Metabase items should look and behave inside the iframe on your website.
 
-{% include shared/in-page-promo-embedding-workshop.html %}
-
 ## Types of parameters
 
 Parameters can be signed or unsigned.
@@ -37,7 +35,7 @@ Unsigned parameters, such as appearance settings, should be added directly to yo
 You can use **editable parameters** to add [filter widgets](https://www.metabase.com/glossary/filter-widget) to embedded dashboards or SQL questions.
 
 1. Go to your dashboard or SQL question. Make sure you've set up a [dashboard filter](../dashboards/filters.md) or [SQL variable](../questions/native-editor/sql-parameters.md).
-2. Click on the **sharing icon** > **Embed this item in an application**.
+2. Click on the **Share** icon > **Embed this item in an application**.
 3. Under **Parameters**, you'll find the names of your dashboard filters or SQL variables.
 4. Select **Editable** for each parameter that should get a filter widget on your embed.
 5. Click **Publish** to save your changes.
@@ -114,7 +112,7 @@ Whenever you're adding a parameter to the embedding URL in your iframe's `src` a
 If you want to restrict the data that's displayed in an embedded dashboard or SQL question, you can set up a **locked parameter**. A locked parameter filters the data in a dashboard or SQL question _before_ the results are displayed to people in a static embed.
 
 1. Go to your dashboard or SQL question. Make sure you've set up a [dashboard filter](../dashboards/filters.md) or [SQL variable](../questions/native-editor/sql-parameters.md).
-2. Click on the **sharing icon** > **Embed this item in an application**.
+2. Click on the **Share** icon > **Embed this item in an application**.
 3. Under **Parameters**, you'll find the names of your dashboard filters or SQL variables.
 4. Select **Locked** for each parameter that you want to restrict your data with.
 5. Optional: select a value under **Preview locked parameters** to see what the restricted data looks like.

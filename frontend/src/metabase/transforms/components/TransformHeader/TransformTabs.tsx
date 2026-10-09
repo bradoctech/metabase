@@ -3,12 +3,12 @@ import { t } from "ttag";
 import {
   type PaneHeaderTab,
   PaneHeaderTabs,
-} from "metabase/data-studio/common/components/PaneHeader";
-import * as Urls from "metabase/lib/urls";
+} from "metabase/common/data-studio/components/PaneHeader";
 import {
   PLUGIN_DEPENDENCIES,
   PLUGIN_TRANSFORMS_PYTHON,
 } from "metabase/plugins";
+import * as Urls from "metabase/urls";
 import type { Transform, TransformId } from "metabase-types/api";
 
 type TransformTabsProps = {
@@ -37,10 +37,11 @@ function getTabs(id: TransformId): PaneHeaderTab[] {
     },
   ];
 
-  if (PLUGIN_TRANSFORMS_PYTHON.isEnabled) {
+  if (PLUGIN_TRANSFORMS_PYTHON.shouldShowInspectTab) {
     tabs.push({
       label: t`Inspect`,
       to: inspectUrl,
+      isGated: !PLUGIN_TRANSFORMS_PYTHON.isEnabled,
       isSelected: (pathname: string) => pathname.startsWith(inspectUrl),
     });
   }

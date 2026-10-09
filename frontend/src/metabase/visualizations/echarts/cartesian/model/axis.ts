@@ -2,15 +2,9 @@ import * as d3 from "d3";
 import dayjs from "dayjs";
 import _ from "underscore";
 
-import { NULL_DISPLAY_VALUE } from "metabase/lib/constants";
-import { formatValue } from "metabase/lib/formatting";
-import type { OptionsType } from "metabase/lib/formatting/types";
-import {
-  getObjectEntries,
-  getObjectKeys,
-  getObjectValues,
-} from "metabase/lib/objects";
-import { isNotNull, isNumber } from "metabase/lib/types";
+import { NULL_DISPLAY_VALUE } from "metabase/utils/constants";
+import { getObjectEntries, getObjectKeys } from "metabase/utils/objects";
+import { isNotNull, isNumber } from "metabase/utils/types";
 import {
   ECHARTS_CATEGORY_AXIS_NULL_VALUE,
   X_AXIS_DATA_KEY,
@@ -43,15 +37,16 @@ import {
   normalizeDate,
   tryGetDate,
 } from "metabase/visualizations/echarts/cartesian/utils/timeseries";
+import { formatValue } from "metabase/visualizations/lib/formatting";
 import { computeNumericDataInterval } from "metabase/visualizations/lib/numeric";
 import { getLineAreaBarComparisonSettings } from "metabase/visualizations/lib/settings";
 import type {
-  ColumnSettings,
   ComputedVisualizationSettings,
   Extent,
   VisualizationGridSize,
 } from "metabase/visualizations/types";
 import type {
+  ColumnSettings,
   DatasetColumn,
   DateTimeAbsoluteUnit,
   NumericScale,
@@ -174,23 +169,21 @@ function generateSplits(
 function axisCost(extents: Extent[], favorUnsplit = true) {
   const axisExtent = d3.extent(extents.flatMap((e) => e));
 
-  // TODO: handle cases where members of axisExtent is undefined
-  const axisRange = axisExtent[1]! - axisExtent[0]!;
+  const axisRange =
+    axisExtent[0] != null ? axisExtent[1] - axisExtent[0] : undefined;
 
   if (favorUnsplit && extents.length === 0) {
     return SPLIT_AXIS_UNSPLIT_COST;
-  } else if (axisRange === 0) {
+  } else if (axisRange === 0 || !axisRange) {
     return 0;
   } else {
-    return extents.reduce(
-      (sum, seriesExtent) =>
-        sum +
-        Math.pow(
-          axisRange / (seriesExtent[1] - seriesExtent[0]),
-          SPLIT_AXIS_COST_FACTOR,
-        ),
-      0,
-    );
+    return extents.reduce((sum, seriesExtent) => {
+      const seriesRange = seriesExtent[1] - seriesExtent[0];
+      if (seriesRange === 0) {
+        return sum;
+      }
+      return sum + Math.pow(axisRange / seriesRange, SPLIT_AXIS_COST_FACTOR);
+    }, 0);
   }
 }
 
@@ -395,7 +388,7 @@ export const getYAxisFormatter = (
   column: DatasetColumn,
   settings: ComputedVisualizationSettings,
   stackType: StackType,
-  formattingOptions?: OptionsType,
+  formattingOptions?: ColumnSettings,
 ): AxisFormatter => {
   const isNormalized = stackType === "normalized";
 
@@ -506,7 +499,7 @@ function getYAxisExtent(
 interface YAxisModelOptions {
   stackModels?: StackModel[];
   stackType?: StackType;
-  formattingOptions?: OptionsType;
+  formattingOptions?: ColumnSettings;
   gridSize?: VisualizationGridSize;
   showLabel?: boolean;
 }
@@ -674,28 +667,6 @@ export function getYAxesModels(
   };
 }
 
-type GetYAxisFormattingOptions = {
-  compactSeriesDataKeys: DataKey[];
-  axisSeriesKeysSet: Set<string>;
-  settings: ComputedVisualizationSettings;
-};
-
-export function getYAxisFormattingOptions({
-  compactSeriesDataKeys,
-  axisSeriesKeysSet,
-  settings,
-}: GetYAxisFormattingOptions): OptionsType {
-  const isCompact =
-    settings["graph.label_value_formatting"] === "compact" ||
-    compactSeriesDataKeys.some((dataKey) => axisSeriesKeysSet.has(dataKey));
-
-  if (isCompact) {
-    return { compact: isCompact };
-  }
-
-  return {};
-}
-
 const getFormatUnit = (
   dimensionColumn: DatasetColumn,
   dataTimeSeriesInterval: TimeSeriesInterval,
@@ -706,6 +677,31 @@ const getFormatUnit = (
 
   return dimensionColumn.unit;
 };
+
+const isDateColumn = (column: DatasetColumn) => {
+  return (
+    (column.effective_type ?? column.base_type)?.startsWith("type/Date") ??
+    false
+  );
+};
+
+const getCategoryXAxisColumn = (
+  column: DatasetColumn,
+  dataset: ChartDataset,
+) => {
+  if (!isDateColumn(column) || isAbsoluteDateTimeUnit(column.unit)) {
+    return column;
+  }
+
+  const xValues = dataset.map((datum) => datum[X_AXIS_DATA_KEY]);
+  const dataTimeSeriesInterval = computeTimeseriesDataInterval(xValues, null);
+  const formatUnit = dataTimeSeriesInterval
+    ? getFormatUnit(column, dataTimeSeriesInterval)
+    : column.unit;
+
+  return formatUnit ? { ...column, unit: formatUnit } : column;
+};
+
 export function getTimeSeriesXAxisModel(
   dimensionModel: DimensionModel,
   rawSeries: RawSeries,
@@ -852,7 +848,7 @@ export function getXAxisModel(
     );
   }
 
-  const column = dimensionModel.column;
+  const column = getCategoryXAxisColumn(dimensionModel.column, dataset);
   const columnSettings =
     column != null ? (settings.column?.(column) ?? {}) : {};
 
@@ -960,7 +956,7 @@ function getTimeSeriesXAxisInfo(
   // 2. count - how many intervals per tick?
   // 3. timezone - what timezone are values in? days vary in length by timezone
   const unit = minTimeseriesUnit(
-    getObjectValues(dimensionModel.columnByCardId)
+    Object.values(dimensionModel.columnByCardId)
       .map((column) =>
         isAbsoluteDateTimeUnit(column.unit) ? column.unit : null,
       )

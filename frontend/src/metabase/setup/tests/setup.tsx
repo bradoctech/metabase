@@ -12,6 +12,11 @@ import {
 } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
 import { renderWithProviders, screen } from "__support__/ui";
+import type { SetupStep } from "metabase/redux/store";
+import {
+  createMockSetupState,
+  createMockState,
+} from "metabase/redux/store/mocks";
 import type {
   SettingDefinition,
   TokenFeatures,
@@ -21,13 +26,8 @@ import {
   createMockSettings,
   createMockTokenFeatures,
 } from "metabase-types/api/mocks";
-import {
-  createMockSetupState,
-  createMockState,
-} from "metabase-types/store/mocks";
 
 import { Setup } from "../components/Setup";
-import type { SetupStep } from "../types";
 
 export interface SetupOpts {
   step?: SetupStep;
@@ -89,8 +89,6 @@ export const clickNextStep = async () =>
 
 export const skipWelcomeScreen = async () =>
   await userEvent.click(screen.getByText("Let's get started"));
-
-export const skipLanguageStep = clickNextStep;
 
 export const submitUserInfoStep = async ({
   firstName = "John",
@@ -164,7 +162,7 @@ export const getLastSettingsPutPayload = async () => {
   expect(lastSettingsCall).toBeTruthy();
   expect(lastSettingsCall.options?.body).toBeTruthy();
 
-  return JSON.parse((await lastSettingsCall.options!.body!) as string);
+  return JSON.parse((await lastSettingsCall.options.body!) as string);
 };
 
 export const skipTokenStep = async (name = "Skip") =>

@@ -3,13 +3,13 @@ import { useState } from "react";
 import { t } from "ttag";
 
 import { useHasTokenFeature, useSetting } from "metabase/common/hooks";
-import { EmbeddingHubHomePage } from "metabase/embedding/embedding-hub";
-import { useSelector } from "metabase/lib/redux";
+import { useSelector } from "metabase/redux";
 import { getUser, getUserIsAdmin } from "metabase/selectors/user";
 import { getLandingPageIllustration } from "metabase/selectors/whitelabel";
 import { Box, Button, Icon, Tooltip } from "metabase/ui";
 
 import { CustomHomePageModal } from "../CustomHomePageModal";
+import { EmbeddingHubHomePage } from "../EmbeddingHubHomePage";
 import { HomeGreeting } from "../HomeGreeting";
 
 interface HomeLayoutProps {

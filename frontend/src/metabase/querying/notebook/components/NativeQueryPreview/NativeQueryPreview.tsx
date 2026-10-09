@@ -5,8 +5,8 @@ import { getErrorMessage } from "metabase/api/utils";
 import { CodeEditor } from "metabase/common/components/CodeEditor";
 import { CopyButton } from "metabase/common/components/CopyButton";
 import { ExternalLink } from "metabase/common/components/ExternalLink";
-import { formatNativeQuery } from "metabase/lib/engine";
-import { useSelector } from "metabase/lib/redux";
+import { formatNativeQuery } from "metabase/databases/utils/engine";
+import { useSelector } from "metabase/redux";
 import { getLearnUrl } from "metabase/selectors/settings";
 import { getShowMetabaseLinks } from "metabase/selectors/whitelabel";
 import { Box, Flex, Icon, Loader, Stack } from "metabase/ui";
@@ -43,14 +43,14 @@ export function NativeQueryPreview({
     <Stack>
       {formattedError && (
         <Flex gap="sm">
-          <Icon name="warning" c="error" />
+          <Icon name="warning" c="feedback-negative" />
           {t`An error occurred in your query`}
         </Flex>
       )}
 
       {isFetching ? (
         <Flex direction="column" justify="center" align="center">
-          <Loader c="brand" />
+          <Loader c="core-brand" />
         </Flex>
       ) : (
         <Flex direction="column" mih={0}>

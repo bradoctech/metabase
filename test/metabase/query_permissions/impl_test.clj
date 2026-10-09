@@ -1,4 +1,5 @@
 (ns metabase.query-permissions.impl-test
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.query-permissions.impl-test]}}}}}}
   (:require
    [clojure.test :refer :all]
    [metabase.api.common :refer [*current-user-id* *current-user-permissions-set*]]
@@ -207,7 +208,6 @@
                                          [:field "USER_ID" {:base-type :type/Integer, :join-alias "__alias__"}]]}]
                  :limit 10})
               :throw-exceptions? true)))
-
       (is (= {:perms/view-data      {(mt/id :users) :unrestricted
                                      (mt/id :checkins) :unrestricted}
               :perms/create-queries {(mt/id :users) :query-builder
@@ -244,8 +244,8 @@
                  (qp.preprocess/preprocess
                   query)))))))))
 
-(deftest ^:parallel pmbql-query-test
-  (testing "Should be able to calculate permissions for a pMBQL query (#39024)"
+(deftest ^:parallel mbql5-query-test
+  (testing "Should be able to calculate permissions for a MBQL 5 query (#39024)"
     (let [metadata-provider (mt/metadata-provider)
           venues            (lib.metadata/table metadata-provider (mt/id :venues))
           query             (lib/query metadata-provider venues)]
@@ -253,8 +253,8 @@
               :perms/create-queries {(mt/id :venues) :query-builder}}
              (query-perms/required-perms-for-query query))))))
 
-(deftest ^:parallel pmbql-native-query-test
-  (testing "Should be able to calculate permissions for a pMBQL native query (#39024)"
+(deftest ^:parallel mbql5-native-query-test
+  (testing "Should be able to calculate permissions for a MBQL 5 native query (#39024)"
     (let [metadata-provider (mt/metadata-provider)
           query             (lib/query metadata-provider {:lib/type :mbql.stage/native
                                                           :native   "SELECT *;"})]
@@ -272,6 +272,7 @@
       (testing "native query"
         (is (= {:perms/create-queries :query-builder-and-native
                 :perms/view-data      :unrestricted
+                :card-ids             #{card-1-id card-2-id}
                 :paths                #{(format "/collection/%d/read/" collection-1-id)
                                         (format "/collection/%d/read/" collection-2-id)}}
                (query-perms/required-perms-for-query
@@ -290,17 +291,20 @@
                                                        :condition    [:= true false]}]}}]
           (is (= {:perms/create-queries :query-builder-and-native
                   :perms/view-data      :unrestricted
+                  :card-ids             #{card-1-id card-2-id}
                   :paths                #{(format "/collection/%d/read/" collection-1-id)
                                           (format "/collection/%d/read/" collection-2-id)}}
-                 (query-perms/required-perms-for-query native-query)))
-          (testing "pMBQL query"
+                 (query-perms/required-perms-for-query native-query :already-preprocessed? true)))
+          (testing "MBQL 5 query"
             (is (= {:perms/create-queries :query-builder-and-native
                     :perms/view-data      :unrestricted
+                    :card-ids             #{card-1-id card-2-id}
                     :paths                #{(format "/collection/%d/read/" collection-1-id)
                                             (format "/collection/%d/read/" collection-2-id)}}
                    (query-perms/required-perms-for-query
                     (lib/query (mt/metadata-provider)
-                               (lib/->pMBQL native-query)))))))))))
+                               (lib/->mbql5 native-query))
+                    :already-preprocessed? true)))))))))
 
 (deftest ^:parallel native-query-source-card-id-join-permissions-test
   (testing "MBQL query with native source card (#30077)"
@@ -320,3 +324,15 @@
                 :perms/create-queries {(mt/id :products) :query-builder}
                 :perms/view-data      {(mt/id :products) :unrestricted}}
                (query-perms/required-perms-for-query query :already-preprocessed? true)))))))
+
+(deftest check-result-metadata-data-perms-error-message-test
+  (testing "the denied table's ID reads as a plain number, with no digit-grouping separator"
+    ;; `tru` runs its arguments through MessageFormat, which formats a bare integer for the current locale: a
+    ;; four-digit ID comes out as "1,595". IDs only reach four digits on busy instances, so the ID is passed as a
+    ;; string to keep the message stable whatever its magnitude.
+    (mt/with-no-data-perms-for-all-users!
+      (mt/with-current-user (mt/user->id :rasta)
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo
+             #"You do not have permission to view data of table 1595 in result_metadata\."
+             (query-perms/check-result-metadata-data-perms (mt/id) [{:name "NAME", :table_id 1595}])))))))

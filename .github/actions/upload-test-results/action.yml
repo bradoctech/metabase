@@ -7,9 +7,7 @@ inputs:
   output-name:
     required: true
     default: test
-  aws-access-key-id:
-    required: true
-  aws-secret-access-key:
+  role-to-assume:
     required: true
   aws-region:
     required: true
@@ -23,15 +21,18 @@ inputs:
     default: ""
   previous-step-outcome:
     required: true
+  run-trunk:
+    required: false
+    default: "true"
+    description: Whether to run the Trunk step at all.
 
 runs:
   using: "composite"
   steps:
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
+      uses: aws-actions/configure-aws-credentials@d979d5b3a71173a29b74b5b88418bfda9437d885
       with:
-        aws-access-key-id: ${{ inputs.aws-access-key-id }}
-        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        role-to-assume: ${{ inputs.role-to-assume }}
         aws-region: ${{ inputs.aws-region }}
     - name: zip test results
       env:
@@ -50,11 +51,11 @@ runs:
         aws s3 cp ${OUTPUT_FILE}.zip s3://$BUCKET/$DATE/$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT/
 
     - name: Upload results to Trunk
+      if: ${{ always() && github.repository_owner == 'metabase' && inputs.run-trunk == 'true' }}
       # Important!
       # 1. This step must always run because it controls job's exit code.
       # 2. There's no point in running this outside the organization
-      if: always() && github.repository_owner == 'metabase'
-      uses: trunk-io/analytics-uploader@main
+      uses: trunk-io/analytics-uploader@1198efcc0976501147b10a7e343c3fa069527526 # v2.0.9
       env:
         TRUNK_REPO_URL: git@github.com:metabase/metabase.git
       with:

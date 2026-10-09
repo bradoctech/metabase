@@ -2,29 +2,21 @@ import { createAction } from "redux-actions";
 import { t } from "ttag";
 
 import { getActionErrorMessage } from "metabase/actions/utils";
-import { Pulses } from "metabase/entities/pulses";
-import {
-  NEW_PULSE_TEMPLATE,
-  createChannel,
-  getDefaultChannel,
-} from "metabase/lib/pulse";
-import { createThunkAction } from "metabase/lib/redux";
-import { setErrorPage } from "metabase/redux/app";
+import { subscriptionApi } from "metabase/api";
+import { createThunkAction } from "metabase/redux";
+import type { DraftDashboardSubscription } from "metabase/redux/store";
 import { addUndo } from "metabase/redux/undo";
-import { PulseApi } from "metabase/services";
 import type {
   ChannelApiResponse,
-  ChannelSpec,
-  ChannelSpecs,
+  CreateSubscriptionRequest,
   DashboardSubscription,
-  RegularCollectionId,
+  UpdateSubscriptionRequest,
 } from "metabase-types/api";
 
-import { getEditingPulse, getPulseFormInput } from "./selectors";
+import { getEditingPulse } from "./selectors";
 
 export const SET_EDITING_PULSE = "SET_EDITING_PULSE";
 export const UPDATE_EDITING_PULSE = "UPDATE_EDITING_PULSE";
-export const SAVE_PULSE = "SAVE_PULSE";
 export const SAVE_EDITING_PULSE = "SAVE_EDITING_PULSE";
 export const CANCEL_EDITING_PULSE = "CANCEL_EDITING_PULSE";
 export const TEST_PULSE = "TEST_PULSE";
@@ -34,52 +26,9 @@ export const FETCH_PULSE_FORM_INPUT = "FETCH_PULSE_FORM_INPUT";
 export const FETCH_PULSE_LIST_BY_DASHBOARD_ID =
   "FETCH_PULSE_LIST_BY_DASHBOARD_ID";
 
-export const setEditingPulse = createThunkAction(
-  SET_EDITING_PULSE,
-  function (
-    id?: number,
-    initialCollectionId: RegularCollectionId | null = null,
-  ) {
-    return async function (dispatch, getState) {
-      if (id != null) {
-        try {
-          return Pulses.HACK_getObjectFromAction(
-            await dispatch(Pulses.actions.fetch({ id })),
-          );
-        } catch (e) {
-          console.error(e);
-          dispatch(setErrorPage(e));
-        }
-      } else {
-        let channels = getPulseFormInput(getState())?.channels;
-        if (!channels) {
-          try {
-            // HACK: need a way to wait for form_input to finish loading
-            channels = (await PulseApi.form_input()).channels;
-          } catch {
-            // form_input can fail when the user lacks subscription
-            // permissions — this is non-critical (EMB-967).
-          }
-        }
-        const defaultChannelSpec = channels
-          ? (getDefaultChannel(channels as ChannelSpecs) as
-              | ChannelSpec
-              | undefined)
-          : undefined;
-        return {
-          ...NEW_PULSE_TEMPLATE,
-          channels: defaultChannelSpec
-            ? [createChannel(defaultChannelSpec)]
-            : [],
-          collection_id: initialCollectionId,
-        };
-      }
-    };
-  },
-);
-
-export const updateEditingPulse =
-  createAction<DashboardSubscription>(UPDATE_EDITING_PULSE);
+export const updateEditingPulse = createAction<
+  DashboardSubscription | DraftDashboardSubscription
+>(UPDATE_EDITING_PULSE);
 export const cancelEditingPulse = createAction(CANCEL_EDITING_PULSE);
 
 export const saveEditingPulse = createThunkAction(
@@ -91,13 +40,17 @@ export const saveEditingPulse = createThunkAction(
 
       try {
         if (isEdit) {
-          return Pulses.HACK_getObjectFromAction(
-            await dispatch(Pulses.actions.update(editingPulse)),
-          );
+          return await dispatch(
+            subscriptionApi.endpoints.updateSubscription.initiate(
+              editingPulse as unknown as UpdateSubscriptionRequest,
+            ),
+          ).unwrap();
         } else {
-          return Pulses.HACK_getObjectFromAction(
-            await dispatch(Pulses.actions.create(editingPulse)),
-          );
+          return await dispatch(
+            subscriptionApi.endpoints.createSubscription.initiate(
+              editingPulse as unknown as CreateSubscriptionRequest,
+            ),
+          ).unwrap();
         }
       } catch (error) {
         const errorMessage = getActionErrorMessage(error);
@@ -105,7 +58,7 @@ export const saveEditingPulse = createThunkAction(
         dispatch(
           addUndo({
             icon: "warning",
-            toastColor: "error",
+            toastColor: "feedback-negative",
             message: isEdit
               ? t`Cannot edit subscription. ${errorMessage} Please contact your administrator.`
               : t`Cannot create subscription. ${errorMessage} Please contact your administrator.`,
@@ -120,9 +73,11 @@ export const saveEditingPulse = createThunkAction(
 
 export const testPulse = createThunkAction(
   TEST_PULSE,
-  function (pulse: DashboardSubscription) {
-    return async function () {
-      return await PulseApi.test(pulse);
+  function (pulse: DashboardSubscription | DraftDashboardSubscription) {
+    return async function (dispatch) {
+      return await dispatch(
+        subscriptionApi.endpoints.testSubscription.initiate(pulse),
+      ).unwrap();
     };
   },
 );
@@ -130,24 +85,17 @@ export const testPulse = createThunkAction(
 export const fetchPulseFormInput = createThunkAction(
   FETCH_PULSE_FORM_INPUT,
   function () {
-    return async function (): Promise<ChannelApiResponse | undefined> {
+    return async function (dispatch): Promise<ChannelApiResponse | undefined> {
       try {
-        return await PulseApi.form_input();
+        return await dispatch(
+          subscriptionApi.endpoints.getChannelInfo.initiate(),
+        ).unwrap();
       } catch {
         // This request is expected to fail when the user lacks
         // "Subscriptions and Alerts" permissions. Swallow the error
         // so it doesn't surface as an unhandled rejection (EMB-967).
         return undefined;
       }
-    };
-  },
-);
-
-export const fetchPulsesByDashboardId = createThunkAction(
-  FETCH_PULSE_LIST_BY_DASHBOARD_ID,
-  function (dashboard_id: number) {
-    return async function () {
-      return await PulseApi.list({ dashboard_id: dashboard_id });
     };
   },
 );

@@ -1,7 +1,7 @@
 import type { ScaleContinuousNumeric } from "d3-scale";
 
+import type { TextWidthMeasurer } from "metabase/utils/measure-text";
 import type { Margin } from "metabase/visualizations/shared/types/layout";
-import type { TextWidthMeasurer } from "metabase/visualizations/shared/types/measure-text";
 import type { ChartGoal } from "metabase/visualizations/shared/types/settings";
 import type {
   ChartFont,
@@ -24,7 +24,7 @@ export const getMaxWidth = (
     ...formattedYTicks.map((tick) =>
       measureTextWidth(tick, {
         size: `${ticksFont.size}px`,
-        family: "Rawline",
+        family: "Lato",
         weight: String(ticksFont.weight ?? 400),
       }),
     ),

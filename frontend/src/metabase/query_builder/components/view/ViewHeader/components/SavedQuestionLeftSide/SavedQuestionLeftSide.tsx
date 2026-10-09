@@ -11,7 +11,7 @@ import type Question from "metabase-lib/v1/Question";
 import { ViewSubHeading } from "../../../ViewSection";
 import ViewTitleHeaderS from "../../ViewTitleHeader.module.css";
 import { HeadBreadcrumbs } from "../HeaderBreadcrumbs/HeaderBreadcrumbs";
-import { HeaderCollectionBadge } from "../HeaderCollectionBadge/HeaderCollectionBadge";
+import { HeaderCollectionBreadcrumb } from "../HeaderCollectionBreadcrumb/HeaderCollectionBreadcrumb";
 import { QuestionDataSource } from "../QuestionDataSource";
 
 import SavedQuestionLeftSideS from "./SavedQuestionLeftSide.module.css";
@@ -87,7 +87,7 @@ export function SavedQuestionLeftSide({
               parts={[
                 ...(isAdditionalInfoVisible && isModelOrMetric
                   ? [
-                      <HeaderCollectionBadge
+                      <HeaderCollectionBreadcrumb
                         key="collection"
                         question={question}
                       />,

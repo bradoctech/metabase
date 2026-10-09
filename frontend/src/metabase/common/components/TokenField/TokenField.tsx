@@ -2,10 +2,10 @@ import cx from "classnames";
 import { Component, createRef } from "react";
 import _ from "underscore";
 
-import { TippyPopover } from "metabase/common/components/Popover/TippyPopover";
 import FormS from "metabase/css/components/form.module.css";
 import CS from "metabase/css/core/index.css";
-import { isObscured } from "metabase/lib/dom";
+import { Icon, Popover } from "metabase/ui";
+import { isObscured } from "metabase/utils/dom";
 import {
   KEYCODE_BACKSPACE,
   KEYCODE_DOWN,
@@ -16,8 +16,7 @@ import {
   KEY_BACKSPACE,
   KEY_COMMA,
   KEY_ENTER,
-} from "metabase/lib/keyboard";
-import { Icon } from "metabase/ui";
+} from "metabase/utils/keyboard";
 
 import { TokenFieldAddon, TokenFieldItem } from "../TokenFieldItem";
 
@@ -50,7 +49,7 @@ export type TokenFieldProps = {
   optionRenderer?: (option: any) => React.ReactNode;
   valueRenderer?: (value: any) => React.ReactNode;
   layoutRenderer?: (args: LayoutRendererArgs) => React.ReactNode;
-  color?: "brand";
+  color?: "core-brand";
   style?: React.CSSProperties;
   className?: string;
   valueStyle?: React.CSSProperties;
@@ -490,7 +489,7 @@ class _TokenField extends Component<TokenFieldProps, TokenFieldState> {
         <DefaultTokenFieldLayout {...props} />
       ),
 
-      color = "brand",
+      color = "core-brand",
 
       style = {},
       className,
@@ -680,13 +679,14 @@ const DefaultTokenFieldLayout = ({
   isFocused,
 }: DefaultTokenFieldLayoutProps) => (
   <div>
-    <TippyPopover
-      visible={isFocused && !!optionsList}
-      content={<div data-testid="token-field-popover">{optionsList}</div>}
-      placement="bottom-start"
-    >
-      <div>{valuesList}</div>
-    </TippyPopover>
+    <Popover opened={Boolean(isFocused && optionsList)} position="bottom-start">
+      <Popover.Target>
+        <div>{valuesList}</div>
+      </Popover.Target>
+      <Popover.Dropdown data-testid="token-field-popover">
+        {optionsList}
+      </Popover.Dropdown>
+    </Popover>
   </div>
 );
 

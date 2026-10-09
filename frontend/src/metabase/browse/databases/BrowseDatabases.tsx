@@ -8,11 +8,11 @@ import { EmptyState } from "metabase/common/components/EmptyState";
 import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
 import CS from "metabase/css/core/index.css";
 import { getEngineLogo } from "metabase/databases/utils/engine";
-import { useSelector } from "metabase/lib/redux";
-import * as Urls from "metabase/lib/urls";
-import { newDatabase } from "metabase/lib/urls";
+import { useSelector } from "metabase/redux";
 import { getUserIsAdmin } from "metabase/selectors/user";
 import { Box, Flex, Group, Stack, Text, Title } from "metabase/ui";
+import * as Urls from "metabase/urls";
+import { newDatabase } from "metabase/urls";
 
 import { BrowseCard } from "../components/BrowseCard";
 import S from "../components/BrowseContainer.module.css";
@@ -84,7 +84,7 @@ export const BrowseDatabases = () => {
 const CardImageWrapper = ({ database }: { database: string }) => {
   return (
     <Box
-      bg="white"
+      bg="core-white"
       h="xl"
       w="xl"
       className={CS.rounded}

@@ -67,14 +67,14 @@ export default function Gauge({
     formattedValue,
     GAUGE_INNER_RADIUS,
   );
-  const outlineColor = getColor("white");
+  const outlineColor = getColor("core-white");
 
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       width={CHART_WIDTH}
       height={CHART_HEIGHT}
-      fontFamily="Rawline"
+      fontFamily="Lato"
     >
       <g transform={`translate(${CHART_WIDTH / 2}, ${CHART_HEIGHT / 2})`}>
         {/* `transform-origin: center` doesn't work when rendered with Batik.
@@ -108,7 +108,7 @@ export default function Gauge({
                       <g>
                         <path
                           d={baseArcPath}
-                          fill={getColor("background-tertiary")}
+                          fill={getColor("background_page-tertiary")}
                         />
                       </g>
                     )}

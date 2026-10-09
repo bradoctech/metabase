@@ -270,7 +270,6 @@
            (u/kebab->snake-keys {:user-id 1
                                  :profile-id "abc"
                                  :nested {:still-kebab-case true}})))
-
     (testing "preserves camelCase keys"
       (is (= {:userId 1
               :profileId "abc"
@@ -287,7 +286,6 @@
            (u/deep-kebab->snake-keys {:user-id 1
                                       :profile-id "abc"
                                       :nested {:inner-key {:deeply-nested true}}}))))
-
   (testing "preserves camelCase throughout the structure"
     (is (= {:userId 1
             :nested {:innerKey {:deeplyNested true
@@ -295,7 +293,6 @@
            (u/deep-kebab->snake-keys {:userId 1
                                       :nested {:innerKey {:deeplyNested true
                                                           :kebab-converted "yes"}}}))))
-
   (testing "works with vectors and other collections"
     (is (= [{:user_id 1} {:user_id 2}]
            (u/deep-kebab->snake-keys [{:user-id 1} {:user-id 2}])))
@@ -360,6 +357,17 @@
     "string" 3  "str"
     "string" 0  ""))
 
+(deftest ^:parallel strip-bom-test
+  (are [s expected] (= expected
+                       (u/strip-bom s))
+    nil                          nil
+    ""                           ""
+    "ID,Name"                    "ID,Name"
+    (str u/utf8-bom "ID,Name")   "ID,Name"
+    (str u/utf8-bom)             ""
+    ;; only a *leading* BOM is stripped
+    (str "ID" u/utf8-bom "Name") (str "ID" u/utf8-bom "Name")))
+
 #?(:clj
    (deftest capitalize-en-turkish-test
      (mt/with-locale! "tr"
@@ -402,14 +410,12 @@
   (testing "nil and empty maps return empty maps"
     (is (= {} (u/normalize-map nil)))
     (is (= {} (u/normalize-map {}))))
-
   (let [exp {:kebab-key 1
              :snake-key 2
              :camel-key 3}]
     (testing "Clojure maps have their keys normalized"
       (is (= exp (u/normalize-map {:kebab-key  1 :snake_key  2 :camelKey  3})))
       (is (= exp (u/normalize-map {"kebab-key" 1 "snake_key" 2 "camelKey" 3}))))
-
     #?(:cljs
        (testing "JS objects get turned into Clojure maps"
          (is (= exp (u/normalize-map #js {"kebab-key" 1 "snake_key" 2 "camelKey" 3})))))))
@@ -543,13 +549,15 @@
                  :b [:c :d]
                  :c nil
                  :d [:e]
-                 :e nil}]
+                 :e nil}
+          neighbors-fn #(zipmap (get graph %) (repeat #{%}))]
       (is (= {:a nil
               :b #{:a}
               :c #{:b}
               :d #{:a :b}
               :e #{:d}}
-             (u/traverse [:a] #(zipmap (get graph %) (repeat #{%}))))))))
+             (u/traverse [:a] neighbors-fn)))
+      (is (= {} (u/traverse [] neighbors-fn))))))
 
 (deftest ^:parallel round-to-decimals-test
   (are [decimal-place expected] (= expected
@@ -721,3 +729,22 @@
       nil    []
       \c     "abc"
       [:b 2] {:a 1 :b 2})))
+
+#?(:clj
+   (deftest https-state-test
+     (testing "a proxy that states the scheme decides it"
+       (is (= :https (u/https-state {:scheme :http :headers {"x-forwarded-proto" "https"}})))
+       (is (= :http  (u/https-state {:scheme :https :headers {"x-forwarded-proto" "http"}})))
+       (is (= :https (u/https-state {:scheme :http :headers {"x-forwarded-ssl" "on"}}))))
+     (testing "otherwise the connection we answered decides it"
+       (is (= :https (u/https-state {:scheme :https :headers {}})))
+       (testing "even when the client sends a plain-HTTP Origin"
+         (is (= :https (u/https-state {:scheme :https :headers {"origin" "http://example.com"}})))))
+     (testing "a plaintext request claiming an https Origin is unknown, not https"
+       (is (= :unknown (u/https-state {:scheme :http :headers {"origin" "https://example.com"}}))))
+     (testing "nothing to go on reads as plain HTTP"
+       (is (= :http (u/https-state {:scheme :http :headers {}})))
+       (is (= :http (u/https-state {:headers {}}))))
+     (testing "the states a caller adding protection accepts, and the one it does not"
+       (is (#{:https :unknown} (u/https-state {:scheme :http :headers {"origin" "https://example.com"}})))
+       (is (nil? (#{:https :unknown} (u/https-state {:scheme :http :headers {}})))))))

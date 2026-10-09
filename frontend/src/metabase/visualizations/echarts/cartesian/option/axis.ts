@@ -1,7 +1,7 @@
 import type { XAXisOption, YAXisOption } from "echarts/types/dist/shared";
 import type { AxisBaseOptionCommon } from "echarts/types/src/coord/axisCommonTypes";
 
-import { parseNumberValue } from "metabase/lib/number";
+import { parseNumberValue } from "metabase/utils/number";
 import { CHART_STYLE } from "metabase/visualizations/echarts/cartesian/constants/style";
 import type {
   AxisFormatter,
@@ -193,7 +193,9 @@ const getCommonDimensionAxisOptions = (
     axisLine: {
       show: !!settings["graph.x_axis.axis_enabled"],
       lineStyle: {
-        color: getColor(isSplitPanels ? "border-strong" : "border"),
+        color: getColor(
+          isSplitPanels ? "border-neutral-strong" : "border-neutral",
+        ),
       },
     },
   };

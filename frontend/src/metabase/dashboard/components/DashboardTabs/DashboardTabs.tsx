@@ -1,7 +1,6 @@
 import { t } from "ttag";
 import { uniq } from "underscore";
 
-import { Button } from "metabase/common/components/Button";
 import { Link } from "metabase/common/components/Link";
 import { Sortable } from "metabase/common/components/Sortable";
 import type { TabButtonMenuItem } from "metabase/common/components/TabButton";
@@ -10,10 +9,10 @@ import { TabRow } from "metabase/common/components/TabRow";
 import { useConfirmation } from "metabase/common/hooks/use-confirmation";
 import CS from "metabase/css/core/index.css";
 import { useDashboardContext } from "metabase/dashboard/context";
-import { isVirtualDashCard } from "metabase/lib/dashboard";
 import { useRegisterShortcut } from "metabase/palette/hooks/useRegisterShortcut";
-import { Flex, List } from "metabase/ui";
-import type { SelectedTabId } from "metabase-types/store";
+import type { SelectedTabId } from "metabase/redux/store";
+import { ActionIcon, Flex, Icon, List } from "metabase/ui";
+import { isVirtualDashCard } from "metabase/utils/dashboard";
 
 import S from "./DashboardTabs.module.css";
 import { useDashboardTabs } from "./use-dashboard-tabs";
@@ -152,13 +151,14 @@ export function DashboardTabs() {
           ))
         )}
         {isEditing && (
-          <Button
-            icon="add"
-            iconSize={12}
+          <ActionIcon
+            variant="viewHeader"
             onClick={createNewTab}
             aria-label={t`Create new tab`}
             className={S.createTabButton}
-          />
+          >
+            <Icon name="add" size={12} />
+          </ActionIcon>
         )}
       </TabRow>
       {modalContent}

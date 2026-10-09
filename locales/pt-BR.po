@@ -17140,7 +17140,7 @@ msgstr "Nome do remetente"
 
 #: frontend/src/metabase/admin/settings/components/SettingsPages/EmailSettingsPage.tsx:47
 msgid "Add Recipients as CC or BCC"
-msgstr "Adicionr destinatários como CC ou BCC"
+msgstr "Adicionar destinatários como CC ou BCC"
 
 #: frontend/src/metabase/admin/settings/components/SettingsPages/EmailSettingsPage.tsx:50
 msgid "BCC - Hide recipients"
@@ -38988,3 +38988,10 @@ msgstr "Não é permitido usar uma chave de API em produção."
 #: frontend/src/metabase/embedding/embedding-iframe-sdk/components/SdkIframeError.tsx
 msgid "Using the existing user's session in production is not allowed."
 msgstr "Não é permitido usar a sessão do usuário existente em produção."
+
+msgid "Create custom themes"
+msgstr "Criar temas personalizados"
+
+msgid "Fine-tune the appearance of your embedded content with colors and fonts."
+msgstr "Ajuste a aparência do seu conteúdo incorporado com cores e fontes."
+

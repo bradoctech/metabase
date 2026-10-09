@@ -9,6 +9,7 @@
 
 (defsetting version
   "Metabase's version info. When MB_SOURCE_CODE_URL is set (e.g. for AGPL compliance of a fork), it is included as :source-code-url."
+  :encryption :no
   :visibility :public
   :setter     :none
   :getter     (fn []

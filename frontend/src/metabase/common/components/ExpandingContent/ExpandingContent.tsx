@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Component, createRef } from "react";
 
 import CS from "metabase/css/core/index.css";
-import { isReducedMotionPreferred } from "metabase/lib/dom";
+import { isReducedMotionPreferred } from "metabase/utils/dom";
 
 interface ExpandingContentProps {
   isOpen: boolean;

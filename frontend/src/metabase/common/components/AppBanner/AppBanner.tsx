@@ -1,8 +1,6 @@
 import dayjs from "dayjs";
 
 import { useSetting, useUserSetting } from "metabase/common/hooks";
-import { isWithinIframe } from "metabase/lib/dom";
-import { useSelector } from "metabase/lib/redux";
 import { DevModeBanner } from "metabase/nav/components/DevModeBanner";
 import {
   LicenseTokenMissingBanner,
@@ -12,9 +10,12 @@ import { PaymentBanner } from "metabase/nav/components/PaymentBanner/PaymentBann
 import { ReadOnlyBanner } from "metabase/nav/components/ReadOnlyBanner";
 import { TrialBanner } from "metabase/nav/components/TrialBanner";
 import { PLUGIN_SECURITY_CENTER } from "metabase/plugins";
+import { useSelector } from "metabase/redux";
+import { getIsHosted } from "metabase/selectors/settings";
 import { getUserIsAdmin } from "metabase/selectors/user";
-import { getIsHosted } from "metabase/setup/selectors";
+import { isWithinIframe } from "metabase/utils/iframe";
 
+import { UpgradeBanner, useUpgradeBanner } from "./UpgradeBanner";
 import { getCurrentUTCTimestamp, shouldShowTrialBanner } from "./utils";
 
 export const AppBanner = () => {
@@ -28,6 +29,7 @@ export const AppBanner = () => {
   const migrateReadOnly = useSetting("read-only-mode");
   const isDevMode = useSetting("development-mode?");
 
+  const upgradeBannerProps = useUpgradeBanner();
   const { shouldShowLicenseTokenMissingBanner, dismissBanner } =
     useLicenseTokenMissingBanner(isAdmin);
 
@@ -51,6 +53,10 @@ export const AppBanner = () => {
 
   if (migrateReadOnly) {
     return <ReadOnlyBanner />;
+  }
+
+  if (upgradeBannerProps) {
+    return <UpgradeBanner {...upgradeBannerProps} />;
   }
 
   if (shouldShowLicenseTokenMissingBanner) {

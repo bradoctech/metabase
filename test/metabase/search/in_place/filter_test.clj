@@ -8,7 +8,8 @@
    [metabase.search.config :as search.config]
    [metabase.search.in-place.filter :as search.filter]
    [metabase.search.permissions :as search.permissions]
-   [metabase.test :as mt]))
+   [metabase.test :as mt]
+   [metabase.util.honey-sql-2 :as h2x]))
 
 (def default-search-ctx
   {:search-string                  nil
@@ -20,6 +21,8 @@
    :is-data-analyst?               false
    :current-user-perms             #{"/"}
    :calculate-available-models?    false
+   :is-sandboxed-user?             false
+   :is-impersonated-user?          false
    :enabled-transform-source-types #{"mbql"}})
 
 (deftest ^:parallel ->applicable-models-test
@@ -47,61 +50,51 @@
              (search.filter/search-context->applicable-models
               (merge default-search-ctx
                      {:created-by #{1}}))))
-
       (is (= #{"dashboard" "dataset"}
              (search.filter/search-context->applicable-models
               (merge default-search-ctx
                      {:models #{"dashboard" "dataset" "table"}
                       :created-by #{1}})))))
-
     (testing "created at"
       (is (= #{"dashboard" "table" "dataset" "document" "collection" "database" "action" "card" "metric" "transform" "measure"}
              (search.filter/search-context->applicable-models
               (merge default-search-ctx
                      {:created-at "past3days"}))))
-
       (is (= #{"dashboard" "table" "dataset"}
              (search.filter/search-context->applicable-models
               (merge default-search-ctx
                      {:models #{"dashboard" "dataset" "table"}
                       :created-at "past3days"})))))
-
     (testing "verified"
       (is (= #{"dashboard" "dataset" "card" "metric"}
              (search.filter/search-context->applicable-models
               (merge default-search-ctx
                      {:verified true}))))
-
       (is (= #{"dashboard" "dataset"}
              (search.filter/search-context->applicable-models
               (merge default-search-ctx
                      {:models   #{"dashboard" "dataset" "table"}
                       :verified true})))))
-
     (testing "last edited by"
       (is (= #{"dashboard" "dataset" "card" "metric"}
              (search.filter/search-context->applicable-models
               (merge default-search-ctx
                      {:last-edited-by #{1}}))))
-
       (is (= #{"dashboard" "dataset"}
              (search.filter/search-context->applicable-models
               (merge default-search-ctx
                      {:models         #{"dashboard" "dataset" "table"}
                       :last-edited-by #{1}})))))
-
     (testing "last edited at"
       (is (= #{"dashboard" "dataset" "action" "metric" "card"}
              (search.filter/search-context->applicable-models
               (merge default-search-ctx
                      {:last-edited-at "past3days"}))))
-
       (is (= #{"dashboard" "dataset"}
              (search.filter/search-context->applicable-models
               (merge default-search-ctx
                      {:models   #{"dashboard" "dataset" "table"}
                       :last-edited-at "past3days"})))))
-
     (testing "search native query"
       (is (= #{"dataset" "action" "card" "metric" "transform"}
              (search.filter/search-context->applicable-models
@@ -117,7 +110,6 @@
                    {:is-superuser? true
                     :models #{"dashboard" "card" "transform"}}))
            "transform")))
-
     (testing "Non-superuser does not see transform in applicable models"
       (is (not (contains?
                 (search.filter/search-context->applicable-models
@@ -125,13 +117,36 @@
                         {:is-superuser? false
                          :models #{"dashboard" "card" "transform"}}))
                 "transform"))))
-
     (testing "Non-superuser with transform in models set - transform is filtered out"
       (is (= #{"dashboard" "card"}
              (search.filter/search-context->applicable-models
               (merge default-search-ctx
                      {:is-superuser? false
                       :models #{"dashboard" "card" "transform"}})))))))
+
+(deftest ^:parallel app-user-visibility-test
+  (testing "models with :visibility :app-user (indexed-entity) are hidden from sandboxed/impersonated users"
+    (let [models #{"dashboard" "card" "indexed-entity"}]
+      (testing "an ordinary user still sees indexed-entity"
+        (is (contains?
+             (search.filter/search-context->applicable-models
+              (merge default-search-ctx {:models models
+                                         :is-sandboxed-user? false
+                                         :is-impersonated-user? false}))
+             "indexed-entity")))
+      (testing "an impersonated user does not -- even with no search string (the LIKE-clause guard never fires)"
+        (is (= #{"dashboard" "card"}
+               (search.filter/search-context->applicable-models
+                (merge default-search-ctx {:models models
+                                           :search-string nil
+                                           :is-sandboxed-user? false
+                                           :is-impersonated-user? true})))))
+      (testing "a sandboxed user does not either"
+        (is (= #{"dashboard" "card"}
+               (search.filter/search-context->applicable-models
+                (merge default-search-ctx {:models models
+                                           :is-sandboxed-user? true
+                                           :is-impersonated-user? false}))))))))
 
 (deftest joined-with-table?-test
   #_{:clj-kondo/ignore [:equals-true]}
@@ -167,7 +182,6 @@
     (is (= [:= :card.archived false]
            (:where (search.filter/build-filters
                     base-search-query "card" default-search-ctx))))
-
     (is (= [:and
             [:= :table.active true]
             [:= :table.visibility_type nil]
@@ -185,10 +199,10 @@
   (testing "with search string"
     (is (= [:and
             [:or
-             [:like [:lower :card.name] "%a%"]
-             [:like [:lower :card.name] "%string%"]
-             [:like [:lower :card.description] "%a%"]
-             [:like [:lower :card.description] "%string%"]]
+             [:like [:lower :card.name] (h2x/like-substring "a")]
+             [:like [:lower :card.name] (h2x/like-substring "string")]
+             [:like [:lower :card.description] (h2x/like-substring "a")]
+             [:like [:lower :card.description] (h2x/like-substring "string")]]
             [:= :card.archived false]]
            (:where (search.filter/build-filters
                     base-search-query "card"
@@ -198,7 +212,7 @@
   (mt/with-clock #t "2023-05-04T10:02:05Z[UTC]"
     (are [created-at expected-where]
          (= expected-where (#'search.filter/date-range-filter-clause :card.created_at created-at))
-         ;; absolute datetime
+      ;; absolute datetime
       "Q1-2023"                                 [:and [:>= [:cast :card.created_at :date] #t "2023-01-01"]
                                                  [:< [:cast :card.created_at :date]  #t "2023-04-01"]]
       "2016-04-18~2016-04-23"                   [:and [:>= [:cast :card.created_at :date] #t "2016-04-18"]
@@ -213,7 +227,7 @@
                                                  [:< :card.created_at  #t "2016-04-23T10:01"]]
       "2016-04-18T10:30:00~"                    [:> :card.created_at #t "2016-04-18T10:30"]
       "~2016-04-18T10:30:00"                    [:< :card.created_at #t "2016-04-18T10:31"]
-         ;; relative datetime
+      ;; relative datetime
       "past3days"                               [:and [:>= [:cast :card.created_at :date] #t "2023-05-01"]
                                                  [:< [:cast :card.created_at :date]  #t "2023-05-04"]]
       "past3days~"                              [:and [:>= [:cast :card.created_at :date] #t "2023-05-01"]
@@ -262,7 +276,6 @@
            (search.filter/build-filters
             base-search-query "dataset"
             (merge default-search-ctx {:last-edited-at "2016-04-18~2016-04-23"}))))
-
     (testing "do not join twice if has both last-edited-at and last-edited-by"
       (is (= {:select [:*]
               :from   [:table]
@@ -278,7 +291,6 @@
               base-search-query "dataset"
               (merge default-search-ctx {:last-edited-at "2016-04-18~2016-04-23"
                                          :last-edited-by #{1}})))))
-
     (testing "for actiion"
       (is (= {:select [:*]
               :from   [:table]
@@ -372,7 +384,7 @@
                 base-search-query
                 {:where  [:and
                           [:= :card.archived false]
-                          [:inline [:= 0 1]]]})
+                          [:= [:inline 0] [:inline 1]]]})
                (search.filter/build-filters
                 base-search-query "card"
                 (merge default-search-ctx {:verified true}))))))))
@@ -385,7 +397,7 @@
                 base-search-query
                 {:where  [:and
                           [:= :card.archived false]
-                          [:inline [:= 0 1]]]})
+                          [:= [:inline 0] [:inline 1]]]})
                (search.filter/build-filters
                 base-search-query "dataset"
                 (merge default-search-ctx {:verified true}))))))))
@@ -403,10 +415,10 @@
 
 (deftest build-filters-indexed-entity-test
   (testing "users that are not sandboxed or impersonated can search for indexed entity"
-    (with-redefs [search.permissions/sandboxed-or-impersonated-user? (constantly false)]
+    (mt/with-dynamic-fn-redefs [search.permissions/sandboxed-or-impersonated-user? (constantly false)]
       (is (= [:and
-              [:or [:like [:lower :model-index-value.name] "%foo%"]]
-              [:inline [:= 1 1]]]
+              [:or [:like [:lower :model-index-value.name] (h2x/like-substring "foo")]]
+              [:= [:inline 1] [:inline 1]]]
              (:where (search.filter/build-filters
                       base-search-query
                       "indexed-entity"
@@ -414,10 +426,10 @@
 
 (deftest build-filters-indexed-entity-test-2
   (testing "otherwise search result is empty"
-    (with-redefs [search.permissions/sandboxed-or-impersonated-user? (constantly true)]
+    (mt/with-dynamic-fn-redefs [search.permissions/sandboxed-or-impersonated-user? (constantly true)]
       (is (= [:and
               [:or [:= 0 1]]
-              [:inline [:= 1 1]]]
+              [:= [:inline 1] [:inline 1]]]
              (:where (search.filter/build-filters
                       base-search-query
                       "indexed-entity"
@@ -428,7 +440,7 @@
     (testing model
       (testing "do not search for native query by default"
         (is (= [:and
-                [:or [:like [:lower :card.name] "%foo%"] [:like [:lower :card.description] "%foo%"]]
+                [:or [:like [:lower :card.name] (h2x/like-substring "foo")] [:like [:lower :card.description] (h2x/like-substring "foo")]]
                 [:= :card.archived false]]
                (:where (search.filter/build-filters
                         base-search-query
@@ -440,11 +452,11 @@
     (testing model
       (testing "search in both name, description and dataset_query if is enabled"
         (is (= [:and [:or
-                      [:like [:lower :card.name] "%foo%"]
-                      [:like [:lower :card.description] "%foo%"]
+                      [:like [:lower :card.name] (h2x/like-substring "foo")]
+                      [:like [:lower :card.description] (h2x/like-substring "foo")]
                       [:and
                        [:= :card.query_type "native"]
-                       [:like [:lower :card.dataset_query] "%foo%"]]]
+                       [:like [:lower :card.dataset_query] (h2x/like-substring "foo")]]]
                 [:= :card.archived false]]
                (:where (search.filter/build-filters
                         base-search-query
@@ -455,7 +467,7 @@
   (testing "action"
     (testing "do not search for native query by default"
       (is (= [:and
-              [:or [:like [:lower :action.name] "%foo%"] [:like [:lower :action.description] "%foo%"]]
+              [:or [:like [:lower :action.name] (h2x/like-substring "foo")] [:like [:lower :action.description] (h2x/like-substring "foo")]]
               [:= :action.archived false]]
              (:where (search.filter/build-filters
                       base-search-query
@@ -467,9 +479,9 @@
     (testing "search in both name, description and dataset_query if is enabled"
       (is (= [:and
               [:or
-               [:like [:lower :action.name] "%foo%"]
-               [:like [:lower :action.description] "%foo%"]
-               [:like [:lower :query_action.dataset_query] "%foo%"]]
+               [:like [:lower :action.name] (h2x/like-substring "foo")]
+               [:like [:lower :action.description] (h2x/like-substring "foo")]
+               [:like [:lower :query_action.dataset_query] (h2x/like-substring "foo")]]
               [:= :action.archived false]]
              (:where (search.filter/build-filters
                       base-search-query
@@ -483,5 +495,5 @@
         (let [result (search.filter/build-filters
                       base-search-query model
                       (merge default-search-ctx {:collection 1}))]
-          (is (some #{[:inline [:= 0 1]]}
+          (is (some #{[:= [:inline 0] [:inline 1]]}
                     (tree-seq sequential? seq (:where result)))))))))

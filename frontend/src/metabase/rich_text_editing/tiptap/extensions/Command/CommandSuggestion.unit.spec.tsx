@@ -1,5 +1,6 @@
 import userEvent from "@testing-library/user-event";
 import type { Editor } from "@tiptap/core";
+import fetchMock from "fetch-mock";
 import { useState } from "react";
 
 import { setupEnterprisePlugins } from "__support__/enterprise";
@@ -12,8 +13,10 @@ import {
 } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
 import { renderWithProviders, screen, within } from "__support__/ui";
+import type { SettingsState } from "metabase/redux/store";
+import { createMockState } from "metabase/redux/store/mocks";
 import { Input } from "metabase/ui";
-import registerVisualizations from "metabase/visualizations/register";
+import { registerVisualizations } from "metabase/visualizations/register";
 import { type RecentItem, isRecentTableItem } from "metabase-types/api";
 import {
   createMockDatabase,
@@ -21,10 +24,9 @@ import {
   createMockRecentTableItem,
   createMockSearchResult,
   createMockUser,
+  createMockUserMetabotPermissions,
   createMockUserPermissions,
 } from "metabase-types/api/mocks";
-import type { SettingsState } from "metabase-types/store";
-import { createMockState } from "metabase-types/store/mocks";
 
 import {
   CommandSuggestion,
@@ -129,6 +131,10 @@ const setup = ({
   setupSearchEndpoints(SEARCH_ITEMS);
   setupRecentViewsEndpoints(RECENT_ITEMS);
   setupDatabasesEndpoints([MOCK_DATABASE]);
+  fetchMock.get(
+    "path:/api/metabot/permissions/user-permissions",
+    createMockUserMetabotPermissions(),
+  );
 
   renderWithProviders(
     <TestWrapper
@@ -147,6 +153,13 @@ const setup = ({
 };
 
 describe("CommandSuggestion", () => {
+  beforeEach(() => {
+    fetchMock.get(
+      "path:/api/metabot/permissions/user-permissions",
+      createMockUserMetabotPermissions(),
+    );
+  });
+
   it("renders with default commands", async () => {
     setup();
 
@@ -183,7 +196,6 @@ describe("CommandSuggestion", () => {
       embedItem: true,
       entityId: 2,
       model: "card",
-      document: null,
     });
   });
 
@@ -215,7 +227,6 @@ describe("CommandSuggestion", () => {
       selectItem: true,
       entityId: 4,
       model: "document",
-      document: null,
     });
   });
 
@@ -255,7 +266,6 @@ describe("CommandSuggestion", () => {
       embedItem: true,
       entityId: 5,
       model: "card",
-      document: null,
     });
   });
 
@@ -290,7 +300,6 @@ describe("CommandSuggestion", () => {
       embedItem: true,
       entityId: 6,
       model: "card",
-      document: null,
     });
   });
 
@@ -325,7 +334,6 @@ describe("CommandSuggestion", () => {
       selectItem: true,
       entityId: 8,
       model: "table",
-      document: null,
     });
   });
 
@@ -465,7 +473,7 @@ describe("CommandSuggestion", () => {
           }),
         });
 
-        expect(screen.getByText("Ask Metabot")).toBeInTheDocument();
+        expect(await screen.findByText("Ask Metabot")).toBeInTheDocument();
         await expectStandardCommandsToBePresent();
       });
     });

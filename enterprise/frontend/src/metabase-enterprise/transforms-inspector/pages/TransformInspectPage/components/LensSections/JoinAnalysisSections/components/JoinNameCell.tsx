@@ -1,8 +1,7 @@
 import { match } from "ts-pattern";
 import { t } from "ttag";
 
-import { Ellipsified } from "metabase/common/components/Ellipsified";
-import { FixedSizeIcon, Group, Tooltip } from "metabase/ui";
+import { Ellipsified, FixedSizeIcon, Group, Tooltip } from "metabase/ui";
 
 type JoinNameCellProps = {
   joinAlias: string;
@@ -29,7 +28,7 @@ export const JoinNameCell = ({
           .with("inner-join", () => "join_inner" as const)
           .with("full-join", () => "join_full_outer" as const)
           .otherwise(() => "join_left_outer" as const)}
-        c="brand"
+        c="core-brand"
       />
     </Tooltip>
     <Ellipsified>{joinAlias}</Ellipsified>

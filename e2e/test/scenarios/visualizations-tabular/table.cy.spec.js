@@ -1100,6 +1100,7 @@ describe("scenarios > visualizations > table > conditional formatting", () => {
       cy.findAllByTestId("formatting-rule-preview").eq(2).as("dragElement");
       H.moveDnDKitElementByAlias("@dragElement", {
         vertical: -300,
+        useMouseEvents: true,
       });
 
       cy.findAllByTestId("formatting-rule-preview")
@@ -1172,6 +1173,55 @@ describe("scenarios > visualizations > table > conditional formatting", () => {
         .findByTestId("body-cell-container")
         .should("have.css", "background-color", "rgba(80, 158, 227, 0.65)");
     });
+  });
+});
+
+describe("scenarios > visualizations > table > with tracking", () => {
+  beforeEach(() => {
+    H.restore();
+    cy.signInAsAdmin();
+    H.resetSnowplow();
+    H.enableTracking();
+  });
+
+  afterEach(() => {
+    H.expectNoBadSnowplowEvents();
+  });
+
+  it("should track when freeze columns is enabled from viz settings", () => {
+    H.openOrdersTable();
+    H.openVizSettingsSidebar();
+    H.sidebar().findByText("Display").click();
+
+    H.sidebar().findByText("Freeze columns").click();
+
+    // Toggling off should not emit the enabled event again
+    H.sidebar().findByText("Freeze columns").click();
+    H.expectUnstructuredSnowplowEvent(
+      {
+        event: "table_freeze_columns_enabled",
+        triggered_from: "viz_settings",
+      },
+      1,
+    );
+  });
+
+  it("should track when freeze rows is enabled from viz settings", () => {
+    H.openOrdersTable();
+    H.openVizSettingsSidebar();
+    H.sidebar().findByText("Display").click();
+
+    H.sidebar().findByText("Freeze rows").click();
+
+    // Toggling off should not emit the enabled event again
+    H.sidebar().findByText("Freeze rows").click();
+    H.expectUnstructuredSnowplowEvent(
+      {
+        event: "table_freeze_rows_enabled",
+        triggered_from: "viz_settings",
+      },
+      1,
+    );
   });
 });
 

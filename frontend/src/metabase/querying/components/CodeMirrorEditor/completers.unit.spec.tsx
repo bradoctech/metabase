@@ -6,8 +6,10 @@ import { EditorState } from "@codemirror/state";
 import fetchMock from "fetch-mock";
 
 import { mockSettings } from "__support__/settings";
-import { renderWithProviders, waitFor } from "__support__/ui";
-import { isNotNull } from "metabase/lib/types";
+import { act, renderWithProviders, waitFor } from "__support__/ui";
+import type { State } from "metabase/redux/store";
+import { createMockState } from "metabase/redux/store/mocks";
+import { isNotNull } from "metabase/utils/types";
 import type {
   AutocompleteMatchStyle,
   AutocompleteSuggestion,
@@ -16,8 +18,6 @@ import type {
   NativeQuerySnippet,
 } from "metabase-types/api";
 import { createMockCard, createMockField } from "metabase-types/api/mocks";
-import type { State } from "metabase-types/store";
-import { createMockState } from "metabase-types/store/mocks";
 
 import {
   useCardTagCompletion,
@@ -43,8 +43,9 @@ function completer(
     storeInitialState: state,
   });
 
-  return (doc: string) => {
-    if (!completer) {
+  return async (doc: string) => {
+    const activeCompleter = completer;
+    if (!activeCompleter) {
       return null;
     }
 
@@ -61,7 +62,13 @@ function completer(
     });
 
     const ctx = new CompletionContext(state, cur, false);
-    return completer(ctx);
+    // Completers may trigger RTK Query requests, whose subscription state
+    // updates re-render the Wrapper; run inside act so they stay wrapped.
+    let result: Awaited<ReturnType<CompletionSource>> = null;
+    await act(async () => {
+      result = await activeCompleter(ctx);
+    });
+    return result;
   };
 }
 

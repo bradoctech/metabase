@@ -37,6 +37,9 @@
   "Schema for a valid `Field` visibility type."
   (into [:enum] (map name field/visibility-types)))
 
+(def ^:private max-field-ids-for-table-id-lookup
+  1000)
+
 ;; TODO (Cam 10/28/25) -- fix this endpoint so it uses kebab-case for query parameters for consistency with the rest
 ;; of the REST API
 ;;
@@ -53,6 +56,17 @@
                                                                    [:include_editable_data_model {:default false} ms/BooleanValue]]]
   (schema.field/get-field id {:include-editable-data-model? include-editable-data-model?}))
 
+(api.macros/defendpoint :post "/table-ids" :- [:map
+                                               [:table_ids [:sequential ms/PositiveInt]]]
+  "Get unique Table IDs for a list of Field IDs."
+  [_route-params
+   _query-params
+   {:keys [field_ids]} :- [:map
+                           [:field_ids [:sequential ms/PositiveInt]]]]
+  (api/check-400 (<= (count field_ids) max-field-ids-for-table-id-lookup)
+                 (format "field_ids may contain at most %d IDs." max-field-ids-for-table-id-lookup))
+  {:table_ids (schema.field/field-ids->table-ids field_ids)})
+
 (defn- check-field-in-same-database!
   "Check that `target-field-id` is a valid field in the same database as `source-field-id`. Throws a 400 if
    the target field does not exist or belongs to a different database. Uses a single query."
@@ -67,6 +81,19 @@
     (api/checkp result param-name "Invalid target field")
     (api/checkp (= (:source_db_id result) (:target_db_id result))
                 param-name "Target field must belong to the same database")))
+
+(defn- check-can-point-at-field!
+  "Check that the current user may make a Field they are editing point at `target-field-id`.
+
+  A stored reference to another Field is an instruction to join that Field's Table and surface its column, so it takes
+  permission on the target as well as on the Field being edited — the structural [[check-field-in-same-database!]]
+  does not stand in for one. Only a newly requested target is checked: leaving an existing reference in place is not
+  an escalation, and must not start failing for editors who cannot see it."
+  [source-field-id target-field-id current-target-field-id param-name]
+  (when target-field-id
+    (check-field-in-same-database! source-field-id target-field-id param-name)
+    (when (not= target-field-id current-target-field-id)
+      (api/write-check :model/Field target-field-id))))
 
 (defn- clear-dimension-on-fk-change! [{:keys [dimensions], :as _field}]
   (doseq [{dimension-id :id, dimension-type :type} dimensions]
@@ -165,10 +192,8 @@
                                      :effective-type effective}))))))
         removed-fk?        (removed-fk-semantic-type? (:semantic_type field) new-semantic-type)
         fk-target-field-id (get body :fk_target_field_id (:fk_target_field_id field))]
-
-    ;; validate that fk_target_field_id is a valid Field in the same database
-    (when fk-target-field-id
-      (check-field-in-same-database! id fk-target-field-id :fk_target_field_id))
+    ;; validate that fk_target_field_id is a Field in the same database that this user may point at
+    (check-can-point-at-field! id fk-target-field-id (:fk_target_field_id field) :fk_target_field_id)
     (when (and display-name
                (not removed-fk?)
                (not= (:display_name field) display-name))
@@ -238,18 +263,20 @@
                  (and (= dimension-type "external")
                       human-readable-field-id))
              [400 "Foreign key based remappings require a human readable field id"])
-  (when human-readable-field-id
-    (check-field-in-same-database! id human-readable-field-id :human_readable_field_id))
-  (if-let [dimension (t2/select-one :model/Dimension :field_id id)]
-    (t2/update! :model/Dimension (u/the-id dimension)
-                {:type                    dimension-type
-                 :name                    dimension-name
-                 :human_readable_field_id human-readable-field-id})
-    (t2/insert! :model/Dimension
-                {:field_id                id
-                 :type                    dimension-type
-                 :name                    dimension-name
-                 :human_readable_field_id human-readable-field-id}))
+  (let [existing-dimension (t2/select-one :model/Dimension :field_id id)]
+    (check-can-point-at-field! id human-readable-field-id
+                               (:human_readable_field_id existing-dimension)
+                               :human_readable_field_id)
+    (if-let [dimension existing-dimension]
+      (t2/update! :model/Dimension (u/the-id dimension)
+                  {:type                    dimension-type
+                   :name                    dimension-name
+                   :human_readable_field_id human-readable-field-id})
+      (t2/insert! :model/Dimension
+                  {:field_id                id
+                   :type                    dimension-type
+                   :name                    dimension-name
+                   :human_readable_field_id human-readable-field-id})))
   (t2/select-one :model/Dimension :field_id id))
 
 ;; TODO (Cam 2025-11-25) please add a response schema to this API endpoint, it makes it easier for our customers to

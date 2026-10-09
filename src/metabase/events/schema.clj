@@ -44,7 +44,7 @@
    [:user-id  pos-int?]
    [:object   [:fn #(t2/instance-of? :model/Collection %)]]])
 
- ;; collection write events
+;; collection write events
 
 (mr/def ::collection
   [:map {:closed true}
@@ -103,6 +103,11 @@
              [:is_from_setup {:optional true} :boolean]
              [:first_name    {:optional true} [:maybe :string]]
              [:invite_method {:optional true} :string]
+             [:invite_target {:optional true}
+              [:map
+               [:type [:enum "dashboard" "question"]]
+               [:id   ms/PositiveInt]
+               [:name ms/NonBlankString]]]
              [:sso_source    {:optional true} [:maybe [:or :keyword :string]]]]]
    [:details {:optional true}
     [:map {:closed true}

@@ -59,10 +59,10 @@ export function AdvisoryCard({
           </Badge>
           {!isAffecting && (
             <Group gap="xs" align="center">
-              <Text size="sm" c="success" fw={500}>
+              <Text size="sm" c="feedback-positive" fw={500}>
                 {t`Your instance is not affected`}
               </Text>
-              <Icon name="check_filled" c="success" size={20} />
+              <Icon name="check_filled" c="feedback-positive" size={20} />
             </Group>
           )}
         </Group>
@@ -78,7 +78,7 @@ export function AdvisoryCard({
               {advisory.affected_versions.map((v) => (
                 <List.Item
                   key={`${v.min}-${v.fixed}`}
-                >{`${v.min} - ${v.fixed}`}</List.Item>
+                >{`>= ${v.min}, < ${v.fixed}`}</List.Item>
               ))}
             </List>
           </Box>

@@ -1,10 +1,10 @@
 import innerText from "react-innertext";
 
 import DashboardS from "metabase/css/dashboard.module.css";
-import { formatValue } from "metabase/lib/formatting/value";
-import { measureTextWidth } from "metabase/lib/measure-text";
 import { Badge, Flex, Group, Icon, Stack, Tooltip } from "metabase/ui";
-import type { ColumnSettings } from "metabase/visualizations/types";
+import { measureTextWidth } from "metabase/utils/measure-text";
+import { formatValue } from "metabase/visualizations/lib/formatting/value";
+import type { ColumnSettings } from "metabase-types/api";
 
 import { CHANGE_TYPE_OPTIONS, type ComparisonResult } from "../compute";
 import {
@@ -120,7 +120,7 @@ export function PreviousValueComparison({
         className={DashboardS.fullscreenNormalText}
       >
         <VariationPercent
-          color="text-tertiary"
+          color="text-disabled"
           comparison={comparison}
           iconSize={ICON_SIZE}
         >

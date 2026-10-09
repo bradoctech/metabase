@@ -1,5 +1,5 @@
-import { DEFAULT_CARD_SIZE, GRID_WIDTH } from "metabase/lib/dashboard_grid";
-import { measureText } from "metabase/lib/measure-text";
+import { DEFAULT_CARD_SIZE, GRID_WIDTH } from "metabase/utils/dashboard_grid";
+import { measureText } from "metabase/utils/measure-text";
 
 interface FindSizeInput {
   text: string;
@@ -47,8 +47,8 @@ export const findSize = ({
   return `${size}${unit}`;
 };
 
-const MAX_SIZE_SMALL = 1.8;
-const MAX_SIZE_LARGE = 4;
+const MAX_SIZE_SMALL = 2.2;
+const MAX_SIZE_LARGE = 7;
 
 const NARROW_CARD_WIDTH = 240;
 const NARROW_CARD_MAX_SIZE = 2.5;

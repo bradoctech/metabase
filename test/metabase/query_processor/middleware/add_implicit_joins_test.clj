@@ -1,4 +1,5 @@
 (ns metabase.query-processor.middleware.add-implicit-joins-test
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.query-processor.middleware.add-implicit-joins-test]}}}}}}
   (:require
    [clojure.test :refer :all]
    [medley.core :as m]
@@ -17,8 +18,11 @@
    [metabase.query-processor.schema :as qp.schema]
    [metabase.query-processor.test :as qp]
    [metabase.test :as mt]
+   [metabase.test.fixtures :as fixtures]
    [metabase.util :as u]
    [metabase.util.malli :as mu]))
+
+(use-fixtures :once (fixtures/initialize :db))
 
 (deftest ^:parallel fk-field-infos->joins-test
   (is (=? [{:lib/type    :mbql/join

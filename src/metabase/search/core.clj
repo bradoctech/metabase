@@ -1,10 +1,11 @@
 (ns metabase.search.core
   "NOT the API namespace for the search module!! See [[metabase.search]] instead."
   (:require
-   [metabase.analytics.core :as analytics]
-   [metabase.analytics.prometheus :as prometheus]
+   [metabase.analytics-interface.core :as analytics]
+   [metabase.analytics.core :as analytics.core]
    [metabase.lib-be.core :as lib-be]
    [metabase.search.config :as search.config]
+   [metabase.search.debug :as search.debug]
    [metabase.search.engine :as search.engine]
    [metabase.search.impl :as search.impl]
    [metabase.search.ingestion :as search.ingestion]
@@ -25,24 +26,22 @@
 (p/import-vars
  [search.config
   SearchableModel]
-
+ [search.debug
+  diagnose]
  [search.engine
   model-set]
-
  [search.impl
   search
   ;; We could avoid exposing this by wrapping `query-model-set` and `search` with it.
   search-context]
-
  [search.ingestion
   bulk-ingest!
   max-searchable-value-length
   searchable-value-trim-sql]
-
  [search.spec
   spec
+  specifications
   define-spec]
-
  [search.util
   collapse-id
   indexed-entity-id->model-index-id
@@ -51,32 +50,44 @@
   to-tsquery-expr
   weighted-tsvector])
 
-(defmethod analytics/known-labels :metabase-search/index-updates
+(defmethod analytics.core/known-labels :metabase-search/index-updates
   [_]
   (for [model (keys (search.spec/specifications))]
     {:model model}))
 
-(defmethod analytics/known-labels :metabase-search/index-reindexes
+(defmethod analytics.core/known-labels :metabase-search/index-reindexes
   [_]
   (for [model (keys (search.spec/specifications))]
     {:model model}))
 
-(defmethod analytics/known-labels :metabase-search/engine-default
+(defmethod analytics.core/known-labels :metabase-search/appdb-index-batches-skipped
   [_]
-  (analytics/known-labels :metabase-search/engine-active))
+  [{:table-type :active} {:table-type :pending}])
 
-(defmethod analytics/known-labels :metabase-search/engine-active
+(defmethod analytics.core/known-labels :metabase-search/index-documents-skipped
+  [_]
+  (for [model (keys (search.spec/specifications))]
+    {:model model}))
+
+(defmethod analytics.core/known-labels :metabase-search/engine-default
+  [_]
+  (analytics.core/known-labels :metabase-search/engine-active))
+
+(defmethod analytics.core/known-labels :metabase-search/engine-active
   [_]
   (for [e (search.engine/known-engines)]
     {:engine (name e)}))
 
-(defmethod analytics/initial-value :metabase-search/engine-default
+(defmethod analytics.core/initial-value :metabase-search/engine-default
   [_ {:keys [engine]}]
   (if (= engine (name (search.engine/default-engine))) 1 0))
 
-(defmethod analytics/initial-value :metabase-search/engine-active
+(defmethod analytics.core/initial-value :metabase-search/engine-active
   [_ {:keys [engine]}]
-  (if (search.engine/supported-engine? (keyword "search.engine" engine)) 1 0))
+  ;; Can the engine serve queries: in-place always can, indexed engines only while their index is maintained.
+  (if (= :ok (search.engine/engine-status (keyword "search.engine" engine)))
+    1
+    0))
 
 (defn supports-index?
   "Does this instance support a search index, of any sort?"
@@ -86,7 +97,8 @@
 (defn init-index!
   "Ensure there is an index ready to be populated."
   [& {:as opts}]
-  (when (supports-index?)
+  (search.engine/log-resolution!)
+  (when-let [engines (seq (search.engine/active-engines))]
     (log/info "Initializing search indexes")
     (tracing/with-span :search "search.init-index" {}
       (lib-be/with-metadata-provider-cache
@@ -95,13 +107,13 @@
           (let [timer    (u/start-timer)
                 report   (reduce (partial merge-with max)
                                  nil
-                                 (for [e (search.engine/active-engines)]
+                                 (for [e engines]
                                    (search.engine/init! e opts)))
                 duration (u/since-ms timer)]
             (if (seq report)
               (do
                 (analytics/inc! :metabase-search/index-reindex-ms duration)
-                (prometheus/observe! :metabase-search/index-reindex-duration-ms duration)
+                (analytics/observe! :metabase-search/index-reindex-duration-ms duration)
                 (doseq [[model cnt] report]
                   (analytics/inc! :metabase-search/index-reindexes {:model model} cnt))
                 (log/infof "Index initialized in %.0fms %s" duration (sort-by (comp - val) report))
@@ -112,7 +124,7 @@
             (throw e)))))))
 
 (defn- reindex-logic! [opts]
-  (when (supports-index?)
+  (when-let [engines (seq (search.engine/active-engines))]
     (tracing/with-span :search "search.reindex" {}
       (lib-be/with-metadata-provider-cache
         (try
@@ -120,11 +132,11 @@
           (let [timer    (u/start-timer)
                 report   (reduce (partial merge-with max)
                                  nil
-                                 (for [e (search.engine/active-engines)]
+                                 (for [e engines]
                                    (search.engine/reindex! e opts)))
                 duration (u/since-ms timer)]
             (analytics/inc! :metabase-search/index-reindex-ms duration)
-            (prometheus/observe! :metabase-search/index-reindex-duration-ms duration)
+            (analytics/observe! :metabase-search/index-reindex-duration-ms duration)
             (doseq [[model cnt] report]
               (analytics/inc! :metabase-search/index-reindexes {:model model} cnt))
             (log/infof "Done reindexing in %.0fms %s" duration (sort-by (comp - val) report))
@@ -143,7 +155,7 @@
             (try
               (reindex-logic! opts)
               (catch Exception e
-                (log/error e "Reindex failed")
+                (log/errorf "Reindex failed: %s" (ex-message e))
                 (analytics/inc! :metabase-search/index-error)
                 (throw e))))]
     (if (or search.ingestion/*force-sync* (not async?))

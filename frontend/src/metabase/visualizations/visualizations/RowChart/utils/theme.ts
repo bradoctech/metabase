@@ -6,7 +6,7 @@ import type { RowChartTheme } from "metabase/visualizations/shared/components/Ro
 import { getVisualizationTheme } from "metabase/visualizations/shared/utils/theme";
 
 export const useRowChartTheme = (
-  fontFamily: string = "Rawline",
+  fontFamily: string = "Lato",
   isDashboard: boolean,
 ): RowChartTheme => {
   const theme = useMantineTheme();
@@ -19,7 +19,7 @@ export const useRowChartTheme = (
 
     return {
       axis: {
-        color: color("border"),
+        color: color("border-neutral"),
         ticks: {
           size: cartesian.label.fontSize,
           weight: 400,
@@ -49,7 +49,7 @@ export const useRowChartTheme = (
         family: fontFamily,
       },
       grid: {
-        color: color("border-subtle"),
+        color: color("border-neutral-subtle"),
       },
     };
   }, [theme, fontFamily, isDashboard]);

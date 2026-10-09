@@ -42,10 +42,6 @@
   width: 100%;
 }
 
-.half {
-  width: 50%;
-}
-
 /* position utilities */
 .fixed {
   position: fixed;
@@ -99,7 +95,7 @@
   vertical-align: middle;
 }
 
-/* São Paulo logo used in dashboard headers */
+/* São Paulo logo used in dashboard headers — hidden until further notice (EDD-791 / PR #64) */
 .SpLogo {
   height: 2.125rem; /* 34px */
   width: auto;

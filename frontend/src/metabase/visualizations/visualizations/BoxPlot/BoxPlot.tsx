@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useSet } from "react-use";
 
-import { isReducedMotionPreferred } from "metabase/lib/dom";
+import { isReducedMotionPreferred } from "metabase/utils/dom";
 import { extractRemappings } from "metabase/visualizations";
 import { ChartRenderingErrorBoundary } from "metabase/visualizations/components/ChartRenderingErrorBoundary";
 import { ResponsiveEChartsRenderer } from "metabase/visualizations/components/EChartsRenderer";
@@ -36,7 +36,7 @@ import {
 } from "metabase/visualizations/visualizations/CartesianChart/CartesianChart.styled";
 import { useTooltipMouseLeave } from "metabase/visualizations/visualizations/CartesianChart/use-tooltip-mouse-leave";
 
-import { BOXPLOT_CHART_DEFINITION } from "./chart-definition";
+import { BOXPLOT_CHART_DEFINITION } from "./definition";
 import { useBoxPlotEvents } from "./events";
 
 function BoxPlotInner({
@@ -286,6 +286,7 @@ function BoxPlotInner({
         <ResponsiveEChartsRenderer
           key={hasValidOption ? "chart" : "measuring"}
           ref={containerRef}
+          display="boxplot"
           option={option ?? {}}
           eventHandlers={hasValidOption ? eventHandlers : undefined}
           onInit={handleInit}

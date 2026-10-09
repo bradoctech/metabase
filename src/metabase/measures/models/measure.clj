@@ -6,6 +6,7 @@
    [metabase.api.common :as api]
    [metabase.lib-be.core :as lib-be]
    [metabase.lib.core :as lib]
+   [metabase.lib.schema :as lib.schema]
    [metabase.lib.schema.common :as lib.schema.common]
    [metabase.lib.schema.measure :as lib.schema.measure]
    [metabase.metrics.core :as metrics]
@@ -38,9 +39,12 @@
 
 (def ^:private transform-measure-definition
   "Transform for measure definitions. Handles JSON serialization/deserialization.
-  Validation happens in before-insert and before-update hooks."
+  Validation happens in before-insert and before-update hooks.
+
+  Keys are left as strings for the schema-driven normalization in the after-select hook to keywordize, the same way
+  Card `dataset_query` is handled."
   {:in mi/json-in
-   :out mi/json-out-with-keywordization})
+   :out mi/json-out-without-keywordization})
 
 (t2/deftransforms :model/Measure
   {:definition         transform-measure-definition
@@ -155,13 +159,16 @@
 
 (defn- normalize-definition-from-db
   "Normalize a measure definition read from the database.
-  This handles keyword normalization after JSON round-trip (e.g., string \"mbql/query\" -> keyword :mbql/query)."
+  This handles keyword normalization after JSON round-trip (e.g., string \"mbql/query\" -> keyword :mbql/query).
+  Keys are normalized against the query schema first, so that `normalize-query` sees an MBQL 5 query rather than an
+  opaque map."
   [{:keys [definition] :as measure}]
   (if (seq definition)
     (try
-      (assoc measure :definition (lib-be/normalize-query definition))
+      (assoc measure :definition (-> (lib/normalize ::lib.schema/query definition)
+                                     lib-be/normalize-query))
       (catch Throwable e
-        (log/error e "Error normalizing measure definition:" (ex-message e))
+        (log/errorf "Error normalizing measure definition: %s" (ex-message e))
         measure))
     measure))
 
@@ -176,7 +183,7 @@
     (try
       (lib/describe-top-level-key definition :aggregation)
       (catch Throwable e
-        (log/error e "Error calculating Measure description:" (ex-message e))
+        (log/errorf "Error calculating Measure description: %s" (ex-message e))
         nil))))
 
 (methodical/defmethod t2.hydrate/batched-hydrate [:model/Measure :definition_description]
@@ -190,28 +197,30 @@
   [_measure]
   [:name (serdes/hydrated-hash :table) :created_at])
 
-(defmethod serdes/dependencies "Measure" [{:keys [definition table_id]}]
-  (cond-> (serdes/mbql-deps definition)
-    table_id (conj (serdes/table->path table_id))))
+(defmethod serdes/dependencies "Measure" [{:keys [definition]}]
+  (serdes/mbql-deps definition))
 
 (defmethod serdes/storage-path "Measure" [measure _ctx]
-  (into (-> measure :table_id serdes/table->path serdes/storage-path-prefixes)
-        [{:label "measures"} {:label (:name measure) :key (:entity_id measure)}]))
+  (let [table-path (-> measure :definition serdes/serialized-query-source-table)]
+    (into (serdes/storage-path-prefixes (serdes/table->path table-path))
+          [{:label "measures"} {:label (:name measure) :key (:entity_id measure)}])))
 
 (defn- import-measure-definition
   "Import a measure definition from serialization format.
   Converts portable IDs back to numeric IDs, then converts MBQL4 to MBQL5."
   [exported]
   (let [with-ids (serdes/import-mbql exported)]
-    (when (seq with-ids)
-      (lib-be/normalize-query with-ids))))
+    (if (seq with-ids)
+      (lib-be/normalize-query with-ids)
+      with-ids)))
 
 (defmethod serdes/make-spec "Measure" [_model-name _opts]
   {:copy [:name :archived :description :entity_id]
    :skip [;; dimensions are computed from the query and reconciled on read, not serialized
-          :dimensions :dimension_mappings]
+          :dimensions :dimension_mappings
+          ;; always re-derived from definition by before-insert via lib/primary-source-table-id
+          :table_id]
    :transform {:created_at (serdes/date)
-               :table_id (serdes/fk :model/Table)
                :creator_id (serdes/fk :model/User)
                :definition {:export serdes/export-mbql :import import-measure-definition}}
    :defaults {:archived false}})
@@ -230,6 +239,7 @@
    :render-terms {:table-id :table_id
                   :table_description :table.description
                   :table_name :table.name
+                  :table_display_name :table.display_name
                   :table_schema :table.schema}
    :joins {:table [:model/Table [:= :table.id :this.table_id]]}})
 

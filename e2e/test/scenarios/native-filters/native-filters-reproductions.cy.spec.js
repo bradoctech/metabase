@@ -40,6 +40,7 @@ describe("issue 9357", () => {
       H.filterWidget().findAllByRole("listitem").first().as("dragElement");
       H.moveDnDKitElementByAlias("@dragElement", {
         vertical: 50,
+        useMouseEvents: true,
       });
 
       // Ensure they're in the right order
@@ -218,7 +219,14 @@ describe("issue 12581", () => {
       cy.findByText(/You created this/i);
 
       cy.findByTestId("question-revert-button").click(); // Revert to the first revision
+    });
 
+    // Reverting reloads the question, which re-runs its query and resets the
+    // info sidesheet to the Overview tab. Wait for that reload to settle before
+    // re-reading the History tab, otherwise the tab switch races the reset.
+    cy.wait("@cardQuery");
+
+    H.sidesheet().within(() => {
       cy.findByRole("tab", { name: "History" }).click();
       cy.findByText(/You reverted to an earlier version/i);
     });
@@ -698,7 +706,7 @@ describe("issue 16756", () => {
 
     // We expect "No results"
     // eslint-disable-next-line metabase/no-unscoped-text-selectors -- deprecated usage
-    cy.findByText("No results!");
+    cy.findByText("No results");
   });
 });
 
@@ -1303,5 +1311,41 @@ describe("issue 63537", () => {
     });
     H.runNativeQuery();
     H.assertQueryBuilderRowCount(2);
+  });
+});
+
+describe("issue 70311", () => {
+  beforeEach(() => {
+    H.restore();
+    cy.signInAsAdmin();
+    cy.intercept("POST", "/api/card/*/query").as("cardQuery");
+  });
+
+  it("should not show the run overlay for a saved question with an empty between field filter (metabase#70311)", () => {
+    H.createNativeQuestion(
+      {
+        name: "70311",
+        native: {
+          query: "SELECT * FROM PRODUCTS WHERE {{filter}} LIMIT 5",
+          "template-tags": {
+            filter: {
+              id: "a3b95feb-b6d2-33b6-660b-bb656f59b1d7",
+              name: "filter",
+              "display-name": "Filter",
+              type: "dimension",
+              dimension: ["field", PRODUCTS.RATING, null],
+              "widget-type": "number/between",
+              default: null,
+            },
+          },
+        },
+      },
+      { visitQuestion: true },
+    );
+
+    cy.wait("@cardQuery");
+
+    cy.findByTestId("query-visualization-root").should("be.visible");
+    cy.icon("play").should("not.exist");
   });
 });

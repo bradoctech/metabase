@@ -23,6 +23,7 @@
    [metabase.query-processor.error-type :as qp.error-type]
    [metabase.query-processor.metadata :as qp.metadata]
    [metabase.query-processor.middleware.add-remaps :as qp.add-remaps]
+   [metabase.query-processor.middleware.drop-fields-in-summaries :as qp.drop-fields-in-summaries]
    [metabase.query-processor.middleware.normalize-query :as qp.middleware.normalize]
    [metabase.query-processor.pipeline :as qp.pipeline]
    [metabase.query-processor.pivot.common :as pivot.common]
@@ -199,7 +200,7 @@
                       (seq info) (qp/userland-query info))]
           (qp/process-query query rff))
         (catch Throwable e
-          (log/error e "Error processing additional pivot table query")
+          (log/errorf "Error processing additional pivot table query: %s" (ex-message e))
           (throw e))))))
 
 (mu/defn- process-queries-append-results
@@ -379,7 +380,7 @@
         show-column-totals (get viz-settings "pivot.show_column_totals" true)
         metadata-provider             (or (:lib/metadata query)
                                           (lib-be/application-database-metadata-provider (:database query)))
-        mlv2-query                    (lib/query metadata-provider query)
+        mbql5-query                    (lib/query metadata-provider query)
         breakouts                     (into []
                                             (map-indexed (fn [i col]
                                                            (cond-> col
@@ -389,17 +390,17 @@
                                                              ;; match a column that has a join-alias but whose source is a
                                                              ;; model
                                                              (contains? col :lib/card-id) (assoc :lib/source :source/card))))
-                                            (concat (lib/breakouts-metadata mlv2-query)
-                                                    (lib/aggregations-metadata mlv2-query)))
+                                            (concat (lib/breakouts-metadata mbql5-query)
+                                                    (lib/aggregations-metadata mbql5-query)))
         index-in-breakouts            (fn index-in-breakouts [legacy-ref]
                                         (try
                                           (::idx (lib.equality/find-column-for-legacy-ref
-                                                  mlv2-query
+                                                  mbql5-query
                                                   -1
                                                   legacy-ref
                                                   breakouts))
                                           (catch Throwable e
-                                            (log/errorf e "Error finding matching column for ref %s" (pr-str legacy-ref))
+                                            (log/errorf "Error finding matching column for ref %s: %s" (pr-str legacy-ref) (ex-message e))
                                             nil)))
         process-refs                  (fn process-refs [refs]
                                         (when (seq refs)
@@ -469,7 +470,12 @@
   Some pivot subqueries exclude certain breakouts, so we need to fill in those missing columns with `nil` in the overall
   results -- "
   [query :- ::lib.schema/query]
-  (let [remapped-query           (qp.add-remaps/add-remapped-columns query)
+  ;; `drop-fields-in-summaries` mirrors the QP preprocessing step that strips `:fields` from stages that
+  ;; also have `:aggregation`/`:breakout`. Without it, `lib/returned-columns` on such a stage would
+  ;; concat the `:fields` cols with the summary cols and overcount `:qp.pivot/num-remapped-cols` (#81203).
+  (let [remapped-query           (-> query
+                                     qp.drop-fields-in-summaries/drop-fields-in-summaries
+                                     qp.add-remaps/add-remapped-columns)
         remap                    (remapped-indexes (lib/breakouts remapped-query))
         remapped-cols            (lib/returned-columns remapped-query)
         num-remapped-cols        (count remapped-cols)
@@ -503,9 +509,15 @@
 
   ([query :- ::qp.schema/any-query
     rff   :- [:maybe ::qp.schema/rff]]
-   (log/debugf "Running pivot query:\n%s" (u/pprint-to-str query))
+   (log/debug "Running pivot query")
+   ;; Do not bind *card-id* here. Callers that run pivot queries for saved cards
+   ;; (e.g. card.clj, dashboards) bind *card-id* themselves before calling
+   ;; run-pivot-query, so binding it here from the query's :info map would be
+   ;; redundant and could mis-set it for ad-hoc queries that carry a :card-id in :info.
    (qp.setup/with-qp-setup [query query]
-     (let [query       (qp.middleware.normalize/normalize-preprocessing-middleware query) ; normalize to MBQL 5 if needed.
+     (let [query       (-> query
+                           qp.middleware.normalize/normalize-preprocessing-middleware ; normalize to MBQL 5 if needed.
+                           lib/prepare-after-deserialization)
            rff         (or rff qp.reducible/default-rff)
            pivot-opts  (or
                         (pivot-options query (get query :viz-settings))
@@ -519,4 +531,5 @@
                              (update-in [:constraints :max-results-bare-rows] min pivot-limit))
                            add-canonical-col-info)
            all-queries (generate-queries query pivot-opts)]
-       (process-multiple-queries all-queries rff pivot-limit)))))
+       (binding [qp.pipeline/*pivot?* true]
+         (process-multiple-queries all-queries rff pivot-limit))))))

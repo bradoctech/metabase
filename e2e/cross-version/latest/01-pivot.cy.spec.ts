@@ -10,7 +10,12 @@ describe("Cross-version questions - pivot", () => {
     cy.signIn("admin", { skipCache: true });
 
     cy.log("-- Create a pivot table --");
-    X.startQuestionFromTable("People");
+    // Intentionally start from the root collection to prevent ambiguity
+    // in the collection picker when we attempt to save the question
+    cy.visit("/collection/root");
+    H.newButton("Question").click();
+    X.selectFromPopover("Sample Database");
+    X.selectFromPopover("People");
 
     cy.log(
       "-- Add filter: Narrow down the states that start with K (only two) --",
@@ -52,7 +57,7 @@ describe("Cross-version questions - pivot", () => {
   it("verify: pivot table is preserved", { tags: ["@target"] }, () => {
     cy.signIn("admin", { skipCache: true });
 
-    cy.visit("/collection/root");
+    X.visitRootCollectionAndWait();
 
     cy.log(`-- ${Q1_NAME}: Assert that the pivot table viz is preserved --`);
     cy.findAllByTestId("collection-entry-name")

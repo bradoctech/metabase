@@ -1,17 +1,16 @@
-import { DashboardApi } from "metabase/services";
-import {
-  createMockDashboard,
-  createMockDashboardCard,
-  createMockParameter,
-} from "metabase-types/api/mocks";
-import type { Dispatch, GetState } from "metabase-types/store";
+import type { Dispatch, GetState } from "metabase/redux/store";
 import {
   createMockDashboardState,
   createMockLocation,
   createMockRoutingState,
   createMockState,
   createMockStoreDashboard,
-} from "metabase-types/store/mocks";
+} from "metabase/redux/store/mocks";
+import {
+  createMockDashboard,
+  createMockDashboardCard,
+  createMockParameter,
+} from "metabase-types/api/mocks";
 
 import { SIDEBAR_NAME } from "../constants";
 
@@ -29,9 +28,6 @@ import {
   showClickBehaviorSidebar,
   updateDashboardAndCards,
 } from "./";
-
-DashboardApi.parameterSearch = jest.fn();
-DashboardApi.parameterValues = jest.fn();
 
 describe("dashboard actions", () => {
   let dispatch: jest.MockedFunction<Dispatch>;

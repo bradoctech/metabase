@@ -15,12 +15,67 @@ import type { MetabaseAuthConfig } from "embedding-sdk-bundle/types";
 import { useLazySelector } from "embedding-sdk-shared/hooks/use-lazy-selector";
 import { useMetabaseProviderPropsStore } from "embedding-sdk-shared/hooks/use-metabase-provider-props-store";
 import { ensureMetabaseProviderPropsStore } from "embedding-sdk-shared/lib/ensure-metabase-provider-props-store";
-import { getBuildInfo } from "embedding-sdk-shared/lib/get-build-info";
-import { EMBEDDING_SDK_CONFIG } from "metabase/embedding-sdk/config";
-import api from "metabase/lib/api";
-import registerVisualizations from "metabase/visualizations/register";
+import { getSdkPackageVersion } from "embedding-sdk-shared/lib/get-build-info";
+import {
+  type OnBeforeRequestHandler,
+  type RequestClientInfo,
+  api,
+} from "metabase/api/client";
+import registerDashboardVisualizations from "metabase/dashboard/visualizations/register";
+import {
+  setEmbedPreviewHeader,
+  setRequestClientHeaders,
+} from "metabase/embedding/lib/embedding-request-auth";
+import {
+  EMBEDDING_SDK_CONFIG,
+  isEmbeddingEajs,
+} from "metabase/embedding-sdk/config";
+import { PLUGIN_API, PLUGIN_EMBEDDING_SDK } from "metabase/plugins";
+import { setBasename } from "metabase/utils/basename";
+import { registerVisualizations } from "metabase/visualizations/register";
+
+const reactSdkEmbedReferrerHandler: OnBeforeRequestHandler = async (
+  config,
+) => ({
+  ...config,
+  headers: {
+    ...config.headers,
+    // eslint-disable-next-line metabase/no-literal-metabase-strings -- header name
+    "X-Metabase-Embed-Referrer": window.location.href,
+  },
+});
+
+const sdkResponseErrorHandler = ({
+  metabaseVersion,
+}: {
+  metabaseVersion: string | null;
+}) => {
+  if (metabaseVersion == null) {
+    return;
+  }
+  // Use ensureMetabaseProviderPropsStore to access the current instance of reduxStore
+  ensureMetabaseProviderPropsStore()
+    .getState()
+    .internalProps.reduxStore?.dispatch(
+      setMetabaseInstanceVersion(metabaseVersion),
+    );
+};
 
 const registerVisualizationsOnce = _.once(registerVisualizations);
+const registerDashboardVisualizationsOnce = _.once(
+  registerDashboardVisualizations,
+);
+
+// Install the SDK's request-client header strategy once; re-renders keep the
+// first-set client (matching the previous set-once-if-unset behaviour).
+const setSdkRequestClientHeadersOnce = _.once(
+  (requestClient: RequestClientInfo) => {
+    PLUGIN_API.onBeforeRequestHandlers.setRequestClientHeaders =
+      setRequestClientHeaders(requestClient);
+    PLUGIN_API.onBeforeRequestHandlers.setEmbedPreviewHeader =
+      setEmbedPreviewHeader;
+  },
+);
 
 interface InitDataLoaderParameters {
   reduxStore: SdkStore;
@@ -65,34 +120,29 @@ export const useInitDataInternal = ({
 
   const fetchRefreshTokenFnFromStore = useLazySelector(getFetchRefreshTokenFn);
 
-  const sdkPackageVersion =
-    getBuildInfo("METABASE_EMBEDDING_SDK_PACKAGE_BUILD_INFO").version ?? null;
+  const sdkPackageVersion = getSdkPackageVersion();
 
   // We have to initialize the API fields before other possible API calls
-  if (api.basename !== authConfig.metabaseInstanceUrl) {
-    api.basename = authConfig.metabaseInstanceUrl;
+  setBasename(authConfig.metabaseInstanceUrl);
+
+  setSdkRequestClientHeadersOnce({
+    name: EMBEDDING_SDK_CONFIG.metabaseClientRequestHeader,
+    // Note: this is *package* version, it's undefined in EAJS
+    version: sdkPackageVersion,
+  });
+
+  // For the React SDK, send the host page URL as the embed referrer in a
+  // header on every request. The EAJS iframe installs its own handler in
+  // SdkIframeEmbedRoute.tsx using the value received via postMessage.
+  if (!isEmbeddingEajs()) {
+    PLUGIN_EMBEDDING_SDK.onBeforeRequestHandlers.reactSdkEmbedReferrer =
+      reactSdkEmbedReferrerHandler;
   }
 
-  if (!api.requestClient) {
-    api.requestClient = {
-      name: EMBEDDING_SDK_CONFIG.metabaseClientRequestHeader,
-      version: sdkPackageVersion,
-    };
-  }
-
-  if (!api.onResponseError) {
-    api.onResponseError = ({
-      metabaseVersion,
-    }: {
-      metabaseVersion: string;
-    }) => {
-      // Use ensureMetabaseProviderPropsStore to access the current instance of reduxStore
-      ensureMetabaseProviderPropsStore()
-        .getState()
-        .internalProps.reduxStore?.dispatch(
-          setMetabaseInstanceVersion(metabaseVersion),
-        );
-    };
+  // Dedupe by handler identity rather than total listener count — other code
+  // can register its own `responseError` listeners without disabling ours.
+  if (!api.listeners("responseError").includes(sdkResponseErrorHandler)) {
+    api.on("responseError", sdkResponseErrorHandler);
   }
 
   useEffect(() => {
@@ -111,7 +161,7 @@ export const useInitDataInternal = ({
     }
 
     if (isGuestEmbed) {
-      dispatch(initGuestEmbed());
+      dispatch(initGuestEmbed(authConfig));
     } else {
       dispatch(initAuth({ ...authConfig, isLocalHost }));
     }
@@ -119,5 +169,6 @@ export const useInitDataInternal = ({
 
   useMount(function registerVisualizations() {
     registerVisualizationsOnce();
+    registerDashboardVisualizationsOnce();
   });
 };

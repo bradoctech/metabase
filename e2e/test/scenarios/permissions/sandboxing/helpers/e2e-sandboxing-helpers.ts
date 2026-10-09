@@ -1,7 +1,7 @@
 import { SAMPLE_DB_ID, USER_GROUPS } from "e2e/support/cypress_data";
 import { SAMPLE_DATABASE } from "e2e/support/cypress_sample_database";
 import type { StructuredQuestionDetails } from "e2e/support/helpers";
-import { checkNotNull } from "metabase/lib/types";
+import { checkNotNull } from "metabase/utils/types";
 import type {
   CollectionItem,
   Dashboard,
@@ -10,7 +10,6 @@ import type {
   GetFieldValuesResponse,
   ParameterValue,
   ParameterValues,
-  StructuredQuery,
   User,
 } from "metabase-types/api";
 
@@ -115,7 +114,7 @@ const ordersJoinedToProducts: StructuredQuestionDetails = {
     aggregation: [["sum", ["field", ORDERS.TOTAL, null]]],
     breakout: [["field", PRODUCTS.CATEGORY, { "join-alias": "Products" }]],
     "source-table": ORDERS_ID,
-  } as StructuredQuery,
+  },
 };
 
 const ordersImplicitlyJoinedToProducts: StructuredQuestionDetails = {
@@ -350,14 +349,12 @@ export const configureSandboxPolicy = (
   cy.log("Modify the sandboxing policy for the 'data' group");
   H.modifyPermission("data", 0, "Row and column security");
 
-  if (databaseId === 1) {
-    H.modal().within(() => {
-      cy.findByText(
-        /Change access to this database to .*Row and column security.*?/,
-      );
-      cy.button("Change").click();
-    });
-  }
+  H.modal().within(() => {
+    cy.findByText(
+      /Change access to this database to .*Row and column security.*?/,
+    );
+    cy.button("Change").click();
+  });
 
   H.modal().findByText(/Configure row and column security for this table/);
 

@@ -6,18 +6,16 @@ import { SettingsSection } from "metabase/admin/components/SettingsSection";
 import { useListPermissionsGroupsQuery, useListUsersQuery } from "metabase/api";
 import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
 import { useSetting } from "metabase/common/hooks";
-import { useSelector } from "metabase/lib/redux";
-import * as Urls from "metabase/lib/urls";
 import { PLUGIN_TENANTS } from "metabase/plugins";
+import { useSelector } from "metabase/redux";
 import { getUser, getUserIsAdmin } from "metabase/selectors/user";
 import { Box, Button, Flex, Group, Tabs, Title } from "metabase/ui";
+import * as Urls from "metabase/urls";
 
 import { PeopleList } from "../../components/PeopleList";
 import { SearchFilter } from "../../components/SearchFilter";
 import { ACTIVE_STATUS, type ActiveStatus } from "../../constants";
 import { usePeopleQuery } from "../../hooks/use-people-query";
-
-import S from "./PeopleListingApp.module.css";
 
 const PAGE_SIZE = 25;
 
@@ -110,8 +108,13 @@ export function PeopleListingApp({
       </Group>
 
       {isAdmin && hasDeactivatedUsers && (
-        <Tabs value={status} onChange={handleTabChange} pl="md">
-          <Tabs.List className={S.tabs}>
+        <Tabs
+          value={status}
+          onChange={handleTabChange}
+          pl="md"
+          listBorder={false}
+        >
+          <Tabs.List>
             <Tabs.Tab value={ACTIVE_STATUS.active}>{t`Active`}</Tabs.Tab>
             <Tabs.Tab
               value={ACTIVE_STATUS.deactivated}

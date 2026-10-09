@@ -61,6 +61,25 @@
                   {:table (mt/id :products)}}
                 (sql-tools/referenced-tables driver/*driver* query))))))))
 
+(deftest referenced-tables-fetches-only-named-tables-test
+  (testing "GHY-4251: referenced-tables looks up only the Tables the SQL names, never the Database's whole catalog.
+           Fetching the catalog per entity made dependency analysis scale with warehouse size instead of query size,
+           OOM-killing instances with ~20k synced tables."
+    (sql-tools.tu/test-parser-backends
+     (mt/test-driver :h2
+       (let [catalog-fetches (atom 0)
+             all-tables      lib.metadata/tables]
+         (with-redefs [lib.metadata/tables (fn [mp] (swap! catalog-fetches inc) (all-tables mp))]
+           (testing "the referenced table still resolves"
+             ;; H2 stores table names upper-cased while the query spells them lower-case, so this also covers the
+             ;; case-folding that makes an exact name match unusable (the same mismatch Snowflake has).
+             (is (= #{{:table (mt/id :orders)}}
+                    (sql-tools/referenced-tables driver/*driver*
+                                                 (lib/native-query (mt/metadata-provider)
+                                                                   "select id from orders")))))
+           (testing "and it did so without fetching the catalog"
+             (is (zero? @catalog-fetches)))))))))
+
 ;;; ------------------------------------------------ replace-names -------------------------------------------------
 
 (deftest ^:parallel replace-names-table-test
@@ -175,7 +194,7 @@
         (is (= :skipped status))
         (is (= :missing-dialect reason))))))
 
-(deftest ^:parallel is-single-select-stmt?-test
+(deftest ^:parallel is-single-stmt-of-type?-test
   (mt/test-drivers (mt/normal-drivers-with-feature :connection-impersonation)
     (let [mp (mt/metadata-provider)
           products (lib.metadata/table mp (mt/id :products))
@@ -184,20 +203,98 @@
                     (lib/filter (lib/= product-category "Widget")))
           native-query (:query (qp.compile/compile-with-inline-parameters query))]
       (testing "A single SELECT statement returns true and the reconstructed SQL"
-        (are [sql] (=? {:is-single-select? true, :sql string?}
-                       (sql-tools/is-single-select-stmt? driver/*driver* sql))
+        (are [sql] (=? {:is-single-stmt? true :allowed-stmt-type? true :sql string?}
+                       (sql-tools/is-single-stmt-of-type? driver/*driver* sql "read"))
           native-query
           "SELECT 1"
           "SELECT * FROM table"
           "WITH x AS (SELECT * FROM foo) SELECT * from x"
           "WITH x AS (SELECT a FROM foo), y AS (SELECT b FROM bar), z AS (SELECT c FROM baz) SELECT x.a, y.b, z.c FROM x, y, z")))
-    (testing "All other queries are rejected"
-      (are [sql] (=? {:is-single-select? false}
-                     (sql-tools/is-single-select-stmt? driver/*driver* sql))
-        "SELECT ("
-        "SELECT 1; SELECT 2"
-        "SET ROLE NONE"
-        "DROP TABLE table"
-        "SET ROLE NONE; DROP TABLE table"
-        "SELECT set_config('role', 'none', false); DROP TABLE table"
-        "DO $$ BEGIN EXECUTE 'SET ROLE NONE; DROP TABLE table'; END $$;"))))
+    (testing "All other read queries are rejected"
+      (are [sql is-single-stmt?] (=? {:is-single-stmt? is-single-stmt? :allowed-stmt-type? false}
+                                     (sql-tools/is-single-stmt-of-type? driver/*driver* sql "read"))
+        "SELECT (" false
+        "SELECT 1; SELECT 2" false
+        "SET ROLE NONE" true
+        "DROP TABLE table" true
+        "SET ROLE NONE; DROP TABLE table" false
+        "SELECT set_config('role', 'none', false); DROP TABLE table" false
+        "DO $$ BEGIN EXECUTE 'SET ROLE NONE; DROP TABLE table'; END $$;" (isa? driver/hierarchy driver/*driver* :postgres)))
+    (testing "A single insert, update or delete statement returns true and the reconstructed SQL"
+      (are [sql] (=? {:is-single-stmt? true :allowed-stmt-type? true :sql string?}
+                     (sql-tools/is-single-stmt-of-type? driver/*driver* sql "write"))
+        "INSERT INTO table VALUES (1)"
+        "UPDATE table SET column = 1"
+        "DELETE FROM table WHERE id = 1"))
+    (testing "All other write queries are rejected"
+      (are [sql is-single-stmt?] (=? {:is-single-stmt? is-single-stmt? :allowed-stmt-type? false}
+                                     (sql-tools/is-single-stmt-of-type? driver/*driver* sql "write"))
+        "SELECT 1" true
+        "INSERT INTO table VALUES (1); SELECT 1" false
+        "UPDATE table SET column = 1; SELECT 1" false
+        "DELETE FROM table WHERE id = 1; SELECT 1" false
+        "SET ROLE NONE; INSERT INTO table VALUES (1)" false
+        "SELECT set_config('role', 'none', false); DELETE FROM table WHERE id = 1" false))
+    (testing "A single set operation statement returns true and the reconstructed SQL"
+      (doseq [op ["UNION ALL" "INTERSECT ALL" "EXCEPT ALL"]
+              ts [["foo" "bar"] ["foo" "bar" "baz"]]
+              :let [sql (str/join (str " " op " ") (map #(str "SELECT * FROM " %) ts))]]
+        (is (=? {:is-single-stmt? true, :sql string?}
+                (sql-tools/is-single-stmt-of-type? driver/*driver* sql "read"))))
+      (are [sql] (=? {:is-single-stmt? true, :allowed-stmt-type? true :sql string?}
+                     (sql-tools/is-single-stmt-of-type? driver/*driver* sql "read"))
+        "SELECT * FROM foo UNION ALL SELECT * FROM bar INTERSECT ALL SELECT * FROM baz"
+        "SELECT * FROM foo UNION ALL SELECT * FROM bar EXCEPT ALL SELECT * FROM baz"
+        "SELECT * FROM foo INTERSECT ALL SELECT * FROM bar UNION ALL SELECT * FROM baz"
+        "SELECT * FROM foo INTERSECT ALL SELECT * FROM bar EXCEPT ALL SELECT * FROM baz"
+        "SELECT * FROM foo EXCEPT ALL SELECT * FROM bar UNION ALL SELECT * FROM baz"
+        "SELECT * FROM foo EXCEPT ALL SELECT * FROM bar INTERSECT ALL SELECT * FROM baz"))))
+
+(defn- placeholder-count
+  [sql]
+  (count (re-seq #"\?" sql)))
+
+(deftest ^:parallel is-single-stmt-of-type-placeholder-cast-test
+  (testing "queries with `?::` are parsed correctly"
+    (doseq [sql ["SELECT ?::date"
+                 "SELECT (?::date - x::date)"
+                 "SELECT ?::text, ?::integer, ?::boolean FROM t WHERE x = ?"
+                 "SELECT (?::date - CURRENT_DATE) AS diff"]]
+      (let [{out-sql :sql :as result} (sql-tools/is-single-stmt-of-type? :postgres sql "read")]
+        (is (=? {:is-single-stmt? true :allowed-stmt-type? true :sql string?} result))
+        (is (= (placeholder-count sql) (placeholder-count out-sql))))))
+  (testing "a query with `?::` inside string literals are left untouched"
+    (is (= {:is-single-stmt? true :allowed-stmt-type? true :sql "SELECT '?::date'"}
+           (sql-tools/is-single-stmt-of-type? :postgres "select '?::date'" "read"))))
+  (testing "multi-statement queries with placeholder casts are still rejected"
+    (are [sql] (=? {:is-single-stmt? false :allowed-stmt-type? false}
+                   (sql-tools/is-single-stmt-of-type? :postgres sql "read"))
+      "SELECT ?::date; DROP TABLE t"
+      "SET ROLE NONE; SELECT ?::date")))
+
+(deftest ^:parallel is-single-stmt-of-type-qdcolon-dialects-test
+  (testing "databricks' native `expr?::type` try-cast operator is not split apart"
+    (is (=? {:is-single-stmt? true :allowed-stmt-type? true :sql #"(?i).*TRY_CAST\(x AS DATE\).*"}
+            (sql-tools/is-single-stmt-of-type? :databricks "SELECT x?::date FROM t" "read")))))
+
+(deftest ^:parallel is-single-stmt-of-type-not-stripped-test
+  (testing "we don't remove value clauses when validating impersonated queries (#74284)"
+    (let [values-query (str "SELECT x FROM (VALUES " (str/join ", " (repeat 105 "(1)")) ") AS t(x)")]
+      (are [sql is-single-stmt? allowed-stmt-type?]
+           (= {:is-single-stmt? is-single-stmt? :allowed-stmt-type? allowed-stmt-type? :sql sql}
+              (sql-tools/is-single-stmt-of-type? :postgres sql "read"))
+        values-query true true
+        (str "SELECT 1; " values-query) false false
+        (str "SET ROLE none; " values-query) false false
+        (str values-query "; SELECT 1") false false
+        (str values-query "; SET ROLE none") false false)))
+  (testing "we don't remove large IN lists, tuple lists, or arrays when validating impersonated queries"
+    (doseq [query [(str "SELECT x FROM t WHERE x IN (" (str/join ", " (range 105)) ")")
+                   (str "SELECT x FROM t WHERE (x, y) IN (" (str/join ", " (map #(format "(%d, %d)" % %) (range 105))) ")")
+                   (str "SELECT x FROM t WHERE x = ANY(ARRAY[" (str/join ", " (range 105)) "])")]]
+      (are [sql is-single-stmt? allowed-stmt-type?]
+           (= {:is-single-stmt? is-single-stmt? :allowed-stmt-type? allowed-stmt-type? :sql sql}
+              (sql-tools/is-single-stmt-of-type? :postgres sql "read"))
+        query true true
+        (str "SELECT 1; " query) false false
+        (str query "; SELECT 1") false false))))

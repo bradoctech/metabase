@@ -11,19 +11,25 @@ import {
 import { renderWithProviders, screen, within } from "__support__/ui";
 import { INPUT_WRAPPER_TEST_ID } from "metabase/common/components/TabButton";
 import { getDefaultTab, resetTempTabId } from "metabase/dashboard/actions";
+import { MockDashboardContext } from "metabase/dashboard/context/mock-context";
 import { useDashboardUrlQuery } from "metabase/dashboard/hooks/use-dashboard-url-query";
 import { getSelectedTabId } from "metabase/dashboard/selectors";
 import { createTabSlug } from "metabase/dashboard/utils";
-import { useSelector } from "metabase/lib/redux";
-import { MockDashboardContext } from "metabase/public/containers/PublicOrEmbeddedDashboard/mock-context";
-import { TEST_CARD } from "metabase/query_builder/containers/test-utils";
+import { useSelector } from "metabase/redux";
+import type { DashboardState } from "metabase/redux/store";
 import type { DashboardTab } from "metabase-types/api";
+import { createMockCard } from "metabase-types/api/mocks";
 import { createMockDashboardCard } from "metabase-types/api/mocks/dashboard";
-import type { DashboardState, State } from "metabase-types/store";
 
 import { DashboardTabs } from "./DashboardTabs";
 import { TEST_DASHBOARD_STATE } from "./test-utils";
 import { useDashboardTabs } from "./use-dashboard-tabs";
+
+const TEST_CARD = createMockCard({
+  id: 1,
+  name: "Test card",
+  type: "model",
+});
 
 function setup({
   tabs,
@@ -109,8 +115,7 @@ function setup({
     },
   );
   return {
-    getDashcards: () =>
-      Object.values((store.getState() as unknown as State).dashboard.dashcards),
+    getDashcards: () => Object.values(store.getState().dashboard.dashcards),
   };
 }
 

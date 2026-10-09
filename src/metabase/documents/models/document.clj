@@ -8,9 +8,11 @@
    [metabase.models.interface :as mi]
    [metabase.models.serialization :as serdes]
    [metabase.public-sharing.core :as public-sharing]
+   [metabase.search.config :as search.config]
    [metabase.search.spec :as search.spec]
    [metabase.util :as u]
    [metabase.util.i18n :refer [deferred-tru]]
+   [metabase.util.json :as json]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
    [methodical.core :as methodical]
@@ -23,7 +25,8 @@
   :model/Document)
 
 (t2/deftransforms :model/Document
-  {:document mi/transform-json})
+  {:document    mi/transform-json
+   :public_uuid (mi/transform-encrypted-text "document.public_uuid")})
 
 (doto :model/Document
   (derive :metabase/model)
@@ -98,7 +101,8 @@
   (sync-document-cards-collection! id collection_id
                                    :archived archived
                                    :archived-directly archived_directly)
-  (events/publish-event! :event/document-update {:object instance})
+  (when-not mi/*deserializing?*
+    (events/publish-event! :event/document-update {:object instance}))
   instance)
 
 (t2/define-after-select :model/Document
@@ -113,6 +117,27 @@
 
 ;;; ----------------------------------------------- Search ----------------------------------------------------------
 
+(defn- document->search-text
+  "Extract the plain searchable text from a document's prose-mirror body for the search index.
+
+  Receives the raw `:document` value as it comes off the ingestion query (a JSON string).
+  Returns nil if it can't be parsed, so a malformed/oversized body never blocks the rest of the
+  document (e.g. its name) from being indexed."
+  [document]
+  (when document
+    (try
+      (-> (cond-> document (string? document) json/decode+kw)
+          prose-mirror/ast->text
+          not-empty)
+      (catch Throwable _ nil))))
+
+;; The legacy (in-place) search engine LIKE-matches the raw `:document` JSON in SQL, but scores results
+;; against this cleaned-up text. Extracting prose here means a query that only hits JSON structure
+;; (e.g. "paragraph") matches no real content and is correctly dropped as a non-match.
+(defmethod search.config/column->string [:document :document]
+  [value _model _column]
+  (or (document->search-text value) ""))
+
 (search.spec/define-spec "document"
   {:model :model/Document
    :attrs {:archived true
@@ -123,7 +148,11 @@
            :updated-at :updated_at
            :last-viewed-at :last_viewed_at
            :pinned [:> [:coalesce :collection_position [:inline 0]] [:inline 0]]}
-   :search-terms [:name]
+   :search-terms {:name true
+                  :document document->search-text}
+   ;; Document bodies are full-text searchable (via `document->search-text` above) but are
+   ;; deliberately excluded from semantic-search embeddings.
+   :embedding-exclude #{:document}
    :joins {:collection [:model/Collection [:= :collection.id :this.collection_id]]}
    :render-terms {:document-name :name
                   :document-id :id
@@ -150,10 +179,10 @@
    "table"     "Table"})
 
 (defn- id->entity-id
-  [{{:keys [model] :or {model "card"} :as attrs} :attrs type :type :as node}]
+  [{{:keys [model] :or {model "card"}} :attrs type :type :as node}]
   (let [id-key (if (= prose-mirror/smart-link-type type) :entityId :id)
-        id (id-key attrs)]
-    (if-let [db-model (t2/select-one (ast-model->db-model model) :id id)]
+        id (prose-mirror/node-entity-id node)]
+    (if-let [db-model (and id (t2/select-one (ast-model->db-model model) :id id))]
       (assoc-in node [:attrs id-key] (mapv #(dissoc % :label) (serdes/generate-path (model->serdes-model model) db-model)))
       (u/prog1 node
         (log/warnf "entity_id not found for %s at id: %s" model id)))))
@@ -192,7 +221,7 @@
 (defmethod serdes/make-spec "Document"
   [_model-name _opts]
   {:copy [:archived :archived_directly :content_type :entity_id :name :collection_position]
-   :skip [:view_count :last_viewed_at :public_uuid :made_public_by_id]
+   :skip [:view_count :last_viewed_at :public_uuid :public_uuid_prefix :made_public_by_id]
    :transform {:created_at (serdes/date)
                :updated_at (serdes/date)
                :document {:export-with-context export-document-content
@@ -205,6 +234,9 @@
 (defn- document-deps
   [{:keys [content_type] :as document}]
   (when (= content_type prose-mirror/prose-mirror-content-type)
+    ;; NOTE: unlike the readers below, this feeds `serdes/dependencies`, which runs on the already-serialized
+    ;; form where `:entityId` is a serdes path (a vector of {:model :id} maps), not a raw id — so it is not guarded
+    ;; with `node-entity-id` here.
     (set (prose-mirror/collect-ast document (fn document-deps [{:keys [type attrs]}]
                                               (cond
                                                 (and (= prose-mirror/smart-link-type type)
@@ -232,16 +264,16 @@
              (for [embedded-card-id (prose-mirror/card-ids document)]
                {["Card" embedded-card-id] {"Document" id}}))
        (into {}
-             (for [{model :model link-id :entityId} (prose-mirror/collect-ast document
-                                                                              #(when (= prose-mirror/smart-link-type (:type %))
-                                                                                 (:attrs %)))
-                   :when (contains? model->serdes-model model)]
+             (for [{{model :model} :attrs :as node} (prose-mirror/collect-ast document
+                                                                              #(when (= prose-mirror/smart-link-type (:type %)) %))
+                   :let  [link-id (prose-mirror/node-entity-id node)]
+                   :when (and link-id (contains? model->serdes-model model))]
                {[(model->serdes-model model) link-id] {"Document" id}}))))))
 
 (t2/define-before-insert :model/Document [model]
   (collection/check-allowed-content :model/Document (:collection_id model))
-  model)
+  (public-sharing/add-public-uuid-prefix model))
 
 (t2/define-before-update :model/Document [model]
   (collection/check-allowed-content :model/Document (:collection_id (t2/changes model)))
-  model)
+  (public-sharing/add-public-uuid-prefix-if-changed model))

@@ -20,7 +20,7 @@
    [metabase.driver.sql-jdbc.common :as sql-jdbc.common]
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
    [metabase.driver.sql-jdbc.execute :as sql-jdbc.execute]
-   [metabase.driver.sql-jdbc.quoting :refer [quote-columns]]
+   [metabase.driver.sql-jdbc.quoting :as quoting :refer [quote-columns]]
    [metabase.driver.sql-jdbc.sync :as sql-jdbc.sync]
    [metabase.driver.sql.query-processor :as sql.qp]
    [metabase.driver.sql.query-processor.like-escape-char-built-in :as like-escape-char-built-in]
@@ -31,10 +31,12 @@
    [metabase.util :as u]
    [metabase.util.date-2 :as u.date]
    [metabase.util.honey-sql-2 :as h2x]
-   [metabase.util.i18n :refer [deferred-tru]]
+   [metabase.util.i18n :refer [deferred-tru tru]]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
-   [metabase.util.performance :as perf :refer [get-in not-empty some]])
+   [metabase.util.memoize :as memoize]
+   [metabase.util.performance :as perf :refer [get-in not-empty some]]
+   [next.jdbc :as next.jdbc])
   (:import
    (java.io File)
    (java.sql Connection DatabaseMetaData ResultSet ResultSetMetaData SQLException Statement Types)
@@ -50,6 +52,13 @@
 
 (driver/register! :mysql, :parent #{:sql-jdbc ::like-escape-char-built-in/like-escape-char-built-in})
 
+(defmethod driver/host-carrying-parameters :mysql [_driver] [])
+
+(defmethod driver/non-host-parameters :mysql
+  [_driver]
+  ["disableSslHostnameVerification" "localSocketAddress" "serverRsaPublicKeyFile" "serverSslCert" "serverTimezone"
+   "tcpNoDelay" "trustServerCertificate" "useServerPrepStmts"])
+
 (def ^:private ^:const min-supported-mysql-version 5.7)
 (def ^:private ^:const min-supported-mariadb-version 10.2)
 
@@ -62,7 +71,6 @@
                               :connection-impersonation               true
                               :connection-impersonation-requires-role true
                               :describe-fields                        true
-                              :describe-fks                           true
                               :convert-timezone                       true
                               :datetime-diff                          true
                               :full-join                              false
@@ -98,12 +106,27 @@
                               :workspace                              true}]
   (defmethod driver/database-supports? [:mysql feature] [_driver _feature _db] supported?))
 
-;; This is a bit of a lie since the JSON type was introduced for MySQL since 5.7.8.
-;; And MariaDB doesn't have the JSON type at all, though `JSON` was introduced as an alias for LONGTEXT in 10.2.7.
-;; But since JSON unfolding will only apply columns with JSON types, this won't cause any problems during sync.
-(defmethod driver/database-supports? [:mysql :nested-field-columns]
-  [_driver _feat db]
-  (driver.common/json-unfolding-default db))
+(defmethod driver/qualified-name-components :mysql
+  [_driver]
+  ;; MySQL's "schema" doesn't exist; its "database" is what other engines call a schema and
+  ;; what JDBC calls a catalog. We populate the `:db` AST slot (= SQLGlot `Table.catalog`)
+  ;; with the connection's bound DB so workspace remap can record both canonical and iso
+  ;; DB names on `TableRemapping` rows and the QP can rewrite identifiers across DBs.
+  ;; Production SELECTs continue to emit unqualified `t` because the SQL compiler reads
+  ;; the per-driver `quote-name` rules, not this multimethod.
+  [:db])
+
+;;; MySQL has no schema layer. Workspace remap stores `:db.table` -- the `:db`
+;;; slot carries the connection's bound DB so cross-DB routing works. Production
+;;; SELECTs emit unqualified `t` because the SQL compiler reads `quote-name`
+;;; rules, not this multimethod.
+(defmethod driver.sql/table-qualification-style :mysql
+  [_driver]
+  :table-qualification-style/db-table)
+
+(defmethod driver.sql/db-slot-value :mysql
+  [_driver database]
+  (:db (:details database)))
 
 (doseq [feature [:actions :actions/custom :actions/data-editing]]
   (defmethod driver/database-supports? [:mysql feature]
@@ -143,17 +166,10 @@
   [conn :- (lib.schema.common/instance-of-class Connection)]
   (= (connection-flavor conn) "MariaDB"))
 
-(defn- partial-revokes-enabled?
-  [driver db]
-  (sql-jdbc.execute/do-with-connection-with-options
-   driver
-   db
-   nil
-   (fn [^java.sql.Connection conn]
-     (let [stmt (.prepareStatement conn "SHOW VARIABLES LIKE 'partial_revokes';")
-           rset (.executeQuery stmt)]
-       (when (.next rset)
-         (= "ON" (.getString rset 2)))))))
+;; MariaDB doesn't have the JSON type at all, though `JSON` was introduced as an alias for LONGTEXT in 10.2.7.
+(defmethod driver/database-supports? [:mysql :nested-field-columns]
+  [_driver _feat db]
+  (and (driver.common/json-unfolding-default db) (not (mariadb? db))))
 
 (defmethod driver/database-supports? [:mysql :table-privileges]
   [_driver _feat _db]
@@ -164,12 +180,7 @@
 (defmethod driver/database-supports? [:mysql :metadata/table-writable-check]
   [driver _feat db]
   (and (= driver :mysql)
-       (mysql? db)
-       (not (try
-              (partial-revokes-enabled? driver db)
-              (catch Exception e
-                (log/warn e "Failed to check table writable")
-                false)))))
+       (mysql? db)))
 
 (defmethod driver/database-supports? [:mysql :regex/lookaheads-and-lookbehinds]
   [driver _feat db]
@@ -210,10 +221,18 @@
                                "All Metabase features may not work properly when using an unsupported version."
                                "\n********************************************************************************\n"))))))))
 
+(def ^:private disallowed-additional-opts #"(?:allowLocalInfile|allowLoadLocalInfile|allowLoadLocalInfileInPath|allowUrlInLocalInfile|autoDeserialize|serverRSAPublicKeyFile)")
+
+(defmethod driver/validate-db-details! :mysql
+  [_driver details]
+  (when-let [match (some->> (:additional-options details) (re-find disallowed-additional-opts))]
+    (throw (ex-info "Potentially dangerous keys in additional options" {:disallowed-key match}))))
+
 (defmethod driver/can-connect? :mysql
   [driver details]
   ;; delegate to parent method to check whether we can connect; if so, check if it's an unsupported version and issue
   ;; a warning if it is
+  (driver/validate-db-details! driver details)
   (when ((get-method driver/can-connect? :sql-jdbc) driver details)
     (warn-on-unsupported-versions driver details)
     true))
@@ -335,10 +354,16 @@
   :sunday)
 
 (defmethod driver/rename-tables!* :mysql
-  [_driver db-id sorted-rename-map]
-  (let [rename-clauses (map (fn [[from-table to-table]]
-                              (str (sql/format-entity from-table) " TO " (sql/format-entity to-table)))
-                            sorted-rename-map)
+  [driver db-id sorted-rename-map]
+  ;; `with-quoting` is what binds the dialect: a bare `sql/format-entity` leaves it nil, and
+  ;; then HoneySQL's quote fn is `identity` and every identifier goes out raw
+  (let [rename-clauses (quoting/with-quoting driver
+                         (doall
+                          (map (fn [[from-table to-table]]
+                                 (str (sql/format-entity from-table)
+                                      " TO "
+                                      (sql/format-entity to-table)))
+                               sorted-rename-map)))
         sql (str "RENAME TABLE " (str/join ", " rename-clauses))]
     (sql-jdbc.execute/do-with-connection-with-options
      :mysql
@@ -411,7 +436,6 @@
      ;; non-positive position
      [:< pos 1]
      ""
-
      ;; position greater than number of parts
      [:> pos
       [:+ 1
@@ -421,7 +445,6 @@
           [:length [:replace text div ""]]]
          [:length div]]]]]
      ""
-
      ;; This needs some explanation.
      ;; The inner substring_index returns the string up to the `pos` instance of `div`
      ;; The outer substring_index returns the string from the last instance of `div` to the end
@@ -433,6 +456,12 @@
 (defmethod sql.qp/->honeysql [:mysql :text]
   [driver [_ value]]
   (h2x/maybe-cast "CHAR" (sql.qp/->honeysql driver value)))
+
+;; MySQL/MariaDB `CAST` does not accept `TEXT` as a target type — the string cast target is
+;; `CHAR`.
+(defmethod sql.qp/->honeysql [:mysql ::sql.qp/cast-to-text]
+  [driver [_ expr]]
+  (sql.qp/->honeysql driver [::sql.qp/cast expr "char"]))
 
 (defmethod sql.qp/->honeysql [:mysql :regex-match-first]
   [driver [_ arg pattern]]
@@ -476,7 +505,14 @@
         ;; equivalent; instead you can do `<string> + 0.0` =(
         ("float" "double") [:+ json-extract+jsonpath [:inline 0.0]]
 
-        [:convert json-extract+jsonpath [:raw (u/upper-case-en field-type)]]))))
+        ;; CONVERT's target type cannot be a quoted identifier, so a `database-type` that isn't a plain type name
+        ;; (the same rule as [[h2x/cast]]) cannot be spliced into the SQL safely — reject it instead
+        (do
+          (when-not (h2x/raw-type-name? field-type)
+            (throw (ex-info (format "Invalid database type for MySQL CONVERT: %s" (pr-str field-type))
+                            {:type          driver-api/qp.error-type.invalid-query
+                             :database-type field-type})))
+          [:convert json-extract+jsonpath [:raw (u/upper-case-en field-type)]])))))
 
 (defmethod sql.qp/->honeysql [:mysql :field]
   [driver [_ id-or-name opts :as mbql-clause]]
@@ -489,7 +525,15 @@
       honeysql-expr
 
       (::sql.qp/forced-alias opts)
-      (keyword (driver-api/qp.add.source-alias opts))
+      (h2x/identifier :field-alias (driver-api/qp.add.source-alias opts))
+
+      ;; The field is referenced through a join (source-table is a join-alias
+      ;; string). The join target is compiled as a subquery that already
+      ;; projects this nfc column with JSON extraction applied — reference the
+      ;; projected column directly instead of re-applying extraction, which
+      ;; would derive the wrong column name through nested projections. (#73198)
+      (string? (driver-api/qp.add.source-table opts))
+      honeysql-expr
 
       :else
       (perf/postwalk #(if (h2x/identifier? %)
@@ -507,14 +551,14 @@
 
 (defmethod sql.qp/date [:mysql :minute]
   [_driver _unit expr]
-  (let [format-str (if (= (h2x/database-type expr) "time")
+  (let [format-str (if (h2x/database-or-effective-type-isa? expr "time" :type/Time)
                      "%H:%i"
                      "%Y-%m-%d %H:%i")]
     (trunc-with-format format-str expr)))
 
 (defmethod sql.qp/date [:mysql :hour]
   [_driver _unit expr]
-  (let [format-str (if (= (h2x/database-type expr) "time")
+  (let [format-str (if (h2x/database-or-effective-type-isa? expr "time" :type/Time)
                      "%H"
                      "%Y-%m-%d %H")]
     (trunc-with-format format-str expr)))
@@ -533,9 +577,9 @@
 
 (defn- temporal-cast [type expr]
   ;; mysql does not allow casting to timestamp
-  (if (= "timestamp" (u/lower-case-en type))
-    (h2x/maybe-cast "datetime" expr)
-    (h2x/maybe-cast type expr)))
+  (if (= "date" (u/lower-case-en type))
+    (h2x/maybe-cast "date" expr)
+    (h2x/maybe-cast "datetime" expr)))
 
 (defmethod sql.qp/date [:mysql :day]
   [_ _ expr]
@@ -587,7 +631,9 @@
                        (h2x/is-of-type? expr "timestamp"))]
     (sql.u/validate-convert-timezone-args timestamp? target-timezone source-timezone)
     (h2x/with-database-type-info
-     [:convert_tz expr (or source-timezone (driver-api/results-timezone-id)) target-timezone]
+     [:convert_tz expr
+      (sql.qp/->honeysql driver (or source-timezone (driver-api/results-timezone-id)))
+      (sql.qp/->honeysql driver target-timezone)]
      "datetime")))
 
 (defn- timestampdiff-dates [unit x y]
@@ -669,7 +715,17 @@
    ;; removing that overhead. See also
    ;; https://dev.mysql.com/doc/connector-j/en/connector-j-connp-props-performance-extensions.html#cj-conn-prop_useLocalSessionState
    ;; and #44507
-   :useLocalSessionState true})
+   :useLocalSessionState true
+   ;; A `nil` catalog passed to `DatabaseMetaData.getTables` must mean "the current (bound) database",
+   ;; NOT "every database the user has privileges on". `active-tables` (and `describe-database` generally)
+   ;; relies on this: it passes `nil` for the catalog and trusts the driver to scope results to the
+   ;; connected DB. This is the MariaDB 2.x default, but pin it explicitly so that (a) the contract is
+   ;; documented where the next person bumping the driver will see it, and (b) a future driver upgrade
+   ;; can't silently flip the default to `false` and widen sync to sibling databases — Connector/J 8.x,
+   ;; for instance, defaults this to `false`. Pinning `true` is also why we must pass `nil` rather than
+   ;; `(.getCatalog conn)`: on Vitess/PlanetScale replica connections getCatalog returns the routing-
+   ;; qualified `<db>@replica`, which never matches the bare `TABLE_SCHEMA`. See #75929.
+   :nullCatalogMeansCurrent true})
 
 (defn- maybe-add-program-name-option [jdbc-spec additional-options-map]
   ;; connectionAttributes (if multiple) are separated by commas, so values that contain spaces are OK, so long as they
@@ -682,6 +738,14 @@
         jdbc-spec ; additional-options already includes the program_name; don't set it here
         (set-prog-nm-fn))
       (set-prog-nm-fn)))) ; additional-options did not contain connectionAttributes at all; set it
+
+(defn- set-local-infile
+  "Pin `allowLocalInfile` to `allowed?` on `spec`'s connection string.
+
+  Appending is what makes this stick: the driver lets URL parameters override connection `Properties`, and lets a later
+  duplicate parameter override an earlier one, so this only wins if it comes after `:additional-options`."
+  [spec allowed?]
+  (sql-jdbc.common/handle-additional-options spec {:additional-options (str "allowLocalInfile=" allowed?)}))
 
 (defmethod sql-jdbc.conn/connection-details->spec :mysql
   [_ {ssl? :ssl, :keys [additional-options ssl-cert auth-provider], :as details}]
@@ -722,10 +786,25 @@
                          (dissoc :ssl)))]
        (-> (driver-api/spec :mysql details)
            (maybe-add-program-name-option addl-opts-map)
-           (sql-jdbc.common/handle-additional-options details))))))
+           (sql-jdbc.common/handle-additional-options details)
+           (set-local-infile false))))))
 
 (defmethod sql-jdbc.sync/active-tables :mysql
   [& args]
+  ;; Pass `nil` for the catalog filter (the default). Our MySQL/MariaDB JDBC driver defaults to
+  ;; `nullCatalogMeansCurrent=true`, so a `nil` catalog already scopes `getTables()` to the connection's
+  ;; current (bound) database — it does NOT enumerate every DB the user can read.
+  ;;
+  ;; Do NOT pass `(.getCatalog conn)` here. On PlanetScale/Vitess connections made with *replica*
+  ;; credentials (or any `<db>@replica`-targeted connection), `SELECT DATABASE()` — which backs
+  ;; `getCatalog()` — returns the routing-qualified name `<db>@replica`. The driver compiles a non-nil
+  ;; catalog into `WHERE TABLE_SCHEMA = '<db>@replica'`, but `information_schema` stores the bare
+  ;; `TABLE_SCHEMA = '<db>'`, so the filter matches nothing and sync sees an empty database. The `@replica`
+  ;; suffix is a Vitess routing directive, not part of the schema name, so it can never equal a real
+  ;; `TABLE_SCHEMA`. See #75929. (Verified against live PlanetScale: nil → 3 tables, getCatalog → 0.)
+  ;;
+  ;; (If no database is bound, current-DB scoping resolves to nothing and `getTables` returns zero tables;
+  ;; this fails safe and is unreachable in practice since a MySQL Database always has `:dbname`.)
   (apply sql-jdbc.sync/post-filtered-active-tables args))
 
 (defmethod sql-jdbc.sync/excluded-schemas :mysql
@@ -986,12 +1065,14 @@
           (with-open [^java.io.Writer writer (jio/writer file-path)]
             (doseq [value (interpose \newline tsvs)]
               (.write writer (str value))))
-          (sql-jdbc.execute/do-with-connection-with-options
-           driver
-           db-id
-           nil
-           (fn [conn]
-             (jdbc/execute! {:connection conn} sql))))
+          ;; Bulk-loading needs a connection that will service `LOAD DATA LOCAL INFILE`, which the pooled connections
+          ;; refuse (see [[set-local-infile]]), so open a dedicated unpooled one for this statement. That is safe here
+          ;; where it is not for user-supplied SQL: the driver only sends the server the file named in the statement,
+          ;; and this statement names the temp file we just wrote.
+          (driver-api/with-metadata-provider db-id
+            (let [details (driver.conn/effective-details (driver-api/database (driver-api/metadata-provider)))]
+              (sql-jdbc.conn/with-connection-spec-for-testing-connection [spec [driver details]]
+                (jdbc/execute! (set-local-infile spec true) sql)))))
         (finally
           (.delete temp-file))))))
 
@@ -1034,6 +1115,11 @@
   (condp re-find grant
     #"^GRANT PROXY ON "
     nil
+    ;; Under `partial_revokes`, `SHOW GRANTS` emits `REVOKE ... ON ... FROM ...` lines. We ignore them and rely on the
+    ;; GRANT lines alone, which yields an optimistic view of privileges (a table revoked from may still look writable).
+    ;; In that case the edit fails at runtime rather than every table being treated as uneditable.
+    #"^REVOKE "
+    nil
     #"^GRANT (.+) ON FUNCTION "
     nil
     #"^GRANT (.+) ON PROCEDURE "
@@ -1065,8 +1151,9 @@
     #"^GRANT (.+) TO "
     :>>
     (fn [[_ roles]]
+      ;; role names are case-sensitive to MySQL, so they must be passed back to `SHOW GRANTS ... USING` verbatim
       {:type  :roles
-       :roles (set (map u/lower-case-en (str/split roles #",")))})))
+       :roles (set (str/split roles #","))})))
 
 (defn- privilege-grants-for-user
   "Returns a list of parsed privilege grants for a user, taking into account the roles that the user has.
@@ -1082,7 +1169,7 @@
          privilege-grants :privileges} (group-by :type grants)]
     (if (seq role-grants)
       (let [roles  (:roles (first role-grants))
-            grants (map parse-grant (query (str "SHOW GRANTS FOR " user "USING " (str/join "," roles))))
+            grants (map parse-grant (query (str "SHOW GRANTS FOR " user " USING " (str/join "," roles))))
             {privilege-grants :privileges} (group-by :type grants)]
         privilege-grants)
       privilege-grants)))
@@ -1144,14 +1231,12 @@
                         [[:= :c.column_key [:inline "PRI"]] :pk?]
                         [[:= :is_nullable [:inline "YES"]] :database-is-nullable]
                         [[:if [:= [:lower :column_default] [:inline "null"]] nil :column_default] :database-default]
-
                         [[:and
                           ;; mariadb
                           [:!= :generation_expression nil]
                           ;; mysql
                           [:<> :generation_expression ""]]
                          :database-is-generated]
-
                         [[:nullif :c.column_comment [:inline ""]] :field-comment]]
                :from [[:information_schema.columns :c]]
                :where
@@ -1193,9 +1278,27 @@
   [_driver database]
   (-> database driver.conn/effective-details :role))
 
-(defmethod driver.sql/set-role-statement :mysql
-  [_driver role]
-  (format "SET ROLE '%s';" role))
+(def ^{:arglists '([conn s])} memoized-quote-string-literal
+  "Call quotename(?, '''') on MySQL to quote a string literal, and escape any embedded single quotes, for use
+  with [[sql-jdbc/set-role-statement]] below; presumably this should never change so use a bounded cache to avoid the
+  overhead of calling this on every query."
+  (memoize/bounded
+   (-> (fn [conn s]
+         (:s (next.jdbc/execute-one! conn ["SELECT quote(?) AS s;" s])))
+       (vary-meta assoc :clojure.core.memoize/args-fn (fn [[_conn s]] s)))))
+
+(defn- quote-role
+  "MySQL allows roles like `webapp@localhost`, and the correct way to quote that is `'webapp'@'localhost'."
+  [conn role]
+  (let [parts       (->> (str/split role #"@" 2)
+                         (map (partial memoized-quote-string-literal conn)))]
+    (if (= (count parts) 2)
+      (str (first parts) \@ (second parts))
+      (first parts))))
+
+(defmethod sql-jdbc/set-role-statement :mysql
+  [_driver conn role]
+  (format "SET ROLE %s;" (quote-role conn role)))
 
 (defmethod sql-jdbc/impl-table-known-to-not-exist? :mysql
   [_ e]
@@ -1232,6 +1335,9 @@
 ;;; |                                         Workspace Isolation                                                    |
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
+(defn- quote-schema [s] (sql.u/quote-name :mysql :schema s))
+(defn- quote-field  [s] (sql.u/quote-name :mysql :field s))
+
 (defn- mysql-user-exists?
   "Check if a MySQL user exists."
   [conn username]
@@ -1244,49 +1350,78 @@
   (let [db-name          (driver.u/workspace-isolation-namespace-name workspace)
         user             (driver.u/workspace-isolation-user-name workspace)
         password         (driver.u/random-workspace-password)
-        escaped-password (sql.u/escape-sql password :ansi)]
+        escaped-password (sql.u/escape-sql password :ansi)
+        quoted-db        (quote-schema db-name)
+        quoted-user      (quote-field user)]
     (jdbc/with-db-transaction [t-conn (sql-jdbc.conn/db->pooled-connection-spec (:id database))]
       (let [user-sql (if (mysql-user-exists? t-conn user)
-                       (format "ALTER USER `%s`@'%%' IDENTIFIED BY '%s'"
-                               user escaped-password)
-                       (format "CREATE USER `%s`@'%%' IDENTIFIED BY '%s'"
-                               user escaped-password))]
+                       (format "ALTER USER %s@'%%' IDENTIFIED BY '%s'"
+                               quoted-user escaped-password)
+                       (format "CREATE USER %s@'%%' IDENTIFIED BY '%s'"
+                               quoted-user escaped-password))]
         (with-open [^Statement stmt (.createStatement ^Connection (:connection t-conn))]
           (doseq [sql [;; Create the isolated database
-                       (format "CREATE DATABASE IF NOT EXISTS `%s`" db-name)
+                       (format "CREATE DATABASE IF NOT EXISTS %s" quoted-db)
                        user-sql
-                       ;; Grant all privileges on the isolated database
-                       (format "GRANT ALL PRIVILEGES ON `%s`.* TO `%s`@'%%'" db-name user)]]
+                       ;; Least-privilege grant on the workspace's own DB (vs. ALL PRIVILEGES,
+                       ;; dropping GRANT OPTION, CREATE VIEW/ROUTINE, TRIGGER, etc.):
+                       ;;   SELECT, INSERT, UPDATE, DELETE - full DML on its own tables
+                       ;;   CREATE - transform target / CTAS
+                       ;;   DROP   - swap/cleanup
+                       ;;   ALTER  - required (with DROP/CREATE) for RENAME TABLE swaps
+                       (format "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER ON %s.* TO %s@'%%'"
+                               quoted-db quoted-user)]]
             (.addBatch ^Statement stmt ^String sql))
-          (.executeBatch ^Statement stmt))))
+          (try
+            (.executeBatch ^Statement stmt)
+            (catch Throwable t
+              (throw (driver.u/scrub-exceptions t [password escaped-password])))))))
     {:schema           db-name
-     :database_details {:user user, :password password :db db-name}}))
+     ;; Intentionally omit `:db` from `:database_details`: when the workspace
+     ;; loader merges these over the canonical Database's `:details`, we must
+     ;; not overwrite the connection's bound database. MySQL workspace users
+     ;; need to read from the canonical input DB (granted via `GRANT SELECT
+     ;; ON <input-db>.*`) while output writes go to `db-name` via fully
+     ;; qualified `INSERT INTO <db-name>.<table>`. The output DB lives in
+     ;; the WSD row's `:output_namespace`, not in connection details.
+     :database_details {:user user, :password password}}))
 
 (defmethod driver/destroy-workspace-isolation! :mysql
   [_driver database workspace]
-  (let [db-name  (:schema workspace)
-        username (-> workspace :database_details :user)]
+  (let [db-name     (:schema workspace)
+        username    (-> workspace :database_details :user)
+        quoted-db   (quote-schema db-name)
+        quoted-user (quote-field username)]
     (jdbc/with-db-transaction [t-conn (sql-jdbc.conn/db->pooled-connection-spec (:id database))]
       (with-open [^Statement stmt (.createStatement ^Connection (:connection t-conn))]
-        (doseq [sql (cond-> [(format "DROP DATABASE IF EXISTS `%s`" db-name)]
+        (doseq [sql (cond-> [(format "DROP DATABASE IF EXISTS %s" quoted-db)]
                       (mysql-user-exists? t-conn username)
-                      (conj (format "DROP USER IF EXISTS `%s`@'%%'" username)))]
+                      (conj (format "DROP USER IF EXISTS %s@'%%'" quoted-user)))]
           (.addBatch ^Statement stmt ^String sql))
         (.executeBatch ^Statement stmt)))))
 
+(defn- grant-workspace-read-access-sqls
+  "Build SQL statements that grant `username` SELECT on all tables in each database
+  named in `schemas`. MySQL has no schema layer — `qualified-name-components`
+  is `[]` — so each entry in `schemas` is interpreted as a database name.
+  Workspace-scoped users receive database-wide SELECT via `GRANT SELECT ON db.*`."
+  [username schemas]
+  (let [quoted-user      (quote-field username)
+        source-databases (set schemas)]
+    (perf/mapv (fn [db]
+                 (format "GRANT SELECT ON %s.* TO %s@'%%'"
+                         (quote-schema db) quoted-user))
+               source-databases)))
+
 (defmethod driver/grant-workspace-read-access! :mysql
-  [_driver database workspace tables]
+  [_driver database workspace schemas]
+  ;; Each entry in `schemas` is interpreted as a MySQL database name. The
+  ;; workspace SA gets database-wide SELECT via `GRANT SELECT ON db.*`. The
+  ;; Metabase `Database` row's `:details.db` is the bound database, but MySQL
+  ;; itself allows `GRANT SELECT ON other_db.*` as long as the admin has it,
+  ;; so we don't reject inputs that don't equal `:details.db`.
   (let [username (-> workspace :database_details :user)
-        qu       (sql.u/quote-name :mysql :field username)
-        ;; In MySQL, tables don't have separate schemas within a database,
-        ;; but the :schema field contains the source database name
-        sqls     (for [{db :schema, t :name} tables]
-                   (if (str/blank? db)
-                     (format "GRANT SELECT ON %s TO %s@'%%'"
-                             (sql.u/quote-name :mysql :table t) qu)
-                     (format "GRANT SELECT ON %s.%s TO %s@'%%'"
-                             (sql.u/quote-name :mysql :schema db)
-                             (sql.u/quote-name :mysql :table t) qu)))]
+        sqls     (grant-workspace-read-access-sqls username schemas)]
     (jdbc/with-db-transaction [t-conn (sql-jdbc.conn/db->pooled-connection-spec (:id database))]
       (with-open [^Statement stmt (.createStatement ^Connection (:connection t-conn))]
         (doseq [sql sqls]
@@ -1301,44 +1436,50 @@
   [driver database test-table]
   (let [test-workspace {:id   perm-check-workspace-id
                         :name "_mb_perm_check_"}]
-    (sql-jdbc.execute/do-with-connection-with-options
-     driver
-     database
-     {:write? true}
-     (fn [^Connection _conn]
-       (let [result (try
-                      (let [init-result (try
-                                          (driver/init-workspace-isolation! driver database test-workspace)
-                                          (catch Exception e
-                                            (throw (ex-info (format "Failed to initialize workspace isolation (CREATE DATABASE/USER): %s"
-                                                                    (ex-message e))
-                                                            {:step :init} e))))
-                            workspace-with-details (merge test-workspace init-result)]
-                        (when test-table
+    (driver.conn/with-admin-connection
+      (sql-jdbc.execute/do-with-connection-with-options
+       driver
+       database
+       {:write? true}
+       (fn [^Connection _conn]
+         (let [result (try
+                        (let [init-result (try
+                                            (driver/init-workspace-isolation! driver database test-workspace)
+                                            (catch Exception e
+                                              (throw (ex-info (tru "Failed to initialize workspace isolation (CREATE DATABASE/USER): {0}"
+                                                                   (ex-message e))
+                                                              {:step :init} e))))
+                              workspace-with-details (merge test-workspace init-result)]
+                          (when test-table
+                            (try
+                              ;; `grant-workspace-read-access!` takes a vector of
+                              ;; schema-name strings. MySQL has no schema layer; each
+                              ;; entry is interpreted as a database name. `test-table`'s
+                              ;; `:schema` from the caller IS the MySQL database name.
+                              (driver/grant-workspace-read-access! driver database workspace-with-details
+                                                                   [(:schema test-table)])
+                              (catch Exception e
+                                (throw (ex-info (tru "Failed to grant read access to database {0}: {1}"
+                                                     (quote-schema (:schema test-table)) (ex-message e))
+                                                {:step :grant :table test-table} e)))))
                           (try
-                            (driver/grant-workspace-read-access! driver database workspace-with-details [test-table])
+                            (driver/destroy-workspace-isolation! driver database workspace-with-details)
                             (catch Exception e
-                              (throw (ex-info (format "Failed to grant read access to table %s.%s: %s"
-                                                      (:schema test-table) (:name test-table) (ex-message e))
-                                              {:step :grant :table test-table} e)))))
-                        (try
-                          (driver/destroy-workspace-isolation! driver database workspace-with-details)
-                          (catch Exception e
-                            (throw (ex-info (format "Failed to destroy workspace isolation (DROP DATABASE/USER): %s"
-                                                    (ex-message e))
-                                            {:step :destroy} e))))
-                        nil)
-                      (catch Exception e
-                        ;; On failure, attempt cleanup
-                        (try
-                          (driver/destroy-workspace-isolation! driver database
-                                                               (merge test-workspace
-                                                                      {:schema           (driver.u/workspace-isolation-namespace-name test-workspace)
-                                                                       :database_details {:user (driver.u/workspace-isolation-user-name test-workspace)}}))
-                          (catch Exception _cleanup-error
-                            nil))
-                        (ex-message e)))]
-         result)))))
+                              (throw (ex-info (tru "Failed to destroy workspace isolation (DROP DATABASE/USER): {0}"
+                                                   (ex-message e))
+                                              {:step :destroy} e))))
+                          nil)
+                        (catch Exception e
+                          ;; On failure, attempt cleanup
+                          (try
+                            (driver/destroy-workspace-isolation! driver database
+                                                                 (merge test-workspace
+                                                                        {:schema           (driver.u/workspace-isolation-namespace-name test-workspace)
+                                                                         :database_details {:user (driver.u/workspace-isolation-user-name test-workspace)}}))
+                            (catch Exception _cleanup-error
+                              nil))
+                          (ex-message e)))]
+           result))))))
 
 (defmethod driver/llm-sql-dialect-resource :mysql [_]
   "metabot/prompts/dialects/mysql.md")

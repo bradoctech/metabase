@@ -1,3 +1,4 @@
+import type { Store } from "@reduxjs/toolkit";
 import { Fragment } from "react";
 import {
   IndexRedirect,
@@ -14,7 +15,10 @@ import { DatabasePage } from "metabase/admin/databases/containers/DatabasePage";
 import { RevisionHistoryApp } from "metabase/admin/datamodel/containers/RevisionHistoryApp";
 import { SegmentApp } from "metabase/admin/datamodel/containers/SegmentApp";
 import { SegmentListApp } from "metabase/admin/datamodel/containers/SegmentListApp";
+import { EmbeddingThemeEditorApp } from "metabase/admin/embedding/components/ThemeEditor";
+import { EmbeddingThemeListingApp } from "metabase/admin/embedding/components/ThemeListing";
 import { AdminEmbeddingApp } from "metabase/admin/embedding/containers/AdminEmbeddingApp";
+import { EmbeddingHubAdminSettingsPage } from "metabase/admin/embedding/embedding-hub";
 import { AdminPeopleApp } from "metabase/admin/people/containers/AdminPeopleApp";
 import { EditUserModal } from "metabase/admin/people/containers/EditUserModal";
 import { GroupDetailApp } from "metabase/admin/people/containers/GroupDetailApp";
@@ -31,43 +35,52 @@ import {
   EmbeddingSettings,
   GuestEmbedsSettings,
 } from "metabase/admin/settings/components/EmbeddingSettings";
-import { Help } from "metabase/admin/tools/components/Help";
-import { JobInfoApp } from "metabase/admin/tools/components/JobInfoApp";
-import { JobTriggersModal } from "metabase/admin/tools/components/JobTriggersModal";
-import { LogLevelsModal } from "metabase/admin/tools/components/LogLevelsModal";
-import { Logs } from "metabase/admin/tools/components/Logs";
 import {
-  ModelCachePage,
-  ModelCacheRefreshJobModal,
-} from "metabase/admin/tools/components/ModelCacheRefreshJobs";
-import {
-  EmbeddingHubAdminSettingsPage,
   SetupPermissionsAndTenantsPage,
   SetupSsoPage,
 } from "metabase/embedding/embedding-hub";
 import { ModalRoute } from "metabase/hoc/ModalRoute";
-import { getAdminRoutes as getMetabotAdminRoutes } from "metabase/metabot/components/MetabotAdmin/MetabotAdminPage";
 import { DataModelV1 } from "metabase/metadata/pages/DataModelV1";
+import { Help } from "metabase/monitor/tools/components/Help";
+import { JobInfoApp } from "metabase/monitor/tools/components/JobInfoApp";
+import { JobTriggersModal } from "metabase/monitor/tools/components/JobTriggersModal";
+import { LogLevelsModal } from "metabase/monitor/tools/components/LogLevelsModal";
+import { Logs } from "metabase/monitor/tools/components/Logs";
+import {
+  ModelCachePage,
+  ModelCacheRefreshJobModal,
+} from "metabase/monitor/tools/components/ModelCacheRefreshJobs";
+import { ToolsApp } from "metabase/monitor/tools/components/ToolsApp";
+import { ToolsUpsell } from "metabase/monitor/tools/components/ToolsUpsell";
+import {
+  getNotificationsRoutes,
+  getTasksRoutes,
+} from "metabase/monitor/tools/routes";
 import {
   PLUGIN_ADMIN_TOOLS,
   PLUGIN_ADMIN_USER_MENU_ROUTES,
+  PLUGIN_AI_CONTROLS,
+  PLUGIN_AUDIT,
   PLUGIN_CACHING,
   PLUGIN_DB_ROUTING,
   PLUGIN_DEPENDENCIES,
   PLUGIN_SECURITY_CENTER,
   PLUGIN_SUPPORT,
   PLUGIN_TENANTS,
+  PLUGIN_WORKSPACES,
   PLUGIN_WRITABLE_CONNECTION,
+  PerformanceTabId,
 } from "metabase/plugins";
-import { getTokenFeature } from "metabase/setup";
-import type { State } from "metabase-types/store";
+import type { State } from "metabase/redux/store";
+import { getTokenFeature } from "metabase/selectors/settings";
 
+import { AISettingsPage, McpSettingsPage } from "./ai/AISettingsPage";
+import { MetabotAdminLayout } from "./ai/MetabotAdminLayout";
+import { OAuthAuthorizationsPage } from "./ai/OAuthAuthorizationsPage";
 import { ModelPersistenceConfiguration } from "./performance/components/ModelPersistenceConfiguration";
 import { StrategyEditorForDatabases } from "./performance/components/StrategyEditorForDatabases";
-import { PerformanceTabId } from "./performance/types";
 import { getSettingsRoutes } from "./settingsRoutes";
-import { ToolsApp } from "./tools/components/ToolsApp";
-import { getTasksRoutes } from "./tools/routes";
+import { UpsellTenants } from "./upsells/UpsellTenants";
 import {
   RedirectToAllowedSettings,
   createAdminRouteGuard,
@@ -75,14 +88,12 @@ import {
 } from "./utils";
 
 export const getRoutes = (
-  store: { getState: () => State },
+  store: Store<State>,
   CanAccessSettings: RouteComponent,
   IsAdmin: RouteComponent,
 ) => {
-  const hasSimpleEmbedding = getTokenFeature(
-    store.getState(),
-    "embedding_simple",
-  );
+  const state = store.getState();
+  const hasSimpleEmbedding = getTokenFeature(state, "embedding_simple");
 
   return (
     <Route path="/admin" component={CanAccessSettings}>
@@ -95,6 +106,7 @@ export const getRoutes = (
           </Route>
           <Route path=":databaseId/edit" component={DatabasePage} />
           {PLUGIN_WRITABLE_CONNECTION.getWritableConnectionInfoRoutes(IsAdmin)}
+          {PLUGIN_WORKSPACES.getWorkspaceDatabaseRoutes(IsAdmin)}
           <Route path=":databaseId" component={DatabaseEditApp}>
             {PLUGIN_DB_ROUTING.getDestinationDatabaseRoutes(IsAdmin)}
           </Route>
@@ -152,7 +164,13 @@ export const getRoutes = (
 
             {/* Tenants */}
             <Route path="tenants" component={createTenantsRouteGuard()}>
-              {PLUGIN_TENANTS.tenantsRoutes}
+              {PLUGIN_TENANTS.tenantsRoutes ?? (
+                <>
+                  <IndexRoute component={UpsellTenants} />
+                  <Route path="groups" component={UpsellTenants} />
+                  <Route path="people" component={UpsellTenants} />
+                </>
+              )}
             </Route>
 
             <Route path="" component={PeopleListingApp}>
@@ -204,6 +222,8 @@ export const getRoutes = (
             )}
 
             <Route path="security" component={EmbeddingSecuritySettings} />
+            <Route path="themes" component={EmbeddingThemeListingApp} />
+            <Route path="themes/:themeId" component={EmbeddingThemeEditorApp} />
           </Route>
         </Route>
 
@@ -234,7 +254,7 @@ export const getRoutes = (
 
         {/* SETTINGS */}
         <Route path="settings" component={createAdminRouteGuard("settings")}>
-          {getSettingsRoutes()}
+          {getSettingsRoutes(store, IsAdmin)}
         </Route>
         {/* PERMISSIONS */}
         <Route path="permissions" component={IsAdmin}>
@@ -259,7 +279,41 @@ export const getRoutes = (
 
         {/* Metabot */}
         <Route path="metabot" component={createAdminRouteGuard("metabot")}>
-          {getMetabotAdminRoutes()}
+          {PLUGIN_AUDIT.getAiAnalyticsRoutes()}
+          <Route key="index-layout" component={MetabotAdminLayout}>
+            <IndexRoute key="index" component={AISettingsPage} />
+            <Route key="mcp" path="mcp" component={McpSettingsPage} />
+          </Route>
+          <Route
+            key="mcp-authorizations-layout"
+            component={(props) => (
+              <MetabotAdminLayout
+                {...props}
+                fullWidth
+                innerContentProps={{ fullWidth: true, fullHeight: true }}
+              />
+            )}
+          >
+            <Route
+              path="mcp/authorizations"
+              component={OAuthAuthorizationsPage}
+            />
+          </Route>
+          <Route
+            key="layout"
+            component={(props) => (
+              <MetabotAdminLayout
+                {...props}
+                fullWidth={!PLUGIN_AI_CONTROLS.isEnabled}
+                innerContentProps={{
+                  fullWidth: !PLUGIN_AI_CONTROLS.isEnabled,
+                  fullHeight: !PLUGIN_AI_CONTROLS.isEnabled,
+                }}
+              />
+            )}
+          >
+            {PLUGIN_AI_CONTROLS.getAiControlsRoutes()}
+          </Route>
         </Route>
 
         {PLUGIN_SECURITY_CENTER.isEnabled && (
@@ -275,7 +329,9 @@ export const getRoutes = (
             <Route
               key="error-overview"
               path="errors"
-              component={PLUGIN_ADMIN_TOOLS.COMPONENT || ToolsApp}
+              // If the audit_app feature flag is present, our enterprise plugin system kicks in and we render the
+              // appropriate enterprise component. The upsell component is shown in all other cases.
+              component={PLUGIN_ADMIN_TOOLS.COMPONENT || ToolsUpsell}
             />
             <Route path="model-caching" component={ModelCachePage}>
               <ModalRoute path=":jobId" modal={ModelCacheRefreshJobModal} />
@@ -289,22 +345,16 @@ export const getRoutes = (
               )}
             </Route>
             <Route path="tasks">{getTasksRoutes()}</Route>
+            <Route path="notifications">{getNotificationsRoutes()}</Route>
             <Route path="jobs" component={JobInfoApp}>
               <ModalRoute
                 path=":jobKey"
                 modal={JobTriggersModal}
-                modalProps={{ wide: true }}
+                modalProps={{ size: "85%" }}
               />
             </Route>
             <Route path="logs" component={Logs}>
-              <ModalRoute
-                path="levels"
-                modal={LogLevelsModal}
-                modalProps={{
-                  // EventSandbox interferes with mouse text selection in CodeMirror editor
-                  disableEventSandbox: true,
-                }}
-              />
+              <ModalRoute path="levels" modal={LogLevelsModal} />
             </Route>
             {PLUGIN_DEPENDENCIES.isEnabled && (
               <Route

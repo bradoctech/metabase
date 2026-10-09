@@ -13,18 +13,16 @@ import {
 } from "metabase/common/components/MetadataInfo/InfoIcon";
 import { Popover } from "metabase/common/components/MetadataInfo/Popover";
 import { useToggle } from "metabase/common/hooks/use-toggle";
-import { useTranslateContent } from "metabase/i18n/hooks";
-import { useSelector } from "metabase/lib/redux";
+import { useTranslateContent } from "metabase/content-translation/hooks";
 import {
   ExpressionWidget,
   ExpressionWidgetHeader,
 } from "metabase/querying/components/expressions";
 import {
-  type DefinedClauseName,
-  type MBQLClauseFunctionConfig,
   clausesForMode,
   getClauseDefinition,
 } from "metabase/querying/expressions";
+import { useSelector } from "metabase/redux";
 import { getMetadata } from "metabase/selectors/metadata";
 import { Box, Flex, Icon, Text } from "metabase/ui";
 import * as Lib from "metabase-lib";
@@ -73,7 +71,7 @@ type MeasureListItem = Lib.MeasureDisplayInfo & {
 
 type ExpressionClauseListItem = {
   type: "expression-clause";
-  clause: MBQLClauseFunctionConfig;
+  clause: Lib.MBQLClauseFunctionConfig;
   displayName: string;
 };
 
@@ -119,10 +117,10 @@ export function AggregationPicker({
     }),
   );
   const [initialExpressionClause, setInitialExpressionClause] =
-    useState<DefinedClauseName | null>(null);
+    useState<Lib.DefinedClauseName | null>(null);
 
   // For really simple inline expressions like Average([Price]),
-  // MLv2 can figure out that "Average" operator is used.
+  // Lib can figure out that "Average" operator is used.
   // We don't want that though, so we don't break navigation inside the picker
   const [operator, setOperator] = useState<Lib.AggregationOperator | null>(
     isEditingExpression ? null : initialOperator,
@@ -258,7 +256,7 @@ export function AggregationPicker({
   );
 
   const handleExpressionSelect = useCallback(
-    (clause?: DefinedClauseName) => {
+    (clause?: Lib.DefinedClauseName) => {
       if (clause) {
         setInitialExpressionClause(clause);
       }
@@ -424,7 +422,7 @@ export function AggregationPicker({
         className={className}
         mih="18.75rem"
         data-testid="aggregation-column-picker"
-        c="summarize"
+        c="core-summarize"
       >
         <ColumnPickerHeader onClick={handleResetOperator}>
           {operatorInfo.displayName}
@@ -434,7 +432,7 @@ export function AggregationPicker({
           stageIndex={stageIndex}
           columnGroups={columnGroups}
           hasTemporalBucketing
-          color="summarize"
+          color="core-summarize"
           checkIsColumnSelected={checkIsColumnSelected}
           onSelect={handleColumnSelect}
           onClose={onClose}
@@ -446,7 +444,7 @@ export function AggregationPicker({
   return (
     <AccordionList<Item, Section>
       data-testid="aggregation-picker"
-      style={{ color: "var(--mb-color-summarize)" }}
+      style={{ color: "var(--mb-color-core-summarize)" }}
       sections={sections}
       onChange={handleChange}
       onChangeSection={handleSectionChange}
@@ -567,11 +565,7 @@ function getMeasureListItem(
   measure: Lib.MeasureMetadata,
   clauseIndex?: number,
 ): MeasureListItem {
-  const measureInfo = Lib.displayInfo(
-    query,
-    stageIndex,
-    measure,
-  ) as Lib.MeasureDisplayInfo;
+  const measureInfo = Lib.displayInfo(query, stageIndex, measure);
   return {
     ...measureInfo,
     type: "measure",
@@ -584,7 +578,7 @@ function getMeasureListItem(
 }
 
 function getExpressionClauseListItem(
-  clause: MBQLClauseFunctionConfig,
+  clause: Lib.MBQLClauseFunctionConfig,
 ): ExpressionClauseListItem {
   return {
     type: "expression-clause",

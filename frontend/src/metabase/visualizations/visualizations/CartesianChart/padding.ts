@@ -19,6 +19,5 @@ export const getChartPadding = ({
     return "1rem 1rem 1rem 2rem";
   }
 
-  // 0.5rem = 8px (assuming 16px root font size).
-  return "0.5rem";
+  return "0.5rem 1rem";
 };

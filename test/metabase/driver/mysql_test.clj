@@ -1,4 +1,6 @@
 (ns metabase.driver.mysql-test
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.driver.mysql-test]}
+                                                            metabase.test.data/run-mbql-query {:namespaces [metabase.driver.mysql-test]}}}}}}
   (:require
    [clojure.java.jdbc :as jdbc]
    [clojure.set :as set]
@@ -13,6 +15,8 @@
    [metabase.driver.mysql :as mysql]
    [metabase.driver.mysql.actions :as mysql.actions]
    [metabase.driver.mysql.ddl :as mysql.ddl]
+   [metabase.driver.settings :as driver.settings]
+   [metabase.driver.sql-jdbc :as driver.sql-jdbc]
    [metabase.driver.sql-jdbc.actions :as sql-jdbc.actions]
    [metabase.driver.sql-jdbc.actions-test :as sql-jdbc.actions-test]
    [metabase.driver.sql-jdbc.connection :as sql-jdbc.conn]
@@ -39,7 +43,11 @@
    [metabase.util :as u]
    [metabase.util.honey-sql-2 :as h2x]
    [metabase.util.log :as log]
-   [toucan2.core :as t2]))
+   [toucan2.core :as t2])
+  (:import
+   (java.io File)
+   (java.util Properties)
+   (org.mariadb.jdbc UrlParser)))
 
 (set! *warn-on-reflection* true)
 
@@ -51,6 +59,17 @@
                       ;;    tests.
                       (binding [sync-util/*log-exceptions-and-continue?* false]
                         (mt/with-test-user :rasta (thunk)))))
+
+(deftest ^:parallel like-pattern-escape-char-not-driver-inlined-test
+  (testing "LIKE's ESCAPE character compiles to a plain `'!'` even with a driver bound — a `_utf8mb4 X'21'` hex
+            literal carries utf8mb4's default collation and makes MySQL app DBs on another collation fail with
+            `Illegal mix of collations` (#81161 follow-up)"
+    (binding [driver/*driver* :mysql]
+      (is (= ["SELECT * FROM `t` WHERE LOWER(`name`) LIKE ? ESCAPE '!'" "%a!%b%"]
+             (sql/format {:select [:*]
+                          :from   [:t]
+                          :where  [:like [:lower :name] (h2x/like-substring "a%b")]}
+                         {:dialect :mysql}))))))
 
 (deftest all-zero-dates-test
   (mt/test-driver :mysql
@@ -123,6 +142,14 @@
           (is (= #{"dbone_a" "dbone_b" "dbone_c"}
                  (into #{} (map :name) (driver/describe-fields :mysql database)))))))))
 
+(deftest ^:parallel hour-bucketing-time-without-database-type-test
+  (testing (str "Hour bucketing on a TIME-typed expression without `:database-type` (as happens for "
+                "fields referenced by name from a source query, #75193) should use the TIME-only format "
+                "string and not produce a DATETIME-with-date format")
+    (let [expr (h2x/with-type-info :test_col {:effective-type :type/Time})]
+      (is (= ["STR_TO_DATE(DATE_FORMAT(CAST(`test_col` AS datetime), '%H'), '%H')"]
+             (sql.qp/format-honeysql :mysql (sql.qp/date :mysql :hour expr)))))))
+
 (deftest date-test
   ;; make sure stuff at least compiles. Even if the result probably isn't as concise as it could be.
   ;; See [[metabase.query-processor.date-time-zone-functions-test/extract-week-tests]] for something that tests
@@ -143,10 +170,7 @@
                                         "    ("
                                         "      ("
                                         "        DAYOFYEAR(weeks.d) - ("
-                                        "          8 - COALESCE("
-                                        "            NULLIF((DAYOFWEEK(MAKEDATE(YEAR(weeks.d), 1)) + 5) % 7, 0),"
-                                        "            7"
-                                        "          )"
+                                        "          8 - (((DAYOFWEEK(MAKEDATE(YEAR(weeks.d), 1)) + 4) % 7) + 1)"
                                         "        )"
                                         "      ) / 7.0"
                                         "    )"
@@ -189,7 +213,6 @@
                  {:name "id", :base_type :type/Integer, :semantic_type :type/PK}
                  {:name "thing", :base_type :type/Text, :semantic_type :type/Category}}
                (db->fields (mt/db)))))
-
       (testing "if someone says specifies `tinyInt1isBit=false`, it should come back as a number instead"
         (mt/with-temp [:model/Database db {:engine  "mysql"
                                            :details (assoc (:details (mt/db))
@@ -218,7 +241,6 @@
                                            field-metadata)]
           (testing "Model has boolean metadata"
             (is (= :type/Boolean (:base-type boolean-col))))
-
           (testing "Can query model with boolean filter"
             (let [query (as-> (lib/query mp (lib.metadata/card mp 1)) $q
                           (lib/filter $q (lib/= (m/find-first #(= (:name %) "number-of-cans") (lib/fieldable-columns $q))
@@ -272,7 +294,6 @@
       (testing "Should add a `+` if needed to offset"
         (is (= "+00:00"
                (timezone {:global_tz "PDT", :system_tz "UTC", :offset "00:00"})))))
-
     (testing "real timezone query doesn't fail"
       (is (nil? (try
                   (driver/db-default-timezone driver/*driver* (mt/db))
@@ -303,7 +324,6 @@
         (testing "date formatting when system-timezone == report-timezone"
           (is (= ["2018-04-18T00:00:00+08:00"]
                  (run-query-with-report-timezone "Asia/Hong_Kong"))))
-
         ;; [August, 2018]
         ;; This tests a similar scenario, but one in which the JVM timezone is in Hong Kong, but the report timezone
         ;; is in Los Angeles. The Joda Time date parsing functions for the most part default to UTC. Our tests all run
@@ -338,7 +358,7 @@
 
 (deftest ^:parallel connection-spec-test-3
   (testing "Connections that are `:ssl false` but with `useSSL` in the additional options should be treated as SSL (see #9629)"
-    (is (=? {:useSSL true, :subname "//localhost:3306/my_db?useSSL=true&trustServerCertificate=true"}
+    (is (=? {:useSSL true, :subname "//localhost:3306/my_db?useSSL=true&trustServerCertificate=true&allowLocalInfile=false"}
             (sql-jdbc.conn/connection-details->spec :mysql
                                                     (assoc sample-connection-details
                                                            :ssl false
@@ -347,13 +367,70 @@
 (deftest ^:parallel connection-spec-test-4
   (testing "A program_name specified in additional-options is not overwritten by us"
     (let [conn-attrs "connectionAttributes=program_name:my_custom_value"]
-      (is (=? {:subname (str "//localhost:3306/my_db?" conn-attrs)
+      (is (=? {:subname (str "//localhost:3306/my_db?" conn-attrs "&allowLocalInfile=false")
                :useSSL false
                ;; because program_name was in additional-options, we shouldn't use emit :connectionAttributes
                :connectionAttributes (symbol "nil #_\"key is not present.\"")}
               (sql-jdbc.conn/connection-details->spec
                :mysql
                (assoc sample-connection-details :additional-options conn-attrs)))))))
+
+(defn- spec->allow-local-infile?
+  "Whether the MariaDB JDBC driver would let a server ask `spec`'s connection to read a file off the Metabase host.
+  Asks the driver's own URL parser rather than eyeballing the connection string, because URL parameters and connection
+  `Properties` do not carry equal weight and the last duplicate URL parameter wins."
+  [{:keys [subprotocol subname] :as spec}]
+  (let [props (Properties.)]
+    (doseq [[k v] (dissoc spec :classname :subprotocol :subname)]
+      (.setProperty props (name k) (str v)))
+    (.-allowLocalInfile (.getOptions (UrlParser/parse (str "jdbc:" subprotocol ":" subname) props)))))
+
+(deftest ^:parallel local-infile-always-disabled-test
+  (testing "connections never honor `LOAD DATA LOCAL INFILE`"
+    (are [additional-options] (false? (spec->allow-local-infile?
+                                       (sql-jdbc.conn/connection-details->spec
+                                        :mysql
+                                        (cond-> sample-connection-details
+                                          additional-options (assoc :additional-options additional-options)))))
+      nil
+      "allowLocalInfile=true"
+      "useSSL=true&allowLocalInfile=true"
+      ;; the driver lets a later duplicate win, so ours has to be appended after whatever the user wrote
+      "allowLocalInfile=false&allowLocalInfile=true")))
+
+(deftest ^:synchronized local-infile-blocked-for-write-queries-test
+  (mt/test-driver :mysql
+    (testing "a write query cannot make the driver read a file off the Metabase host"
+      ;; Write queries — query actions, transforms — reach the database without the `-- Metabase::` remark that native
+      ;; queries carry, and that remark was the only thing keeping the driver from treating user SQL as a local-infile
+      ;; request. The connection now refuses local infile outright, so the remark no longer matters.
+      (let [spec      (sql-jdbc.conn/connection-details->spec driver/*driver* (:details (mt/db)))
+            temp-file (File/createTempFile "local-infile" ".txt")]
+        (try
+          (spit temp-file "secret-from-the-metabase-host\n")
+          (jdbc/execute! spec "DROP TABLE IF EXISTS local_infile_loot")
+          (jdbc/execute! spec "CREATE TABLE local_infile_loot (line TEXT)")
+          (qp.store/with-metadata-provider (mt/id)
+            (is (thrown? clojure.lang.ExceptionInfo
+                         (driver/execute-write-query!
+                          driver/*driver*
+                          {:type   :native
+                           :native {:query (format "LOAD DATA LOCAL INFILE '%s' INTO TABLE local_infile_loot"
+                                                   (.getAbsolutePath temp-file))}}))))
+          (is (= [] (jdbc/query spec "SELECT * FROM local_infile_loot"))
+              "nothing from the Metabase host made it into the warehouse")
+          (finally
+            (jdbc/execute! spec "DROP TABLE IF EXISTS local_infile_loot")
+            (.delete temp-file)))))))
+
+(deftest ^:parallel local-infile-enabled-for-uploads-test
+  (testing "the dedicated connection uploads bulk-load through is the one exception"
+    (is (true? (spec->allow-local-infile?
+                (#'mysql/set-local-infile
+                 (sql-jdbc.conn/connection-details->spec
+                  :mysql
+                  (assoc sample-connection-details :additional-options "allowLocalInfile=false"))
+                 true))))))
 
 (deftest read-timediffs-test
   (mt/test-driver :mysql
@@ -400,9 +477,9 @@
                         (jdbc/execute! spec [sql]))
                       true
                       (catch java.sql.SQLSyntaxErrorException se
-                       ;; if an error is received with SYSTEM VERSIONING mentioned, the version
-                       ;; of mysql or mariadb being tested against does not support system versioning,
-                       ;; so do not continue
+                        ;; if an error is received with SYSTEM VERSIONING mentioned, the version
+                        ;; of mysql or mariadb being tested against does not support system versioning,
+                        ;; so do not continue
                         (if (re-matches #".*VERSIONING'.*" (.getMessage se))
                           false
                           (throw se))))]
@@ -510,7 +587,6 @@
                       "GROUP BY attempts.date "
                       "ORDER BY attempts.date ASC")
                  (some-> (qp.compile/compile query) :query pretty-sql))))))
-
     (testing "trunc-with-format should not cast a field if it is already a DATETIME"
       (is (= ["SELECT STR_TO_DATE(DATE_FORMAT(CAST(`field` AS datetime), '%Y'), '%Y')"]
              (sql.qp/format-honeysql :mysql {:select [[(#'mysql/trunc-with-format "%Y" :field)]]})))
@@ -543,7 +619,12 @@
     (testing "Doesn't complain when field is boolean"
       (let [boolean-boop-field {:database-type "boolean" :nfc-path [:bleh "boop" :foobar 1234]}]
         (is (= ["JSON_UNQUOTE(JSON_EXTRACT(`boop`.`bleh`, ?))" "$.\"boop\".\"foobar\".\"1234\""]
-               (sql.qp/format-honeysql :mysql (sql.qp/json-query :mysql boop-identifier boolean-boop-field))))))))
+               (sql.qp/format-honeysql :mysql (sql.qp/json-query :mysql boop-identifier boolean-boop-field))))))
+    (testing "a database-type that isn't a plain type name is rejected instead of spliced raw into CONVERT"
+      (let [evil-field {:database-type "signed); select 1 --" :nfc-path [:bleh :meh]}]
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                              #"Invalid database type for MySQL CONVERT"
+                              (sql.qp/json-query :mysql boop-identifier evil-field)))))))
 
 (tx/defdataset json-unquote-test
   [["json_test"
@@ -690,7 +771,7 @@
 
 (deftest actions-maybe-parse-sql-error-test-2
   (testing "violate unique constraint"
-    (with-redefs [mysql.actions/constraint->column-names (constantly ["PRIMARY"])]
+    (mt/with-dynamic-fn-redefs [mysql.actions/constraint->column-names (constantly ["PRIMARY"])]
       (is (=? {:type :metabase.actions.error/violate-unique-constraint,
                :message "Primary already exists.",
                :errors {"PRIMARY" "This Primary value already exists."}}
@@ -755,7 +836,7 @@
                          :message     "Some of your values violate the constraint: email_format_check"
                          :status-code 400
                          :type        actions.error/violate-check-constraint}
-                        (sql-jdbc.actions-test/perform-action-ex-data
+                        (sql-jdbc.actions-test/perform-action-ex-data!
                          :model.row/create (mt/$ids {:create-row {"email" "invalid-email"
                                                                   "age"   25}
                                                      :database   (:id database)
@@ -787,7 +868,7 @@
                          :message     "Column1 and Column2 already exist."
                          :errors      {"column1" "This Column1 value already exists." "column2" "This Column2 value already exists."}
                          :status-code 400}
-                        (sql-jdbc.actions-test/perform-action-ex-data
+                        (sql-jdbc.actions-test/perform-action-ex-data!
                          :model.row/create (mt/$ids {:create-row {"id"      3
                                                                   "column1" "A"
                                                                   "column2" "A"}
@@ -800,7 +881,7 @@
                          :message     "Column1 and Column2 already exist."
                          :status-code 400
                          :type        actions.error/violate-unique-constraint}
-                        (sql-jdbc.actions-test/perform-action-ex-data
+                        (sql-jdbc.actions-test/perform-action-ex-data!
                          :model.row/update (mt/$ids {:update-row {"column1" "A"
                                                                   "column2" "A"}
                                                      :database   (:id database)
@@ -833,7 +914,14 @@
     (is (= {:type  :roles
             :roles #{"`example_role`@`%`" "`example_role_2`@`%`"}}
            (#'mysql/parse-grant "GRANT `example_role`@`%`,`example_role_2`@`%` TO 'metabase'@'localhost'")))
-    (is (nil? (#'mysql/parse-grant "GRANT PROXY ON 'metabase'@'localhost' TO 'metabase'@'localhost' WITH GRANT OPTION")))))
+    (testing "role names keep their case (GHY-3835): MySQL 8 backticked role identifiers are case-sensitive, so lowercasing them makes the follow-up `SHOW GRANTS ... USING` fail with error 3530"
+      (is (= {:type  :roles
+              :roles #{"`AWS_FOO_ROLE`@`%`"}}
+             (#'mysql/parse-grant "GRANT `AWS_FOO_ROLE`@`%` TO `mb_case_test`@`%`"))))
+    (is (nil? (#'mysql/parse-grant "GRANT PROXY ON 'metabase'@'localhost' TO 'metabase'@'localhost' WITH GRANT OPTION")))
+    (testing "REVOKE grants (emitted under partial_revokes) are ignored rather than throwing"
+      (is (nil? (#'mysql/parse-grant "REVOKE INSERT ON `test-data`.`foo` FROM 'metabase'@'localhost'")))
+      (is (nil? (#'mysql/parse-grant "REVOKE INSERT, DELETE ON `test-data`.* FROM 'metabase'@'localhost'"))))))
 
 (deftest ^:parallel table-name->privileges-test
   (testing "table-names->privileges should work correctly"
@@ -874,7 +962,7 @@
                                                                      :additional-options "trustServerCertificate=true")]
                                    (sql-jdbc.conn/with-connection-spec-for-testing-connection
                                     [spec [:mysql new-connection-details]]
-                                     (with-redefs [sql-jdbc.conn/db->pooled-connection-spec (fn [_] spec)]
+                                     (mt/with-dynamic-fn-redefs [sql-jdbc.conn/db->pooled-connection-spec (fn [_] spec)]
                                        (sql-jdbc.sync/current-user-table-privileges driver/*driver* spec {})))))]
           (try
             (doseq [stmt ["CREATE TABLE `bar` (id INTEGER);"
@@ -934,7 +1022,7 @@
     (let [{schema :schema, table-name :name} (t2/select-one :model/Table (mt/id :checkins))]
       (qp.store/with-metadata-provider (mt/id)
         (testing "checking select privilege defaults to allow on timeout (#56737)"
-          (with-redefs [sql-jdbc.describe-database/simple-select-probe-query (constantly ["SELECT sleep(3)"])]
+          (mt/with-dynamic-fn-redefs [sql-jdbc.describe-database/simple-select-probe-query (constantly ["SELECT sleep(3)"])]
             (binding [sql-jdbc.describe-database/*select-probe-query-timeout-seconds* 1]
               (sql-jdbc.execute/do-with-connection-with-options
                driver/*driver*
@@ -958,12 +1046,10 @@
                           "CREATE TABLE `fullaccess_table` (id INTEGER);"
                           "CREATE USER 'sync_writable_test_user' IDENTIFIED BY 'password';"]]
               (jdbc/execute! spec stmt))
-
             (doseq [stmt ["GRANT SELECT ON sync_writable_test.`readonly_table` TO 'sync_writable_test_user'"
                           "GRANT SELECT, INSERT ON sync_writable_test.`readwrite_table` TO 'sync_writable_test_user'"
                           "GRANT SELECT, INSERT, UPDATE, DELETE ON sync_writable_test.`fullaccess_table` TO 'sync_writable_test_user'"]]
               (jdbc/execute! spec stmt))
-
             (let [user-connection-details (assoc details
                                                  :user "sync_writable_test_user"
                                                  :password "password"
@@ -979,7 +1065,6 @@
                 (testing "After granting full access to all tables and re-syncing"
                   (doseq [table-name ["readonly_table" "readwrite_table"]]
                     (jdbc/execute! spec (format "GRANT INSERT, UPDATE, DELETE ON sync_writable_test.`%s` TO 'sync_writable_test_user'" table-name)))
-
                   (sync/sync-database! database)
                   (is (= {"readonly_table"   true
                           "readwrite_table"  true
@@ -991,17 +1076,18 @@
 (deftest partial-revokes-writable-test
   (mt/test-driver :mysql
     (when-not (mysql/mariadb? (mt/db))
-      (testing "`database-supports :metadata/table-writable-check` returns true normally but false with partial revokes"
+      (testing "a genuinely-writable table stays editable under partial_revokes, even when another table is revoked"
         (tx/drop-if-exists-and-create-db! driver/*driver* "partial_revokes_test")
         (let [details (tx/dbdef->connection-details :mysql :db {:database-name "partial_revokes_test"})
               spec    (sql-jdbc.conn/connection-details->spec :mysql details)]
           (try
-            ;; Create test tables and user
-            (doseq [stmt ["CREATE TABLE `test_table` (id INTEGER);"
+            ;; Two fully-writable tables and a user with full DML on both.
+            (doseq [stmt ["CREATE TABLE `writable_table` (id INTEGER);"
+                          "CREATE TABLE `revoked_table` (id INTEGER);"
                           "CREATE USER 'partial_revokes_test_user' IDENTIFIED BY 'password';"
-                          "GRANT SELECT, INSERT, UPDATE, DELETE ON partial_revokes_test.test_table TO 'partial_revokes_test_user'"]]
+                          "GRANT SELECT, INSERT, UPDATE, DELETE ON partial_revokes_test.writable_table TO 'partial_revokes_test_user'"
+                          "GRANT SELECT, INSERT, UPDATE, DELETE ON partial_revokes_test.revoked_table TO 'partial_revokes_test_user'"]]
               (jdbc/execute! spec stmt))
-
             (let [user-connection-details (assoc details
                                                  :user "partial_revokes_test_user"
                                                  :password "password"
@@ -1009,33 +1095,117 @@
                                                  :additional-options "trustServerCertificate=true")]
               (mt/with-temp [:model/Database database {:engine "mysql", :details user-connection-details
                                                        :dbms_version {:flavor "MySQL"}}]
-                (testing "With partial_revokes OFF (default), metadata/table-writable-check is supported"
+                (testing "With partial_revokes OFF (default), both tables sync as writable"
                   (jdbc/execute! spec "SET GLOBAL partial_revokes = OFF;")
                   (is (true? (driver/database-supports? driver/*driver* :metadata/table-writable-check database))
-                      "Should support metadata/table-writable-check when partial_revokes is OFF"))
-
-                (testing "With partial_revokes ON, metadata/table-writable-check is not supported"
+                      "Should support metadata/table-writable-check when partial_revokes is OFF")
+                  (sync/sync-database! database)
+                  (is (= {"writable_table" true, "revoked_table" true}
+                         (t2/select-fn->fn :name :is_writable :model/Table :db_id (:id database)))))
+                (testing "With partial_revokes ON and INSERT revoked on one table, the check stays enabled"
                   (jdbc/execute! spec "SET GLOBAL partial_revokes = ON;")
-                  (is (false? (driver/database-supports? driver/*driver* :metadata/table-writable-check database))
-                      "Should not support metadata/table-writable-check when partial_revokes is ON")
-
+                  (jdbc/execute! spec "REVOKE INSERT ON partial_revokes_test.revoked_table FROM 'partial_revokes_test_user';")
+                  (is (true? (driver/database-supports? driver/*driver* :metadata/table-writable-check database))
+                      "Should still support metadata/table-writable-check when partial_revokes is ON")
                   (sync/sync-database! database)
-                  (is (= {"test_table" nil}
+                  ;; The bug (metabase#73276): turning partial_revokes ON disabled the writable check for the whole
+                  ;; database, so *every* table became uneditable. The fix removes that blanket gate, so writability is
+                  ;; computed per-table from the GRANT lines again: the untouched table stays writable, and the table
+                  ;; whose INSERT was revoked correctly reports not-writable instead of dragging everything down with it.
+                  ;; (Optimistic handling of schema-level partial-revoke REVOKE lines is covered by `parse-grant-test`.)
+                  (is (= {"writable_table" true, "revoked_table" false}
                          (t2/select-fn->fn :name :is_writable :model/Table :db_id (:id database)))
-                      "is_writable should sync to nil when partial_revokes is ON"))
-
-                (testing "Revoke some permissions with partial_revokes ON"
-                  (jdbc/execute! spec "REVOKE INSERT ON partial_revokes_test.test_table FROM 'partial_revokes_test_user';")
-                  (is (false? (driver/database-supports? driver/*driver* :metadata/table-writable-check database))
-                      "Should still not support metadata/table-writable-check after partial revoke")
-
-                  ;; Sync database again and verify is_writable is still nil
-                  (sync/sync-database! database)
-                  (is (= {"test_table" nil}
-                         (t2/select-fn->fn :name :is_writable :model/Table :db_id (:id database)))
-                      "is_writable should still be nil after partial revoke"))))
-
+                      "writable_table stays writable; revoked_table loses writability after its INSERT is revoked"))))
             (finally
               ;; Clean up: Reset partial_revokes to OFF before exiting
               (jdbc/execute! spec "SET GLOBAL partial_revokes = OFF;")
               (jdbc/execute! spec "DROP USER IF EXISTS 'partial_revokes_test_user';"))))))))
+
+(deftest ^:parallel only-connect-when-non-malicious-properties
+  (mt/test-driver :mysql
+    (let [details (:details (mt/db))]
+      (testing "Reject connection strings with malicious properties"
+        (are [bad-option] (let [details (assoc details :additional-options bad-option)]
+                            (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                                                  #"Potentially dangerous keys in additional options"
+                                                  (driver/can-connect? :mysql details))))
+          "allowLoadLocalInfile=true"
+          "allowLoadLocalInfileInPath=1"
+          "allowLocalInfile=true"
+          "allowUrlInLocalInfile=1"
+          "autoDeserialize=1"
+          "serverRSAPublicKeyFile=/path/to/file"))
+      (testing "Allow connection strings with non-malicious properties"
+        (are [ok-option] (let [details (assoc details :additional-options ok-option)]
+                           (is (true? (driver/can-connect? :mysql details))))
+          nil
+          ""
+          " "
+          "tinyInt1isBit=1")
+        (is (true? (driver/can-connect? :mysql details)))))))
+
+(deftest ^:parallel set-role-statement-escape-quotes-test
+  (mt/test-driver :mysql
+    (sql-jdbc.execute/do-with-connection-with-options
+     :mysql (mt/id) nil
+     (fn [conn]
+       (are [role expected] (= expected
+                               (driver.sql-jdbc/set-role-statement :mysql conn role))
+         "role'; SELECT sleep(10); --"
+         "SET ROLE 'role\\'; SELECT sleep(10); --';"
+
+         "webapp@localhost"
+         "SET ROLE 'webapp'@'localhost';")))))
+
+(deftest ^:synchronized cancel-slow-mysql-query-via-query-timeout-test
+  (mt/test-driver :mysql
+    (testing "Slow MySQL query is cancelled server-side when *query-timeout-ms* elapses (GHY-3266)"
+      ;; `SELECT SLEEP(60)` would normally take 60s. With `*query-timeout-ms*` of 2s the canceled-chan timer fires
+      ;; (and `Statement.setQueryTimeout` also fires); both reach the MariaDB Connector/J `.cancel()` path which
+      ;; issues `KILL QUERY` on a side connection. The query should error within a few seconds, not run to
+      ;; completion. Cancellation evidence: the query throws AND finishes far short of 60s. We don't assert on the
+      ;; exception message because QP output-schema middleware wraps the underlying SQLException — the timing is
+      ;; the load-bearing assertion.
+      (binding [driver.settings/*query-timeout-ms* 2000]
+        (let [timer   (u/start-timer)
+              query   (mt/native-query {:query "SELECT SLEEP(60) AS s"})
+              result  (try
+                        (qp/process-query query)
+                        (catch Throwable e e))
+              elapsed (u/since-ms timer)]
+          (is (instance? Throwable result)
+              "query should throw rather than completing normally")
+          (is (< elapsed 30000)
+              (format "query should be cancelled well before SLEEP(60) completes naturally — took %.0f ms" elapsed)))))))
+
+(deftest ^:parallel add-interval-honeysql-form-rejects-hostile-unit-test
+  (testing "the MySQL interval sink refuses a unit outside its closed allow-list"
+    (let [hostile (keyword "day) FROM t2 UNION SELECT pw FROM secrets --")]
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid temporal unit"
+           (sql.qp/add-interval-honeysql-form :mysql :some_col 1 hostile))))
+    (testing "and refuses a non-numeric amount, which would otherwise be spliced into raw SQL"
+      (is (thrown-with-msg?
+           clojure.lang.ExceptionInfo
+           #"Invalid interval amount"
+           (sql.qp/add-interval-honeysql-form :mysql :some_col "1 DAY) UNION SELECT pw FROM secrets --" :day))))
+    (testing "and still compiles a legitimate (possibly fractional) amount to the expected INTERVAL token"
+      (is (= ["INTERVAL 1 day"]
+             (sql/format-expr (last (sql.qp/add-interval-honeysql-form :mysql :some_col 1 :day)))))
+      (is (= ["INTERVAL 0.5 second"]
+             (sql/format-expr (last (sql.qp/add-interval-honeysql-form :mysql :some_col 0.5 :second))))))))
+
+(deftest ^:parallel date-bucketing-never-splices-database-type-test
+  (testing "MySQL date bucketing never splices a client-supplied database_type into the CAST target"
+    (let [hostile "datetime) UNION SELECT pw FROM secrets --"
+          sql     (first (sql/format {:select [[(sql.qp/date :mysql :day (h2x/with-database-type-info :some_col hostile))]]}
+                                     {:dialect :mysql :quoted true}))]
+      (is (not (str/includes? (u/lower-case-en sql) "union"))
+          "the hostile database_type does not reach the emitted SQL at all")
+      (is (= "SELECT CAST(DATE(`some_col`) AS datetime)" sql)
+          "the client type only selects a safe temporal target; it is never emitted"))
+    (testing "a legitimate temporal type still compiles to the expected CAST keyword"
+      (is (= ["SELECT CAST(DATE(`some_col`) AS datetime)"]
+             (sql/format {:select [[(sql.qp/date :mysql :day (h2x/with-database-type-info :some_col "datetime"))]]}
+                         {:dialect :mysql :quoted true}))))))

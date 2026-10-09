@@ -15,11 +15,12 @@ import { OnboardingIllustration } from "metabase/common/components/OnboardingIll
 import { useSetting, useTempStorage } from "metabase/common/hooks";
 import CS from "metabase/css/core/index.css";
 import { getIsXrayEnabled } from "metabase/home/selectors";
-import { useSelector } from "metabase/lib/redux";
-import * as Urls from "metabase/lib/urls";
 import { useHelpLink } from "metabase/nav/components/AppSwitcher/useHelpLink";
+import { useSelector } from "metabase/redux";
+import type { ChecklistItemValue } from "metabase/redux/store";
 import {
   getDocsUrl,
+  getIsHosted,
   getIsPaidPlan,
   getSetting,
 } from "metabase/selectors/settings";
@@ -28,7 +29,6 @@ import {
   getApplicationName,
   getShowMetabaseLinks,
 } from "metabase/selectors/whitelabel";
-import { getIsHosted } from "metabase/setup/selectors";
 import {
   Accordion,
   Box,
@@ -40,13 +40,13 @@ import {
   Title,
   rem,
 } from "metabase/ui";
+import * as Urls from "metabase/urls";
 
 import S from "./Onboarding.module.css";
 import {
   trackChecklistItemCTAClicked,
   trackChecklistItemExpanded,
 } from "./analytics";
-import type { ChecklistItemValue } from "./types";
 
 export const Onboarding = () => {
   const applicationName = useSelector(getApplicationName);
@@ -332,14 +332,14 @@ export const Onboarding = () => {
                   <VideoTutorial
                     id="FOAXF4p1AL0"
                     si="COmu2w0SqGagUoVp"
-                    title={t`How to find and use X-rays?`}
+                    title="How to find and use X-rays?"
                   />
                   {isXrayEnabled ? (
                     <>
                       <Text>
                         {jt`Hover over a table and click the yellow lightning bolt ${(
                           <Icon
-                            c="warning"
+                            c="feedback-warning"
                             className={S.inlineIcon}
                             key="bolt_icon"
                             name="bolt_filled"
@@ -379,7 +379,7 @@ export const Onboarding = () => {
                   <VideoTutorial
                     id="N9pR8KyaWzY"
                     si="EQbwmOGt733oWkXF"
-                    title={t`How to use the Notebook editor?`}
+                    title="How to use the Notebook editor?"
                   />
                   <Text>
                     {jt`Filter and summarize data, add custom columns, join data from other tables, and more - ${(
@@ -415,7 +415,7 @@ export const Onboarding = () => {
                   <VideoTutorial
                     id="_iiG_MoxdAE"
                     si="QInRPzkHpFamjsHw"
-                    title={t`How to use the SQL/Native query editor?`}
+                    title="How to use the SQL/Native query editor?"
                   />
                   <Text>
                     {jt`Use the ${(
@@ -459,7 +459,7 @@ export const Onboarding = () => {
                   <VideoTutorial
                     id="FAst1nabBck"
                     si="yVMfXeh0tkr1Yt8_"
-                    title={t`How to use dashboards?`}
+                    title="How to use dashboards?"
                   />
                   <Text>
                     {t`You can:`}
@@ -509,7 +509,7 @@ export const Onboarding = () => {
                   <VideoTutorial
                     id="IustSQH6bfQ"
                     si="GYTUdFsXfpc2QL8S"
-                    title={t`How to create a dashboard email subscription?`}
+                    title="How to create a dashboard email subscription?"
                   />
                   {shouldConfigureCommunicationChannels && (
                     <Text data-testid="subscription-communication-setup">
@@ -536,7 +536,7 @@ export const Onboarding = () => {
                         className={S.inlineIcon}
                       />
                     )} ${(
-                      <b key="sharing">{t`Sharing`}</b>
+                      <b key="sharing">{t`Share`}</b>
                     )} icon on the top bar, then click on ${(
                       <Icon
                         key="subscription-icon"
@@ -573,7 +573,7 @@ export const Onboarding = () => {
                   <VideoTutorial
                     id="MPw5__mVg58"
                     si="jaUgne1VDg6VXprJ"
-                    title={t`How to create an alert?`}
+                    title="How to create an alert?"
                   />
                   {shouldConfigureCommunicationChannels && (
                     <Text data-testid="alert-communication-setup">

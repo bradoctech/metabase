@@ -1,27 +1,31 @@
 (ns metabase.driver.sql-jdbc.connection
   "Logic for creating and managing connection pools for SQL JDBC drivers. Implementations for connection-related driver
   multimethods for SQL JDBC drivers."
-  (:refer-clojure :exclude [get-in select-keys])
+  (:refer-clojure :exclude [get-in mapv select-keys])
   (:require
    [clojure.java.jdbc :as jdbc]
+   ^{:clj-kondo/ignore [:discouraged-namespace]}
+   [metabase.audit-app.core :as audit-app]
    [metabase.driver :as driver]
    [metabase.driver-api.core :as driver-api]
    [metabase.driver.connection :as driver.conn]
    [metabase.driver.connection.workspaces :as driver.w]
    [metabase.driver.settings :as driver.settings]
+   [metabase.driver.sql-jdbc.common :as sql-jdbc.common]
    [metabase.driver.sql-jdbc.connection.ssh-tunnel :as ssh]
    [metabase.driver.util :as driver.u]
    [metabase.util :as u]
    [metabase.util.i18n :refer [tru]]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
-   [metabase.util.performance :refer [get-in select-keys]]
+   [metabase.util.performance :refer [get-in mapv select-keys]]
    [potemkin :as p]
    ^{:clj-kondo/ignore [:discouraged-namespace]}
    [toucan2.core :as t2])
   (:import
    (com.google.common.cache Cache CacheBuilder RemovalNotification)
-   (com.mchange.v2.c3p0 DataSources)
+   (com.mchange.v2.c3p0 C3P0ProxyConnection DataSources)
+   (java.sql Connection)
    (java.util.concurrent TimeUnit)
    (javax.sql DataSource)
    (org.apache.logging.log4j Level)))
@@ -50,6 +54,49 @@
   {:added "0.32.0" :arglists '([driver details-map])}
   driver/dispatch-on-initialized-driver-safe-keys
   :hierarchy #'driver/hierarchy)
+
+(def ^:private spec-structural-keys
+  "Keys that describe how to reach the JDBC driver rather than what to say to it."
+  [:connection-uri :subname :subprotocol :classname :datasource :datasource-class])
+
+(defn- spec-to-inspect
+  "The connection spec `details` would produce, or nil when they do not make one. Used to read where a connection would
+  go, never to open it.
+
+  A `:write_data_details` or `:admin_details` overlay reaches us as a partial map that may not make a whole spec.
+  Details that cannot produce a spec cannot open a connection either, so nil is a safe answer rather than a blind
+  spot."
+  [driver details]
+  (try
+    (connection-details->spec driver details)
+    (catch Throwable e
+      (log/debug e "Could not build a connection spec to check where it would connect")
+      nil)))
+
+(defn- spec-connection-string [spec]
+  (or (:connection-uri spec) (:subname spec)))
+
+(defmethod driver/connection-hosts :sql-jdbc
+  [driver details]
+  ;; Read from the connection string as well as the details, because the two disagree in both directions: a client
+  ;; substitutes `localhost` for a host detail that is missing or blank, so the string names a host the details do
+  ;; not; and a driver that builds its URL somewhere this cannot see (`:datasource`) leaves the details as the only
+  ;; account of where it goes.
+  (into (vec (driver/hosts-from-details details driver/default-host-detail-keys))
+        (some-> (spec-to-inspect driver details)
+                spec-connection-string
+                sql-jdbc.common/connection-string-hosts)))
+
+(defmethod driver/connection-parameter-hosts :sql-jdbc
+  [driver details]
+  ;; The parameters are read off the finished spec rather than off `:additional-options`, so that whatever the driver
+  ;; folds in on its way there is covered too -- several drivers pass any detail key they do not recognize straight
+  ;; through as a connection property.
+  (if-let [spec (spec-to-inspect driver details)]
+    (sql-jdbc.common/connection-parameter-hosts (spec-connection-string spec)
+                                                (apply dissoc spec spec-structural-keys)
+                                                (driver/host-carrying-parameters driver))
+    []))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                           Creating Connection Pools                                            |
@@ -105,6 +152,17 @@
    "minPoolSize"                          0
    "initialPoolSize"                      0
    "maxPoolSize"                          (driver.settings/jdbc-data-warehouse-max-connection-pool-size)
+   ;; [From dox] The number of milliseconds a client calling getConnection() will wait for a Connection to be
+   ;; checked-in or acquired when the pool is exhausted. Zero means wait indefinitely. Setting any positive value will
+   ;; cause the getConnection() call to time out and break with an SQLException after the specified number of
+   ;; milliseconds.
+   ;;
+   ;; Without this, once the pool hits maxPoolSize every additional query blocks forever waiting for a free
+   ;; connection, so a backlog can grow without bound under load. With it, an over-loaded instance sheds load: the
+   ;; checkout fails fast and the QP turns the resulting timeout into an HTTP 503 (see
+   ;; [[metabase.driver.sql-jdbc.execute/do-with-resolved-connection]]). The number of queries allowed to wait at once
+   ;; is separately bounded by [[driver.settings/jdbc-data-warehouse-connection-pool-max-pending-checkouts]].
+   "checkoutTimeout"                      (driver.settings/jdbc-data-warehouse-connection-pool-checkout-timeout-ms)
    ;; [From dox] If true, an operation will be performed at every connection checkout to verify that the connection is
    ;; valid. [...] ;; Testing Connections in checkout is the simplest and most reliable form of Connection testing,
    ;; but for better performance, consider verifying connections periodically using `idleConnectionTestPeriod`. [...]
@@ -120,7 +178,16 @@
    ;; request. IRL the Metabase server and data warehouse are likely to be located in closer geographical proximity to
    ;; one another than my trans-contintental tests. Thus in the majority of cases the overhead should be next to
    ;; nothing, and in the worst case close to imperceptible.
-   "testConnectionOnCheckout"             true
+   ;;
+   ;; Tests are the exception: CI drives remote warehouses over a slow link, and on Snowflake `isValid()` is a
+   ;; heartbeat REST call, which makes the per-checkout test one of the largest single costs in the driver test
+   ;; suite. There, verify on c3p0's background thread instead -- the same pairing the app DB pool
+   ;; uses (see [[metabase.app-db.connection-pool-setup]]) -- so a stale connection is still culled without putting
+   ;; a round trip in front of every query.
+   "testConnectionOnCheckout"             (not driver-api/is-test?)
+   ;; Seconds between background tests of idle, checked-in connections. Zero disables it, which is what we want
+   ;; whenever `testConnectionOnCheckout` is already covering every connection handed out.
+   "idleConnectionTestPeriod"             (if driver-api/is-test? 60 0)
    ;; [From dox] Number of seconds that Connections in excess of minPoolSize should be permitted to remain idle in the
    ;; pool before being culled. Intended for applications that wish to aggressively minimize the number of open
    ;; Connections, shrinking the pool back towards minPoolSize if, following a spike, the load level diminishes and
@@ -187,12 +254,17 @@
 (defn- create-pool!
   "Create a new C3P0 `ComboPooledDataSource` for connecting to the given `database`.
    Uses [[driver.conn/effective-details]] to select the appropriate connection details
-   based on the current [[driver.conn/*connection-type*]]."
+   for the current connection context."
   [{:keys [id], driver :engine, :as database}]
   {:pre [(map? database)]}
-  (log/debug (u/format-color :cyan "Creating new connection pool for %s database %s (connection-type: %s) ..."
-                             driver id driver.conn/*connection-type*))
+  (log/debug (u/format-color :cyan "Creating new connection pool for %s database %s (%s) ..."
+                             driver id (driver.conn/connection-telemetry-info)))
   (let [details             (driver.conn/effective-details database)
+        ;; before the tunnel is set up, since incorporating it rewrites `:host` to the local tunnel entrance. Checking
+        ;; here as well as at connection-test time narrows the DNS-rebinding window and covers databases that never
+        ;; went through a connection test (serialization import, config files).
+        _                   (driver.u/with-database-network-policy database
+                              (driver.u/validate-connection-hosts! driver details))
         details-with-tunnel (driver/incorporate-ssh-tunnel-details ;; If the tunnel is disabled this returned unchanged
                              driver
                              (update details :port #(or % (default-ssh-tunnel-target-port driver))))
@@ -211,7 +283,10 @@
      (select-keys details-with-auth [:password-expiry-timestamp]))))
 
 (defn- destroy-pool! [database-id pool-spec]
-  (log/debug (u/format-color :red "Closing old connection pool for database %s ..." database-id))
+  ;; INFO (not DEBUG) so pool destruction is visible in CI test-log artifacts: destroying a pool closes its
+  ;; checked-out connections, which kills in-flight queries with errors like SQL Server's "The result set is
+  ;; closed" (see DEV-2161). Pool destruction is rare and significant enough to warrant INFO in production too.
+  (log/info (u/format-color :red "Closing old connection pool for database %s ..." database-id))
   (driver-api/destroy-connection-pool! pool-spec)
   (ssh/close-tunnel! pool-spec))
 
@@ -250,16 +325,16 @@
 
 (defn- pool-cache-key
   "Returns the cache key for connection pools: `[database-id, connection-type]`.
-   Uses [[driver.conn/effective-connection-type]] so that a requested write connection
+   Uses [[driver.conn/connection-pool-type]] so that a requested write connection
    without configured `:write-data-details` resolves to `:default`, reusing the
    existing pool instead of creating a duplicate."
   [database]
-  [(u/the-id database) (driver.conn/effective-connection-type database)])
+  [(u/the-id database) (driver.conn/connection-pool-type database)])
 
 (mu/defn- jdbc-spec-hash
   "Computes a hash value for the JDBC connection spec based on the effective connection details, for the purpose of
   determining if details changed and therefore the existing connection pool needs to be invalidated.
-  Uses [[driver.conn/effective-details]] to select the appropriate details based on [[driver.conn/*connection-type*]]."
+  Uses [[driver.conn/effective-details]] to select the appropriate details for the current connection context."
   [{driver :engine, :as database} :- [:maybe :map]]
   (when (some? database)
     (hash (connection-details->spec driver (driver.conn/effective-details database)))))
@@ -290,15 +365,16 @@
   them and removing from cache."
   [database]
   (let [db-id           (u/the-id database)
-        canonical-keys  [[db-id :default] [db-id :write-data]]
+        canonical-keys  (mapv (fn [conn-type] [db-id conn-type])
+                              driver.conn/connection-types)
         pool-map        @pool-cache-key->connection-pool
         canonical-count (count (filter pool-map canonical-keys))
         ;; Find all swapped pool keys for this database (keys are [db-id, details-hash] tuples)
         swapped-keys    (filter (fn [[cached-db-id _details-hash]]
                                   (= cached-db-id db-id))
                                 (keys (.asMap ^Cache swapped-connection-pools)))]
-    (log/debugf "Invalidating connection pools for database %d (canonical count: %d, swapped count: %d)"
-                db-id canonical-count (count swapped-keys))
+    (log/infof "Invalidating connection pools for database %d (canonical count: %d, swapped count: %d)"
+               db-id canonical-count (count swapped-keys))
     ;; Clear canonical pools for both connection types
     (doseq [cache-key canonical-keys
             :let      [[old-map] (swap-vals! pool-cache-key->connection-pool dissoc cache-key)
@@ -412,7 +488,7 @@
       ;; the hash didn't match, but it's possible that a stale instance of `DatabaseInstance`
       ;; was passed in (ex: from a long-running sync operation); fetch the latest one from
       ;; our app DB, and see if it STILL doesn't match
-      (not= curr-hash (-> (t2/select-one [:model/Database :id :engine :details :write_data_details] :id database-id)
+      (not= curr-hash (-> (t2/select-one [:model/Database :id :engine :details :write_data_details :admin_details] :id database-id)
                           jdbc-spec-hash)))))
 
 (defn- get-canonical-pool
@@ -438,8 +514,8 @@
 
 (defn db->pooled-connection-spec
   "Return a JDBC connection spec that includes a c3p0 `ComboPooledDataSource`. These connection pools are cached so we
-  don't create multiple ones for the same DB and connection type. The connection type is determined by
-  [[driver.conn/*connection-type*]] - use [[driver.conn/with-write-connection]] to get a write connection pool.
+  don't create multiple ones for the same DB and connection type. The connection type follows the current
+  connection context — use [[driver.conn/with-write-connection]] to get a write connection pool.
 
   When [[metabase.driver/with-swapped-connection-details]] is active for a database, the database details are
   modified before creating the connection pool. Swapped pools are stored in a separate Guava cache with TTL-based
@@ -466,11 +542,17 @@
           details-hash (jdbc-spec-hash db)]
       (driver.conn/track-connection-acquisition! (driver.conn/effective-details db))
       (cond
-        ;; for the audit db, we pass the datasource for the app-db. This lets us use fewer db
-        ;; connections with *application-db* and 1 less connection pool. Note: This data-source is
-        ;; not in [[pool-cache-key->connection-pool]].
-        (or (:is-audit db) (get-in db [:details :is-audit-dev]))
+        (or (:is-audit db)
+            (and (audit-app/analytics-dev-mode)
+                 (get-in db [:details :is-audit-dev])))
         {:datasource (driver-api/data-source)}
+
+        ;; An analytics-dev db is only a valid handle onto the app-db while analytics dev mode is on; reaching here with
+        ;; the mode off is an invariant violation, so fail loudly rather than silently building a credential-less pool
+        ;; against the wrong host.
+        (get-in db [:details :is-audit-dev])
+        (throw (ex-info (tru "Cannot open a connection for an analytics-dev database unless analytics dev mode is enabled.")
+                        {:database-id (:id db)}))
 
         ;; Swapped pool: use Guava cache with TTL
         has-swap?
@@ -540,9 +622,49 @@
   "Default implementation of [[driver/can-connect?]] for SQL JDBC drivers. Checks whether we can perform a simple
   `SELECT 1` query."
   [driver details]
-  (with-connection-spec-for-testing-connection [jdbc-spec [driver details]]
-    (or (:is-audit-dev details)
-        (can-connect-with-spec? jdbc-spec))))
+  ;; An `:is-audit-dev` database is a handle onto the app-db (see [[db->pooled-connection-spec]]); it has no real
+  ;; connection to test. That is only a valid state while analytics dev mode is on — otherwise reaching here is an
+  ;; invariant violation, so throw rather than reporting the database as connectable.
+  (if (:is-audit-dev details)
+    (if (audit-app/analytics-dev-mode)
+      true
+      (throw (ex-info (tru "Cannot connect to an analytics-dev database unless analytics dev mode is enabled.")
+                      {})))
+    (with-connection-spec-for-testing-connection [jdbc-spec [driver details]]
+      (can-connect-with-spec? jdbc-spec))))
 
 (defmethod driver/connection-spec :sql-jdbc [_driver db]
   (db->pooled-connection-spec  db))
+
+(def ^:private raw-connection-close-method
+  ;; c3p0 exposes the pooled physical Connection only through `rawConnectionOperation`, which names the operation as a
+  ;; `java.lang.reflect.Method`. `unwrap` is not an alternative: c3p0 delegates it to the driver, and Hive's throws.
+  (.getMethod Connection "close" (make-array Class 0)))
+
+(defn discard-pooled-connection!
+  "Destroy the physical Connection behind a c3p0 proxy, so the pool acquires a fresh one rather than handing this one
+  to the next query. Use for a Connection left in a state the pool cannot reset, such as after canceling a Statement
+  on a driver where that leaves unread protocol state on the wire.
+
+  Only the caller that owns `conn` may call this: the pool has no way to tell the difference between a Connection
+  whose borrower is finished with it and one that is still in use.
+
+  A Connection with no pool behind it has no next query to poison, so it is left alone."
+  [^Connection conn]
+  (when (instance? C3P0ProxyConnection conn)
+    (try
+      (.rawConnectionOperation ^C3P0ProxyConnection conn
+                               raw-connection-close-method
+                               C3P0ProxyConnection/RAW_CONNECTION
+                               (make-array Object 0))
+      (catch Throwable e
+        (log/debugf "Closing the raw connection to discard it failed: %s" (ex-message e))))
+    ;; Closing the raw Connection is invisible to c3p0: `rawConnectionOperation` reports nothing back to the pool, and
+    ;; the check-in reset only reads properties that a driver may answer from memory once closed — Hive's
+    ;; `getAutoCommit` is a bare `return true` — so on those drivers the pool would hand the dead Connection to the
+    ;; next query. Any *proxied* call routes its exception into c3p0, which then tests the physical Connection and
+    ;; destroys it when the test fails. `createStatement` is that call: JDBC requires it to throw on a closed
+    ;; Connection.
+    (try
+      (.close (.createStatement conn))
+      (catch Throwable _))))
