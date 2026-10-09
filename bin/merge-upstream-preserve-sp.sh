@@ -12,7 +12,10 @@
 #   ./bin/merge-upstream-preserve-sp.sh restore
 #   ./bin/merge-upstream-preserve-sp.sh report
 #   # resolve dual-changed + behavior-manual manually
+#   ./bin/merge-upstream-preserve-sp.sh scan            # v2: stale / orphan / missing / hybrid vs UPSTREAM_REF
+#   ./bin/merge-upstream-preserve-sp.sh scan --apply    # restore stale+missing from upstream, delete orphans
 #   ./bin/merge-upstream-preserve-sp.sh verify
+#   ./bin/merge-upstream-preserve-sp.sh build-check     # v2: production build checks (dev passing != build passing)
 #
 # See docs/internal/atualizacao-metabase-sp/runbook-atualizacao.md
 set -euo pipefail
@@ -38,6 +41,15 @@ REPORT_FILE="${REPORT_FILE:-$WORK_DIR/manual-report.md}"
 CANON_RESTORE="$LISTS_DIR/restore-ours.txt"
 CANON_DUAL="$LISTS_DIR/dual-changed.txt"
 CANON_BEHAVIOR="$LISTS_DIR/behavior-manual.txt"
+CANON_EXTRA="$LISTS_DIR/sp-extra.txt"
+SP_EXTRA_FILE="${SP_EXTRA_FILE:-$WORK_DIR/sp-extra.txt}"
+
+# Pre-merge tip of the fork (content that may get "stuck" after the merge).
+PRE_MERGE_REF="${PRE_MERGE_REF:-$BACKUP_TAG}"
+# Extra snapshots of earlier steps (stale content can come from any previous major).
+STALE_REFS="${STALE_REFS:-$(git tag -l 'saopaulo-pre-*' 2>/dev/null | tr '\n' ' ')}"
+# Unmerged non-curated paths during `restore`: upstream (default, v2) or sp (MVP behavior).
+UNMERGED_POLICY="${UNMERGED_POLICY:-upstream}"
 
 mkdir -p "$WORK_DIR"
 
@@ -75,6 +87,38 @@ is_behavior() {
 
 is_manual() {
   is_dual_changed "$1" || is_behavior "$1"
+}
+
+SP_EXTRA_PATTERNS=()
+load_sp_extra() {
+  if [[ -f "$CANON_EXTRA" ]]; then
+    strip_comments "$CANON_EXTRA" | sed 's/[[:space:]]*$//' | sort -u > "$SP_EXTRA_FILE"
+  else
+    : > "$SP_EXTRA_FILE"
+  fi
+  mapfile -t SP_EXTRA_PATTERNS < "$SP_EXTRA_FILE"
+}
+
+is_sp_extra() {
+  local path="$1" pattern
+  for pattern in "${SP_EXTRA_PATTERNS[@]}"; do
+    # shellcheck disable=SC2053
+    [[ "$path" == $pattern ]] && return 0
+  done
+  return 1
+}
+
+# Curated SP: the 3 buckets + sp-extra. Never "SP" because an EDD-* commit touched it:
+# upgrade commits (EDD-1355…) touch upstream files and carry the previous major's content.
+is_protected() {
+  is_listed "$1" "$RESTORE_OURS_FILE" || is_manual "$1" || is_sp_extra "$1"
+}
+
+load_all_lists() {
+  load_or_copy_list "$CANON_RESTORE" "$RESTORE_OURS_FILE"
+  load_or_copy_list "$CANON_DUAL" "$DUAL_CHANGED_FILE"
+  load_or_copy_list "$CANON_BEHAVIOR" "$BEHAVIOR_FILE"
+  load_sp_extra
 }
 
 ensure_remote_ref() {
@@ -175,7 +219,12 @@ should_restore_path() {
   is_listed "$path" "$RESTORE_OURS_FILE" && return 0
 
   case "$path" in
-    *.png|*.svg|*.jpg|*.jpeg|*.gif|*.ico|*.woff|*.woff2|*.ttf|*.eot)
+    # Brand assets only. Images elsewhere (docs/, .loki/) are upstream's: restoring them from
+    # SP reverted docs screenshots and visual-test baselines (63 lesson).
+    resources/frontend_client/*.png|resources/frontend_client/*.svg|resources/frontend_client/*.jpg|\
+    resources/frontend_client/*.jpeg|resources/frontend_client/*.gif|resources/frontend_client/*.ico|\
+    resources/frontend_client/*.woff|resources/frontend_client/*.woff2|resources/frontend_client/*.ttf|\
+    resources/frontend_client/*.eot)
       return 0
       ;;
     docs/internal/*)
@@ -197,9 +246,7 @@ should_restore_path() {
 
 cmd_restore() {
   [[ -f "$LIST_FILE" ]] || cmd_snapshot
-  load_or_copy_list "$CANON_RESTORE" "$RESTORE_OURS_FILE"
-  load_or_copy_list "$CANON_DUAL" "$DUAL_CHANGED_FILE"
-  load_or_copy_list "$CANON_BEHAVIOR" "$BEHAVIOR_FILE"
+  load_all_lists
 
   echo "==> Auto-restore from $SP_REF (skip dual-changed + behavior-manual)"
   local restored=0 skipped_manual=0
@@ -230,15 +277,27 @@ cmd_restore() {
     done < <(git ls-tree -r --name-only "$SP_REF" -- "$pattern" 2>/dev/null || true)
   done
 
-  # Unmerged non-manual → prefer SP
+  # Unmerged non-manual: SP-owned → SP; everything else → upstream (v2). Taking SP for any
+  # conflict (MVP) left the previous major's content stuck in upstream files.
+  local unmerged_log="$WORK_DIR/unmerged-resolved.txt"
+  : > "$unmerged_log"
   while IFS= read -r path; do
     [[ -z "$path" ]] && continue
     is_manual "$path" && continue
-    if git cat-file -e "$SP_REF:$path" 2>/dev/null; then
-      git checkout "$SP_REF" -- "$path" 2>/dev/null || true
-      git add -- "$path" 2>/dev/null || true
+    local source_ref="$UPSTREAM_REF"
+    if [[ "$UNMERGED_POLICY" == "sp" ]] || is_listed "$path" "$RESTORE_OURS_FILE" || is_sp_extra "$path"; then
+      source_ref="$SP_REF"
     fi
+    if git cat-file -e "$source_ref:$path" 2>/dev/null; then
+      git checkout "$source_ref" -- "$path" 2>/dev/null || true
+      git add -- "$path" 2>/dev/null || true
+    else
+      git rm -q --cached -- "$path" 2>/dev/null || true
+      rm -f -- "$path"
+    fi
+    echo "$source_ref	$path" >> "$unmerged_log"
   done < <(git diff --name-only --diff-filter=U 2>/dev/null || true)
+  echo "    Unmerged resolved automatically: $(wc -l < "$unmerged_log") (see $unmerged_log)"
 
   # Do not `git add -A` — that can stage unresolved dual/behavior files that
   # still contain conflict markers. Only paths restored above were staged.
@@ -323,6 +382,210 @@ cmd_report() {
   echo "    Done. Open $REPORT_FILE"
 }
 
+# --- v2: post-merge scan ----------------------------------------------------------------------
+# Compares the working tree with UPSTREAM_REF and classifies every non-protected difference:
+#   stale   – content equals the pre-merge tip or an earlier step snapshot → restore from upstream
+#   missing – exists upstream, missing locally                               → restore from upstream
+#   orphan  – exists locally, deleted upstream                                → delete
+#   hybrid  – differs from upstream and from every snapshot (3-way mix or     → review by hand
+#             post-merge fix); add to the lists if it is SP, else restore
+SCAN_STALE="$WORK_DIR/scan-stale.txt"
+SCAN_MISSING="$WORK_DIR/scan-missing.txt"
+SCAN_ORPHANS="$WORK_DIR/scan-orphans.txt"
+SCAN_HYBRID="$WORK_DIR/scan-hybrid.txt"
+SCAN_REPORT="$WORK_DIR/scan-report.md"
+
+cmd_scan() {
+  local apply=0
+  [[ "${1:-}" == "--apply" || "${SCAN_APPLY:-0}" == "1" ]] && apply=1
+  ensure_remote_ref "$UPSTREAM_REF"
+  load_all_lists
+
+  local refs=()
+  local ref
+  for ref in $PRE_MERGE_REF $STALE_REFS; do
+    git rev-parse -q --verify "$ref^{commit}" >/dev/null 2>&1 && refs+=("$ref")
+  done
+  # dedupe, keep order
+  mapfile -t refs < <(printf '%s\n' "${refs[@]}" | awk '!seen[$0]++')
+
+  echo "==> Scan: working tree vs $UPSTREAM_REF (snapshots: ${refs[*]:-none})"
+  : > "$SCAN_STALE"; : > "$SCAN_MISSING"; : > "$SCAN_ORPHANS"; : > "$SCAN_HYBRID"
+  local protected=0 status path wt_hash stale_ref
+
+  while IFS=$'\t' read -r status path; do
+    [[ -z "$path" ]] && continue
+    if is_protected "$path"; then
+      protected=$((protected + 1))
+      continue
+    fi
+    case "$status" in
+      A) echo "$path" >> "$SCAN_ORPHANS" ;;
+      D) echo "$path" >> "$SCAN_MISSING" ;;
+      *)
+        wt_hash="$(git hash-object -- "$path" 2>/dev/null || true)"
+        stale_ref=""
+        for ref in "${refs[@]}"; do
+          if [[ -n "$wt_hash" && "$wt_hash" == "$(git rev-parse -q --verify "$ref:$path" 2>/dev/null)" ]]; then
+            stale_ref="$ref"
+            break
+          fi
+        done
+        if [[ -n "$stale_ref" ]]; then
+          printf '%s\t%s\n' "$path" "$stale_ref" >> "$SCAN_STALE"
+        else
+          echo "$path" >> "$SCAN_HYBRID"
+        fi
+        ;;
+    esac
+  done < <(git diff --no-renames --name-status "$UPSTREAM_REF" -- . ":(exclude)$WORK_DIR")
+
+  local n_stale n_missing n_orphans n_hybrid
+  n_stale=$(wc -l < "$SCAN_STALE"); n_missing=$(wc -l < "$SCAN_MISSING")
+  n_orphans=$(wc -l < "$SCAN_ORPHANS"); n_hybrid=$(wc -l < "$SCAN_HYBRID")
+
+  local trio
+  trio="$(git diff --name-only "$UPSTREAM_REF" -- package.json bun.lock patches/ 2>/dev/null || true)"
+
+  {
+    echo "# Scan pós-merge — $(git branch --show-current)"
+    echo
+    echo "Gerado em: $(date -u +%Y-%m-%dT%H:%MZ) · UPSTREAM_REF=\`$UPSTREAM_REF\` · snapshots: \`${refs[*]:-none}\`"
+    echo
+    echo "| Categoria | Qtde | Ação |"
+    echo "| --- | --- | --- |"
+    echo "| stale | $n_stale | restaurar do upstream (\`scan --apply\`) |"
+    echo "| missing | $n_missing | restaurar do upstream (\`scan --apply\`) |"
+    echo "| orphan | $n_orphans | apagar (\`scan --apply\`) |"
+    echo "| hybrid | $n_hybrid | revisar: SP → adicionar às listas; senão restaurar do upstream |"
+    echo "| protegidos (listas + sp-extra) | $protected | ignorados |"
+    echo
+    if [[ -n "$trio" ]]; then
+      echo "## ⚠ Trio FE diferente do upstream (package.json + bun.lock + patches/ devem andar juntos)"
+      echo; echo '```'; echo "$trio"; echo '```'; echo
+    fi
+    local section file
+    for section in stale missing orphans hybrid; do
+      file="$WORK_DIR/scan-$section.txt"
+      echo "## $section"
+      echo; echo '```'; cat "$file"; echo '```'; echo
+    done
+  } > "$SCAN_REPORT"
+
+  echo "    stale=$n_stale missing=$n_missing orphan=$n_orphans hybrid=$n_hybrid protected=$protected"
+  [[ -n "$trio" ]] && echo "    WARNING: package.json/bun.lock/patches differ from upstream: $(echo "$trio" | tr '\n' ' ')"
+  echo "    Report → $SCAN_REPORT"
+
+  if [[ $apply -eq 1 ]]; then
+    echo "==> Applying: restore stale+missing from $UPSTREAM_REF, delete orphans"
+    { cut -f1 "$SCAN_STALE"; cat "$SCAN_MISSING"; } | sed '/^$/d' \
+      | xargs -r -d '\n' git checkout "$UPSTREAM_REF" --
+    sed '/^$/d' "$SCAN_ORPHANS" | xargs -r -d '\n' git rm -q -f --
+    if [[ "${APPLY_HYBRID:-0}" == "1" ]]; then
+      echo "    APPLY_HYBRID=1: restoring hybrids from $UPSTREAM_REF too"
+      sed '/^$/d' "$SCAN_HYBRID" | xargs -r -d '\n' git checkout "$UPSTREAM_REF" --
+    fi
+    echo "    Done. Re-run '$0 scan' to confirm; hybrids still need review."
+  fi
+}
+
+# --- v2: production build checks ------------------------------------------------------------
+# The dev run (`--hot` + rspack serve) only loads what the app touches, never compiles drivers,
+# and treats broken imports as warnings. `bin/build.sh` compiles everything and fails.
+BUILD_CHECK_STEPS="${BUILD_CHECK_STEPS:-backend static-viz frontend}"
+
+write_load_all_script() {
+  cat > "$WORK_DIR/load-all.clj" <<'EOF'
+(require '[clojure.java.io :as io])
+
+(defn- ns-of [^java.io.File f]
+  (try
+    (with-open [r (java.io.PushbackReader. (io/reader f))]
+      (let [form (read {:eof nil :read-cond :allow :features #{:clj}} r)]
+        (when (and (seq? form) (= 'ns (first form)))
+          (second form))))
+    (catch Throwable _ nil)))
+
+(def dirs
+  (concat ["src" "enterprise/backend/src"]
+          (for [d (.listFiles (io/file "modules/drivers"))
+                :let [s (io/file d "src")]
+                :when (.isDirectory s)]
+            (str s))))
+
+(def nss
+  (->> dirs
+       (mapcat #(file-seq (io/file %)))
+       (filter #(re-find #"\.cljc?$" (.getName ^java.io.File %)))
+       (keep ns-of)
+       distinct
+       sort))
+
+(def failed
+  (atom 0))
+
+(doseq [n nss]
+  (try
+    (require n)
+    (catch Throwable e
+      (swap! failed inc)
+      (println "FAIL" n "::" (.getMessage e) "::" (some-> (.getCause e) .getMessage)))))
+
+(println "DONE" (count nss) "namespaces," @failed "failed")
+(shutdown-agents)
+(System/exit (if (pos? @failed) 1 0))
+EOF
+}
+
+cmd_build_check() {
+  local failed=0 step log
+  for step in $BUILD_CHECK_STEPS; do
+    log="$WORK_DIR/build-check-$step.log"
+    case "$step" in
+      backend)
+        echo "==> build-check backend: require every src/EE/driver namespace (-M:drivers:ee) → $log"
+        write_load_all_script
+        if clojure -M:drivers:ee "$WORK_DIR/load-all.clj" > "$log" 2>&1; then
+          grep -E '^DONE' "$log" | sed 's/^/    /'
+        else
+          failed=1
+          grep -E '^(FAIL|DONE)' "$log" | cut -c1-300 | sed 's/^/    /'
+        fi
+        ;;
+      static-viz)
+        echo "==> build-check static-viz (also compiles CLJS) → $log"
+        if NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=3072}" RSPACK_WORKER_THREADS=1 \
+           bun run build-static-viz > "$log" 2>&1 && ! grep -q '^ERROR in' "$log"; then
+          echo "    OK"
+        else
+          failed=1
+          grep -E '^ERROR in|×' "$log" | head -20 | cut -c1-300 | sed 's/^/    /'
+        fi
+        ;;
+      frontend)
+        echo "==> build-check frontend: production bundle, MB_EDITION=${MB_EDITION:-ee} → $log"
+        if MB_EDITION="${MB_EDITION:-ee}" WEBPACK_BUNDLE=production \
+           NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" RSPACK_WORKER_THREADS=1 \
+           bun run build-release:js > "$log" 2>&1 && ! grep -q '^ERROR in' "$log"; then
+          echo "    OK"
+        else
+          failed=1
+          grep -E '^ERROR in|×' "$log" | head -20 | cut -c1-300 | sed 's/^/    /'
+        fi
+        ;;
+      *)
+        echo "Unknown build-check step: $step (valid: backend static-viz frontend)" >&2
+        exit 1
+        ;;
+    esac
+  done
+  if [[ $failed -ne 0 ]]; then
+    echo "BUILD-CHECK FAILED (logs in $WORK_DIR/build-check-*.log)"
+    exit 1
+  fi
+  echo "BUILD-CHECK OK"
+}
+
 cmd_verify() {
   load_or_copy_list "$CANON_RESTORE" "$RESTORE_OURS_FILE"
   load_or_copy_list "$CANON_DUAL" "$DUAL_CHANGED_FILE"
@@ -352,11 +615,21 @@ cmd_verify() {
     failed=1
   fi
 
+  if [[ "${VERIFY_SCAN:-1}" == "1" ]]; then
+    cmd_scan
+    if [[ -s "$SCAN_STALE" || -s "$SCAN_MISSING" || -s "$SCAN_ORPHANS" ]]; then
+      echo "==> stale/missing/orphan paths found — run '$0 scan --apply' (see $SCAN_REPORT)"
+      failed=1
+    fi
+    [[ -s "$SCAN_HYBRID" ]] && echo "    NOTE: $(wc -l < "$SCAN_HYBRID") hybrid paths to review (not a failure)"
+  fi
+
   if [[ $failed -ne 0 ]]; then
     echo "VERIFY FAILED"
     exit 1
   fi
-  echo "VERIFY OK (restore-ours intact; no unmerged conflicts)"
+  echo "VERIFY OK (restore-ours intact; no unmerged conflicts; no stale/missing/orphan paths)"
+  echo "Next: '$0 build-check' (production build) and the canonical smoke test."
 }
 
 cmd_status() {
@@ -377,9 +650,13 @@ Usage: $0 <command>
 Commands:
   snapshot   Build working lists from fork diff + canonical lists
   merge      Tag backup, create WORK_BRANCH from SP_REF, merge UPSTREAM_REF
-  restore    Restore SP-owned / safe paths from SP_REF (skip manual lists)
+  restore    Restore SP-owned / safe paths from SP_REF (skip manual lists);
+             unmerged non-curated paths are resolved from UPSTREAM_REF
   report     Write $REPORT_FILE with conflicts + manual queues
-  verify     Check restore-ours drift and remaining unmerged conflicts
+  scan       Classify non-protected diffs vs UPSTREAM_REF (stale/missing/orphan/hybrid)
+             → $SCAN_REPORT ; 'scan --apply' fixes stale/missing/orphan
+  verify     restore-ours drift + unmerged conflicts + scan (fails on stale/missing/orphan)
+  build-check  Production build checks: backend namespaces, static-viz, FE bundle (slow, ~15 min)
   status     Show env + merge state
   all        snapshot + merge + restore + report + status
 
@@ -391,6 +668,12 @@ Environment (defaults in parentheses):
   BACKUP_TAG      ($BACKUP_TAG)
   LISTS_DIR       ($LISTS_DIR)
   FETCH_REMOTES   (0) set to 1 to git fetch origin/upstream during snapshot
+  PRE_MERGE_REF   ($PRE_MERGE_REF) pre-merge tip used to detect stale content
+  STALE_REFS      ($STALE_REFS) earlier step snapshots
+  UNMERGED_POLICY ($UNMERGED_POLICY) upstream | sp
+  APPLY_HYBRID    (0) with 'scan --apply', also restore hybrids from upstream
+  VERIFY_SCAN     (1) set to 0 to skip the scan inside verify
+  BUILD_CHECK_STEPS ($BUILD_CHECK_STEPS)
 EOF
 }
 
@@ -402,6 +685,8 @@ main() {
     restore) cmd_restore ;;
     report) cmd_report ;;
     verify) cmd_verify ;;
+    scan) cmd_scan "${2:-}" ;;
+    build-check) cmd_build_check ;;
     status) cmd_status ;;
     all) cmd_snapshot; cmd_merge; cmd_restore; cmd_report; cmd_status ;;
     -h|--help|help) usage ;;

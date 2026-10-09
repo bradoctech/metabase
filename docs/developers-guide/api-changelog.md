@@ -4,13 +4,23 @@ title: API changelog
 
 # Breaking changes to the API interface
 
-## Metabase 0.61.20
+## Metabase 0.63.15
 
 - `POST /api/slack/bug-report` now requires bug reporting to be enabled (`MB_BUG_REPORTING_ENABLED`).
   `diagnosticInfo.reporter` is now a boolean: `true` attributes the report to the authenticated user, `false` (or
   omitting it) submits the report anonymously. The previous `{ "name": ..., "email": ... }` object is still accepted
   and treated as `true`; the name and email in it are ignored. The request body is validated against a fixed set of
   keys; undeclared keys are dropped.
+
+## Metabase 0.62.18
+
+- `POST /api/slack/bug-report`: `diagnosticInfo.reporter` is now a boolean and bug reporting must be enabled. See the
+  0.63.15 entry.
+
+## Metabase 0.61.20
+
+- `POST /api/slack/bug-report`: `diagnosticInfo.reporter` is now a boolean and bug reporting must be enabled. See the
+  0.63.15 entry.
 
 ## Metabase 0.61.0
 
@@ -21,17 +31,17 @@ title: API changelog
 ## Metabase 0.60.26
 
 - `POST /api/slack/bug-report`: `diagnosticInfo.reporter` is now a boolean and bug reporting must be enabled. See the
-  0.61.20 entry.
+  0.63.15 entry.
 
 ## Metabase 0.59.30
 
 - `POST /api/slack/bug-report`: `diagnosticInfo.reporter` is now a boolean and bug reporting must be enabled. See the
-  0.61.20 entry.
+  0.63.15 entry.
 
 ## Metabase 0.58.32
 
 - `POST /api/slack/bug-report`: `diagnosticInfo.reporter` is now a boolean and bug reporting must be enabled. See the
-  0.61.20 entry.
+  0.63.15 entry.
 
 ## Metabase 0.57.0
 

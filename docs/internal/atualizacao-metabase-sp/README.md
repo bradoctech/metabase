@@ -18,6 +18,7 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 | [issue-edd-1361.md](./issue-edd-1361.md)                   | EDD-1361 — inventário + isolamento mínimo (prep)                          |
 | [issue-edd-1362.md](./issue-edd-1362.md)                   | EDD-1362 — refatoração de tema/marca pós-update                           |
 | [issue-edd-1356.md](./issue-edd-1356.md)                   | EDD-1356 — processo semi-automático de merge                              |
+| [edd-1356-v2.md](./edd-1356-v2.md)                         | EDD-1356 v2 — scan pós-merge, build-check e `sp-extra` (lições 60→63)     |
 | [manifesto-customizacoes.md](./manifesto-customizacoes.md) | Inventário classificado (SP-owned / Adapter / Behavior) + quick wins      |
 | [runbook-atualizacao.md](./runbook-atualizacao.md)         | Como executar o merge (`bin/merge-upstream-preserve-sp.sh`)               |
 | [checklist-smoke-test.md](./checklist-smoke-test.md)       | Checklist canônica de smoke (UI/marca, charts, datagrid, i18n)            |
@@ -31,6 +32,6 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 - O Metabase deste projeto é um **fork** com customizações SP (tema, marca, datagrid, traduções, home, etc.).
 - Atualizar a versão exige **identificar, transportar e adaptar** essas mudanças — não basta trocar o JAR/imagem.
 - A estratégia oficial aqui é: **inventário → processo semi-automático → update como PoC → refatorar tema na base nova**.
-- Após a 63: próximos passos **EDD-1362** (tema) e **EDD-1356 v2** (stuck/órfãos no script) — ver [notas-etapa-62-63.md](./notas-etapa-62-63.md).
+- Após a 63: **EDD-1356 v2** implementada ([edd-1356-v2.md](./edd-1356-v2.md)); próximo passo **EDD-1362** (tema), depois revisitar a v2.
 
 Para o raciocínio completo e a sequência recomendada, comece por [estratégia-sequencia.md](./estrategia-sequencia.md).

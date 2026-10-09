@@ -53,6 +53,20 @@ Prioridade alta no próximo endurecimento do `bin/merge-upstream-preserve-sp.sh`
 4. **Híbridos:** `ns`/API SP com body upstream (ou o inverso) → ClassNotFound / import quebrado; sinalizar no `report`.
 5. **Trio FE sempre junto:** `package.json` + `bun.lock` + `patches/` da major alvo.
 6. Smoke canônico = [checklist-smoke-test.md](./checklist-smoke-test.md), não só “login + home”.
+7. **Build de produção** (descoberto no deploy): `starburst.clj` 0.62 (`driver/describe-table-fks` removido no 63) e imports FE de caminhos 0.62 passaram no dev e quebraram o `bin/build.sh`.
+
+**Status v2 (implementado na branch `EDD-1356`):**
+
+| Item | Implementação |
+| ---- | ------------- |
+| 1, 2 | `scan` / `scan --apply`: stale (blob = pré-merge ou qualquer `saopaulo-pre-*`), missing, orphan; repo inteiro |
+| 3 | SP protegido = 3 listas + `lists/sp-extra.txt` (globs); nunca "tocado por commit EDD-*" |
+| 4 | `hybrid` no `scan-report.md` (revisão manual) + `build-check` pega API inexistente |
+| 5 | Aviso no `scan` quando `package.json` / `bun.lock` / `patches/` diferem do upstream |
+| 7 | `build-check`: namespaces src/EE/drivers + static-viz + bundle FE EE |
+| — | `restore`: conflito fora das listas → upstream (antes: SP); imagens só restauradas de `resources/frontend_client/` (antes: qualquer `*.png`, reverteu docs/.loki) |
+
+Teste negativo: com o `starburst.clj` 0.62 de volta, `scan` marca stale e `build-check` falha com `No such var: driver/describe-table-fks`. Revisitar após a EDD-1362 (mover itens de `sp-extra.txt` para dual-changed/behavior-manual).
 
 ## Entrada para EDD-1362 (tema/marca)
 
