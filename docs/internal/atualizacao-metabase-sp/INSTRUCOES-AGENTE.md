@@ -183,7 +183,7 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 1. Ler este arquivo e, se na EDD-1355, [notas-etapa-62-63.md](./notas-etapa-62-63.md) (e notas 61–62 / 60–61 se precisar de histórico).
 2. Confirmar branch (`EDD-1355` vs `saopaulo`) e remotes `origin` / `upstream`.
 3. Seguir a sequência oficial; não inverter para “refatorar tema grande → depois update” sem o usuário pedir.
-4. Smoke 63 canônico está OK — próximo foco: **PR da 1355**, depois **EDD-1362** e **EDD-1356 v2**.
+4. Fork em 0.63 (EDD-1355/1359) e **EDD-1356 v2** implementada ([edd-1356-v2.md](./edd-1356-v2.md)) — próximo foco: **EDD-1362**, depois revisitar a v2.
 
 ### Ao inventariar customizações (EDD-1361)
 
@@ -194,10 +194,12 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 ### Ao atualizar versão (1355)
 
 - Branch a partir de `saopaulo` (ou tip que já tenha 1361/1356).
-- Por etapa: `snapshot` → `merge` → `restore` → `report` → manuais → `verify` → smoke → commit.
+- Por etapa (obrigatório, nesta ordem): `snapshot` → `merge` → `restore` → `report` → resolver `dual-changed`/`behavior-manual` → `scan` (+ `scan --apply`; híbridos revisados um a um) → `verify` → `build-check` → smoke canônico → propor commit ao usuário.
+- Rodar com `bash bin/merge-upstream-preserve-sp.sh <cmd>`; `build-check` só com BE/FE dev parados (WSL ~8 GiB).
+- **Não** declarar a etapa concluída com `verify` ou `build-check` falhando, nem com o dev "funcionando" mas sem `build-check`.
+- SP = 3 listas + `lists/sp-extra.txt`. Customização SP nova ou fix pós-merge que deva sobreviver → adicionar a uma lista no mesmo commit (senão o próximo `scan` reverte).
 - Restore **só** curated + padrões seguros do script.
-- Se boot/FE quebrar com erros de API “antiga”: procurar arquivos WT == tip pré-etapa e != upstream; restaurar upstream nos não-curated.
-- Registrar conflitos/lições nas notas da etapa e, no fim, na 1356 v2 / 1362.
+- Registrar conflitos/lições nas notas da etapa e, no fim, em [edd-1356-v2.md](./edd-1356-v2.md) / 1362.
 
 ### Ao automatizar (1356)
 
@@ -235,6 +237,7 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 | [manifesto-customizacoes.md](./manifesto-customizacoes.md) | Inventário path → EDD → bucket → risco           |
 | [runbook-atualizacao.md](./runbook-atualizacao.md)         | Como rodar o merge semi-automático               |
 | [issue-edd-1356.md](./issue-edd-1356.md)                   | Entrega da EDD-1356                              |
+| [edd-1356-v2.md](./edd-1356-v2.md)                         | v2 do script: scan, build-check, sp-extra        |
 | [notas-etapa-60-61.md](./notas-etapa-60-61.md)             | Diário da etapa 60→61 (EDD-1355)                 |
 | [notas-etapa-61-62.md](./notas-etapa-61-62.md)             | Diário da etapa 61→62 (EDD-1355)                 |
 | [notas-etapa-62-63.md](./notas-etapa-62-63.md)             | Diário da etapa 62→63 (EDD-1355)                 |
