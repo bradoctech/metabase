@@ -26,7 +26,7 @@ Trate isto como verdade até alguém atualizar este arquivo após nova verifica�
 | Backup da etapa 60→61    | Tag `saopaulo-pre-61x`                                                                                                                               |
 | Backup da etapa 61→62    | Tag `saopaulo-pre-62x`                                                                                                                               |
 | Backup da etapa 62→63    | Tag `saopaulo-pre-63x`                                                                                                                               |
-| Script de merge          | `bin/merge-upstream-preserve-sp.sh` (EDD-1356); **restore estreito** após lição da 61; v2 deve detectar stuck/órfãos (lições da 63)                  |
+| Script de merge          | `bin/merge-upstream-preserve-sp.sh` (EDD-1356); **restore estreito** após lição da 61; **v2**: `scan` (stale/missing/orphan/hybrid), `build-check`, `lists/sp-extra.txt` |
 | Alvo final da EDD-1355   | Linha **63.x** alcançada na PoC; falta PR/merge de volta a `saopaulo`                                                                                |
 | Customizações            | Commits `feat[EDD-…]` + listas em `lists/`; isolamento ainda parcial                                                                                 |
 
@@ -87,7 +87,7 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 | ID           | Papel                                                      | Estado                                                                      |
 | ------------ | ---------------------------------------------------------- | --------------------------------------------------------------------------- |
 | **EDD-1355** | Atualizar Metabase + reaplicar customizações               | PoC 63 + smoke canônico OK na branch; falta PR / merge em `saopaulo`        |
-| **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | MVP entregue; **v2** alimentada pelas lições da 63 (stuck/órfãos/híbridos)  |
+| **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | MVP entregue; **v2** implementada (scan + build-check + sp-extra); revisitar após EDD-1362 |
 | **EDD-1361** | Inventário + quick wins de isolamento                      | Concluída (manifesto publicado)                                             |
 | **EDD-1362** | Refatorar tema/marca na base já atualizada                 | Próxima após PR da 1355 — entrada em [notas-etapa-62-63.md](./notas-etapa-62-63.md) |
 

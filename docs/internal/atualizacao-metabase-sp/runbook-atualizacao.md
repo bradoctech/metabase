@@ -142,8 +142,12 @@ Arquivos gerados (gitignored) em `.merge-sp/`:
 | `dual-changed.txt`    | Adapters (merge 3-way)                 |
 | `behavior-manual.txt` | Features SP (reaplicar)                |
 | `manual-report.md`    | Relatório de conflitos / filas manuais |
+| `sp-extra.txt`        | Cópia de trabalho de `lists/sp-extra.txt` (v2) |
+| `unmerged-resolved.txt` | Conflitos resolvidos no `restore` e de qual ref vieram (v2) |
+| `scan-report.md` + `scan-{stale,missing,orphans,hybrid}.txt` | Resultado do `scan` (v2) |
+| `build-check-*.log`   | Logs do `build-check` (v2)             |
 
-Script: `bin/merge-upstream-preserve-sp.sh`
+Script: `bin/merge-upstream-preserve-sp.sh` (rodar com `bash bin/merge-upstream-preserve-sp.sh …` se o WSL não respeitar o bit executável).
 
 ---
 
@@ -153,9 +157,13 @@ Script: `bin/merge-upstream-preserve-sp.sh`
 | ------------ | ----------- | ------------------------------------------------------------- |
 | **snapshot** | Sim         | Diff fork vs base + carrega listas canônicas                  |
 | **merge**    | Semi        | Tag de backup + `git merge` do upstream (espera conflitos)    |
-| **restore**  | Sim         | Restaura SP-owned e paths seguros; **não** toca dual/behavior |
+| **restore**  | Sim         | Restaura SP-owned e assets de marca; **não** toca dual/behavior. Conflito fora das listas → versão do **upstream** (v2; `UNMERGED_POLICY=sp` volta ao MVP) |
 | **report**   | Sim         | Lista o que falta resolver à mão                              |
-| **verify**   | Sim         | Garante restore-ours intacto e zero unmerged                  |
+| **scan**     | Sim (v2)    | Compara o WT com o upstream e classifica o que não é SP protegido: **stale** (igual ao pré-merge ou a um `saopaulo-pre-*`), **missing**, **orphan**, **hybrid**. `scan --apply` corrige stale/missing/orphan; hybrid é revisão manual |
+| **verify**   | Sim         | restore-ours intacto + zero unmerged + `scan` sem stale/missing/orphan |
+| **build-check** | Sim (v2, ~15 min) | Carrega todos os namespaces (src, EE, drivers) com `-M:drivers:ee`, compila static-viz e o bundle FE de produção (EE). Falha em `FAIL` / `ERROR in` |
+
+**SP protegido** = `restore-ours` + `dual-changed` + `behavior-manual` + `lists/sp-extra.txt` (globs: infra do fork, assets de marca, código SP que ainda só está no manifesto). Nada mais é tratado como SP.
 
 ---
 
@@ -165,21 +173,14 @@ Script: `bin/merge-upstream-preserve-sp.sh`
 2. **dual-changed:** merge 3-way — lógica/estrutura upstream + tokens/estilo SP (`spColors`, Rawline via settings quando possível).
 3. **behavior-manual:** reaplicar feature SP na API da nova versão (datagrid pin, title-case, badges, filtros cascata, etc.).
 4. `git add` dos arquivos resolvidos e concluir o merge (`git commit` se o merge ainda estiver aberto).
-5. `./bin/merge-upstream-preserve-sp.sh verify`
-6. **Pós-verify (lição 63):** varrer stuck (WT == tip pré-merge ≠ upstream, fora das listas) e órfãos (sumiu no upstream, fora das listas). Não restaurar curated.
-   - Considerar SP **somente** o que está em `lists/*.txt` + manifesto. Arquivos tocados apenas por commits de upgrade (`EDD-1355`/`1356`/`1359`/`1362`) **não** são customização SP e costumam carregar conteúdo da versão anterior.
-   - Checar também stuck de etapas anteriores (blob igual a `saopaulo-pre-62x` / `saopaulo-pre-61x`), não só da etapa atual.
-7. **Validar o build de produção (lição 63):** o dev (`--hot` + rspack serve) não compila drivers nem namespaces não carregados e trata import quebrado como aviso; o build de produção quebra. Antes de abrir PR para `saopaulo`:
-   - Ideal: `./bin/build.sh` completo (mesmo `MB_EDITION` do deploy) ou `bin/build-and-push-docker.sh`.
-   - Mínimo, se faltar RAM/tempo (WSL ~8 GiB; rodar um por vez, com BE/FE dev parados):
-     ```bash
-     # BE: carregar todos os namespaces de drivers + EE (e depois src/) com os aliases do build
-     clojure -M:drivers:ee /tmp/load_all.clj   # script: (doseq [n nss] (try (require n) (catch Throwable e (println "FAIL" n (.getMessage e)))))
-     # FE: bundle principal de produção (EE) e static-viz
-     MB_EDITION=ee WEBPACK_BUNDLE=production NODE_OPTIONS=--max-old-space-size=4096 RSPACK_WORKER_THREADS=1 bun run build-release:js
-     NODE_OPTIONS=--max-old-space-size=3072 RSPACK_WORKER_THREADS=1 bun run build-static-viz
-     ```
-   - Critério: zero `FAIL` no carregamento e zero `ERROR in` no rspack (avisos de tamanho de bundle são normais).
+5. **Scan pós-merge (v2, lição 63):** `bash bin/merge-upstream-preserve-sp.sh scan` e ler `.merge-sp/scan-report.md`.
+   - `stale` / `missing` / `orphan` fora das listas → `scan --apply`.
+   - `hybrid` → revisar um a um: se for customização SP, **adicionar às listas** (ou `sp-extra.txt`); senão restaurar do upstream (`APPLY_HYBRID=1 … scan --apply`).
+   - Fixes SP feitos depois do merge (ex.: crash ao salvar question) aparecem como hybrid até entrarem em `sp-extra.txt`.
+6. `bash bin/merge-upstream-preserve-sp.sh verify` (inclui o scan; falha se sobrar stale/missing/orphan).
+7. **Validar o build de produção (lição 63):** `bash bin/merge-upstream-preserve-sp.sh build-check`. O dev (`--hot` + rspack serve) não compila drivers nem namespaces não carregados e trata import quebrado como aviso; o build de produção quebra.
+   - Rodar com BE/FE dev parados (WSL ~8 GiB). Passos isolados: `BUILD_CHECK_STEPS=backend` (≈5 min), `static-viz`, `frontend` (≈7 min).
+   - Critério: `BUILD-CHECK OK` (avisos de tamanho de bundle são normais). Ideal antes do deploy: `./bin/build.sh` completo ou `bin/build-and-push-docker.sh`.
 8. Validar Trilhas com [checklist-smoke-test.md](./checklist-smoke-test.md).
 9. Atualizar o manifesto com conflitos reais (entrada da EDD-1362 e da 1356 v2).
 
@@ -192,6 +193,7 @@ Script: `bin/merge-upstream-preserve-sp.sh`
 | SP-owned | `lists/restore-ours.txt`    | Restore automático |
 | Adapter  | `lists/dual-changed.txt`    | Manual 3-way       |
 | Behavior | `lists/behavior-manual.txt` | Manual (reaplicar) |
+| SP extra | `lists/sp-extra.txt` (globs) | Não restaura; só protege do `scan` (revisar à mão) |
 
 ---
 
