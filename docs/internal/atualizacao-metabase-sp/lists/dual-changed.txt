@@ -1,15 +1,11 @@
 # Adapter — manual 3-way merge (do not auto-restore). Source: manifesto + script 61.
 
-Dockerfile
-bun.lock
-deps.edn
 frontend/src/metabase/dashboard/components/DashboardHeader/DashboardHeaderView.module.css
 frontend/src/metabase/css/core/layout.module.css
 frontend/src/metabase/css/admin.module.css
 frontend/src/metabase/common/components/LogoIcon/LogoIcon.tsx
 frontend/src/metabase/dashboard/components/DashboardHeader/DashboardHeaderView.tsx
 frontend/src/metabase/dashboard/containers/AutomaticDashboardApp/AutomaticDashboardApp.module.css
-frontend/src/metabase/dashboard/containers/AutomaticDashboardApp/AutomaticDashboardApp.tsx
 frontend/src/metabase/home/components/HomeCaption/HomeCaption.styled.tsx
 frontend/src/metabase/home/components/HomeContent/HomeContent.tsx
 frontend/src/metabase/home/components/HomeGreeting/HomeGreeting.module.css
@@ -20,7 +16,6 @@ frontend/src/metabase/home/components/HomeModelCard/HomeModelCard.styled.tsx
 frontend/src/metabase/home/components/HomeModelCard/HomeModelCard.tsx
 frontend/src/metabase/home/components/HomeXrayCard/HomeXrayCard.styled.tsx
 frontend/src/metabase/home/components/HomeXraySection/HomeXraySection.styled.tsx
-frontend/src/metabase/nav/components/NewItemButton/NewItemButton.styled.tsx
 frontend/src/metabase/nav/components/search/SearchButton/SearchButton.module.css
 frontend/src/metabase/nav/containers/MainNavbar/SidebarItems/SidebarItems.styled.tsx
 frontend/src/metabase/public/components/EmbedFrame/EmbedFrame.tsx

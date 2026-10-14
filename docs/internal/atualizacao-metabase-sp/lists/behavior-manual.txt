@@ -10,7 +10,6 @@ frontend/src/metabase/data-grid/components/DataGridRow/DataGridRow.tsx
 frontend/src/metabase/data-grid/components/Footer/Footer.module.css
 frontend/src/metabase/data-grid/components/SortableHeader/SortableHeader.tsx
 frontend/src/metabase/data-grid/constants.ts
-frontend/src/metabase/data-grid/docs/datagrid-custom-features.md
 frontend/src/metabase/data-grid/hooks/use-column-pinning-by-count.ts
 frontend/src/metabase/data-grid/hooks/use-data-grid-instance.tsx
 frontend/src/metabase/data-grid/types.ts

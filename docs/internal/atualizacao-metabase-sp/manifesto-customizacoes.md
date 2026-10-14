@@ -471,9 +471,9 @@ Como medir de novo: `git diff upstream/release-x.63.x -- <path>` nas linhas `+`,
 
 Achados do levantamento:
 
-- **Entradas obsoletas em `dual-changed.txt`:** sem diff vs upstream: `Dockerfile` (raiz), `bun.lock`, `deps.edn`, `AutomaticDashboardApp.tsx`. Inexistente: `NewItemButton.styled.tsx`.
+- **Entradas obsoletas em `dual-changed.txt`:** sem diff vs upstream: `Dockerfile` (raiz), `bun.lock`, `deps.edn`, `AutomaticDashboardApp.tsx`. Inexistente: `NewItemButton.styled.tsx`. Removidas da lista (41 → 36).
 - **Customização SP perdida:** `NewItemButton.styled.tsx` (EDD-578: texto/ícone `sp-white`, peso 600) foi removido no upstream; o botão "Novo" voltou ao estilo padrão. Reaplicar no componente atual se o smoke confirmar.
-- **Doc SP perdida:** `frontend/src/metabase/data-grid/docs/datagrid-custom-features.md` (EDD-944) foi apagada em `bbf8960726e` (restore 61). Recuperável de `saopaulo-pre-61x`.
+- **Doc SP perdida:** `frontend/src/metabase/data-grid/docs/datagrid-custom-features.md` (EDD-944) foi apagada em `bbf8960726e` (restore 61). Recuperada de `saopaulo-pre-61x` e movida de `behavior-manual` para `restore-ours` (arquivo só SP).
 - `groups.ts` reescreve `getMain/Light/DarkAccentColors` com fallbacks: é o maior adapter de lógica no tema e principal candidato a virar ponto de injeção.
 
 ---
