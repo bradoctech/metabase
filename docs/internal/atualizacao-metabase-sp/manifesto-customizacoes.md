@@ -455,6 +455,27 @@ Registrado após a PoC 60→61→62→63. Detalhe narrativo: [notas-etapa-62-63.
 
 Métrica alvo da 1362: reduzir contagem de paths **Adapter** ligados a tema/marca vs. a tabela de Resumo acima; registrar antes/depois aqui.
 
+### Linha de base EDD-1362 (antes)
+
+Medido na `EDD-1362` @ `ffc1bd9f565` contra `upstream/release-x.63.x` (7387f79).
+
+| Métrica | Antes | Depois |
+| ------- | ----- | ------ |
+| `dual-changed.txt` — paths (FE / total) | 37 / 41 | |
+| `sp-extra.txt` — código FE ainda não classificado | 20 | |
+| Arquivos core fora de `ui/colors/` usando tokens SP (`--mb-color-sp-*`, `spColors`, `SP_PALETTE_COLORS`) | 18 (30 refs) | |
+| Linhas com hex/rgba adicionadas em `ui/colors/` fora de `sp-colors.ts` (`light.ts` 29, `dark.ts` 29, `accent-colors.ts` 33, `groups.ts` 3) | 94 | |
+| Chaves `sp-*` em `color-keys.ts` (core) | 28 | |
+
+Como medir de novo: `git diff upstream/release-x.63.x -- <path>` nas linhas `+`, contando `#hex`/`rgba(` e `sp-*`/`spColors`/`SP_PALETTE`; e `rg -l 'mb-color-sp-|"sp-[a-z]|spColors|SP_PALETTE' frontend/src enterprise/frontend/src` excluindo `ui/colors/`.
+
+Achados do levantamento:
+
+- **Entradas obsoletas em `dual-changed.txt`:** sem diff vs upstream: `Dockerfile` (raiz), `bun.lock`, `deps.edn`, `AutomaticDashboardApp.tsx`. Inexistente: `NewItemButton.styled.tsx`.
+- **Customização SP perdida:** `NewItemButton.styled.tsx` (EDD-578: texto/ícone `sp-white`, peso 600) foi removido no upstream; o botão "Novo" voltou ao estilo padrão. Reaplicar no componente atual se o smoke confirmar.
+- **Doc SP perdida:** `frontend/src/metabase/data-grid/docs/datagrid-custom-features.md` (EDD-944) foi apagada em `bbf8960726e` (restore 61). Recuperável de `saopaulo-pre-61x`.
+- `groups.ts` reescreve `getMain/Light/DarkAccentColors` com fallbacks: é o maior adapter de lógica no tema e principal candidato a virar ponto de injeção.
+
 ---
 
 ## Como atualizar este manifesto
