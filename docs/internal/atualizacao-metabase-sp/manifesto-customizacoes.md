@@ -467,6 +467,14 @@ Medido na `EDD-1362` @ `ffc1bd9f565` contra `upstream/release-x.63.x` (7387f79).
 | Linhas com hex/rgba adicionadas em `ui/colors/` fora de `sp-colors.ts` (`light.ts` 29, `dark.ts` 29, `accent-colors.ts` 33, `groups.ts` 3) | 94 | |
 | Chaves `sp-*` em `color-keys.ts` (core) | 28 | |
 
+**Passo 2 — módulo de tema SP** (`ui/colors/constants/sp-theme.ts` + `ui/colors/types/sp-color-keys.ts`, ambos `restore-ours`):
+
+- `light.ts` / `dark.ts` = upstream 63 + 2 linhas (import + `...SP_*_THEME_COLORS`); `color-keys.ts` = upstream + 3 linhas (`| SpColorKey`); `accent-colors.ts` = 22 linhas; `theme-from-color-scheme.ts` voltou ao upstream (saiu de `dual-changed`).
+- Hex/rgba adicionados em `ui/colors/` fora de arquivos SP: 94 → 3 (restam em `groups.ts`). Chaves `sp-*` no `color-keys.ts` core: 28 → 0.
+- Validação: tema derivado (`deriveFullMetabaseTheme`) claro idêntico; no escuro, `icon-*` voltaram ao valor 63 (eram resíduo da 60) e entraram 14 tokens `sp-*` que faltavam. Accents e `SP_PALETTE_COLORS` idênticos. `color-keys.d.css` igual + `--mb-color-sp-gray-medium` (já usado, não declarado).
+- Removidos por não terem efeito: `core-brand`/`core-filter`/`core-summarize` (o `deriveFullMetabaseTheme` sobrescreve) e `background-highlight/hover/selected` via `--mb-color-brand` (equivalente a `core-brand`).
+- Testes: `charts.unit.spec.ts` e `groups.unit.spec.ts` falham igual antes e depois (3 casos esperam as cores do Metabase).
+
 Como medir de novo: `git diff upstream/release-x.63.x -- <path>` nas linhas `+`, contando `#hex`/`rgba(` e `sp-*`/`spColors`/`SP_PALETTE`; e `rg -l 'mb-color-sp-|"sp-[a-z]|spColors|SP_PALETTE' frontend/src enterprise/frontend/src` excluindo `ui/colors/`.
 
 Achados do levantamento:
@@ -476,6 +484,7 @@ Achados do levantamento:
 - **Doc SP perdida:** `frontend/src/metabase/data-grid/docs/datagrid-custom-features.md` (EDD-944) foi apagada em `bbf8960726e` (restore 61). Recuperada de `saopaulo-pre-61x` e movida de `behavior-manual` para `restore-ours` (arquivo só SP).
 - **AGPL (`MB_SOURCE_CODE_URL`) mal classificado:** `config/core.clj` e `version/settings.clj` estavam em `restore-ours`, mas são arquivos upstream com patch SP. O `settings.clj` carregava linhas antigas (`:encryption :when-encryption-key-set` no `site-uuid-for-version-info-fetching`, `log/error` da 60). O log AGPL do startup em `core/core.clj` (commit `69bd2c88f2e`) tinha sido perdido. Os três foram refeitos como upstream 63 + patch SP e movidos para `dual-changed`.
 - **`.github/` e `.gitignore`:** alinhados ao upstream 63 (20 desatualizados, 9 órfãos, 2 híbridos; nenhum commit SP neles). O `.gitignore` mantém só a linha SP `.merge-sp/` e entrou em `dual-changed`. Com isso o `verify` passou a fechar limpo (`stale=0 orphan=0 hybrid=0`).
+- **Tipos quebrados que o build não pega** (`tsc --noEmit`, 15 erros, todos em arquivos SP mergeados; nenhum em `ui/colors`): `Scalar.tsx` usa `t` sem importar `ttag` (card de número sem linhas lança `ReferenceError`); `TreemapGroupsPicker` passa `isSortable` para o `ChartSettingSeriesOrder` SP, que não tem a prop da 63; `axis.ts` (`triggerEvent`, formatter); `HeaderBreadcrumbs.tsx`; `HomeModelCard.tsx` (`IconName`); specs de `RowChart`/`Scalar`. Corrigir fora da EDD-1362 e incluir `tsc` no `build-check` (revisão da v2).
 - `groups.ts` reescreve `getMain/Light/DarkAccentColors` com fallbacks: é o maior adapter de lógica no tema e principal candidato a virar ponto de injeção.
 
 ---
