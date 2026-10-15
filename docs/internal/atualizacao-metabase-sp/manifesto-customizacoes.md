@@ -461,11 +461,13 @@ Medido na `EDD-1362` @ `ffc1bd9f565` contra `upstream/release-x.63.x` (7387f79).
 
 | Métrica | Antes | Depois |
 | ------- | ----- | ------ |
-| `dual-changed.txt` — paths (FE / total) | 37 / 41 | |
-| `sp-extra.txt` — código FE ainda não classificado | 20 | |
-| Arquivos core fora de `ui/colors/` usando tokens SP (`--mb-color-sp-*`, `spColors`, `SP_PALETTE_COLORS`) | 18 (30 refs) | |
-| Linhas com hex/rgba adicionadas em `ui/colors/` fora de `sp-colors.ts` (`light.ts` 29, `dark.ts` 29, `accent-colors.ts` 33, `groups.ts` 3) | 94 | |
-| Chaves `sp-*` em `color-keys.ts` (core) | 28 | |
+| `dual-changed.txt` — paths (FE / total) | 37 / 41 | 47 / 52 |
+| `sp-extra.txt` — código FE ainda não classificado | 20 | 0 |
+| Arquivos core fora de `ui/colors/` usando tokens SP (`--mb-color-sp-*`, `spColors`, `SP_PALETTE_COLORS`) | 18 (30 refs) | 18 (30 refs) — Passo 4 só classificou |
+| Linhas com hex/rgba adicionadas em `ui/colors/` fora de arquivos SP-owned (`sp-colors.ts` / `sp-theme.ts`) | 94 | 0 |
+| Chaves `sp-*` em `color-keys.ts` (core) | 28 | 0 (`SpColorKey`) |
+| `behavior-manual.txt` — paths | 40 | 45 |
+| Diff `light.ts`+`dark.ts`+`groups.ts`+`color-keys.ts` vs upstream (linhas) | ~650 | 7 (2+2+0+3) |
 
 **Passo 2 — módulo de tema SP** (`ui/colors/constants/sp-theme.ts` + `ui/colors/types/sp-color-keys.ts`, ambos `restore-ours`):
 
@@ -480,6 +482,16 @@ Medido na `EDD-1362` @ `ffc1bd9f565` contra `upstream/release-x.63.x` (7387f79).
 - A reescrita SP (fallbacks via `LIGHT_THEME_ACCENT_COLORS` / `ACCENT_COLOR_NAMES_MAP`, ~111 linhas) era workaround antigo. Com accents SP já em `sp-theme` → `accent-colors` → tema derivado, `color("accentN")` resolve hex SP corretamente.
 - Arquivo restaurado ao upstream 63 (0 linhas de diff). Saiu de `dual-changed` (FE 34 → 33; total 39 → 38). Hex fora de arquivos SP em `ui/colors/`: 3 → 0.
 - Dump de `getMain/Light/DarkAccentColors` e `getAccentColors` idêntico antes/depois. `verify` limpo. Mesmas 3 falhas de teste (expectam paleta Metabase).
+
+**Passo 4 — classificar os 20 FE de `sp-extra.txt`:**
+
+| Destino | Qtd | Paths / motivo |
+| ------- | --- | -------------- |
+| `dual-changed` | 14 | Login/AuthLayout/LoginForm (EDD-577); Button/FormField; DashCard/ChartWithLegend/LegendCaption/series (EDD-792); NestedSettingSeries\* + siblings ColorPicker (SP_PALETTE); HomeXrayCard.tsx (junto do `.styled`); SettingsLdapForm (`t\`\``) |
+| `behavior-manual` | 6 | `axis.ts` (EDD-969, junto de CartesianChart/BoxPlot/utils); LastEditInfoLabel + QuestionDataSource + SavedQuestionLeftSide/hooks (endurecimento crash pós-63) |
+| `restore-ours` | 0 | Nenhum (todos existem no upstream com patch SP) |
+
+`sp-extra` fica só com infra/marca/`locales/metabase.po` + globs. Dual sobe 38→52 porque esses adapters **já existiam** e estavam fora das 3 listas; não é drift novo. `verify` limpo.
 
 Como medir de novo: `git diff upstream/release-x.63.x -- <path>` nas linhas `+`, contando `#hex`/`rgba(` e `sp-*`/`spColors`/`SP_PALETTE`; e `rg -l 'mb-color-sp-|"sp-[a-z]|spColors|SP_PALETTE' frontend/src enterprise/frontend/src` excluindo `ui/colors/`.
 

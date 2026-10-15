@@ -213,7 +213,7 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 - Trabalhar na árvore já atualizada (base 63).
 - Objetivo: encolher `dual-changed` de visual; tokens SP-owned; menos `"Rawline"`/hex espalhados.
 - Começar pela tabela “Entrada para EDD-1362” em [notas-etapa-62-63.md](./notas-etapa-62-63.md) e pela seção de conflitos reais no [manifesto](./manifesto-customizacoes.md) (linha de base + Passo 2 feitos).
-- **Próximo na 1362:** Passo 4 — classificar os 20 FE de `sp-extra.txt` em dual-changed/behavior-manual/restore-ours; preencher coluna “Depois” das métricas. (Passo 3: `groups.ts` voltou ao upstream.)
+- **Status 1362:** Passos 1–4 feitos (linha de base, `sp-theme`, `groups.ts` upstream, classificação `sp-extra`). Métricas “Depois” no manifesto. Próximo: reduzir refs SP hardcoded nos 18 arquivos core fora de `ui/colors/` (tokens/`SP_PALETTE`) e/ou fechar aceite visual; depois revisitar EDD-1356 v2.
 - **Fora da 1362 (não esquecer):** 7 erros `tsc` listados no manifesto (“Pendências `tsc`”); incluir `tsc` no `build-check` na revisão da EDD-1356 v2.
 
 ### O que evitar sugerir de novo (já descartado)
