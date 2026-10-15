@@ -107,7 +107,7 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 - Sintomas típicos de restore errado: `typed?` privado (`honey_sql_2` vs `honeysql_guard`), `clojure.core.match` ausente (`custom_migrations` pré-61), settings sem `:encryption`, migration sem `public_uuid_prefix`, vars EE novas ausentes (ex. `semantic-search-vector-strategy` com `settings.clj` stuck pré-N).
 - Remédio: trazer do `upstream/release-x.N.x` arquivos **não-curated** que ainda estão iguais ao tip pré-merge; varrer **`src/`**, **`test/`**, **`enterprise/`** e **`modules/`** — não só `src/`. **Preservar** curated (e reaplicar SP por cima quando for adapter/behavior).
 - Migrations incompletas: restaurar YAMLs do upstream; H2 local de smoke pode precisar **reset** (`metabase.db.mv.db`) — isso **não** é o banco de produção SP.
-- Settings SP (`version/settings.clj`, `config/core.clj`): manter getter AGPL (`mb-source-code-url`) e alinhar opções obrigatórias da major (ex. `:encryption :no`).
+- AGPL (`MB_SOURCE_CODE_URL`): `config/core.clj` (default), `version/settings.clj` (getter com `:source-code-url`) e `core/core.clj` (log no startup). São `dual-changed`: partir do arquivo upstream e reaplicar só o patch SP.
 
 ### Frontend / bun / CLJS
 

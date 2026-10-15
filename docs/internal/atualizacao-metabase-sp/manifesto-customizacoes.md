@@ -474,6 +474,8 @@ Achados do levantamento:
 - **Entradas obsoletas em `dual-changed.txt`:** sem diff vs upstream: `Dockerfile` (raiz), `bun.lock`, `deps.edn`, `AutomaticDashboardApp.tsx`. Inexistente: `NewItemButton.styled.tsx`. Removidas da lista (41 → 36).
 - **Customização SP perdida:** `NewItemButton.styled.tsx` (EDD-578: texto/ícone `sp-white`, peso 600) foi removido no upstream; o botão "Novo" voltou ao estilo padrão. Reaplicar no componente atual se o smoke confirmar.
 - **Doc SP perdida:** `frontend/src/metabase/data-grid/docs/datagrid-custom-features.md` (EDD-944) foi apagada em `bbf8960726e` (restore 61). Recuperada de `saopaulo-pre-61x` e movida de `behavior-manual` para `restore-ours` (arquivo só SP).
+- **AGPL (`MB_SOURCE_CODE_URL`) mal classificado:** `config/core.clj` e `version/settings.clj` estavam em `restore-ours`, mas são arquivos upstream com patch SP. O `settings.clj` carregava linhas antigas (`:encryption :when-encryption-key-set` no `site-uuid-for-version-info-fetching`, `log/error` da 60). O log AGPL do startup em `core/core.clj` (commit `69bd2c88f2e`) tinha sido perdido. Os três foram refeitos como upstream 63 + patch SP e movidos para `dual-changed`.
+- **`.github/` e `.gitignore`:** alinhados ao upstream 63 (20 desatualizados, 9 órfãos, 2 híbridos; nenhum commit SP neles). O `.gitignore` mantém só a linha SP `.merge-sp/` e entrou em `dual-changed`. Com isso o `verify` passou a fechar limpo (`stale=0 orphan=0 hybrid=0`).
 - `groups.ts` reescreve `getMain/Light/DarkAccentColors` com fallbacks: é o maior adapter de lógica no tema e principal candidato a virar ponto de injeção.
 
 ---

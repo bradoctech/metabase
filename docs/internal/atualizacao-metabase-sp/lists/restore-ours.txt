@@ -23,5 +23,3 @@ frontend/src/metabase/ui/colors/constants/sp-colors.ts
 resources/frontend_client/app/assets/img/logo-sp-gov.png
 resources/frontend_client/app/assets/img/logo-sp-gov.svg
 resources/frontend_client/app/assets/img/logo-sp.svg
-src/metabase/config/core.clj
-src/metabase/version/settings.clj
