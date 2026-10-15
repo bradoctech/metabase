@@ -484,8 +484,22 @@ Achados do levantamento:
 - **Doc SP perdida:** `frontend/src/metabase/data-grid/docs/datagrid-custom-features.md` (EDD-944) foi apagada em `bbf8960726e` (restore 61). Recuperada de `saopaulo-pre-61x` e movida de `behavior-manual` para `restore-ours` (arquivo só SP).
 - **AGPL (`MB_SOURCE_CODE_URL`) mal classificado:** `config/core.clj` e `version/settings.clj` estavam em `restore-ours`, mas são arquivos upstream com patch SP. O `settings.clj` carregava linhas antigas (`:encryption :when-encryption-key-set` no `site-uuid-for-version-info-fetching`, `log/error` da 60). O log AGPL do startup em `core/core.clj` (commit `69bd2c88f2e`) tinha sido perdido. Os três foram refeitos como upstream 63 + patch SP e movidos para `dual-changed`.
 - **`.github/` e `.gitignore`:** alinhados ao upstream 63 (20 desatualizados, 9 órfãos, 2 híbridos; nenhum commit SP neles). O `.gitignore` mantém só a linha SP `.merge-sp/` e entrou em `dual-changed`. Com isso o `verify` passou a fechar limpo (`stale=0 orphan=0 hybrid=0`).
-- **Tipos quebrados que o build não pega** (`tsc --noEmit`, 15 erros, todos em arquivos SP mergeados; nenhum em `ui/colors`): `Scalar.tsx` usava `t` sem importar `ttag` (card de número sem linhas lançava `ReferenceError`; o import saiu no merge da 61, quando o upstream deixou de usar `t` ali) — **corrigido**, junto com os tipos do spec SP (15 → 10 erros); `TreemapGroupsPicker` passa `isSortable` para o `ChartSettingSeriesOrder` SP, que não tem a prop da 63; `axis.ts` — **corrigido**: os 3 `triggerEvent` da EDD-969 foram removidos (dentro de `axisLabel` o ECharts ignora a opção, e o tooltip do texto completo é por `mousemove` no SVG desde a 969); o erro do formatter era efeito colateral deles (10 → 7 erros); `HeaderBreadcrumbs.tsx`; `HomeModelCard.tsx` (`IconName`); specs de `RowChart`/`Scalar`. Corrigir fora da EDD-1362 e incluir `tsc` no `build-check` (revisão da v2).
 - `groups.ts` reescreve `getMain/Light/DarkAccentColors` com fallbacks: é o maior adapter de lógica no tema e principal candidato a virar ponto de injeção.
+
+### Pendências `tsc` (fora do escopo de tema da EDD-1362)
+
+O build de produção **não** roda `tsc --noEmit`. Medido na `EDD-1362` após Scalar + `triggerEvent`: **7 erros** (eram 15). Corrigir em rodada própria; incluir `tsc` no `build-check` na revisão da EDD-1356 v2.
+
+| # | Arquivo | Erro | Impacto | Status |
+| - | ------- | ---- | ------- | ------ |
+| 1–4 | `visualizations/shared/components/RowChart/RowChart.unit.spec.tsx` | `userEvent` sem import (EDD-969) | Specs quebram | pendente |
+| 5 | `visualizations/visualizations/TreemapChart/TreemapGroupsPicker.tsx` | passa `isSortable` ao `ChartSettingSeriesOrder` SP, que não tem a prop da 63 | Reordenar grupos no Treemap pode falhar | pendente |
+| 6 | `query_builder/.../HeaderBreadcrumbs/HeaderBreadcrumbs.tsx` | `false \| null \| undefined` onde espera `DataSourcePart` | Só tipo; smoke visual OK | pendente |
+| 7 | `home/components/HomeModelCard/HomeModelCard.tsx` | importa `IconName` de `metabase/ui` (na 63 é `iconNames`) | Só tipo | pendente |
+| — | `Scalar.tsx` + spec | `t` sem import + `never[]` no mock | Card número sem linhas → `ReferenceError` | **feito** (`c11eed5`) |
+| — | `echarts/cartesian/option/axis.ts` | `triggerEvent` + formatter | Sem efeito em runtime; tipagem ECharts 6.1 | **feito** (`c9d0340`) |
+
+Como revalidar: com BE/FE parados, `NODE_OPTIONS=--max-old-space-size=5120 bunx tsc --noEmit` e conferir `grep -c 'error TS'`.
 
 ---
 

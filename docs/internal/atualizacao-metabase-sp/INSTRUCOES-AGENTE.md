@@ -212,7 +212,9 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 
 - Trabalhar na árvore já atualizada (base 63).
 - Objetivo: encolher `dual-changed` de visual; tokens SP-owned; menos `"Rawline"`/hex espalhados.
-- Começar pela tabela “Entrada para EDD-1362” em [notas-etapa-62-63.md](./notas-etapa-62-63.md) e pela seção de conflitos reais no [manifesto](./manifesto-customizacoes.md).
+- Começar pela tabela “Entrada para EDD-1362” em [notas-etapa-62-63.md](./notas-etapa-62-63.md) e pela seção de conflitos reais no [manifesto](./manifesto-customizacoes.md) (linha de base + Passo 2 feitos).
+- **Próximo na 1362:** Passo 3 — reduzir/isolar adapter de `groups.ts` (accents); depois Passo 4 — classificar os 20 FE de `sp-extra.txt` em dual-changed/behavior-manual/restore-ours; preencher coluna “Depois” das métricas.
+- **Fora da 1362 (não esquecer):** 7 erros `tsc` listados no manifesto (“Pendências `tsc`”); incluir `tsc` no `build-check` na revisão da EDD-1356 v2.
 
 ### O que evitar sugerir de novo (já descartado)
 
