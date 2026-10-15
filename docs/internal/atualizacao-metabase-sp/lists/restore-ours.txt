@@ -18,9 +18,10 @@ docs/internal/proposta-aba-detalhamentos-por-situacao.pdf
 docs/internal/viabilidade-dashboard-abono-permanencia.md
 docs/internal/viabilidade-dashboard-abono-permanencia.pdf
 frontend/src/metabase/css/core/fonts.saopaulo.styled.ts
+frontend/src/metabase/data-grid/docs/datagrid-custom-features.md
 frontend/src/metabase/ui/colors/constants/sp-colors.ts
+frontend/src/metabase/ui/colors/constants/sp-theme.ts
+frontend/src/metabase/ui/colors/types/sp-color-keys.ts
 resources/frontend_client/app/assets/img/logo-sp-gov.png
 resources/frontend_client/app/assets/img/logo-sp-gov.svg
 resources/frontend_client/app/assets/img/logo-sp.svg
-src/metabase/config/core.clj
-src/metabase/version/settings.clj

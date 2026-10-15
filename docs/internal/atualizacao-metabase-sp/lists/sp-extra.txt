@@ -1,7 +1,10 @@
 # SP protegido fora dos 3 buckets (EDD-1356 v2).
 # O `scan` nunca marca estes paths como stale/órfão nem os reverte para o upstream.
-# Não entram no restore automático: código aqui deve ser revisado à mão após o merge.
+# Não entram no restore automático: revisar à mão após o merge.
 # Aceita glob (* casa qualquer coisa, inclusive /).
+#
+# Código FE que estava aqui foi classificado na EDD-1362 (Passo 4)
+# → dual-changed (tema/DS/login/charts) ou behavior-manual (969/endurecimentos).
 
 # Infra / processo do fork
 bin/docker/Dockerfile
@@ -18,29 +21,3 @@ resources/frontend_client/app/img/*
 
 # Tradução SP
 locales/metabase.po
-
-# Código SP só no manifesto (classificar em dual-changed/behavior-manual na EDD-1362)
-frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
-frontend/src/metabase/auth/components/AuthLayout/AuthLayout.styled.tsx
-frontend/src/metabase/auth/components/AuthLayout/AuthLayout.tsx
-frontend/src/metabase/auth/components/Login/Login.tsx
-frontend/src/metabase/auth/components/LoginForm/LoginForm.tsx
-frontend/src/metabase/dashboard/components/DashCard/DashCard.module.css
-frontend/src/metabase/forms/components/FormField/FormField.tsx
-frontend/src/metabase/ui/components/buttons/Button/Button.module.css
-frontend/src/metabase/visualizations/components/ChartWithLegend.tsx
-frontend/src/metabase/visualizations/components/legend/LegendCaption/LegendCaption.styled.tsx
-frontend/src/metabase/visualizations/components/settings/ChartNestedSettingSeriesMultiple.jsx
-frontend/src/metabase/visualizations/components/settings/ChartNestedSettingSeriesSingle.tsx
-frontend/src/metabase/visualizations/echarts/cartesian/option/axis.ts
-frontend/src/metabase/visualizations/echarts/cartesian/option/series.ts
-
-# Código SP fora do manifesto (home)
-frontend/src/metabase/home/components/HomeXrayCard/HomeXrayCard.tsx
-
-# Endurecimentos SP pós-63 (crash ao salvar question)
-frontend/src/metabase/common/components/LastEditInfoLabel/LastEditInfoLabel.tsx
-frontend/src/metabase/common/components/LastEditInfoLabel/LastEditInfoLabel.unit.spec.tsx
-frontend/src/metabase/query_builder/components/view/ViewHeader/components/QuestionDataSource/QuestionDataSource.tsx
-frontend/src/metabase/query_builder/components/view/ViewHeader/components/QuestionDataSource/utils.unit.spec.ts
-frontend/src/metabase/query_builder/components/view/ViewHeader/components/SavedQuestionLeftSide/hooks.ts

@@ -455,10 +455,80 @@ Registrado após a PoC 60→61→62→63. Detalhe narrativo: [notas-etapa-62-63.
 
 Métrica alvo da 1362: reduzir contagem de paths **Adapter** ligados a tema/marca vs. a tabela de Resumo acima; registrar antes/depois aqui.
 
+### Status EDD-1362: **concluída**
+
+Objetivo desta leva (cliente único SP, baratear updates) atendido. Resumo: [edd-1362.md](./edd-1362.md) · PDF: [edd-1362-metricas.pdf](./edd-1362-metricas.pdf).
+
+**Adiado / multi-cliente:** renomear `--mb-color-sp-*` (e correlatos) no CSS/JS do core para tokens semânticos do Metabase. Valores já estão no `sp-theme`; a troca de nomes só ganha prioridade com outros clientes/temas ou se o smoke exigir menos `dual-changed` de CSS.
+
+### Linha de base EDD-1362 (antes)
+
+Medido na `EDD-1362` @ `ffc1bd9f565` contra `upstream/release-x.63.x` (7387f79).
+
+| Métrica | Antes | Depois |
+| ------- | ----- | ------ |
+| `dual-changed.txt` — paths (FE / total) | 37 / 41 | 47 / 52 |
+| `sp-extra.txt` — código FE ainda não classificado | 20 | 0 |
+| Arquivos core fora de `ui/colors/` usando tokens SP (`--mb-color-sp-*`, `spColors`, `SP_PALETTE_COLORS`) | 18 (30 refs) | 18 (30 refs) — Passo 4 só classificou |
+| Linhas com hex/rgba adicionadas em `ui/colors/` fora de arquivos SP-owned (`sp-colors.ts` / `sp-theme.ts`) | 94 | 0 |
+| Chaves `sp-*` em `color-keys.ts` (core) | 28 | 0 (`SpColorKey`) |
+| `behavior-manual.txt` — paths | 40 | 45 |
+| Diff `light.ts`+`dark.ts`+`groups.ts`+`color-keys.ts` vs upstream (linhas) | ~650 | 7 (2+2+0+3) |
+
+**Passo 2 — módulo de tema SP** (`ui/colors/constants/sp-theme.ts` + `ui/colors/types/sp-color-keys.ts`, ambos `restore-ours`):
+
+- `light.ts` / `dark.ts` = upstream 63 + 2 linhas (import + `...SP_*_THEME_COLORS`); `color-keys.ts` = upstream + 3 linhas (`| SpColorKey`); `accent-colors.ts` = 22 linhas; `theme-from-color-scheme.ts` voltou ao upstream (saiu de `dual-changed`).
+- Hex/rgba adicionados em `ui/colors/` fora de arquivos SP: 94 → 3 (restavam em `groups.ts`; ver Passo 3). Chaves `sp-*` no `color-keys.ts` core: 28 → 0.
+- Validação: tema derivado (`deriveFullMetabaseTheme`) claro idêntico; no escuro, `icon-*` voltaram ao valor 63 (eram resíduo da 60) e entraram 14 tokens `sp-*` que faltavam. Accents e `SP_PALETTE_COLORS` idênticos. `color-keys.d.css` igual + `--mb-color-sp-gray-medium` (já usado, não declarado).
+- Removidos por não terem efeito: `core-brand`/`core-filter`/`core-summarize` (o `deriveFullMetabaseTheme` sobrescreve) e `background-highlight/hover/selected` via `--mb-color-brand` (equivalente a `core-brand`).
+- Testes: `charts.unit.spec.ts` e `groups.unit.spec.ts` falham igual antes e depois (3 casos esperam as cores do Metabase).
+
+**Passo 3 — `groups.ts` volta ao upstream:**
+
+- A reescrita SP (fallbacks via `LIGHT_THEME_ACCENT_COLORS` / `ACCENT_COLOR_NAMES_MAP`, ~111 linhas) era workaround antigo. Com accents SP já em `sp-theme` → `accent-colors` → tema derivado, `color("accentN")` resolve hex SP corretamente.
+- Arquivo restaurado ao upstream 63 (0 linhas de diff). Saiu de `dual-changed` (FE 34 → 33; total 39 → 38). Hex fora de arquivos SP em `ui/colors/`: 3 → 0.
+- Dump de `getMain/Light/DarkAccentColors` e `getAccentColors` idêntico antes/depois. `verify` limpo. Mesmas 3 falhas de teste (expectam paleta Metabase).
+
+**Passo 4 — classificar os 20 FE de `sp-extra.txt`:**
+
+| Destino | Qtd | Paths / motivo |
+| ------- | --- | -------------- |
+| `dual-changed` | 14 | Login/AuthLayout/LoginForm (EDD-577); Button/FormField; DashCard/ChartWithLegend/LegendCaption/series (EDD-792); NestedSettingSeries\* + siblings ColorPicker (SP_PALETTE); HomeXrayCard.tsx (junto do `.styled`); SettingsLdapForm (`t\`\``) |
+| `behavior-manual` | 6 | `axis.ts` (EDD-969, junto de CartesianChart/BoxPlot/utils); LastEditInfoLabel + QuestionDataSource + SavedQuestionLeftSide/hooks (endurecimento crash pós-63) |
+| `restore-ours` | 0 | Nenhum (todos existem no upstream com patch SP) |
+
+`sp-extra` fica só com infra/marca/`locales/metabase.po` + globs. Dual sobe 38→52 porque esses adapters **já existiam** e estavam fora das 3 listas; não é drift novo. `verify` limpo.
+
+Como medir de novo: `git diff upstream/release-x.63.x -- <path>` nas linhas `+`, contando `#hex`/`rgba(` e `sp-*`/`spColors`/`SP_PALETTE`; e `rg -l 'mb-color-sp-|"sp-[a-z]|spColors|SP_PALETTE' frontend/src enterprise/frontend/src` excluindo `ui/colors/`.
+
+Achados do levantamento:
+
+- **Entradas obsoletas em `dual-changed.txt`:** sem diff vs upstream: `Dockerfile` (raiz), `bun.lock`, `deps.edn`, `AutomaticDashboardApp.tsx`. Inexistente: `NewItemButton.styled.tsx`. Removidas da lista (41 → 36).
+- **Customização SP perdida:** `NewItemButton.styled.tsx` (EDD-578: texto/ícone `sp-white`, peso 600) foi removido no upstream; o botão "Novo" voltou ao estilo padrão. Reaplicar no componente atual se o smoke confirmar.
+- **Doc SP perdida:** `frontend/src/metabase/data-grid/docs/datagrid-custom-features.md` (EDD-944) foi apagada em `bbf8960726e` (restore 61). Recuperada de `saopaulo-pre-61x` e movida de `behavior-manual` para `restore-ours` (arquivo só SP).
+- **AGPL (`MB_SOURCE_CODE_URL`) mal classificado:** `config/core.clj` e `version/settings.clj` estavam em `restore-ours`, mas são arquivos upstream com patch SP. O `settings.clj` carregava linhas antigas (`:encryption :when-encryption-key-set` no `site-uuid-for-version-info-fetching`, `log/error` da 60). O log AGPL do startup em `core/core.clj` (commit `69bd2c88f2e`) tinha sido perdido. Os três foram refeitos como upstream 63 + patch SP e movidos para `dual-changed`.
+- **`.github/` e `.gitignore`:** alinhados ao upstream 63 (20 desatualizados, 9 órfãos, 2 híbridos; nenhum commit SP neles). O `.gitignore` mantém só a linha SP `.merge-sp/` e entrou em `dual-changed`. Com isso o `verify` passou a fechar limpo (`stale=0 orphan=0 hybrid=0`).
+- `groups.ts` — **resolvido no Passo 3**: restaurado ao upstream; saiu de `dual-changed`.
+
+### Pendências `tsc` (fora do escopo de tema da EDD-1362)
+
+O build de produção **não** roda `tsc --noEmit`. Medido na `EDD-1362` após Scalar + `triggerEvent`: **7 erros** (eram 15). **Não bloqueiam o fechamento da 1362.** Tratar na revisita da **EDD-1356** (pós-merge da 1362): corrigir os 7 e incluir `tsc` no `build-check`.
+
+| # | Arquivo | Erro | Impacto | Status |
+| - | ------- | ---- | ------- | ------ |
+| 1–4 | `visualizations/shared/components/RowChart/RowChart.unit.spec.tsx` | `userEvent` sem import (EDD-969) | Specs quebram | pendente |
+| 5 | `visualizations/visualizations/TreemapChart/TreemapGroupsPicker.tsx` | passa `isSortable` ao `ChartSettingSeriesOrder` SP, que não tem a prop da 63 | Reordenar grupos no Treemap pode falhar | pendente |
+| 6 | `query_builder/.../HeaderBreadcrumbs/HeaderBreadcrumbs.tsx` | `false \| null \| undefined` onde espera `DataSourcePart` | Só tipo; smoke visual OK | pendente |
+| 7 | `home/components/HomeModelCard/HomeModelCard.tsx` | importa `IconName` de `metabase/ui` (na 63 é `iconNames`) | Só tipo | pendente |
+| — | `Scalar.tsx` + spec | `t` sem import + `never[]` no mock | Card número sem linhas → `ReferenceError` | **feito** (`c11eed5`) |
+| — | `echarts/cartesian/option/axis.ts` | `triggerEvent` + formatter | Sem efeito em runtime; tipagem ECharts 6.1 | **feito** (`c9d0340`) |
+
+Como revalidar: com BE/FE parados, `NODE_OPTIONS=--max-old-space-size=5120 bunx tsc --noEmit` e conferir `grep -c 'error TS'`.
+
 ---
 
 ## Como atualizar este manifesto
 
 - Após configurar `upstream` e rodar o diff 60.x, acrescentar paths faltantes e reclassificar.
 - Após EDD-1355, registrar conflitos reais encontrados (entrada da EDD-1362) — **seed acima**.
-- Após EDD-1362, atualizar contagens de `dual-changed` (métrica antes/depois).
+- Após EDD-1362, atualizar contagens de `dual-changed` (métrica antes/depois) — **feito**; issue concluída (ver acima).

@@ -266,7 +266,6 @@ export const buildNumericDimensionAxis = (
     axisLabel: {
       margin: CHART_STYLE.axisTicksMarginX,
       ...getDimensionTicksDefaultOption(settings, renderingContext),
-      triggerEvent: true,
       formatter: (rawValue: number) => {
         if (isPadded && (rawValue < min || rawValue > max)) {
           return "";
@@ -307,7 +306,6 @@ export const buildTimeSeriesDimensionAxis = (
         CHART_STYLE.axisTicksMarginX +
         (hasTimelineEvents ? CHART_STYLE.timelineEvents.height : 0),
       ...getDimensionTicksDefaultOption(settings, renderingContext),
-      triggerEvent: true,
       formatter: (rawValue: number) => {
         const value = xAxisModel.fromEChartsAxisValue(rawValue);
         if (canRender(value)) {
@@ -358,7 +356,6 @@ export const buildCategoricalDimensionAxis = (
         renderingContext,
       ),
       interval: () => true,
-      triggerEvent: true,
       formatter: (value: string) => {
         const numberValue = parseNumberValue(value);
         let fullText: string;

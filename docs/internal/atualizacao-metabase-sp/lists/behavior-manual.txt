@@ -1,8 +1,10 @@
 # Behavior — manual reapply/adapt (do not auto-restore). Source: manifesto Behavior bucket.
 
 frontend/src/metabase-types/api/field.ts
-frontend/src/metabase/api/field.ts
 frontend/src/metabase/admin/components/AdminContentTable/AdminContentTable.tsx
+frontend/src/metabase/api/field.ts
+frontend/src/metabase/common/components/LastEditInfoLabel/LastEditInfoLabel.tsx
+frontend/src/metabase/common/components/LastEditInfoLabel/LastEditInfoLabel.unit.spec.tsx
 frontend/src/metabase/data-grid/components/DataGrid/DataGrid.module.css
 frontend/src/metabase/data-grid/components/DataGrid/DataGrid.tsx
 frontend/src/metabase/data-grid/components/DataGridHeader/DataGridHeader.tsx
@@ -10,7 +12,6 @@ frontend/src/metabase/data-grid/components/DataGridRow/DataGridRow.tsx
 frontend/src/metabase/data-grid/components/Footer/Footer.module.css
 frontend/src/metabase/data-grid/components/SortableHeader/SortableHeader.tsx
 frontend/src/metabase/data-grid/constants.ts
-frontend/src/metabase/data-grid/docs/datagrid-custom-features.md
 frontend/src/metabase/data-grid/hooks/use-column-pinning-by-count.ts
 frontend/src/metabase/data-grid/hooks/use-data-grid-instance.tsx
 frontend/src/metabase/data-grid/types.ts
@@ -19,11 +20,15 @@ frontend/src/metabase/home/components/HomePopularSection/HomePopularSection.tsx
 frontend/src/metabase/home/components/HomeRecentSection/HomeRecentSection.module.css
 frontend/src/metabase/home/components/HomeRecentSection/HomeRecentSection.tsx
 frontend/src/metabase/home/utils.ts
+frontend/src/metabase/query_builder/components/view/ViewHeader/components/QuestionDataSource/QuestionDataSource.tsx
+frontend/src/metabase/query_builder/components/view/ViewHeader/components/QuestionDataSource/utils.unit.spec.ts
+frontend/src/metabase/query_builder/components/view/ViewHeader/components/SavedQuestionLeftSide/hooks.ts
 frontend/src/metabase/querying/filters/components/FilterPicker/FilterValuePicker/FilterValuePicker.tsx
 frontend/src/metabase/querying/filters/components/FilterPicker/FilterValuePicker/FilterValuePicker.unit.spec.tsx
 frontend/src/metabase/querying/filters/utils/chain-filter-constraints.ts
 frontend/src/metabase/querying/filters/utils/chain-filter-constraints.unit.spec.ts
 frontend/src/metabase/visualizations/components/TableInteractive/TableInteractive.tsx
+frontend/src/metabase/visualizations/echarts/cartesian/option/axis.ts
 frontend/src/metabase/visualizations/echarts/cartesian/option/utils.ts
 frontend/src/metabase/visualizations/shared/components/RowChart/RowChart.unit.spec.tsx
 frontend/src/metabase/visualizations/shared/components/RowChartView/RowChartView.tsx

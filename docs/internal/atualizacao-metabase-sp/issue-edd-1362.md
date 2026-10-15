@@ -1,8 +1,12 @@
 # EDD-1362 — Refatorar tema e marca SP na base atualizada
 
-Issue criada no tracker. **Só iniciar após a EDD-1355** ter a base na versão alvo (ou um marco estável do merge).
+**Status: concluída** (leva atual; cliente único SP). Resumo: [edd-1362.md](./edd-1362.md) · métricas: [edd-1362-metricas.pdf](./edd-1362-metricas.pdf).
 
 Relacionados: [estratégia-sequencia.md](./estrategia-sequencia.md) · [issue-edd-1361.md](./issue-edd-1361.md) · EDD-1355 · EDD-1356
+
+**Adiado / multi-cliente:** renomeação semântica de `--mb-color-sp-*` no core.
+
+**Backlog pós-issue:** 7 erros `tsc` + `tsc` no `build-check` → revisita EDD-1356.
 
 ---
 
