@@ -1,4 +1,5 @@
 import { Component } from "react";
+import { t } from "ttag";
 import _ from "underscore";
 
 import DashboardS from "metabase/css/dashboard.module.css";
@@ -104,7 +105,7 @@ export class Scalar extends Component<
       segmentIsValid(segment, { allowOpenEnded: true }),
     );
 
-    const color = getColor(value, segments);
+    const color = getColor(value ?? null, segments);
     const tooltipContent = getTooltipContent(segments);
 
     const { displayValue, fullScalarValue } = hasNoRows
@@ -112,7 +113,7 @@ export class Scalar extends Component<
           displayValue: t`No results`,
           fullScalarValue: t`No results`,
         }
-      : compactifyValue(value, width, formatOptions);
+      : compactifyValue(value ?? null, width, formatOptions);
 
     const label = settings["scalar.label"];
     const sublabel = settings["scalar.sublabel"];

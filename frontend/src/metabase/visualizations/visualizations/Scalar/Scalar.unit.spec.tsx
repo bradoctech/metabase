@@ -27,7 +27,10 @@ const emptyRowsSeries = () =>
   [
     {
       card: createMockCard({ display: "scalar" }),
-      data: { rows: [], cols: [createMockColumn({ name: "count" })] },
+      data: createMockDatasetData({
+        rows: [],
+        cols: [createMockColumn({ name: "count" })],
+      }),
     },
   ] as Series;
 
