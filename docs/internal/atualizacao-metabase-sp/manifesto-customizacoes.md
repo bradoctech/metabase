@@ -455,6 +455,12 @@ Registrado após a PoC 60→61→62→63. Detalhe narrativo: [notas-etapa-62-63.
 
 Métrica alvo da 1362: reduzir contagem de paths **Adapter** ligados a tema/marca vs. a tabela de Resumo acima; registrar antes/depois aqui.
 
+### Status EDD-1362: **concluída**
+
+Objetivo desta leva (cliente único SP, baratear updates) atendido. Resumo: [edd-1362.md](./edd-1362.md) · PDF: [edd-1362-metricas.pdf](./edd-1362-metricas.pdf).
+
+**Adiado / multi-cliente:** renomear `--mb-color-sp-*` (e correlatos) no CSS/JS do core para tokens semânticos do Metabase. Valores já estão no `sp-theme`; a troca de nomes só ganha prioridade com outros clientes/temas ou se o smoke exigir menos `dual-changed` de CSS.
+
 ### Linha de base EDD-1362 (antes)
 
 Medido na `EDD-1362` @ `ffc1bd9f565` contra `upstream/release-x.63.x` (7387f79).
@@ -506,7 +512,7 @@ Achados do levantamento:
 
 ### Pendências `tsc` (fora do escopo de tema da EDD-1362)
 
-O build de produção **não** roda `tsc --noEmit`. Medido na `EDD-1362` após Scalar + `triggerEvent`: **7 erros** (eram 15). Corrigir em rodada própria; incluir `tsc` no `build-check` na revisão da EDD-1356 v2.
+O build de produção **não** roda `tsc --noEmit`. Medido na `EDD-1362` após Scalar + `triggerEvent`: **7 erros** (eram 15). **Não bloqueiam o fechamento da 1362.** Tratar na revisita da **EDD-1356** (pós-merge da 1362): corrigir os 7 e incluir `tsc` no `build-check`.
 
 | # | Arquivo | Erro | Impacto | Status |
 | - | ------- | ---- | ------- | ------ |
@@ -525,4 +531,4 @@ Como revalidar: com BE/FE parados, `NODE_OPTIONS=--max-old-space-size=5120 bunx 
 
 - Após configurar `upstream` e rodar o diff 60.x, acrescentar paths faltantes e reclassificar.
 - Após EDD-1355, registrar conflitos reais encontrados (entrada da EDD-1362) — **seed acima**.
-- Após EDD-1362, atualizar contagens de `dual-changed` (métrica antes/depois).
+- Após EDD-1362, atualizar contagens de `dual-changed` (métrica antes/depois) — **feito**; issue concluída (ver acima).

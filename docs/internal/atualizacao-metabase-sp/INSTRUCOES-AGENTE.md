@@ -3,7 +3,7 @@
 **Como usar:** no início de uma nova conversa sobre EDD-1355, EDD-1356, EDD-1361, EDD-1362, tema SP ou upgrade do fork, peça ao agente para ler este arquivo (e, se precisar de detalhe, os outros `.md` desta pasta) antes de planejar ou editar código.
 
 **Pasta:** `docs/internal/atualizacao-metabase-sp/`  
-**Última consolidação de contexto:** etapa **62→63** da EDD-1355 na branch `EDD-1355` **publicada** (`origin/EDD-1355`); merge + fixups + **smoke canônico OK** (ver [notas-etapa-62-63.md](./notas-etapa-62-63.md)). Próximo na sequência: EDD-1362 (tema) e EDD-1356 v2 (script). EDD-1361/1356 MVP já na base; notas anteriores em [notas-etapa-61-62.md](./notas-etapa-61-62.md) e [notas-etapa-60-61.md](./notas-etapa-60-61.md).
+**Última consolidação de contexto:** EDD-1362 **concluída** ([edd-1362.md](./edd-1362.md)); fork em 0.63. Próximo: revisitar **EDD-1356 v2** (tsc no build-check + 7 erros). PoC 62→63: [notas-etapa-62-63.md](./notas-etapa-62-63.md).
 
 ---
 
@@ -87,9 +87,9 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 | ID           | Papel                                                      | Estado                                                                      |
 | ------------ | ---------------------------------------------------------- | --------------------------------------------------------------------------- |
 | **EDD-1355** | Atualizar Metabase + reaplicar customizações               | PoC 63 + smoke canônico OK na branch; falta PR / merge em `saopaulo`        |
-| **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | MVP entregue; **v2** implementada (scan + build-check + sp-extra); revisitar após EDD-1362 |
+| **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | MVP + v2 implementados; **revisitar** pós-1362 (tsc no build-check, 7 erros tsc) |
 | **EDD-1361** | Inventário + quick wins de isolamento                      | Concluída (manifesto publicado)                                             |
-| **EDD-1362** | Refatorar tema/marca na base já atualizada                 | Próxima após PR da 1355 — entrada em [notas-etapa-62-63.md](./notas-etapa-62-63.md) |
+| **EDD-1362** | Refatorar tema/marca na base já atualizada                 | **Concluída** — [edd-1362.md](./edd-1362.md); renomeação semântica adiada / multi-cliente |
 
 ---
 
@@ -183,7 +183,7 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 1. Ler este arquivo e, se na EDD-1355, [notas-etapa-62-63.md](./notas-etapa-62-63.md) (e notas 61–62 / 60–61 se precisar de histórico).
 2. Confirmar branch (`EDD-1355` vs `saopaulo`) e remotes `origin` / `upstream`.
 3. Seguir a sequência oficial; não inverter para “refatorar tema grande → depois update” sem o usuário pedir.
-4. Fork em 0.63 (EDD-1355/1359) e **EDD-1356 v2** implementada ([edd-1356-v2.md](./edd-1356-v2.md)) — próximo foco: **EDD-1362**, depois revisitar a v2.
+4. Fork em 0.63; **EDD-1362 concluída**; próximo foco: revisitar **EDD-1356 v2** ([edd-1356-v2.md](./edd-1356-v2.md)).
 
 ### Ao inventariar customizações (EDD-1361)
 
@@ -213,8 +213,8 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 - Trabalhar na árvore já atualizada (base 63).
 - Objetivo: encolher `dual-changed` de visual; tokens SP-owned; menos `"Rawline"`/hex espalhados.
 - Começar pela tabela “Entrada para EDD-1362” em [notas-etapa-62-63.md](./notas-etapa-62-63.md) e pela seção de conflitos reais no [manifesto](./manifesto-customizacoes.md) (linha de base + Passo 2 feitos).
-- **Status 1362:** Passos 1–4 feitos (linha de base, `sp-theme`, `groups.ts` upstream, classificação `sp-extra`). Métricas “Depois” no manifesto. Próximo: reduzir refs SP hardcoded nos 18 arquivos core fora de `ui/colors/` (tokens/`SP_PALETTE`) e/ou fechar aceite visual; depois revisitar EDD-1356 v2.
-- **Fora da 1362 (não esquecer):** 7 erros `tsc` listados no manifesto (“Pendências `tsc`”); incluir `tsc` no `build-check` na revisão da EDD-1356 v2.
+- **Status 1362:** **concluída** ([edd-1362.md](./edd-1362.md)). Renomeação `--mb-color-sp-*` → tokens semânticos: **adiada / multi-cliente**.
+- **Próximo foco:** revisitar **EDD-1356** (branch própria pós-PR da 1362): 7 erros `tsc`, `tsc` no `build-check`, NewItemButton se smoke pedir.
 
 ### O que evitar sugerir de novo (já descartado)
 
@@ -236,6 +236,7 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 | [estrategia-sequencia.md](./estrategia-sequencia.md)       | Cenário + sequência + dependências               |
 | [issue-edd-1361.md](./issue-edd-1361.md)                   | Texto oficial / espelho da EDD-1361              |
 | [issue-edd-1362.md](./issue-edd-1362.md)                   | Texto oficial / espelho da EDD-1362              |
+| [edd-1362.md](./edd-1362.md)                               | Resumo da 1362 + [PDF métricas](./edd-1362-metricas.pdf) |
 | [manifesto-customizacoes.md](./manifesto-customizacoes.md) | Inventário path → EDD → bucket → risco           |
 | [runbook-atualizacao.md](./runbook-atualizacao.md)         | Como rodar o merge semi-automático               |
 | [issue-edd-1356.md](./issue-edd-1356.md)                   | Entrega da EDD-1356                              |
