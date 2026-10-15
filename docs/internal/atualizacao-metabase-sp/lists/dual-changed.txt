@@ -29,7 +29,6 @@ frontend/src/metabase/query_builder/components/view/ViewHeader/components/SavedQ
 frontend/src/metabase/ui/colors/constants/accent-colors.ts
 frontend/src/metabase/ui/colors/constants/themes/dark.ts
 frontend/src/metabase/ui/colors/constants/themes/light.ts
-frontend/src/metabase/ui/colors/groups.ts
 frontend/src/metabase/ui/colors/types/color-keys.ts
 frontend/src/metabase/visualizations/components/settings/ChartSettingColorPicker/ChartSettingColorPicker.tsx
 frontend/src/metabase/visualizations/components/settings/ChartSettingSegmentsEditor/ChartSettingSegmentsEditor.tsx
