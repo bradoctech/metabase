@@ -214,7 +214,7 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 - Objetivo: encolher `dual-changed` de visual; tokens SP-owned; menos `"Rawline"`/hex espalhados.
 - Começar pela tabela “Entrada para EDD-1362” em [notas-etapa-62-63.md](./notas-etapa-62-63.md) e pela seção de conflitos reais no [manifesto](./manifesto-customizacoes.md) (linha de base + Passo 2 feitos).
 - **Status 1362:** **concluída** ([edd-1362.md](./edd-1362.md)). Renomeação `--mb-color-sp-*` → tokens semânticos: **adiada / multi-cliente**.
-- **Próximo foco:** revisitar **EDD-1356** (branch própria pós-PR da 1362): 7 erros `tsc`, `tsc` no `build-check`, NewItemButton se smoke pedir.
+- **Próximo foco (EDD-1356-v2):** 7 erros `tsc` **corrigidos** (`tsc --noEmit` = 0). Falta: `tsc` no `build-check`; NewItemButton se smoke pedir; falhas de comportamento do spec RowChart (969) se relevantes.
 
 ### O que evitar sugerir de novo (já descartado)
 

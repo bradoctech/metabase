@@ -512,18 +512,20 @@ Achados do levantamento:
 
 ### Pendências `tsc` (fora do escopo de tema da EDD-1362)
 
-O build de produção **não** roda `tsc --noEmit`. Medido na `EDD-1362` após Scalar + `triggerEvent`: **7 erros** (eram 15). **Não bloqueiam o fechamento da 1362.** Tratar na revisita da **EDD-1356** (pós-merge da 1362): corrigir os 7 e incluir `tsc` no `build-check`.
+O build de produção **não** roda `tsc --noEmit` (ainda). Na `EDD-1362` havia **7 erros** (eram 15). Na revisita **EDD-1356-v2**: os 7 foram corrigidos — `tsc --noEmit` = **0 erros**. Próximo: incluir `tsc` no `build-check`.
 
 | # | Arquivo | Erro | Impacto | Status |
 | - | ------- | ---- | ------- | ------ |
-| 1–4 | `visualizations/shared/components/RowChart/RowChart.unit.spec.tsx` | `userEvent` sem import (EDD-969) | Specs quebram | pendente |
-| 5 | `visualizations/visualizations/TreemapChart/TreemapGroupsPicker.tsx` | passa `isSortable` ao `ChartSettingSeriesOrder` SP, que não tem a prop da 63 | Reordenar grupos no Treemap pode falhar | pendente |
-| 6 | `query_builder/.../HeaderBreadcrumbs/HeaderBreadcrumbs.tsx` | `false \| null \| undefined` onde espera `DataSourcePart` | Só tipo; smoke visual OK | pendente |
-| 7 | `home/components/HomeModelCard/HomeModelCard.tsx` | importa `IconName` de `metabase/ui` (na 63 é `iconNames`) | Só tipo | pendente |
-| — | `Scalar.tsx` + spec | `t` sem import + `never[]` no mock | Card número sem linhas → `ReferenceError` | **feito** (`c11eed5`) |
-| — | `echarts/cartesian/option/axis.ts` | `triggerEvent` + formatter | Sem efeito em runtime; tipagem ECharts 6.1 | **feito** (`c9d0340`) |
+| 1–4 | `RowChart.unit.spec.tsx` | `userEvent` sem import (EDD-969) | Tipagem do spec | **feito** (`EDD-1356-v2`) |
+| 5 | `TreemapGroupsPicker` / `ChartSettingSeriesOrder` | `isSortable` faltava no componente SP | Treemap não desabilitaria sort | **feito** (prop restaurada do upstream 63; paleta SP mantida) |
+| 6 | `HeaderBreadcrumbs.tsx` | type guard chamava `isDataSourceReactElement` com `null`/`false` | Só tipo | **feito** |
+| 7 | `HomeModelCard.tsx` | `IconName` de `metabase/ui` | Só tipo | **feito** (`metabase-types/api`) |
+| — | `Scalar.tsx` + spec | `t` sem import | `ReferenceError` | **feito** (`c11eed5`) |
+| — | `axis.ts` | `triggerEvent` | Tipagem ECharts | **feito** (`c9d0340`) |
 
-Como revalidar: com BE/FE parados, `NODE_OPTIONS=--max-old-space-size=5120 bunx tsc --noEmit` e conferir `grep -c 'error TS'`.
+Nota: o spec do RowChart ainda tem falhas de **comportamento** (truncate/titleCase EDD-969 vs expectativa do teste) — independentes do `tsc`. Avaliar em smoke/follow-up.
+
+Como revalidar: com BE/FE parados, `NODE_OPTIONS=--max-old-space-size=5120 bunx tsc --noEmit` (esperado: 0 erros).
 
 ---
 

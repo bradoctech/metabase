@@ -1,3 +1,4 @@
+import userEvent from "@testing-library/user-event";
 import type { NumberValue } from "d3-scale";
 
 import { render, screen } from "__support__/ui";
