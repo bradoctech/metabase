@@ -492,7 +492,8 @@ cmd_scan() {
 # --- v2: production build checks ------------------------------------------------------------
 # The dev run (`--hot` + rspack serve) only loads what the app touches, never compiles drivers,
 # and treats broken imports as warnings. `bin/build.sh` compiles everything and fails.
-BUILD_CHECK_STEPS="${BUILD_CHECK_STEPS:-backend static-viz frontend}"
+# tsc after static-viz so CLJS artifacts exist when needed; omit with BUILD_CHECK_STEPS=…
+BUILD_CHECK_STEPS="${BUILD_CHECK_STEPS:-backend static-viz tsc frontend}"
 
 write_load_all_script() {
   cat > "$WORK_DIR/load-all.clj" <<'EOF'
@@ -562,6 +563,19 @@ cmd_build_check() {
           grep -E '^ERROR in|×' "$log" | head -20 | cut -c1-300 | sed 's/^/    /'
         fi
         ;;
+      tsc)
+        # Catches SP/type regressions that production rspack does not (lição pós-1362).
+        echo "==> build-check tsc: TypeScript --noEmit → $log"
+        if NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=5120}" \
+           bunx tsc --noEmit > "$log" 2>&1; then
+          echo "    OK (0 errors)"
+        else
+          failed=1
+          errs=$(grep -c 'error TS' "$log" 2>/dev/null || echo 0)
+          echo "    FAILED ($errs error TS)"
+          grep 'error TS' "$log" | head -20 | cut -c1-300 | sed 's/^/    /'
+        fi
+        ;;
       frontend)
         echo "==> build-check frontend: production bundle, MB_EDITION=${MB_EDITION:-ee} → $log"
         if MB_EDITION="${MB_EDITION:-ee}" WEBPACK_BUNDLE=production \
@@ -574,7 +588,7 @@ cmd_build_check() {
         fi
         ;;
       *)
-        echo "Unknown build-check step: $step (valid: backend static-viz frontend)" >&2
+        echo "Unknown build-check step: $step (valid: backend static-viz tsc frontend)" >&2
         exit 1
         ;;
     esac
@@ -656,7 +670,7 @@ Commands:
   scan       Classify non-protected diffs vs UPSTREAM_REF (stale/missing/orphan/hybrid)
              → $SCAN_REPORT ; 'scan --apply' fixes stale/missing/orphan
   verify     restore-ours drift + unmerged conflicts + scan (fails on stale/missing/orphan)
-  build-check  Production build checks: backend namespaces, static-viz, FE bundle (slow, ~15 min)
+  build-check  Production build checks: backend, static-viz, tsc, FE bundle (slow, ~15–20 min)
   status     Show env + merge state
   all        snapshot + merge + restore + report + status
 

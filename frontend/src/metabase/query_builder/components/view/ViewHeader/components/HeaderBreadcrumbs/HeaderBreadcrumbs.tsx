@@ -100,9 +100,10 @@ function isDataSourceReactElement(part: DataSourcePart): part is ReactElement {
 function isRenderableDataSourcePart(
   part: DataSourcePart | null | undefined | false,
 ): part is DataSourcePart {
-  return (
-    isDataSourceReactElement(part) || (part != null && typeof part === "object")
-  );
+  if (part == null || part === false) {
+    return false;
+  }
+  return isDataSourceReactElement(part) || typeof part === "object";
 }
 
 function isDividerReactElement(

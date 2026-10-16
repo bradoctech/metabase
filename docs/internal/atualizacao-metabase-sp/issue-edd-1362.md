@@ -6,7 +6,7 @@ Relacionados: [estratégia-sequencia.md](./estrategia-sequencia.md) · [issue-ed
 
 **Adiado / multi-cliente:** renomeação semântica de `--mb-color-sp-*` no core.
 
-**Backlog pós-issue:** 7 erros `tsc` + `tsc` no `build-check` → revisita EDD-1356.
+**Backlog pós-issue:** 7 erros `tsc` + `tsc` no `build-check` → feitos na revisita `EDD-1356-v2`.
 
 ---
 

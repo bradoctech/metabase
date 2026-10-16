@@ -13,6 +13,7 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 
 | Documento                                                  | Conteúdo                                                                  |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [manual-orientar-ia.md](./manual-orientar-ia.md)           | Manual humano: prompt curto, entrada da IA e docs sob demanda             |
 | [INSTRUCOES-AGENTE.md](./INSTRUCOES-AGENTE.md)             | Bootstrap de contexto para o agente em conversas novas (não perder o fio) |
 | [estratégia-sequencia.md](./estrategia-sequencia.md)       | Cenário atual, ordem correta de atuação e dependências entre as issues    |
 | [issue-edd-1361.md](./issue-edd-1361.md)                   | EDD-1361 — inventário + isolamento mínimo (prep)                          |
@@ -33,6 +34,6 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 - O Metabase deste projeto é um **fork** com customizações SP (tema, marca, datagrid, traduções, home, etc.).
 - Atualizar a versão exige **identificar, transportar e adaptar** essas mudanças — não basta trocar o JAR/imagem.
 - A estratégia oficial aqui é: **inventário → processo semi-automático → update como PoC → refatorar tema na base nova**.
-- Após a 63: **EDD-1362** concluída ([edd-1362.md](./edd-1362.md)); próximo: **revisitar EDD-1356 v2** (tsc no build-check + 7 erros).
+- Após a 63: **EDD-1362** concluída ([edd-1362.md](./edd-1362.md)); revisita **EDD-1356-v2** concluída (tsc + `build-check` + NewItemButton ok no smoke — [edd-1356-v2.md](./edd-1356-v2.md)).
 
 Para o raciocínio completo e a sequência recomendada, comece por [estratégia-sequencia.md](./estrategia-sequencia.md).

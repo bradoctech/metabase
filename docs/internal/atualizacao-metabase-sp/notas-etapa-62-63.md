@@ -66,7 +66,7 @@ Prioridade alta no próximo endurecimento do `bin/merge-upstream-preserve-sp.sh`
 | 7 | `build-check`: namespaces src/EE/drivers + static-viz + bundle FE EE |
 | — | `restore`: conflito fora das listas → upstream (antes: SP); imagens só restauradas de `resources/frontend_client/` (antes: qualquer `*.png`, reverteu docs/.loki) |
 
-Teste negativo: com o `starburst.clj` 0.62 de volta, `scan` marca stale e `build-check` falha com `No such var: driver/describe-table-fks`. Revisitar após a EDD-1362 (mover itens de `sp-extra.txt` para dual-changed/behavior-manual).
+Teste negativo: com o `starburst.clj` 0.62 de volta, `scan` marca stale e `build-check` falha com `No such var: driver/describe-table-fks`. Pós-1362: FE de `sp-extra` classificado nas 3 listas; revisita `EDD-1356-v2` concluída (`tsc` + NewItemButton ok).
 
 ## Entrada para EDD-1362 (tema/marca)
 
