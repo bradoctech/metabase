@@ -33,6 +33,6 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 - O Metabase deste projeto é um **fork** com customizações SP (tema, marca, datagrid, traduções, home, etc.).
 - Atualizar a versão exige **identificar, transportar e adaptar** essas mudanças — não basta trocar o JAR/imagem.
 - A estratégia oficial aqui é: **inventário → processo semi-automático → update como PoC → refatorar tema na base nova**.
-- Após a 63: **EDD-1362** concluída ([edd-1362.md](./edd-1362.md)); próximo: **revisitar EDD-1356 v2** (tsc no build-check + 7 erros).
+- Após a 63: **EDD-1362** concluída ([edd-1362.md](./edd-1362.md)); revisita **EDD-1356-v2** (tsc zerado + `tsc` no `build-check`).
 
 Para o raciocínio completo e a sequência recomendada, comece por [estratégia-sequencia.md](./estrategia-sequencia.md).

@@ -3,7 +3,7 @@
 **Como usar:** no início de uma nova conversa sobre EDD-1355, EDD-1356, EDD-1361, EDD-1362, tema SP ou upgrade do fork, peça ao agente para ler este arquivo (e, se precisar de detalhe, os outros `.md` desta pasta) antes de planejar ou editar código.
 
 **Pasta:** `docs/internal/atualizacao-metabase-sp/`  
-**Última consolidação de contexto:** EDD-1362 **concluída** ([edd-1362.md](./edd-1362.md)); fork em 0.63. Próximo: revisitar **EDD-1356 v2** (tsc no build-check + 7 erros). PoC 62→63: [notas-etapa-62-63.md](./notas-etapa-62-63.md).
+**Última consolidação de contexto:** EDD-1362 **concluída**; revisita **EDD-1356-v2** (tsc zerado + passo `tsc` no `build-check`). PoC 62→63: [notas-etapa-62-63.md](./notas-etapa-62-63.md).
 
 ---
 
@@ -87,7 +87,7 @@ Runbook de etapas: [runbook-atualizacao.md](./runbook-atualizacao.md).
 | ID           | Papel                                                      | Estado                                                                      |
 | ------------ | ---------------------------------------------------------- | --------------------------------------------------------------------------- |
 | **EDD-1355** | Atualizar Metabase + reaplicar customizações               | PoC 63 + smoke canônico OK na branch; falta PR / merge em `saopaulo`        |
-| **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | MVP + v2 implementados; **revisitar** pós-1362 (tsc no build-check, 7 erros tsc) |
+| **EDD-1356** | Automatizar / semi-automatizar transporte de customizações | MVP + v2; revisita pós-1362: tsc zerado + `tsc` no `build-check` (branch `EDD-1356-v2`) |
 | **EDD-1361** | Inventário + quick wins de isolamento                      | Concluída (manifesto publicado)                                             |
 | **EDD-1362** | Refatorar tema/marca na base já atualizada                 | **Concluída** — [edd-1362.md](./edd-1362.md); renomeação semântica adiada / multi-cliente |
 
@@ -214,7 +214,7 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 - Objetivo: encolher `dual-changed` de visual; tokens SP-owned; menos `"Rawline"`/hex espalhados.
 - Começar pela tabela “Entrada para EDD-1362” em [notas-etapa-62-63.md](./notas-etapa-62-63.md) e pela seção de conflitos reais no [manifesto](./manifesto-customizacoes.md) (linha de base + Passo 2 feitos).
 - **Status 1362:** **concluída** ([edd-1362.md](./edd-1362.md)). Renomeação `--mb-color-sp-*` → tokens semânticos: **adiada / multi-cliente**.
-- **Próximo foco (EDD-1356-v2):** 7 erros `tsc` **corrigidos** (`tsc --noEmit` = 0). Falta: `tsc` no `build-check`; NewItemButton se smoke pedir; falhas de comportamento do spec RowChart (969) se relevantes.
+- **Próximo foco (EDD-1356-v2):** 7 erros `tsc` zerados; RowChart spec alinhado; `tsc` no `build-check`. Falta: NewItemButton SP se o smoke pedir.
 
 ### O que evitar sugerir de novo (já descartado)
 

@@ -161,7 +161,7 @@ Script: `bin/merge-upstream-preserve-sp.sh` (rodar com `bash bin/merge-upstream-
 | **report**   | Sim         | Lista o que falta resolver à mão                              |
 | **scan**     | Sim (v2)    | Compara o WT com o upstream e classifica o que não é SP protegido: **stale** (igual ao pré-merge ou a um `saopaulo-pre-*`), **missing**, **orphan**, **hybrid**. `scan --apply` corrige stale/missing/orphan; hybrid é revisão manual |
 | **verify**   | Sim         | restore-ours intacto + zero unmerged + `scan` sem stale/missing/orphan |
-| **build-check** | Sim (v2, ~15 min) | Carrega todos os namespaces (src, EE, drivers) com `-M:drivers:ee`, compila static-viz e o bundle FE de produção (EE). Falha em `FAIL` / `ERROR in` |
+| **build-check** | Sim (v2, ~15–20 min) | Carrega namespaces (src, EE, drivers) com `-M:drivers:ee`, compila static-viz, roda `tsc --noEmit` e o bundle FE de produção (EE). Falha em `FAIL` / `error TS` / `ERROR in`. Isolar: `BUILD_CHECK_STEPS=tsc` |
 
 **SP protegido** = `restore-ours` + `dual-changed` + `behavior-manual` + `lists/sp-extra.txt` (globs: infra do fork, assets de marca, código SP que ainda só está no manifesto). Nada mais é tratado como SP.
 
@@ -179,7 +179,7 @@ Script: `bin/merge-upstream-preserve-sp.sh` (rodar com `bash bin/merge-upstream-
    - Fixes SP feitos depois do merge (ex.: crash ao salvar question) aparecem como hybrid até entrarem em `sp-extra.txt`.
 6. `bash bin/merge-upstream-preserve-sp.sh verify` (inclui o scan; falha se sobrar stale/missing/orphan).
 7. **Validar o build de produção (lição 63):** `bash bin/merge-upstream-preserve-sp.sh build-check`. O dev (`--hot` + rspack serve) não compila drivers nem namespaces não carregados e trata import quebrado como aviso; o build de produção quebra.
-   - Rodar com BE/FE dev parados (WSL ~8 GiB). Passos isolados: `BUILD_CHECK_STEPS=backend` (≈5 min), `static-viz`, `frontend` (≈7 min).
+   - Rodar com BE/FE dev parados (WSL ~8 GiB). Passos isolados: `BUILD_CHECK_STEPS=backend` (≈5 min), `static-viz`, `tsc` (≈2 min), `frontend` (≈7 min).
    - Critério: `BUILD-CHECK OK` (avisos de tamanho de bundle são normais). Ideal antes do deploy: `./bin/build.sh` completo ou `bin/build-and-push-docker.sh`.
 8. Validar Trilhas com [checklist-smoke-test.md](./checklist-smoke-test.md).
 9. Atualizar o manifesto com conflitos reais (entrada da EDD-1362 e da 1356 v2).

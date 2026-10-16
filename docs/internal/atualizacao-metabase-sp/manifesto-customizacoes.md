@@ -512,7 +512,7 @@ Achados do levantamento:
 
 ### Pendências `tsc` (fora do escopo de tema da EDD-1362)
 
-O build de produção **não** roda `tsc --noEmit` (ainda). Na `EDD-1362` havia **7 erros** (eram 15). Na revisita **EDD-1356-v2**: os 7 foram corrigidos — `tsc --noEmit` = **0 erros**. Próximo: incluir `tsc` no `build-check`.
+Na `EDD-1362` havia **7 erros** `tsc` (eram 15). Na revisita **EDD-1356-v2**: os 7 foram corrigidos e o passo `tsc` entrou no `build-check` (`BUILD_CHECK_STEPS` default inclui `tsc` após `static-viz`).
 
 | # | Arquivo | Erro | Impacto | Status |
 | - | ------- | ---- | ------- | ------ |
@@ -523,9 +523,9 @@ O build de produção **não** roda `tsc --noEmit` (ainda). Na `EDD-1362` havia 
 | — | `Scalar.tsx` + spec | `t` sem import | `ReferenceError` | **feito** (`c11eed5`) |
 | — | `axis.ts` | `triggerEvent` | Tipagem ECharts | **feito** (`c9d0340`) |
 
-Nota: o spec do RowChart ainda tem falhas de **comportamento** (truncate/titleCase EDD-969 vs expectativa do teste) — independentes do `tsc`. Avaliar em smoke/follow-up.
+Nota: o spec do RowChart foi alinhado ao `AXIS_LABEL_MAX_CHARS=10` (EDD-1356-v2).
 
-Como revalidar: com BE/FE parados, `NODE_OPTIONS=--max-old-space-size=5120 bunx tsc --noEmit` (esperado: 0 erros).
+Como revalidar: `BUILD_CHECK_STEPS=tsc bash bin/merge-upstream-preserve-sp.sh build-check` (ou `bunx tsc --noEmit` com BE/FE parados).
 
 ---
 
