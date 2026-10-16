@@ -13,6 +13,7 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 
 | Documento                                                  | Conteúdo                                                                  |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [manual-orientar-ia.md](./manual-orientar-ia.md)           | Manual humano: prompt curto, entrada da IA e docs sob demanda             |
 | [INSTRUCOES-AGENTE.md](./INSTRUCOES-AGENTE.md)             | Bootstrap de contexto para o agente em conversas novas (não perder o fio) |
 | [estratégia-sequencia.md](./estrategia-sequencia.md)       | Cenário atual, ordem correta de atuação e dependências entre as issues    |
 | [issue-edd-1361.md](./issue-edd-1361.md)                   | EDD-1361 — inventário + isolamento mínimo (prep)                          |

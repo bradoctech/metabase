@@ -233,6 +233,7 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 | Arquivo                                                    | Uso                                              |
 | ---------------------------------------------------------- | ------------------------------------------------ |
 | [README.md](./README.md)                                   | Índice humano                                    |
+| [manual-orientar-ia.md](./manual-orientar-ia.md)           | Manual: como orientar a IA (prompt + sob demanda)|
 | [estrategia-sequencia.md](./estrategia-sequencia.md)       | Cenário + sequência + dependências               |
 | [issue-edd-1361.md](./issue-edd-1361.md)                   | Texto oficial / espelho da EDD-1361              |
 | [issue-edd-1362.md](./issue-edd-1362.md)                   | Texto oficial / espelho da EDD-1362              |
@@ -252,9 +253,11 @@ Checklist canônica e detalhada (com onde cada item costuma quebrar): [checklist
 
 ## Como o usuário pode acionar isto numa conversa nova
 
+Manual completo (prompt + tabela sob demanda + regras): [manual-orientar-ia.md](./manual-orientar-ia.md).
+
 Sugestão de prompt:
 
-> Leia `docs/internal/atualizacao-metabase-sp/INSTRUCOES-AGENTE.md` e continue a partir do contexto das issues EDD-1361 / EDD-1355 / EDD-1356 / EDD-1362. Não reinvente a estratégia já decidida.
+> Leia `docs/internal/atualizacao-metabase-sp/INSTRUCOES-AGENTE.md` e continue a partir do contexto das issues EDD-1361 / EDD-1355 / EDD-1356 / EDD-1362. Não reinvente a estratégia já decidida. Para o fluxo: `runbook-atualizacao.md` + `bin/merge-upstream-preserve-sp.sh`; listas em `lists/`; inventário em `manifesto-customizacoes.md`; smoke em `checklist-smoke-test.md`.
 
 ---
 
