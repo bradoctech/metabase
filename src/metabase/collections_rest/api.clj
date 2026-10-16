@@ -13,7 +13,6 @@
    [metabase.api.common :as api]
    [metabase.api.macros :as api.macros]
    [metabase.app-db.core :as mdb]
-   [metabase.collections-rest.settings :as collections-rest.settings]
    [metabase.collections.core :as collections]
    [metabase.collections.models.collection :as collection]
    [metabase.collections.models.collection.root :as collection.root]
@@ -34,7 +33,6 @@
    [metabase.util :as u]
    [metabase.util.honey-sql-2 :as h2x]
    [metabase.util.i18n :refer [tru]]
-   [metabase.util.log :as log]
    [metabase.util.malli :as mu]
    [metabase.util.malli.registry :as mr]
    [metabase.util.malli.schema :as ms]
@@ -174,9 +172,21 @@
     ;; remove the :metabase.collection.models.collection.root/is-root? tag since FE doesn't need it
     ;; and for personal/tenant collections we translate the name to user's locale
     (->> (for [collection collections]
-           (dissoc collection ::collection.root/is-root?))
+           (-> collection
+               (dissoc ::collection.root/is-root?)
+               collection/maybe-mark-collection-as-library-root))
          collection/personal-collections-with-ui-details
          collection/maybe-localize-tenant-collection-names)))
+
+(defn- prep-collection-for-export
+  "Given a collection, tweaks it to be ready for returning to the FE.
+
+  These same functions were called in several places in this namespace, so they're combined here to keep it DRY."
+  [coll]
+  (-> coll
+      collection/personal-collection-with-ui-details
+      collection/maybe-localize-tenant-collection-name
+      collection/maybe-mark-collection-as-library-root))
 
 (defn- shallow-tree-from-collection-id
   "Returns only a shallow Collection in the provided collection-id, e.g.
@@ -194,8 +204,7 @@
   ```"
   [colls]
   (->> colls
-       (map (comp collection/maybe-localize-tenant-collection-name
-                  collection/personal-collection-with-ui-details))
+       (map prep-collection-for-export)
        (collection/collections->tree nil)
        (map (fn [coll] (update coll :children #(boolean (seq %)))))))
 
@@ -282,9 +291,7 @@
                                                                          [:= :archived_at nil]]})
                                                       (map :collection_id)
                                                       (into #{}))}))
-            collections-with-details (map (comp collection/maybe-localize-tenant-collection-name
-                                                collection/personal-collection-with-ui-details)
-                                          collections)]
+            collections-with-details (map prep-collection-for-export collections)]
         (collection/collections->tree collection-type-ids collections-with-details)))))
 
 ;;; --------------------------------- Fetching a single Collection & its 'children' ----------------------------------
@@ -303,7 +310,8 @@
     "no_models"
     "timeline"
     "table"
-    "transform"})
+    "transform"
+    "measure"})
 
 (def ^:private ModelString
   (into [:enum] valid-model-param-values))
@@ -599,29 +607,18 @@
       (assoc :fully_parameterized (queries/fully-parameterized? row))))
 
 (defn- post-process-card-like
-  [{:keys [include-can-run-adhoc-query hydrate-based-on-upload]} rows]
-  (let [threshold              (collections-rest.settings/can-run-adhoc-query-check-threshold)
-        card-count             (count rows)
-        skip-adhoc-hydration?  (u/prog1 (and include-can-run-adhoc-query
-                                             (pos? threshold)
-                                             (> card-count threshold))
-                                 (when <>
-                                   (log/warnf "Skipping can_run_adhoc_query hydration for %d cards (threshold: %d)"
-                                              card-count threshold)))
-        hydration              (cond-> [:can_write
-                                        :can_restore
-                                        :can_delete
-                                        :dashboard_count
-                                        :is_remote_synced
-                                        :collection_namespace
-                                        [:dashboard :moderation_status]]
-                                 (and include-can-run-adhoc-query
-                                      (not skip-adhoc-hydration?)) (conj :can_run_adhoc_query))]
+  [{:keys [hydrate-based-on-upload]} rows]
+  (let [hydration [:can_write
+                   :can_restore
+                   :can_delete
+                   :dashboard_count
+                   :is_remote_synced
+                   :collection_namespace
+                   [:dashboard :moderation_status]]]
     (as-> (map post-process-card-row rows) $
       (apply t2/hydrate $ hydration)
       (cond-> $
-        hydrate-based-on-upload upload/model-hydrate-based-on-upload
-        skip-adhoc-hydration?   (->> (map #(assoc % :can_run_adhoc_query true))))
+        hydrate-based-on-upload upload/model-hydrate-based-on-upload)
       (map post-process-card-row-after-hydrate $))))
 
 (defmethod post-process-collection-children :card
@@ -887,6 +884,7 @@
         (-> (t2/instance :model/Collection row)
             collection/maybe-localize-system-collection-name
             collection/maybe-localize-tenant-collection-name
+            collection/maybe-mark-collection-as-library-root
             (update :archived api/bit->boolean)
             (update :is_remote_synced api/bit->boolean)
             (t2/hydrate :can_write :effective_location :can_restore :can_delete :is_shared_tenant_collection)
@@ -896,8 +894,12 @@
             update-personal-collection)))))
 
 (defmethod post-process-collection-children :table
-  [_ _ _collection rows]
-  (map #(update % :archived api/bit->boolean) rows))
+  [_ {:keys [models]} _collection rows]
+  (let [tables (map #(-> (t2/instance :model/Table %)
+                         (update :archived api/bit->boolean)) rows)]
+    (if (contains? models :measure)
+      (t2/hydrate tables :measures)
+      tables)))
 
 ;;; TODO -- consider whether this function belongs here or in [[metabase.revisions.models.revision.last-edit]]
 (mu/defn- coalesce-edit-info :- revisions/MaybeAnnotated
@@ -1081,14 +1083,15 @@
                                                      [:select :select-distinct])]]
                       (-> query
                           (update select-clause-type add-missing-columns all-select-columns)
-                          (update select-clause-type add-model-ranking model)))
+                          (update select-clause-type add-model-ranking model)
+                          (vary-meta assoc :allow-subquery true)))
         viz-config  {:include-archived-items :all
                      :archive-operation-id nil
                      :permission-level (if archived? :write :read)
                      :include-trash-collection? archived?}
         rows-query  {:with     [[:visible_collection_ids (collection/visible-collection-query viz-config)]]
-                     :select   [:* [[:over [[:count :*] {} :total_count]]]]
-                     :from     [[{:union-all queries} :dummy_alias]]
+                     :select   [:* [[:over [[:count :*] ^:allow-subquery {} :total_count]]]]
+                     :from     [[^:allow-subquery {:union-all queries} :dummy_alias]]
                      :order-by sql-order}
         limit       (request/limit)
         offset      (request/offset)
@@ -1146,8 +1149,7 @@
   Works for either a normal Collection or the Root Collection."
   [collection :- collection/CollectionWithLocationAndIDOrRoot]
   (-> collection
-      collection/personal-collection-with-ui-details
-      collection/maybe-localize-tenant-collection-name
+      prep-collection-for-export
       (t2/hydrate :parent_id
                   :effective_location
                   [:effective_ancestors :can_write]
@@ -1340,11 +1342,10 @@
   changed, that should too."
   [_route-params
    {:keys [models archived namespace pinned_state sort_column sort_direction official_collections_first
-           include_can_run_adhoc_query include_library collection_type
+           include_library collection_type
            show_dashboard_questions]} :- [:map
                                           [:models                      {:optional true} [:maybe Models]]
                                           [:collection_type             {:optional true} CollectionType]
-                                          [:include_can_run_adhoc_query {:default false} [:maybe ms/BooleanValue]]
                                           [:archived                    {:default false} [:maybe ms/BooleanValue]]
                                           [:namespace                   {:optional true} [:maybe ms/NonBlankString]]
                                           [:include_library             {:default false} [:maybe ms/BooleanValue]]
@@ -1361,7 +1362,6 @@
     (collection-children
      root-collection
      {:archived?                   (boolean archived)
-      :include-can-run-adhoc-query include_can_run_adhoc_query
       :show-dashboard-questions?   (boolean show_dashboard_questions)
       :collection-type             collection_type
       :include-library?            include_library
@@ -1377,79 +1377,11 @@
 
 ;;; ----------------------------------------- Creating/Editing a Collection ------------------------------------------
 
-(defn- parent-or-root
-  "From a create request return either the parent collection or the root collection"
-  [{collection-id :parent_id collection-namespace :namespace}]
-  (if collection-id
-    (t2/select-one :model/Collection :id collection-id)
-    (collection/root-collection-with-ui-details collection-namespace)))
-
-(defn- write-check-collection-or-root-collection
-  "Check that you're allowed to write Collection with `collection-id`; if `collection-id` is `nil`, check that you have
-  Root Collection perms."
-  [parent-coll]
-  (api/write-check parent-coll))
-
-(defn- write-check-authority-level
-  "Check that a superuser is creating this collection if they are setting the authority level."
-  [{authority-level :authority_level :as coll}]
-  (when (some? authority-level)
-    ;; make sure only admin and an EE token is present to be able to create an Official token
-    (premium-features/assert-has-feature :official-collections (tru "Official Collections"))
-    (api/check-superuser))
-  coll)
-
-(defenterprise validate-new-tenant-collection!
-  "OSS version. Throws API exceptions if the passed collection is an invalid tenant collection, which in OSS
-  means 'any tenant collection.'"
-  metabase-enterprise.tenants.core
-  [collection]
-  (when (collection/shared-tenant-collection? collection)
-    (throw (ex-info "Cannot create tenant collection on OSS." {:status-code 400})))
-  collection)
-
-(def ^:private CreateCollectionArguments
-  "The arguments to the `POST /api/collection` endpoint, i.e. what the API needs to create a collection."
-  [:map
-   [:name            ms/NonBlankString]
-   [:description     {:optional true} [:maybe ms/NonBlankString]]
-   [:parent_id       {:optional true} [:maybe ms/PositiveInt]]
-   [:namespace       {:optional true} [:maybe ms/NonBlankString]]
-   [:authority_level {:optional true} [:maybe collection/AuthorityLevel]]])
-
-(def ^:private NewCollectionArguments
-  "What we use internally to actually create a collection, i.e. what `t2/insert!` needs to create a collection."
-  (-> CreateCollectionArguments
-      (malli.util/dissoc :parent_id)
-      (malli.util/assoc :location [:maybe ms/NonBlankString])
-      (malli.util/assoc :namespace [:maybe [:or :keyword ms/NonBlankString]])
-      (malli.util/assoc :is_remote_synced [:maybe :boolean])
-      (malli.util/optional-keys [:location])
-      (malli.util/closed-schema)))
-
-(mu/defn- apply-defaults-to-collection :- NewCollectionArguments
-  "Converts `CreateCollectionArguments` into `NewCollectionArguments` - i.e. translates what the API gets into what
-  toucan needs to create a collection."
-  [coll-data :- CreateCollectionArguments]
-  (let [parent-coll (parent-or-root coll-data)]
-    (write-check-collection-or-root-collection parent-coll)
-    (-> (cond-> coll-data
-          (and (:namespace parent-coll)
-               (nil? (:namespace coll-data))) (assoc :namespace (:namespace parent-coll))
-          parent-coll (assoc :location (collection/children-location parent-coll)))
-        (assoc :is_remote_synced (boolean (:is_remote_synced parent-coll)))
-        (select-keys (malli.util/keys NewCollectionArguments)))))
-
-(mu/defn create-collection!
-  "Create a new collection."
-  [coll-data]
-  (u/prog1 (t2/insert-returning-instance!
-            :model/Collection
-            (-> (apply-defaults-to-collection coll-data)
-                write-check-authority-level
-                validate-new-tenant-collection!))
-    (events/publish-event! :event/collection-create {:object <> :user-id api/*current-user-id*})
-    (events/publish-event! :event/collection-touch {:collection-id (:id <>) :user-id api/*current-user-id*})))
+;; Create-collection business logic lives in `metabase.collections.create` so that non-REST
+;; callers (notably the agent API's MCP `create_collection` tool) can use the same entry point
+;; without crossing the module-linter's non-rest -> rest barrier. Re-exported through
+;; `metabase.collections.core` as `create-collection!`, `apply-defaults-to-collection`,
+;; `validate-new-tenant-collection!`, etc.
 
 ;; TODO (Cam 2025-11-25) please add a response schema to this API endpoint, it makes it easier for our customers to
 ;; use our API + we will need it when we make auto-TypeScript-signature generation happen
@@ -1465,7 +1397,7 @@
             [:parent_id       {:optional true} [:maybe ms/PositiveInt]]
             [:namespace       {:optional true} [:maybe ms/NonBlankString]]
             [:authority_level {:optional true} [:maybe collection/AuthorityLevel]]]]
-  (create-collection! body))
+  (collections/create-collection! body))
 
 (defn- maybe-send-archived-notifications!
   "When a collection is archived, all of it's cards are also marked as archived, but this is down in the model layer
@@ -1496,10 +1428,8 @@
         (api/check-403
          (perms/set-has-full-permissions-for-set? @api/*current-user-permissions-set*
                                                   (collection/perms-for-moving collection-before-update new-parent)))
-
         (api/check
          (not (collection/shared-tenant-collection? new-parent)))
-
         ;; ok, we're good to move!
         (collection/move-collection! collection-before-update new-location
                                      (collection/moving-into-remote-synced? (collection/location-path->parent-id orig-location)
@@ -1514,7 +1444,6 @@
     (collection/archive-or-unarchive-collection!
      collection-before-update
      (select-keys collection-updates [:parent_id :archived]))
-
     (maybe-send-archived-notifications! {:collection-before-update collection-before-update
                                          :collection-updates       collection-updates
                                          :actor                    @api/*current-user*})))
@@ -1606,7 +1535,7 @@
    {:keys [namespace revision groups]} :- [:map
                                            [:namespace {:optional true} [:maybe ms/NonBlankString]]
                                            [:revision  {:optional true} [:maybe ms/Int]]
-                                           [:groups    :map]]]
+                                           [:groups    ms/Map]]]
   (api/check-superuser)
   (update-graph! namespace
                  (decode-graph {:revision revision :groups groups})
@@ -1640,7 +1569,6 @@
                                                                   [:description      {:optional true} [:maybe ms/NonBlankString]]
                                                                   [:archived         {:default false} [:maybe ms/BooleanValue]]
                                                                   [:parent_id        {:optional true} [:maybe ms/PositiveInt]]
-                                                                  [:type             {:optional true} [:maybe CollectionType]]
                                                                   [:authority_level  {:optional true} [:maybe collection/AuthorityLevel]]]]
   ;; do we have perms to edit this Collection?
   (let [collection-before-update (t2/hydrate (api/write-check :model/Collection id) :parent_id)]
@@ -1654,7 +1582,7 @@
       (api/check-403 api/*is-superuser?*))
     ;; ok, go ahead and update it! Only update keys that were specified in the `body`. But not `parent_id` since
     ;; that's not actually a property of Collection, and since we handle moving a Collection separately below.
-    (let [updates (u/select-keys-when collection-updates :present [:name :description :authority_level :type])]
+    (let [updates (u/select-keys-when collection-updates :present [:name :description :authority_level])]
       (when (seq updates)
         (t2/update! :model/Collection id updates)))
     ;; if we're trying to move or archive the Collection, go ahead and do that
@@ -1679,8 +1607,8 @@
         new-children-location (:location collection)]
     (api/check-400 (:archived collection)
                    "Collection must be trashed before deletion.")
-    (api/check-400 (contains? #{:tenant-specific :shared-tenant-collections nil} (:namespace collection))
-                   "Collections in non-nil namespaces cannot be deleted.")
+    (api/check-400 (contains? #{:tenant-specific collection/shared-tenant-ns nil} (:namespace collection))
+                   "Only collections in the default or tenant namespaces can be deleted.")
     ;; Shouldn't happen, because they can't be archived either... but juuuuust in case.
     (api/check-400 (nil? (:personal_owner_id collection))
                    "Personal collections cannot be deleted.")
@@ -1709,18 +1637,15 @@
   *  `pinned_state` - when `is_pinned`, return pinned objects only.
                    when `is_not_pinned`, return non pinned objects only.
                    when `all`, return everything. By default returns everything.
-  *  `include_can_run_adhoc_query` - when this is true hydrates the `can_run_adhoc_query` flag on card models
 
   Note that this endpoint should return results in a similar shape to `/api/dashboard/:id/items`, so if this is
   changed, that should too."
   [{:keys [id]} :- [:map
                     [:id [:or ms/PositiveInt ms/NanoIdString]]]
    {:keys [models archived pinned_state sort_column sort_direction official_collections_first
-           include_can_run_adhoc_query
            show_dashboard_questions]} :- [:map
                                           [:models                      {:optional true} [:maybe Models]]
                                           [:archived                    {:default false} [:maybe ms/BooleanValue]]
-                                          [:include_can_run_adhoc_query {:default false} [:maybe ms/BooleanValue]]
                                           [:pinned_state                {:optional true} [:maybe (into [:enum] valid-pinned-state-values)]]
                                           [:sort_column                 {:optional true} [:maybe (into [:enum] valid-sort-columns)]]
                                           [:sort_direction              {:optional true} [:maybe (into [:enum] valid-sort-directions)]]
@@ -1735,7 +1660,6 @@
                                    :include-library?             true
                                    :archived?                   (or archived (:archived collection) (collection/is-trash? collection))
                                    :pinned-state                (keyword pinned_state)
-                                   :include-can-run-adhoc-query include_can_run_adhoc_query
                                    :sort-info                   {:sort-column                 (or (some-> sort_column normalize-sort-choice) :name)
                                                                  :sort-direction              (or (some-> sort_direction normalize-sort-choice) :asc)
                                                                  ;; default to sorting official collections first, except for the trash.

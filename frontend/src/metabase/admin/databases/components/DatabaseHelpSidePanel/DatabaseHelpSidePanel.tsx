@@ -7,7 +7,7 @@ import { useDocsUrl, useSetting } from "metabase/common/hooks";
 import { getHelpUrl } from "metabase/common/utils/help-url";
 import CS from "metabase/css/core/index.css";
 import { getEngines } from "metabase/databases/selectors";
-import { useSelector } from "metabase/lib/redux";
+import { useSelector } from "metabase/redux";
 import { getIsPaidPlan } from "metabase/selectors/settings";
 import { getUserIsAdmin } from "metabase/selectors/user";
 import {
@@ -56,7 +56,7 @@ export const DatabaseHelpSidePanel = ({ engineKey, onClose }: Props) => {
       display="flex"
       flex={{ sm: "1 0 20rem", md: "1 0 26.5rem", base: "1 0 100%" }}
       h="100%"
-      bg="background-primary"
+      bg="background_page-primary"
     >
       <Box p="xl" w="100%">
         <Flex align="baseline" justify="space-between" mb="md">

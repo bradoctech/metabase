@@ -1,5 +1,5 @@
 (ns metabase.lib.expression
-  (:refer-clojure :exclude [+ - * / case coalesce abs time concat replace float mapv some select-keys not-empty get-in every?
+  (:refer-clojure :exclude [+ - * / case abs time concat replace float mapv some select-keys not-empty get-in every?
                             #?(:clj doseq) #?(:clj for)])
   (:require
    [clojure.string :as str]
@@ -23,13 +23,13 @@
    [metabase.lib.schema.temporal-bucketing :as lib.schema.temporal-bucketing]
    [metabase.lib.temporal-bucket :as lib.temporal-bucket]
    [metabase.lib.util :as lib.util]
-   [metabase.lib.util.match :as lib.util.match]
    [metabase.types.core :as types]
    [metabase.util :as u]
    [metabase.util.i18n :as i18n]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
    [metabase.util.malli.registry :as mr]
+   [metabase.util.match :as match]
    [metabase.util.number :as u.number]
    [metabase.util.performance :refer [mapv some select-keys not-empty get-in every? #?(:clj doseq) #?(:clj for)]]))
 
@@ -66,17 +66,17 @@
     stage-number    :- :int
     expression-name :- ::lib.schema.common/non-blank-string]
    (or (maybe-resolve-expression query stage-number expression-name)
-       (log/warnf "Expression %s does not exist in stage %d" (pr-str expression-name) (lib.util/canonical-stage-index query stage-number))
+       (log/warnf "Expression does not exist in stage %d" (lib.util/canonical-stage-index query stage-number))
        (when-let [previous-stage-number (lib.util/previous-stage-number query stage-number)]
          (u/prog1 (resolve-expression query previous-stage-number expression-name)
            (when <>
-             (log/warnf "Found expression %s in previous stage" (pr-str expression-name)))))
+             (log/warn "Found expression in previous stage"))))
        (when (lib.util/first-stage? query stage-number)
          (when-let [source-card (lib.metadata.calculation/primary-source-card query)]
            (u/prog1 (resolve-expression (:dataset-query source-card) expression-name)
              (when <>
-               (log/warnf "Found expression %s in source card %d. Next time, use a :field name ref!"
-                          (pr-str expression-name) (:id source-card))))))
+               (log/warnf "Found expression in source card %d. Next time, use a :field name ref!"
+                          (:id source-card))))))
        (throw (ex-info (i18n/tru "No expression named {0}" (pr-str expression-name))
                        {:expression-name expression-name
                         :query           query
@@ -93,9 +93,15 @@
                                              (lib.metadata.calculation/cacheable-options {})]
     (fn []
       (let [base-type (lib.metadata.calculation/type-of query stage-number expression-ref-clause)]
-        (merge {:lib/type                :metadata/column
-                ;; TODO (Cam 8/7/25) -- is the source UUID of an expression ref supposed to be the ID of the ref, or the ID
-                ;; of the expression definition??
+        ;; special case for when the expression is just a plain field -- pull in the Field ID and Table ID so we can
+        ;; resolve Field ID refs in later stages (fix for a very specific bug, #70233)
+        (merge (let [resolved (resolve-expression query stage-number expression-name)]
+                 (when (lib.util/clause-of-type? resolved :field)
+                   (select-keys (lib.metadata.calculation/metadata query stage-number resolved)
+                                [:id :table-id])))
+               {:lib/type                :metadata/column
+                ;; TODO (Cam 8/7/25) -- is the source UUID of an expression ref supposed to be the ID of the ref, or
+                ;; the ID of the expression definition??
                 :lib/source-uuid         (:lib/uuid opts)
                 :name                    expression-name
                 :lib/expression-name     expression-name
@@ -328,7 +334,7 @@
          expressionable (lib.common/->op-arg expressionable)]
      ;; TODO: This logic was removed as part of fixing #39059. We might want to bring it back for collisions with other
      ;; expressions in the same stage; probably not with tables or earlier stages. De-duplicating names is supported by
-     ;; the QP code, and it should be powered by MLv2 in due course.
+     ;; the QP code, and it should be powered by Lib in due course.
      #_(when (conflicting-name? query stage-number expression-name)
          (throw (ex-info "Expression name conflicts with a column in the same query stage"
                          {:expression-name expression-name})))
@@ -545,7 +551,7 @@
 
 (mu/defn with-expression-name :- ::lib.schema.expression/expression
   "Return a new expression clause like `an-expression-clause` but with name `new-name`.
-  For expressions from the :expressions clause of a pMBQL query this sets the :lib/expression-name option,
+  For expressions from the :expressions clause of a MBQL 5 query this sets the :lib/expression-name option,
   for other expressions (for example named aggregation expressions) the :display-name option is set.
 
   Note that always setting :lib/expression-name would lead to confusion, because that option is used
@@ -567,7 +573,7 @@
          (assoc opts :name new-name :display-name new-name))))))
 
 (def ^:private aggregation-explainer
-  (mr/explainer ::lib.schema.aggregation/aggregation))
+  (mr/explainer ::lib.schema.aggregation/aggregation-with-no-unaggregated-refs))
 
 (def ^:private filter-explainer
   (mr/explainer ::lib.schema.expression/boolean))
@@ -578,7 +584,7 @@
 
 (defn- referred-expressions
   [expr]
-  (set (lib.util.match/match-many expr [:expression _opts x & _] x)))
+  (set (match/match-many expr [:expression _opts x & _] x)))
 
 (defn- aggregation->name
   [query stage-number aggregation]
@@ -586,7 +592,7 @@
 
 (defn- referred-aggregations
   [agg]
-  (set (lib.util.match/match-many agg [:aggregation _opts x & _] x)))
+  (set (match/match-many agg [:aggregation _opts x & _] x)))
 
 (defn- cyclic-definition
   ([node->children]
@@ -692,9 +698,9 @@
   As a special case, it checks that window functions are not embedded in each other
   and in aggregation functions.
 
-  - `expr` is a pMBQL expression usually created from a legacy MBQL expression created
+  - `expr` is a MBQL 5 expression usually created from a legacy MBQL expression created
   using the custom column editor in the FE. It is expected to have been normalized and
-  converted using [[metabase.lib.convert/->pMBQL]].
+  converted using [[metabase.lib.convert/->mbql5]].
   - `expression-mode` specifies what type of thing `expr` is: an :expression (custom column),
   an :aggregation expression, or a :filter condition.
   - `expression-position` is only defined when editing an existing custom column, and in that case
@@ -756,11 +762,11 @@
                                   (-> nested name u/->camelCaseEn u/capitalize-first-char)))
              :friendly true})
           (when (and (= expression-mode :expression)
-                     (lib.util.match/match-lite expr :offset true))
+                     (match/match-one expr :offset true))
             {:message  (i18n/tru "OFFSET is not supported in custom columns")
              :friendly true})
           (when (and (= expression-mode :filter)
-                     (lib.util.match/match-lite expr :offset true))
+                     (match/match-one expr :offset true))
             {:message  (i18n/tru "OFFSET is not supported in custom filters")
              :friendly true})
           (when (and (lib.schema.common/is-clause? :value expr)

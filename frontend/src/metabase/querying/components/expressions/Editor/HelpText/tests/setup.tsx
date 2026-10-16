@@ -1,9 +1,10 @@
 import { setupEnterpriseOnlyPlugin } from "__support__/enterprise";
 import { createMockMetadata } from "__support__/metadata";
 import { mockSettings } from "__support__/settings";
-import { renderWithProviders } from "__support__/ui";
-import { checkNotNull } from "metabase/lib/types";
+import { renderWithProviders, screen, waitFor } from "__support__/ui";
 import { getHelpText } from "metabase/querying/expressions";
+import { createMockState } from "metabase/redux/store/mocks";
+import { checkNotNull } from "metabase/utils/types";
 import * as Lib from "metabase-lib";
 import {
   DEFAULT_TEST_QUERY,
@@ -15,7 +16,6 @@ import {
   SAMPLE_DB_ID,
   createSampleDatabase,
 } from "metabase-types/api/mocks/presets";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { HelpText, type HelpTextProps } from "../HelpText";
 
@@ -71,6 +71,13 @@ export async function setup({
   renderWithProviders(<HelpText {...props} />, {
     storeInitialState: state,
   });
+
+  // The example expression is highlighted asynchronously; wait for it to
+  // settle so its state update does not land after the test has finished.
+  const example = screen.queryByTestId("helptext-example");
+  if (example) {
+    await waitFor(() => expect(example).not.toBeEmptyDOMElement());
+  }
 
   const helpText = getHelpText(
     checkNotNull(enclosingFunction?.name),

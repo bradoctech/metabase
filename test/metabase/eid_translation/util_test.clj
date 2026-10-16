@@ -8,6 +8,7 @@
    [metabase.test :as mt]
    [metabase.test.fixtures :as fixtures]
    [metabase.util :as u]
+   [metabase.util.malli.fn :as mu.fn]
    [toucan2.core :as t2]))
 
 (use-fixtures :once (fixtures/initialize :db))
@@ -22,33 +23,56 @@
            @#'eid-translation.util/api-name->model))))
 
 (deftest ->id-test
-  (#'stats/clear-translation-count!)
-  (is (= (assoc eid-translation/default-counter :total 0)
-         (#'stats/get-translation-count)))
-  (mt/with-temp [:model/Card {card-id :id card-eid :entity_id} {}]
-    (is (= card-id (eid-translation.util/->id :card card-id)))
-    (is (= card-id (eid-translation.util/->id :model/Card card-id)))
-    (is (partial= {:ok 0 :total 0} (#'stats/get-translation-count))
-        "Translations are not counted when they don't occur")
+  (mt/with-temporary-setting-values [synchronous-batch-updates true]
     (#'stats/clear-translation-count!)
-    (is (= card-id (eid-translation.util/->id :card card-eid)))
-    (is (= card-id (eid-translation.util/->id :model/Card card-eid)))
-    (is (partial= {:ok 2 :total 2} (#'stats/get-translation-count))
-        "Translations are counted when they do occur")
-    (#'stats/clear-translation-count!))
+    (is (= (assoc eid-translation/default-counter :total 0)
+           (#'stats/get-translation-count)))
+    (mt/with-temp [:model/Card {card-id :id card-eid :entity_id} {}]
+      (is (= card-id (eid-translation.util/->id :card card-id)))
+      (is (= card-id (eid-translation.util/->id :model/Card card-id)))
+      (is (partial= {:ok 0 :total 0} (#'stats/get-translation-count))
+          "Translations are not counted when they don't occur")
+      (#'stats/clear-translation-count!)
+      (is (= card-id (eid-translation.util/->id :card card-eid)))
+      (is (= card-id (eid-translation.util/->id :model/Card card-eid)))
+      (is (partial= {:ok 2 :total 2} (#'stats/get-translation-count))
+          "Translations are counted when they do occur")
+      (#'stats/clear-translation-count!))
+    (let [samples (t2/select-fn->fn :id :entity_id [:model/Card :id :entity_id] {:limit 100})]
+      (when (seq samples)
+        (doseq [[card-id entity-id] samples]
+          (testing (str "card-id: " card-id " entity-id: " entity-id)
+            (is (= card-id (eid-translation.util/->id :model/Card card-id)))
+            (is (= card-id (eid-translation.util/->id :card card-id)))
+            (is (= card-id (eid-translation.util/->id :model/Card entity-id)))
+            (is (= card-id (eid-translation.util/->id :card entity-id)))))
+        (is (malli= [:map [:ok pos-int?] [:total pos-int?]]
+                    (#'stats/get-translation-count)))))))
 
-  (let [samples (t2/select-fn->fn :id :entity_id [:model/Card :id :entity_id] {:limit 100})]
-    (when (seq samples)
-      (doseq [[card-id entity-id] samples]
-        (testing (str "card-id: " card-id " entity-id: " entity-id)
-
-          (is (= card-id (eid-translation.util/->id :model/Card card-id)))
-          (is (= card-id (eid-translation.util/->id :card card-id)))
-
-          (is (= card-id (eid-translation.util/->id :model/Card entity-id)))
-          (is (= card-id (eid-translation.util/->id :card entity-id)))))
-      (is (malli= [:map [:ok pos-int?] [:total pos-int?]]
-                  (#'stats/get-translation-count))))))
+(deftest ^:parallel ->id-rejects-non-scalar-id-test
+  (testing "->id must refuse anything that is not a positive integer or an entity-id string, as a RUNTIME check that
+            does not depend on mu/defn instrumentation -- those schemas are compiled out of production builds, so a
+            non-scalar value (e.g. a keyword-keyed map decoded from a JWT claim) would otherwise pass straight through
+            into a Toucan2 value position and be compiled as HoneySQL query structure rather than bound as a parameter."
+    ;; `*enforce*` false emulates a production JAR, where mu/defn `:-` schemas emit no validation code.
+    (binding [mu.fn/*enforce* false]
+      (testing "a keyword-keyed map (the injection shape) is rejected with a 400, in both name and model forms"
+        (doseq [model [:model/Card :card :model/Dashboard :dashboard]]
+          (is (thrown-with-msg?
+               clojure.lang.ExceptionInfo #"(?i)invalid id"
+               (eid-translation.util/->id model {:raw "SELECT 1 --"})))
+          (is (= 400 (:status-code (ex-data (try (eid-translation.util/->id model {:raw "SELECT 1 --"})
+                                                 (catch clojure.lang.ExceptionInfo e e)))))))
+        (is (thrown-with-msg?
+             clojure.lang.ExceptionInfo #"(?i)invalid id"
+             (eid-translation.util/->id :model/Card {:select [:*] :from [:core_user]}))))
+      (testing "other non-scalar / non-positive shapes are rejected too"
+        (doseq [bad [[1 2 3] #{1} 0 -5 1.5 true]]
+          (is (thrown? clojure.lang.ExceptionInfo (eid-translation.util/->id :model/Card bad))
+              (str "should reject " (pr-str bad)))))
+      (testing "a genuine positive integer id still passes through unchanged"
+        (mt/with-temp [:model/Card {card-id :id} {}]
+          (is (= card-id (eid-translation.util/->id :model/Card card-id))))))))
 
 (deftest ^:parallel entity-id-single-card-translations-test
   (mt/with-temp
@@ -148,11 +172,9 @@
     (mt/with-temp [:model/Card {card-id :id card-eid :entity_id} {}]
       (is (= card-id (eid-translation.util/->id-or-404 :card card-id)))
       (is (= card-id (eid-translation.util/->id-or-404 :card card-eid)))))
-
   (testing "->id-or-404 should throw 404 error for non-existent entity IDs"
     (is (thrown-with-msg? Exception #"Not found\."
                           (eid-translation.util/->id-or-404 :card "abcdefghijklmnopqrstu"))))
-
   (testing "->id-or-404 should preserve original error for invalid format"
     (is (thrown-with-msg? Exception #"problem looking up id from entity_id"
                           (eid-translation.util/->id-or-404 :card "invalid-format")))))

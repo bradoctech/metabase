@@ -60,10 +60,12 @@
     (prose-mirror/collect-ast document (fn [{:keys [type attrs]}]
                                          (cond
                                            (and (= prose-mirror/smart-link-type type)
-                                                (#{"card" "dashboard" "table" "document"} (:model attrs)))
+                                                (#{"card" "dashboard" "table" "document"} (:model attrs))
+                                                (pos-int? (:entityId attrs)))
                                            [(keyword (:model attrs)) (:entityId attrs)]
 
-                                           (= prose-mirror/card-embed-type type)
+                                           (and (= prose-mirror/card-embed-type type)
+                                                (pos-int? (:id attrs)))
                                            [:card (:id attrs)]
 
                                            :else
@@ -83,12 +85,12 @@
 
 (defmethod calculate-deps* :transform
   [_ {{:keys [query]} :source :as transform}]
-  (let [source-type (transforms-base.u/transform-type transform)]
-    (case source-type
-      :query (upstream-deps:query query)
-      :python (upstream-deps:python-transform transform)
-      (do (log/warnf "Don't know how to analyze the deps of Transform %d with source type '%s'" (:id transform) source-type)
-          {}))))
+  (cond
+    (transforms-base.u/query-transform? transform)  (upstream-deps:query query)
+    (transforms-base.u/python-transform? transform) (upstream-deps:python-transform transform)
+    :else (do (log/warnf "Don't know how to analyze the deps of Transform %d with source type '%s'"
+                         (:id transform) (-> transform :source :type))
+              {})))
 
 (defmethod calculate-deps* :snippet
   [_ {:keys [template_tags] :as _snippet}]
@@ -109,7 +111,8 @@
         vis-setting-target-ids (fn [link-type]
                                  (into #{} (keep (fn [dashcard]
                                                    (let [cb (:click_behavior (:visualization_settings dashcard))]
-                                                     (when (= (:linkType cb) link-type)
+                                                     (when (and (= (:linkType cb) link-type)
+                                                                (pos-int? (:targetId cb)))
                                                        (:targetId cb))))
                                                  dashcards)))
         vis-setting-card-ids (vis-setting-target-ids "question")
@@ -119,7 +122,8 @@
                                             (map (fn [dashcard]
                                                    (keep (fn [[_col col-setting]]
                                                            (let [cb (:click_behavior col-setting)]
-                                                             (when (= (:linkType cb) link-type)
+                                                             (when (and (= (:linkType cb) link-type)
+                                                                        (pos-int? (:targetId cb)))
                                                                (:targetId cb))))
                                                          (:column_settings (:visualization_settings dashcard))))
                                                  dashcards)))

@@ -6,7 +6,9 @@
 (mr/def ::middleware-options
   "Additional options that can be used to toggle middleware on or off."
   [:map
-   {:decode/normalize lib.schema.common/normalize-map}
+   {:decode/normalize lib.schema.common/normalize-map
+    :decode/api       lib.schema.common/remove-internal-keys
+    :encode/serialize lib.schema.common/remove-internal-keys}
    [:skip-results-metadata?
     {:optional true
      :description
@@ -14,14 +16,12 @@
      `metabase.query-processor.middleware.results-metadata`; default `false`. (Note: we may change the name of this
      column in the near future, to `result_metadata`, to fix inconsistencies in how we name things.)"}
     :boolean]
-
    [:format-rows?
     {:optional true
      :description
      "Should we skip converting datetime types to ISO-8601 strings with appropriate timezone when post-processing
      results? Used by `metabase.query-processor.middleware.format-rows`default `false`."}
     :boolean]
-
    [:disable-mbql->native?
     {:optional true
      :description
@@ -29,14 +29,12 @@
   you should set this yourself. This is only used by the `metabase.query-processor.preprocess/preprocess` function to
   get the fully pre-processed query without attempting to convert it to native."}
     :boolean]
-
    [:disable-max-results?
     {:optional true
      :description
      "Disable applying a default limit on the query results. Handled in the `add-default-limit` middleware. If true,
   this will override the `:max-results` and `:max-results-bare-rows` values in `Constraints`."}
     :boolean]
-
    [:userland-query?
     {:optional true
      :description
@@ -44,7 +42,6 @@
   certain userland-only middleware for such queries -- results are returned in a slightly different format, and
   QueryExecution entries are normally saved, unless you pass `:no-save` as the option."}
     [:maybe :boolean]]
-
    [:add-default-userland-constraints?
     {:optional true
      :description
@@ -52,11 +49,22 @@
   although the functions that ultimately power most API endpoints tend to set this to `true`. See
   `add-constraints` middleware for more details."}
     [:maybe :boolean]]
-
    [:process-viz-settings?
     {:optional true
      :description
      "Whether to process a question's visualization settings and include them in the result metadata so that they can
   incorporated into an export. Used by `metabase.query-processor.middleware.visualization-settings`; default
+  `false`."}
+    [:maybe :boolean]]
+   [:js-int-to-string?
+    {:optional true
+     :description
+     "Whether to convert bigint values in results to strings so that they can be parsed losslessly by JavaScript
+  clients. Used by `metabase.query-processor.middleware.large-int`; default `false`."}
+    [:maybe :boolean]]
+   [:ignore-cached-results?
+    {:optional true
+     :description
+     "Whether to ignore any cached results and re-run the query. Used by the query results cache middleware; default
   `false`."}
     [:maybe :boolean]]])

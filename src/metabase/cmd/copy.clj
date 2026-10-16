@@ -14,6 +14,7 @@
    [metabase.models.init]
    [metabase.models.resolution :as models.resolution]
    [metabase.util :as u]
+   [metabase.util.encryption :as encryption]
    [metabase.util.i18n :refer [trs]]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
@@ -59,6 +60,7 @@
     :model/Database
     :model/User
     :model/Setting
+    :model/EmbeddingTheme
     :model/Table
     :model/Field
     :model/FieldValues
@@ -127,17 +129,42 @@
     :model/Measure
     ;; 60+
     :model/OAuthClient
+    :model/OAuthClientEvent
     :model/OAuthAuthorizationCode
     :model/OAuthAccessToken
     :model/OAuthRefreshToken
     :model/Metabot
     :model/MetabotConversation
     :model/MetabotMessage
-    :model/MetabotPrompt]
+    :model/MetabotFeedback
+    :model/MetabotSourceFeedback
+    :model/MetabotUsedTable
+    :model/MetabotPrompt
+    :model/OsiAiContext
+    ;; 61+, by table name: migrations create and seed it on every edition, but its model is EE-only
+    :metabot_permissions
+    ;; Not in dependency order, and cannot be: `transform.target_table_id` and `metabase_table.transform_id`
+    ;; point at each other. Order does not matter -- `copy!` defers or disables FK checks for the whole load.
+    :model/Transform
+    :model/TransformTag
+    :model/TransformTransformTag
+    :model/TransformJob
+    :model/TransformJobTransformTag
+    ;; Serialization never exports run history; a whole-instance move keeps it.
+    ;; A run still in flight at dump time arrives marked running, and the transform timeout job reaps it.
+    :model/TransformJobRun
+    :model/TransformRun
+    :model/TransformRunCancelation]
    (when config/ee-available?
-     [:model/Sandbox
+     [:model/MetabotGroupLimit
+      :model/MetabotInstanceLimit
+      :model/Sandbox
       :model/Tenant
-      :model/ConnectionImpersonation])))
+      :model/ConnectionImpersonation
+      :model/CustomVizPlugin
+      :model/Workspace
+      :model/WorkspaceDatabase
+      :model/TableRemapping])))
 
 (defn- objects->columns+values
   "Given a sequence of objects/rows fetched from the H2 DB, return a the `columns` that should be used in the `INSERT`
@@ -164,7 +191,7 @@
     (let [{:keys [cols vals]} (objects->columns+values target-db-type chunkk)]
       (jdbc/insert-multi! target-db-conn-spec table-name cols vals {:transaction? false}))
     (catch SQLException e
-      (log/error (with-out-str (jdbc/print-sql-exception-chain e)))
+      (log/errorf "Error inserting chunk: %s" (ex-message e))
       (throw e))))
 
 (def ^:dynamic *copy-h2-database-details*
@@ -177,6 +204,9 @@
   [model]
   (case model
     :model/Field {:order-by [[:id :asc]]}
+    ;; dumps made by an OSS build before this table was copied still hold the rows the target's own migrations seeded,
+    ;; which can point at group ids the source never had
+    :metabot_permissions {:where [:in :group_id {:select [:id] :from [:permissions_group]}]}
     nil))
 
 (defn- sql-for-selecting-instances-from-source-db [model]
@@ -199,7 +229,7 @@
            (cond-> database
              (or (:is_attached_dwh database)
                  (and (not *copy-h2-database-details*)
-                      (= (:engine database) "h2"))) (assoc :details "{}"))))
+                      (= (:engine database) "h2"))) (assoc :details (encryption/maybe-encrypt "{}")))))
 
     :model/Setting
     ;; Never create dumps with read-only-mode turned on.
@@ -213,6 +243,10 @@
     :model/Field
     ;; unique_field_helper is a computed/generated column
     (map #(dissoc % :unique_field_helper))
+
+    :model/DataPermissions
+    ;; unique_perms_helper is a computed/generated column
+    (map #(dissoc % :unique_perms_helper))
 
     ;; else
     identity))
@@ -342,7 +376,6 @@
         (let [save-point (.setSavepoint conn)]
           (try
             (letfn [(add-batch! [^String sql]
-                      (log/debug (u/colorize :yellow sql))
                       (.addBatch stmt sql))]
               ;; do these in reverse order so child rows get deleted before parents
               (doseq [table-name (map t2/table-name (reverse entities))]
@@ -370,7 +403,10 @@
     :model/FieldUserSettings
     :model/QueryAction
     :model/MetabotConversation
-    :model/ModelIndexValue})
+    :model/ModelIndexValue
+    :model/OsiAiContext
+    ;; `transform_run_cancelation` uses its `run_id` FK as its primary key
+    :model/TransformRunCancelation})
 
 (defmulti ^:private postgres-id-sequence-name
   {:arglists '([model])}
@@ -423,6 +459,24 @@
                                         table-name table-name)]]
         (jdbc/execute! target-db-conn sql)))))
 
+(def ^:private metabot-permissions-seed-sql
+  "The seed of changeset v61.98kjjhf. Dumps made by an OSS build before this table was copied hold the dumping build's
+  seed rows under its own group ids, so the source's magic groups can arrive with none."
+  "INSERT INTO metabot_permissions (group_id, perm_type, perm_value)
+   SELECT pg.id, d.perm_type, d.perm_value
+   FROM permissions_group pg
+   CROSS JOIN (
+     SELECT 'permission/metabot' AS perm_type, 'yes' AS perm_value
+     UNION ALL SELECT 'permission/metabot-sql-generation', 'yes'
+     UNION ALL SELECT 'permission/metabot-nlq', 'yes'
+     UNION ALL SELECT 'permission/metabot-other-tools', 'yes'
+   ) AS d
+   WHERE pg.magic_group_type IN ('admin', 'all-internal-users', 'data-analyst', 'all-external-users')
+     AND NOT EXISTS (
+       SELECT 1 FROM metabot_permissions mp
+       WHERE mp.group_id = pg.id AND mp.perm_type = d.perm_type
+     )")
+
 (mu/defn copy!
   "Copy data from a source application database into an empty destination application database."
   [source-db-type     :- [:enum :h2 :postgres :mysql]
@@ -434,14 +488,18 @@
                     (not config/ee-available?)
                     (remove #(str/starts-with? (str %) "metabase-enterprise")))]
     (classloader/require ns-symb))
-  ;; make sure the source database is up-do-date
+  ;; make sure the source database is up-do-date. Skip the encryption check: the source may legitimately be unencrypted
+  ;; while MB_ENCRYPTION_SECRET_KEY is set for the target (enabling encryption while migrating off H2); rows are copied
+  ;; as-is and [[metabase.cmd.load-from-h2/load-from-h2!]] encrypts the target afterwards.
   (step (trs "Set up {0} source database and run migrations..." (name source-db-type))
-    (mdb.setup/setup-db! source-db-type source-data-source true false))
+    (mdb.setup/setup-db! source-db-type source-data-source {:manage-encryption-state? false}))
   ;; make sure the dest DB is up-to-date
   ;;
-  ;; don't need or want to run data migrations in the target DB, since the data is already migrated appropriately
+  ;; don't need or want to run data migrations in the target DB, since the data is already migrated appropriately.
+  ;; Skip the encryption check too: whatever it would write is truncated below along with the other migration-created
+  ;; rows, and the caller decides the target's encryption state from the copied sentinel afterwards.
   (step (trs "Set up {0} target database and run migrations..." (name target-db-type))
-    (mdb.setup/setup-db! target-db-type target-data-source true false))
+    (mdb.setup/setup-db! target-db-type target-data-source {:manage-encryption-state? false}))
   ;; make sure target DB is empty
   (step (trs "Testing if target {0} database is already populated..." (name target-db-type))
     (assert-has-no-users target-data-source))
@@ -458,4 +516,6 @@
       (with-disabled-db-constraints target-db-type target-conn-spec
         (copy-data! source-data-source target-db-type target-conn-spec))))
   ;; finally, update sequence values (if needed)
-  (update-sequence-values! target-db-type target-data-source))
+  (update-sequence-values! target-db-type target-data-source)
+  (step (trs "Seeding metabot permissions for magic groups without any...")
+    (jdbc/execute! {:datasource target-data-source} [metabot-permissions-seed-sql])))

@@ -13,6 +13,7 @@ When using results:
 - **Be proactive with clear matches**: When the top result(s) have names or descriptions that clearly match the user's request, use them to achieve the users goal first, then list alternatives at the end. Don't ask for confirmation when there's an obvious best choice.
 - **Collection metadata**: Results may include collection information (name, description, authority level) that can help you determine whether the result is relevant to the user's query. Use this context to assess relevance.
 - **Present options for ambiguous results**: When search returns multiple plausible options without a clear best match, present them and ask the user to choose
+- **Drill in via the `uri` attribute**: To inspect a result's details, pass its `uri` attribute to `read_resource` (append `/fields` for a table/model/question's columns). URIs always use the numeric `id` — never put a `portable_entity_id` in a URI; that value belongs only in `construct_notebook_query` query text (`source-card:` and metric/measure/segment references)
 - Reference results using the metabase protocol link format: [display name](metabase://type/id)
 
 Examples: [Customer Metrics](metabase://metric/42), [Sales Dashboard](metabase://dashboard/158)")
@@ -20,7 +21,7 @@ Examples: [Customer Metrics](metabase://metric/42), [Sales Dashboard](metabase:/
 (def entity-metadata-instructions
   "Instructions for LLM when processing entity metadata (tables, models, metrics)."
   "The data above contains the metadata for the requested tables, models, and metrics.
-Metabot needs to:
+The assistant needs to:
 - Use this metadata to understand the structure of the data
 - Handle ambiguous field names by asking clarifying questions if necessary.
 - Always check the actual field values before applying filters to avoid empty results.")
@@ -30,7 +31,7 @@ Metabot needs to:
   "The field values above are sample data (like df.sample(n).describe() in pandas) - a
 statistical snapshot of a subset of rows, not the complete dataset.
 
-Metabot needs to:
+The assistant needs to:
 - Use these samples to understand FORMAT patterns: how values are structured (codes vs names,
   capitalization, date formats, numeric encodings)
 - Understand that samples show rough ranges but not all possible values - the full dataset may
@@ -66,7 +67,7 @@ Reference items using: [name](metabase://type/id)")
   "Generate instructions for a newly created SQL query, embedding the query ID
    in the link template. Matches Python CreateSQLQueryToolV2._create_result."
   [query-id]
-  (str "Metabot needs to:\n"
+  (str "The assistant needs to:\n"
        "- Remember you cannot view the results directly yourself\n"
        "- Always provide a direct link using `[Link text](metabase://query/" query-id ")` "
        "so the user can open it themselves\n"

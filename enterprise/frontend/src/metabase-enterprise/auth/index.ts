@@ -1,5 +1,3 @@
-import { LOGIN, LOGIN_GOOGLE } from "metabase/auth/actions";
-import MetabaseSettings from "metabase/lib/settings";
 import {
   PLUGIN_AUTH_PROVIDERS,
   PLUGIN_IS_PASSWORD_USER,
@@ -7,6 +5,8 @@ import {
   PLUGIN_REDUX_MIDDLEWARES,
 } from "metabase/plugins";
 import type { AuthProvider } from "metabase/plugins/types";
+import { LOGIN, LOGIN_GOOGLE } from "metabase/redux/auth";
+import MetabaseSettings from "metabase/utils/settings";
 import { hasPremiumFeature } from "metabase-enterprise/settings";
 import type { OidcAuthProvider, User } from "metabase-types/api";
 

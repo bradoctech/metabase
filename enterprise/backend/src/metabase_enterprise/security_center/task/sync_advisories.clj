@@ -9,6 +9,7 @@
    [java-time.api :as t]
    [metabase-enterprise.security-center.fetch :as fetch]
    [metabase-enterprise.security-center.matching :as matching]
+   [metabase-enterprise.security-center.metrics :as metrics]
    [metabase-enterprise.security-center.notification :as notification]
    [metabase-enterprise.security-center.settings :as settings]
    [metabase.premium-features.core :as premium-features]
@@ -51,8 +52,8 @@
     (try
       (notification/notify-advisory! advisory)
       (catch Exception e
-        (log/warnf e "Failed to send repeat notification for advisory %s"
-                   (:advisory_id advisory))))))
+        (log/warnf "Failed to send repeat notification for advisory %s: %s"
+                   (:advisory_id advisory) (ex-message e))))))
 
 ;;; ----------------------------------------- Sync + evaluate + notify -----------------------------------------------
 
@@ -63,17 +64,18 @@
     (log/info "Syncing security advisories")
     (try
       (fetch/sync-advisories!)
+      (settings/security-center-last-synced-at! (t/offset-date-time))
       (catch Exception e
-        (log/warn e "Error fetching advisories from HM")))
+        (log/warnf "Error fetching advisories from HM: %s" (ex-message e))))
     (try
       (matching/evaluate-all-advisories!)
       (catch Exception e
-        (log/warn e "Error re-evaluating advisories")))
+        (log/warnf "Error re-evaluating advisories: %s" (ex-message e))))
     (try
       (send-repeat-notifications!)
       (catch Exception e
-        (log/warn e "Error sending repeat notifications")))
-    (settings/security-center-last-synced-at! (t/offset-date-time))))
+        (log/warnf "Error sending repeat notifications: %s" (ex-message e))))
+    (metrics/refresh-metrics!)))
 
 (task/defjob ^{:doc "Periodically fetch and re-evaluate security advisories."
                DisallowConcurrentExecution true} SyncAdvisories [_]
@@ -95,6 +97,9 @@
                      (cron/cron-schedule cron-str)
                      (cron/with-misfire-handling-instruction-do-nothing))))]
       (task/schedule-task! job trigger)
+      ;; Populate metrics from existing appdb state so freshness and vulnerability
+      ;; gauges survive restarts without waiting for the next scheduled sync.
+      (metrics/refresh-metrics!)
       ;; on first run of the feature, we sync immediately to seed advisories
       (when-not (settings/security-center-last-synced-at)
         (task/trigger-now! (jobs/key job-key))))))

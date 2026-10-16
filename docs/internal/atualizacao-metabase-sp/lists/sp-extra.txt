@@ -1,0 +1,23 @@
+# SP protegido fora dos 3 buckets (EDD-1356 v2).
+# O `scan` nunca marca estes paths como stale/órfão nem os reverte para o upstream.
+# Não entram no restore automático: revisar à mão após o merge.
+# Aceita glob (* casa qualquer coisa, inclusive /).
+#
+# Código FE que estava aqui foi classificado na EDD-1362 (Passo 4)
+# → dual-changed (tema/DS/login/charts) ou behavior-manual (969/endurecimentos).
+
+# Infra / processo do fork
+bin/docker/Dockerfile
+bin/build-and-push-docker.sh
+bin/merge-upstream-preserve-sp.sh
+mise.toml
+.husky/pre-commit
+docs/internal/*
+
+# Marca: fontes, imagens, favicons
+resources/frontend_client/app/fonts/Rawline/*
+resources/frontend_client/app/assets/img/*
+resources/frontend_client/app/img/*
+
+# Tradução SP
+locales/metabase.po

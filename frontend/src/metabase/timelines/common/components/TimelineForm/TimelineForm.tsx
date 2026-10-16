@@ -2,14 +2,13 @@ import { useMemo } from "react";
 import { t } from "ttag";
 import * as Yup from "yup";
 
-import { Button } from "metabase/common/components/Button";
 import { FormErrorMessage } from "metabase/common/components/FormErrorMessage";
 import { FormInput } from "metabase/common/components/FormInput";
-import { FormSubmitButton } from "metabase/common/components/FormSubmitButton";
 import { FormTextArea } from "metabase/common/components/FormTextArea";
-import { Form, FormProvider } from "metabase/forms";
-import * as Errors from "metabase/lib/errors";
-import { getTimelineIcons } from "metabase/lib/timelines";
+import { getTimelineIcons } from "metabase/common/utils/timelines";
+import { Form, FormProvider, FormSubmitButton } from "metabase/forms";
+import { Button } from "metabase/ui";
+import * as Errors from "metabase/utils/errors";
 import type { TimelineData } from "metabase-types/api";
 
 import FormArchiveButton from "../FormArchiveButton";
@@ -66,9 +65,9 @@ const TimelineForm = ({
               {t`Cancel`}
             </Button>
             <FormSubmitButton
-              title={isNew ? t`Create` : t`Update`}
+              label={isNew ? t`Create` : t`Update`}
               disabled={!dirty}
-              primary
+              variant="filled"
             />
           </TimelineFormFooter>
         </Form>

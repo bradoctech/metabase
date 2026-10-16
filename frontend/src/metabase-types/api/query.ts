@@ -1,10 +1,10 @@
 import type * as Lib from "metabase-lib";
-import type { UiParameter } from "metabase-lib/v1/parameters/types";
 
 import type { CardId } from "./card";
 import type { DatabaseId } from "./database";
 import type { TemplateTag, TemplateTags, TemporalUnit } from "./dataset";
 import type { FieldId } from "./field";
+import type { Parameter } from "./parameters";
 import type { SegmentId } from "./segment";
 import type { TableId } from "./table";
 
@@ -20,7 +20,7 @@ export interface StructuredDatasetQuery {
 
   // Database is null when missing data permissions to the database
   database: DatabaseId | null;
-  parameters?: UiParameter[];
+  parameters?: Parameter[];
 }
 
 export interface NativeDatasetQuery {
@@ -29,7 +29,7 @@ export interface NativeDatasetQuery {
 
   // Database is null when missing data permissions to the database
   database: DatabaseId | null;
-  parameters?: UiParameter[];
+  parameters?: Parameter[];
 }
 
 export type DatasetQuery = OpaqueDatasetQuery | LegacyDatasetQuery;
@@ -157,7 +157,8 @@ type NestedQueryTableId = string;
 type SourceTableId = TableId | NestedQueryTableId;
 
 export type StructuredQuery = {
-  "source-table"?: SourceTableId;
+  // `null` is the legacy MBQL marker for a not-yet-selected source table
+  "source-table"?: SourceTableId | null;
   "source-query"?: StructuredQuery;
   aggregation?: AggregationClause;
   breakout?: BreakoutClause;

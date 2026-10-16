@@ -147,10 +147,13 @@ export const StepperWithCards = ({ steps }: { steps: StepperStep[] }) => {
                                       <Group gap="xs">
                                         <Icon
                                           name="check"
-                                          c="success-secondary"
+                                          c="feedback-positive-selected"
                                           size={12}
                                         />
-                                        <Text size="sm" c="success-secondary">
+                                        <Text
+                                          size="sm"
+                                          c="feedback-positive-selected"
+                                        >
                                           {t`Done`}
                                         </Text>
                                       </Group>
@@ -236,7 +239,7 @@ const StepAlert = ({
   <Alert
     icon={<Icon size={14} name={type === "success" ? "check" : "info"} />}
     mt="xl"
-    color={type === "info" ? "brand" : type}
+    color={type === "info" ? "core-brand" : type}
     lh="lg"
     classNames={{
       wrapper: S.infoAlertWrapper,

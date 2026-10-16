@@ -12,8 +12,7 @@ export const getFont = createSelector(
     } else if (!_.isEmpty(settings["application-font-files"])) {
       return "Custom";
     } else {
-      // SP: keep charts/labels aligned with GlobalStyles (--mb-default-font-family)
-      return "Rawline";
+      return settings["application-font"];
     }
   },
 );

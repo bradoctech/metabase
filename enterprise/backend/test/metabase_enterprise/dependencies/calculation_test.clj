@@ -2,6 +2,7 @@
   (:require
    [clojure.test :refer [deftest is testing]]
    [metabase-enterprise.dependencies.calculation :as calculation]
+   [metabase.documents.prose-mirror :as prose-mirror]
    [metabase.lib.core :as lib]
    [metabase.lib.metadata :as lib.metadata]
    [metabase.lib.test-util.notebook-helpers :as lib.tu.notebook]
@@ -448,7 +449,6 @@
                                              :definition {:filter [:> [:field price-field-id nil] 50]}}]
         (is (= {:segment #{} :table #{products-id}}
                (calculation/calculate-deps :segment segment)))))
-
     (testing "segment depending on another segment"
       (mt/with-temp [:model/Segment {segment-a-id :id :as segment-a} {:table_id products-id
                                                                       :definition {:filter [:> [:field price-field-id nil] 50]}}
@@ -528,7 +528,6 @@
                                                              (lib/aggregate (lib/sum quantity)))}]
         (is (= {:measure #{} :segment #{} :table #{orders-id}}
                (calculation/calculate-deps :measure measure)))))
-
     (testing "measure depending on another measure"
       (mt/with-temp [:model/Measure {measure-a-id :id :as measure-a} {:name "Measure A"
                                                                       :table_id orders-id
@@ -618,3 +617,25 @@
                                                                  (lib/aggregate (lib/sum-where quantity (lib/ref segment-meta))))}]
             (is (= {:measure #{} :segment #{segment-id} :table #{orders-id}}
                    (calculation/calculate-deps :measure measure)))))))))
+
+(deftest ^:parallel non-integer-ids-are-discarded-during-extraction-test
+  (testing "a document smartLink whose entityId is a map is dropped rather than forwarded"
+    (is (empty? (#'calculation/document-deps
+                 {:content_type prose-mirror/prose-mirror-content-type
+                  :document {:type "doc"
+                             :content [{:type "smartLink"
+                                        :attrs {:model "card" :entityId {:raw "x"}}}]}}))))
+  (testing "a dashcard click_behavior whose targetId is a map is dropped"
+    (let [deps (calculation/calculate-deps*
+                :dashboard
+                {:dashcards [{:visualization_settings
+                              {:click_behavior {:linkType "question"
+                                                :targetId {:raw "x"}}}}]})]
+      (is (empty? (:card deps)))
+      (is (empty? (:dashboard deps)))))
+  (testing "a legitimate integer targetId is still collected"
+    (let [deps (calculation/calculate-deps*
+                :dashboard
+                {:dashcards [{:visualization_settings
+                              {:click_behavior {:linkType "question" :targetId 7777}}}]})]
+      (is (= #{7777} (:card deps))))))

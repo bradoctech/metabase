@@ -1,5 +1,4 @@
 (ns metabase-enterprise.serialization.cmd
-  (:refer-clojure :exclude [load])
   (:require
    [clojure.java.io :as io]
    [clojure.string :as str]
@@ -124,7 +123,7 @@
                              :direction       "export"
                              :source          "cli"
                              :duration_ms     (int (/ (- (System/nanoTime) start) 1e6))
-                             :count           (count (:seen report))
+                             :count           (reduce + 0 (vals (:entity-counts report)))
                              :error_count     (count (:errors report))
                              :collection      (str/join "," collection-ids)
                              :all_collections (and (empty? collection-ids)
@@ -132,7 +131,8 @@
                              :data_model      (not (:no-data-model opts))
                              :settings        (not (:no-settings opts))
                              :field_values    (boolean (:include-field-values opts))
-                             :secrets         (boolean (:include-database-secrets opts))
+                             ;; Database connection secrets are never exported; kept in the schema for compatibility.
+                             :secrets         false
                              :success         (nil? @err)
                              :error_message   (when @err
                                                 (u/strip-error @err nil))})
@@ -143,6 +143,9 @@
       (throw (ex-info (ex-message @err) {:cmd/exit true})))
     (log/info (format "Export to '%s' complete!" path) (u/emoji "🚛💨 📦"))
     report))
+
+(comment
+  (v2-dump! "/tmp/serdes" {}))
 
 (defn seed-entity-ids!
   "Add entity IDs for instances of serializable models that don't already have them.

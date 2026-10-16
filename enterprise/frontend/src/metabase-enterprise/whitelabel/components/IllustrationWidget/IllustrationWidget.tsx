@@ -4,12 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { t } from "ttag";
 
 import { SettingHeader } from "metabase/admin/settings/components/SettingHeader";
-import {
-  BasicAdminSettingInput,
-  SetByEnvVar,
-} from "metabase/admin/settings/components/widgets/AdminSettingInput";
+import { BasicAdminSettingInput } from "metabase/admin/settings/components/widgets/AdminSettingInput";
 import { useAdminSetting } from "metabase/api/utils";
 import { LighthouseIllustrationThumbnail } from "metabase/common/components/LighthouseIllustration";
+import { SetByEnvVar } from "metabase/common/components/SetByEnvVar";
 import CS from "metabase/css/core/index.css";
 import { Box, Button, Flex, Icon, Paper, Text } from "metabase/ui";
 import type {
@@ -184,7 +182,7 @@ export function IllustrationWidget({
     <Box data-testid={`${name}-setting`}>
       <SettingHeader id={name} title={title} description={description} />
       {errorMessage && (
-        <Text size="sm" c="error" mb="sm">
+        <Text size="sm" c="feedback-negative" mb="sm">
           {errorMessage}
         </Text>
       )}
@@ -196,7 +194,7 @@ export function IllustrationWidget({
             justify="center"
             w="7.5rem"
             pos="relative"
-            style={{ borderRight: "1px solid var(--mb-color-border)" }}
+            style={{ borderRight: "1px solid var(--mb-color-border-neutral)" }}
           >
             {getPreviewImage({
               value: localValue,

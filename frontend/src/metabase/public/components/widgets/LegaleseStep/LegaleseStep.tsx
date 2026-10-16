@@ -1,9 +1,9 @@
 import { jt, t } from "ttag";
 
-import { updateSetting } from "metabase/admin/settings/settings";
 import { ExternalLink } from "metabase/common/components/ExternalLink";
-import { useDispatch } from "metabase/lib/redux";
 import { LegaleseStepDetailsContainer } from "metabase/public/components/widgets/LegaleseStep/LegaleseStep.styled";
+import { useDispatch } from "metabase/redux";
+import { updateSetting } from "metabase/redux/settings";
 import { Button, Center, Stack, Text, Title } from "metabase/ui";
 
 export const LegaleseStep = ({
@@ -24,7 +24,7 @@ export const LegaleseStep = ({
   };
 
   return (
-    <Center bg="background-primary" px="18rem" pt="6.25rem" pb="11.75rem">
+    <Center bg="background_page-primary" px="18rem" pt="6.25rem" pb="11.75rem">
       <Stack align="center" gap="3rem">
         <Title order={3} fz="1.25rem">{t`First, some legalese`}</Title>
 

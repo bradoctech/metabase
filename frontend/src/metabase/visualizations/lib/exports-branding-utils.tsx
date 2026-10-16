@@ -1,7 +1,7 @@
 import ReactDOMServer from "react-dom/server";
 import { t } from "ttag";
 
-import BrandingLogo from "metabase/public/components/EmbedFrame/LogoBadge/metabase_logo_with_text.svg?component";
+import BrandingLogo from "metabase/embedding/components/LogoBadge/metabase_logo_with_text.svg?component";
 
 type BrandingSize = "xs" | "s" | "m" | "l" | "xl" | "xxl" | "xxxl";
 
@@ -96,7 +96,7 @@ export const createBrandingElement = (size: BrandingSize) => {
     const brandingCopy = document.createElement("span");
     brandingCopy.textContent = t`Made with`;
     brandingCopy.style.cssText = `
-      font-family: "Rawline", sans-serif;
+      font-family: "Lato", sans-serif;
       font-size: ${fz}px;
       color: var(--mb-color-text-secondary);
       display: inline-block;

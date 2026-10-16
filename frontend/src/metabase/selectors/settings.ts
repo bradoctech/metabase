@@ -1,8 +1,8 @@
 import { createSelector } from "@reduxjs/toolkit";
 
 import { getPlan } from "metabase/common/utils/plan";
-import type { TokenStatus, Version } from "metabase-types/api";
-import type { State } from "metabase-types/store";
+import type { State } from "metabase/redux/store";
+import type { TokenFeature, TokenStatus, Version } from "metabase-types/api";
 
 export const getSettings: <S extends State>(state: S) => GetSettings<S> =
   createSelector(
@@ -32,6 +32,15 @@ export const isSsoEnabled = (state: State) =>
   getSetting(state, "google-auth-enabled") ||
   getSetting(state, "saml-enabled") ||
   getSetting(state, "other-sso-enabled?");
+
+export const getIsHosted = (state: State): boolean => {
+  return getSetting(state, "is-hosted?");
+};
+
+export const getTokenFeature = (state: State, feature: TokenFeature) => {
+  const tokenFeatures = getSetting(state, "token-features");
+  return tokenFeatures[feature];
+};
 
 export type StorePaths =
   /** store main page */
@@ -111,12 +120,20 @@ export const getUrlWithUtm = createSelector(
 interface DocsUrlProps {
   page?: string;
   anchor?: string;
+  searchQuery?: string;
   utm?: UtmProps;
 }
 
 export const getDocsUrl = (state: State, props: DocsUrlProps) => {
-  const version = getSetting(state, "version");
-  const url = getDocsUrlForVersion(version, props.page, props.anchor);
+  const url = props.searchQuery
+    ? `https://www.metabase.com/search?${new URLSearchParams({
+        query: props.searchQuery,
+      })}`
+    : getDocsUrlForVersion(
+        getSetting(state, "version"),
+        props.page,
+        props.anchor,
+      );
 
   if (!props.utm) {
     return url;
@@ -124,9 +141,6 @@ export const getDocsUrl = (state: State, props: DocsUrlProps) => {
 
   return getUrlWithUtm(state, { url, ...props.utm });
 };
-
-export const getDocsSearchUrl = (query: Record<string, string>) =>
-  `https://www.metabase.com/search?${new URLSearchParams(query)}`;
 
 export const getDocsUrlForVersion = (
   version: Version | undefined,
@@ -161,7 +175,7 @@ export const getDocsUrlForVersion = (
     anchor = `#${anchor}`;
   }
 
-  // eslint-disable-next-line metabase/no-unconditional-metabase-links-render -- This function is only used by this file and "metabase/lib/settings"
+  // eslint-disable-next-line metabase/no-unconditional-metabase-links-render -- This function is only used by this file and "metabase/utils/settings"
   return `https://www.metabase.com/docs/${tag}/${page}${anchor}`;
 };
 

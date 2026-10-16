@@ -5,6 +5,7 @@
    [clojure.set :as set]
    [metabase.api.common :as api]
    [metabase.channel.settings :as channel.settings]
+   [metabase.metabot.scope :as scope]
    [metabase.metabot.tools.shared :as shared]
    [metabase.metabot.tools.util :as metabot.tools.u]
    [metabase.notification.api :as notification.api]
@@ -138,6 +139,7 @@ NEVER tell the user you have created an alert without actually calling the creat
    [:send_once {:optional true :default false} :boolean]])
 
 (mu/defn ^{:tool-name           "create_alert"
+           :scope               scope/agent-alert-create
            :system-instructions create-alert-system-instructions}
   create-alert-tool
   "Create an alert based on a saved question's results on a recurring schedule."
@@ -156,5 +158,5 @@ NEVER tell the user you have created an alert without actually calling the creat
           {:output (:error result)}
           {:output (or (:output result) "Alert created successfully.")}))
       (catch Exception e
-        (log/error e "Failed to create alert")
+        (log/errorf "Failed to create alert: %s" (ex-message e))
         {:output (str "Failed to create alert: " (or (ex-message e) "Unknown error"))}))))

@@ -7,9 +7,8 @@ import type {
 } from "echarts/types/src/util/types";
 import _ from "underscore";
 
-import { getObjectValues } from "metabase/lib/objects";
-import { isNotNull } from "metabase/lib/types";
 import { getTextColorForBackground } from "metabase/ui/colors/palette";
+import { isNotNull } from "metabase/utils/types";
 import {
   INDEX_KEY,
   NEGATIVE_STACK_TOTAL_DATA_KEY,
@@ -55,6 +54,7 @@ import {
 } from "../model/series";
 import { getBarSeriesDataLabelKey } from "../model/util";
 
+import { getPadding } from "./ticks";
 import { getSeriesYAxisIndex } from "./utils";
 
 const MIN_LABEL_SPACING_PX = 40;
@@ -287,8 +287,8 @@ export const buildEChartsLabelOptions = (
   chartDataDensity?: ChartDataDensity,
   position?: LabelOption["position"],
 ): SeriesLabelOption => {
-  // const { fontSize } = renderingContext.theme.cartesian.label;
-  const { fontSize } = "11px";
+  // SP DS (EDD-792): fixed 11px label size
+  const fontSize = "11px";
 
   return {
     show: !!formatter,
@@ -299,9 +299,7 @@ export const buildEChartsLabelOptions = (
     fontWeight: CHART_STYLE.seriesLabels.weight,
     fontSize,
     color: renderingContext.getColor("text-primary"),
-    // Este é dos eixos, precisa ser #000000 e não #808080;
-    // color: renderingContext.getColor("text-secondary"),
-    textBorderColor: renderingContext.getColor("background-primary"),
+    textBorderColor: renderingContext.getColor("background_page-primary"),
     textBorderWidth: 3,
     formatter:
       formatter &&
@@ -329,8 +327,12 @@ export const computeContinuousScaleBarWidth = (
     return 1;
   }
 
+  const padding = isTimeSeriesAxis(xAxisModel)
+    ? getPadding(xAxisModel.intervalsCount)
+    : 0.5;
+
   let barWidth =
-    (boundaryWidth / (xAxisModel.intervalsCount + 2)) *
+    (boundaryWidth / (xAxisModel.intervalsCount + 1 + 2 * padding)) *
     CHART_STYLE.series.barWidth;
 
   if (!stackedOrSingleSeries) {
@@ -389,9 +391,7 @@ export const buildEChartsStackLabelOptions = (
     opacity: 1,
     show: true,
     fontFamily: renderingContext.fontFamily,
-    // fontWeight: CHART_STYLE.seriesLabels.weight,
     fontWeight: 600,
-    // fontSize: CHART_STYLE.seriesLabels.size,
     fontSize: "11px",
     color: getTextColorForBackground(
       seriesModel.color,
@@ -441,14 +441,10 @@ function getDataLabelSeriesOption(
       position,
       formatter,
       fontFamily: renderingContext.fontFamily,
-      // fontWeight: CHART_STYLE.seriesLabels.weight,
       fontWeight: 600,
-      // fontSize: CHART_STYLE.seriesLabels.size,
       fontSize: "11px",
       color: renderingContext.getColor("text-primary"),
-      // Este é dos eixos, precisa ser #000000 e não #808080;
-      // color: renderingContext.getColor("text-secondary"),
-      textBorderColor: renderingContext.getColor("background-primary"),
+      textBorderColor: renderingContext.getColor("background_page-primary"),
       textBorderWidth: 3,
     },
     labelLayout: {
@@ -704,7 +700,7 @@ const buildEChartsLineAreaSeries = (
     },
     symbol: "circle", // default is "emptyCircle", but it's filled with white, so we need to handle the fill ourselves for dark mode
     itemStyle: {
-      color: renderingContext.getColor("background-primary"),
+      color: renderingContext.getColor("background_page-primary"),
       borderColor: seriesModel.color,
       borderWidth: lineWidth,
       opacity: isSymbolVisible ? 1 : 0, // Make the symbol invisible to keep it for event trigger for tooltip
@@ -857,7 +853,7 @@ export const getStackTotalsSeries = (
     "stack",
   );
 
-  return getObjectValues(seriesByStackName).flatMap((seriesOptions) => {
+  return Object.values(seriesByStackName).flatMap((seriesOptions) => {
     const stackDataKeys = seriesOptions // we set string dataKeys as series IDs
       .map((s) => s.id)
       .filter(isNotNull) as string[];

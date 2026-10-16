@@ -11,9 +11,8 @@ import {
   FormSubmitButton,
   FormTextInput,
 } from "metabase/forms";
-import * as Errors from "metabase/lib/errors";
-
-import type { LoginData } from "../../types";
+import type { LoginData } from "metabase/redux/auth";
+import * as Errors from "metabase/utils/errors";
 
 const LOGIN_SCHEMA = Yup.object().shape({
   username: Yup.string()
@@ -88,7 +87,7 @@ export const LoginForm = ({
         )}
         <FormSubmitButton
           label={t`Sign in`}
-          variant="primary"
+          variant="filled"
           w="100%"
           radius="100px"
           className={ButtonsS.ButtonNoBorder}

@@ -14,12 +14,12 @@ import type {
   MiniPickerPickableItem,
 } from "metabase/common/components/Pickers/MiniPicker/types";
 import { isEmbedding } from "metabase/embedding/config";
-import { useDispatch, useSelector, useStore } from "metabase/lib/redux";
-import { checkNotNull } from "metabase/lib/types";
 import { loadMetadataForTable } from "metabase/questions/actions";
+import { useDispatch, useSelector, useStore } from "metabase/redux";
 import { getMetadata } from "metabase/selectors/metadata";
 import { getIsTenantUser } from "metabase/selectors/user";
 import { Icon, TextInput } from "metabase/ui";
+import { checkNotNull } from "metabase/utils/types";
 import * as Lib from "metabase-lib";
 import { getQuestionVirtualTableId } from "metabase-lib/v1/metadata/utils/saved-questions";
 import type { TableId } from "metabase-types/api";
@@ -101,7 +101,7 @@ export function NotebookDataPicker({
     const canSelectTableColumns = table && isRaw && !isDisabled;
     return (
       <NotebookCellItem
-        color="brand"
+        color="core-brand"
         inactive={!table}
         right={canSelectTableColumns && columnPicker}
         containerStyle={{ padding: 0 }}
@@ -113,6 +113,7 @@ export function NotebookDataPicker({
           query={query}
           stageIndex={stageIndex}
           table={table}
+          title={title}
           placeholder={placeholder}
           canChangeDatabase={canChangeDatabase}
           isDisabled={isDisabled}
@@ -175,6 +176,7 @@ function ModernDataPicker({
   shouldShowLibrary,
 }: ModernDataPickerProps) {
   const context = useNotebookContext();
+  const getItemTooltip = context.dataPickerOptions?.getItemTooltip;
   const modelList = getModelFilterList(context, hasMetrics);
 
   const databaseId = Lib.databaseID(query) ?? undefined;
@@ -262,6 +264,7 @@ function ModernDataPicker({
                 shouldDisableDatabase?.(i)),
             );
           }}
+          options={getItemTooltip ? { getItemTooltip } : undefined}
           // searchQuery={dataSourceSearchQuery} ?
         />
       )}

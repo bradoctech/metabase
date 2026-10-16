@@ -27,7 +27,8 @@
 
 (mr/def ::DatabaseMetadata
   [:map
-   [:tables [:set DatabaseMetadataTable]]
+   [:tables [:fn {:error/message "a set, sequential, or reducible collection of tables"}
+             (fn [x] (or (set? x) (sequential? x) (instance? clojure.lang.IReduceInit x)))]]
    [:version {:optional true} [:maybe ::lib.schema.common/non-blank-string]]])
 
 (def DatabaseMetadata
@@ -116,12 +117,12 @@
 
 (mr/def ::FKMetadataEntry
   [:map
-   [:fk-table-name    ::lib.schema.common/non-blank-string]
-   [:fk-table-schema  [:maybe ::lib.schema.common/non-blank-string]]
-   [:fk-column-name   ::lib.schema.common/non-blank-string]
-   [:pk-table-name    ::lib.schema.common/non-blank-string]
-   [:pk-table-schema  [:maybe ::lib.schema.common/non-blank-string]]
-   [:pk-column-name   ::lib.schema.common/non-blank-string]])
+   [:fk-table-name   ::lib.schema.common/non-blank-string]
+   [:fk-table-schema [:maybe ::lib.schema.common/non-blank-string]]
+   [:fk-column-name  ::lib.schema.common/non-blank-string]
+   [:pk-table-name   ::lib.schema.common/non-blank-string]
+   [:pk-table-schema [:maybe ::lib.schema.common/non-blank-string]]
+   [:pk-column-name  ::lib.schema.common/non-blank-string]])
 
 (def FKMetadataEntry
   "Schema for an entry in the expected output of [[metabase.driver/describe-fks]]."
@@ -192,7 +193,8 @@
    2 #{:type/Number}
    3 #{:type/DateTime}
    4 #{:type/*}
-   5 #{:type/Text}})
+   5 #{:type/Text}
+   6 #{:type/Number :type/Text :type/DateTime}})
 
 (def ^:dynamic ^Long *latest-fingerprint-version*
   "The newest (highest-numbered) version of our Field fingerprints."

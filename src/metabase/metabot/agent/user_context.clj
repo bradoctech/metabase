@@ -5,13 +5,20 @@
   recent views, user time formatting, and SQL dialect extraction from context."
   (:require
    [clojure.string :as str]
+   [metabase.agent-lib.representations.resolve :as repr.resolve]
    [metabase.lib-be.core :as lib-be]
    [metabase.lib.core :as lib]
+   [metabase.metabot.metadata-perms :as metabot.perms]
+   [metabase.metabot.query-analyzer :as query-analyzer]
    [metabase.metabot.tmpl :as te]
    [metabase.metabot.tools.entity-details :as entity-details]
-   [metabase.metabot.tools.shared.llm-representations :as llm-rep]
+   [metabase.metabot.tools.resources :as resources-tools]
+   [metabase.metabot.tools.shared.content-store :as shared.content-store]
+   [metabase.metabot.tools.shared.llm-shape :as llm-shape]
    [metabase.metabot.util :as metabot.u]
+   [metabase.models.interface :as mi]
    [metabase.util :as u]
+   [metabase.util.json :as json]
    [metabase.util.log :as log])
   (:import
    (java.time OffsetDateTime)
@@ -41,7 +48,7 @@
       :else
       (.format DateTimeFormatter/ISO_LOCAL_DATE_TIME (OffsetDateTime/now)))
     (catch Exception e
-      (log/error e "Error formatting current time")
+      (log/errorf "Error formatting current time: %s" (ex-message e))
       (.format DateTimeFormatter/ISO_LOCAL_DATE_TIME (OffsetDateTime/now)))))
 
 ;;; SQL Dialect Extraction
@@ -78,12 +85,12 @@
 
   The frontend sends `type: \"adhoc\"` for *both* notebook (MBQL) and native SQL
   queries. We distinguish them by inspecting the query: a dataset-query with
-  `{:type \"native\"}` (or `:native`) is a native SQL query, as is an MLv2/pMBQL
+  `{:type \"native\"}` (or `:native`) is a native SQL query, as is an MBQL 4 (legacy) or MBQL 5
   query with a single native stage."
   [item]
   (let [query (:query item)]
     (or (= "native" (normalize-context-type (:type query)))
-        ;; MLv2/pMBQL: normalize and use lib to detect native queries
+        ;; MBQL 4/MBQL 5: normalize and use lib to detect native queries
         (when (and (map? query) (:database query))
           (try
             (lib/native-only-query? (lib-be/normalize-query query))
@@ -122,10 +129,12 @@
 
 ;; For saved entities (table, model, question, metric, dashboard), the frontend only sends
 ;; type + id. We fetch full details from the DB using entity-details and render them via
-;; llm-representations, mirroring what the Python AI service did via HTTP callbacks.
+;; llm-shape (the output-side XML formatters), mirroring what the Python AI service did
+;; via HTTP callbacks.
 
 (defn- fetch-and-format
-  "Fetch entity details and format with llm-rep. Falls back to format-simple-entity on failure."
+  "Fetch entity details and format with llm-shape. Falls back to format-simple-entity on failure,
+  except a 403, which renders nothing."
   [entity preamble details-fn format-fn]
   (try
     (let [{:keys [structured-output]} (details-fn)]
@@ -133,32 +142,54 @@
         (te/lines preamble (format-fn structured-output))
         (format-simple-entity entity)))
     (catch Exception e
-      (log/error e "Error fetching entity details for viewing context" {:type (:type entity) :id (:id entity)})
-      (format-simple-entity entity))))
+      (let [status-code (:status-code (ex-data e))]
+        (cond
+          (= 403 status-code)
+          (do (log/debugf "Omitting viewing-context entity the current user cannot read: %s %s"
+                          (:type entity) (:id entity))
+              nil)
+
+          ;; A 404 is always an intentional, expected signal here (from api/check-404), never an
+          ;; accidental failure -- either the entity plainly doesn't exist, or (per
+          ;; check-resource-database) it's a routing-internal destination database masquerading as
+          ;; "not found" so as not to disclose its existence. Neither warrants an ERROR log; both
+          ;; still render best-effort from the caller's own claimed fields, same as before.
+          (= 404 status-code)
+          (do (log/debugf "Falling back to simple rendering for an unresolvable viewing-context entity: %s %s"
+                          (:type entity) (:id entity))
+              (format-simple-entity entity))
+
+          :else
+          (do (log/error "Error fetching entity details for viewing context"
+                         {:type (:type entity) :id (:id entity)}
+                         (ex-message e))
+              (format-simple-entity entity)))))))
 
 (defmethod format-entity "table"
   [entity]
   (fetch-and-format entity
                     "The user is currently looking at the rows of a table:"
-                    #(entity-details/get-table-details {:entity-type :table
-                                                        :entity-id (:id entity)
-                                                        :with-field-values? false
-                                                        :with-metrics? false
-                                                        :with-measures? true
-                                                        :with-segments? true})
-                    llm-rep/table->xml))
+                    #(do (resources-tools/check-table-resource-database (:id entity))
+                         (entity-details/get-table-details {:entity-type :table
+                                                            :entity-id (:id entity)
+                                                            :with-field-values? false
+                                                            :with-metrics? false
+                                                            :with-measures? true
+                                                            :with-segments? true}))
+                    llm-shape/table->xml))
 
 (defmethod format-entity "model"
   [entity]
   (fetch-and-format entity
                     "The user is currently looking at the rows of a model:"
-                    #(entity-details/get-table-details {:entity-type :model
-                                                        :entity-id (:id entity)
-                                                        :with-field-values? false
-                                                        :with-metrics? false
-                                                        :with-measures? true
-                                                        :with-segments? true})
-                    llm-rep/model->xml))
+                    #(do (resources-tools/check-card-resource-database (:id entity))
+                         (entity-details/get-table-details {:entity-type :model
+                                                            :entity-id (:id entity)
+                                                            :with-field-values? false
+                                                            :with-metrics? false
+                                                            :with-measures? true
+                                                            :with-segments? true}))
+                    llm-shape/model->xml))
 
 (defn- format-chart-config-ids
   "Format chart config IDs for a viewing context item.
@@ -200,24 +231,26 @@
     (format-native-query entity)
     (fetch-and-format entity
                       "The user is currently looking at the results of a report:"
-                      #(entity-details/get-report-details {:report-id (:id entity)
-                                                           :with-field-values? false})
-                      llm-rep/question->xml)))
+                      #(do (resources-tools/check-card-resource-database (:id entity))
+                           (entity-details/get-report-details {:report-id (:id entity)
+                                                               :with-field-values? false}))
+                      llm-shape/question->xml)))
 
 (defmethod format-entity "metric"
   [entity]
   (fetch-and-format entity
                     "The user is currently looking at the details of a metric:"
-                    #(entity-details/get-metric-details {:metric-id (:id entity)
-                                                         :with-field-values? false})
-                    llm-rep/metric->xml))
+                    #(do (resources-tools/check-card-resource-database (:id entity))
+                         (entity-details/get-metric-details {:metric-id (:id entity)
+                                                             :with-field-values? false}))
+                    llm-shape/metric->xml))
 
 (defmethod format-entity "dashboard"
   [entity]
   (fetch-and-format entity
                     "The user is currently looking at the details of a dashboard:"
                     #(entity-details/get-dashboard-details {:dashboard-id (:id entity)})
-                    llm-rep/dashboard->xml))
+                    llm-shape/dashboard->xml))
 
 ;;; Viewing Context Formatting
 
@@ -235,23 +268,173 @@
                                                (map format-entity)
                                                te/lines)))))
 
+;;; The export path ([[repr.resolve/try-export-query]], below) rewrites app-DB ids into names: a table id
+;;; becomes `[db schema table]`, a field id becomes `[db schema table field]`, a card id becomes its
+;;; `entity_id`. The query it runs on is client-supplied, so every id it can resolve is a metadata leak
+;;; unless the caller may reach it. The three vectors below enumerate the id-bearing map keys
+;;; `metabase.models.serialization.resolve/export-mbql` rewrites and must stay in lockstep with it.
+;;;
+;;; Two id kinds are deliberately absent. Measures and Segments are exported through the
+;;; `ContentStore`, and [[shared.content-store/default-store]] read-checks them already. Snippets have no
+;;; export-resolver method at all, so a snippet id makes the whole export throw and drop out.
+
+(def ^:private exported-table-id-keys
+  "Map keys the export path rewrites into a portable `[db schema table]` path."
+  [:source-table :source_table])
+
+(def ^:private exported-card-id-keys
+  "Map keys the export path rewrites into a Card `entity_id`."
+  [:source-card :source_card :card-id :card_id])
+
+(def ^:private exported-field-id-keys
+  "Map keys the export path rewrites into a portable `[db schema table field]` path.
+
+  `:source-field` is the one a walker over `:field` clause slots misses: it names a column on a table the
+  query never lists as a source, so `[:field {:source-field <secret>} <readable>]` used to render the
+  secret column's fully-qualified name into the prompt."
+  [:source-field :metabase.models.visualization-settings/param-mapping-source])
+
+(defn- exported-entity-ids
+  "`{:table #{} :card #{} :field #{}}` — the app-DB ids in `normalized` that the export path can turn into
+  names.
+
+  Runs on the *normalized* query because that is what the export path runs on too. That correspondence is
+  what makes the gate complete, and is why it does not try to recognise raw client shapes: an id
+  normalization drops (`{:source-table \"77\"}`) cannot be exported either, and one it rewrites
+  (`\"card__7\"` into `:source-card 7`) arrives here in its canonical form."
+  [normalized]
+  (let [ids (fn [ks node] (into #{} (comp (map #(get node %)) (filter pos-int?)) ks))]
+    (reduce
+     (fn [acc node]
+       (cond
+         (map? node)
+         (-> acc
+             (update :table into (ids exported-table-id-keys node))
+             (update :card  into (ids exported-card-id-keys node))
+             (update :field into (ids exported-field-id-keys node)))
+
+         (and (vector? node) (not (map-entry? node)))
+         (case (keyword (first node))
+           ;; `[:field opts id]` (MBQL 5), `[:field id opts]` (legacy), `[:field id]`, `[:field-id id]` —
+           ;; the export path accepts every one of those shapes, so check both slots rather than guessing.
+           (:field :field-id) (update acc :field into (filter pos-int?) [(nth node 1 nil) (nth node 2 nil)])
+           ;; `[:metric opts id]` (MBQL 5) and `[:metric id]` (legacy) — a metric id is a Card id. The
+           ;; export path normalizes the clause before matching it, so both slots are checked here for
+           ;; the same reason `:field` checks both: which one holds the id is not ours to guess.
+           :metric            (update acc :card into (filter pos-int?) [(nth node 1 nil) (nth node 2 nil)])
+           acc)
+
+         :else acc))
+     {:table #{} :card #{} :field #{}}
+     (tree-seq coll? seq normalized))))
+
+(defn- native-stage?
+  [normalized]
+  (boolean (some #(and (map? %) (= :mbql.stage/native (:lib/type %)))
+                 (tree-seq coll? seq normalized))))
+
+(defn- native-sql-table-ids
+  "Table ids the query analyzer positively recognises in `normalized`'s native SQL.
+
+  Not about the export: a native stage carries no ids to resolve, and the SQL body is the client's own
+  input echoed back. It is about not reasoning over a transform that selects from a table the caller
+  cannot query. Only tables the analyzer matched to a real row count — its fuzzy name matches are
+  guesses, and an analyzer that cannot answer at all (unsupported driver, unparseable SQL) is not
+  evidence of a restricted table, so neither denies on its own."
+  [normalized]
+  (try
+    (into #{}
+          (comp (keep #(or (:table-id %) (:id %))) (filter pos-int?))
+          (:tables (query-analyzer/tables-for-native normalized :all-drivers-trusted? true)))
+    (catch Exception e
+      (log/debugf "Could not analyze a viewing-context native query for permission gating: %s"
+                  (ex-message e))
+      #{})))
+
+(defn- sandbox-visible-fields?
+  "Whether every field in `field-id->table-id` survives its own table's column sandbox.
+
+  A column sandbox hides columns of a table the caller may otherwise query, so
+  [[metabot.perms/queryable-table-ids]] passing says nothing about them. The export path renders a field
+  id as `[db schema table field]`, which names the column, so one sandboxed away has to drop the whole
+  query. Same bar `entity-details/permission-filter-columns` and `field-stats/check-column-table-perms!`
+  apply to the columns they return."
+  [field-id->table-id]
+  (let [restricted (metabot.perms/sandbox-restricted-fields (set (vals field-id->table-id)))]
+    (every? (fn [[field-id table-id]]
+              (if-let [allowed (get restricted table-id)]
+                (contains? allowed field-id)
+                true))
+            field-id->table-id)))
+
+(defn- queryable-normalized-query
+  "`[normalized metadata-provider]` for the client-supplied `query`, or nil when the current user cannot
+  reach everything it names.
+
+  Fails closed. A query that will not normalize, or that names a Table the caller cannot query, a column
+  its sandbox hides, or a Card it cannot read, yields nil and the caller renders nothing rather than
+  handing the export path ids to resolve into names."
+  [query]
+  (let [raw-database-id (and (map? query) (:database query))]
+    ;; `:database` is client-supplied, so a non-integer would otherwise reach Toucan's queryable position
+    ;;. Checked before normalizing, so a bad shape costs no app-DB round trip.
+    (when (pos-int? raw-database-id)
+      (try
+        (let [normalized  (lib-be/normalize-query query)
+              database-id (:database normalized)]
+          (when (and (pos-int? database-id)
+                     (mi/can-query? :model/Database database-id))
+            (let [{:keys [table card field]} (exported-entity-ids normalized)
+                  ;; A field id with no row drops out here, which is not a hole: `export-field-fk` throws
+                  ;; on it, and that takes the whole export down with it.
+                  field-table (metabot.perms/field-id->table-id field)
+                  table-ids   (cond-> (into (set table) (vals field-table))
+                                (native-stage? normalized) (into (native-sql-table-ids normalized)))]
+              ;; `queryable-table-ids` answers `false` for a table id with no row, so an id the client
+              ;; invented drops out of the set and this comparison fails closed.
+              (when (and (= table-ids (metabot.perms/queryable-table-ids table-ids))
+                         (sandbox-visible-fields? field-table)
+                         (every? #(mi/can-read? :model/Card %) card))
+                [normalized (lib-be/application-database-metadata-provider database-id)]))))
+        (catch Exception e
+          (log/debugf "Omitting a viewing-context query that could not be permission-checked: %s"
+                      (ex-message e))
+          nil)))))
+
 (defn- transform-query-source-text
+  "Format a transform's `:query` source for the LLM.
+
+  When the source carries a query map with a `:database` key, we normalise it and export to
+  the same canonical portable representations form the `construct_notebook_query` tool
+  consumes (rendered as a JSON code block). Both structured (`mbql.stage/mbql`) and native
+  (`mbql.stage/native`) stages go through this path - the latter is intentional: the repr
+  export preserves portable `card-id` / `snippet-id` references inside `template-tags`, and
+  stays in lockstep with the freshly-built-query payloads `construct_notebook_query` returns
+  to the LLM.
+
+  Pre-resolved string sources (`:query` is itself a string, or carries `:query-content` -
+  the SQL-tool's already-rendered shape) pass through unchanged: there's no map to
+  normalise.
+
+  Falls back to a `pprint`'d query map only as a last resort, when repr export is
+  unavailable (e.g. a partially-broken `dataset_query`)."
   [source]
   (let [query (:query source)]
     (cond
       (string? query) query
       (string? (:query-content query)) (:query-content query)
-      (string? (get-in query [:native :query])) (get-in query [:native :query])
       (and (map? query) (:database query))
-      (try
-        (let [normalized (lib-be/normalize-query query)]
-          (if (lib/native-only-query? normalized)
-            (or (lib/raw-native-query normalized)
-                (some :native (:stages normalized))
-                (get-in normalized [:native :query]))
-            (u/pprint-to-str normalized)))
-        (catch Exception _
-          (u/pprint-to-str query)))
+      (when-let [[normalized mp] (queryable-normalized-query query)]
+        (try
+          (let [exported (repr.resolve/try-export-query mp normalized shared.content-store/default-store)]
+            (if exported
+              (str "```json\n" (json/encode exported {:pretty true}) "\n```")
+              (u/pprint-to-str normalized)))
+          (catch Exception _
+            (u/pprint-to-str query))))
+      ;; Legacy native shape with no :database (rare). Surface the raw SQL so the LLM at
+      ;; least sees the query body; if there's no :database we can't normalise / build a MP.
+      (string? (get-in query [:native :query])) (get-in query [:native :query])
       (map? query) (u/pprint-to-str query)
       :else (some-> query str))))
 
@@ -340,7 +523,7 @@
               (try
                 (format-entity item)
                 (catch Exception e
-                  (log/error e "Error formatting viewing context item:" (:type item))
+                  (log/error "Error formatting viewing context item:" (:type item) (ex-message e))
                   "")))))
 
 ;;; Recent Views Formatting
@@ -350,9 +533,9 @@
 
   Returns formatted string for template variable {{recent_views}}."
   [context]
-  (if-not (:user_recently_viewed context)
-    ""
-    (let [items (:user_recently_viewed context)]
+  (let [items (:user_recently_viewed context)]
+    (if-not (seq items)
+      ""
       (te/lines "Here are some items the user has recently viewed:"
                 (for [item items]
                   (format-simple-entity (select-keys item [:type :id :name :description])))
@@ -368,12 +551,12 @@
   [_context]
   (try
     (when-let [{:keys [id name email-address glossary]} (:structured-output (entity-details/get-current-user nil))]
-      (llm-rep/user->xml {:id       id
-                          :name     name
-                          :email    email-address
-                          :glossary glossary}))
+      (llm-shape/user->xml {:id       id
+                            :name     name
+                            :email    email-address
+                            :glossary glossary}))
     (catch Exception e
-      (log/error e "Error formatting current user info")
+      (log/errorf "Error formatting current user info: %s" (ex-message e))
       nil)))
 
 ;;; Context Enrichment

@@ -13,7 +13,7 @@ export const StepToggleContainer = styled.div`
   align-items: center;
   margin: 0 2rem 1.25rem 0;
   padding: 1rem;
-  border: 2px solid var(--mb-color-border);
+  border: 2px solid var(--mb-color-border-neutral);
   border-radius: 0.5rem;
 `;
 
@@ -34,6 +34,6 @@ export const StepInfoList = styled.ul`
 `;
 
 export const StepError = styled.div`
-  color: var(--mb-color-error);
+  color: var(--mb-color-feedback-negative);
   margin-top: 0.5rem;
 `;

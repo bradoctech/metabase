@@ -113,8 +113,12 @@ export const TableColumnCard = ({
         selectedTableIds.includes(pickerItem.id);
       const isOurAnalytics =
         pickerItem.model === "collection" && pickerItem.id === "root";
+      const isSampleDatabase =
+        pickerItem.model === "database" &&
+        "is_sample" in pickerItem &&
+        pickerItem.is_sample === true;
 
-      return isAlreadySelected || isOurAnalytics;
+      return isAlreadySelected || isOurAnalytics || isSampleDatabase;
     },
     [selectedTableIds],
   );
@@ -150,11 +154,11 @@ export const TableColumnCard = ({
             w="100%"
             px="0.75rem"
             py="sm"
-            bg="background-primary"
+            bg="background_page-primary"
             bdrs="xs"
           >
             <Text
-              c={selectedTableName ? "text-primary" : "text-tertiary"}
+              c={selectedTableName ? "text-primary" : "text-disabled"}
               size="md"
             >
               {selectedTableName ?? t`Pick a table`}

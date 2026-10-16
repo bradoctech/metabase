@@ -50,6 +50,20 @@
 (driver/register! :oracle, :parent #{:sql-jdbc
                                      ::sql.qp.empty-string-is-null/empty-string-is-null})
 
+(defmethod driver/host-carrying-parameters :oracle
+  [_driver]
+  ["oracle.net.httpsProxyHost" "oracle.net.socksProxyHost" "oracle.jdbc.ociIamUrl"])
+
+(defmethod driver/non-host-parameters :oracle
+  [_driver]
+  ["oracle.jdbc.DRCPConnectionPurity" "oracle.jdbc.TcpNoDelay" "oracle.jdbc.azureDatabaseApplicationIdUri"
+   "oracle.jdbc.enableErrorUrl" "oracle.jdbc.localhostName" "oracle.jdbc.proxyClientName"
+   "oracle.jdbc.readOnlyInstanceAllowed" "oracle.jdbc.redirectUri" "oracle.jdbc.tokenLocation"
+   "oracle.net.DOWN_HOSTS_TIMEOUT" "oracle.net.httpsProxyPort" "oracle.net.ldap.security.authentication"
+   "oracle.net.ldap.security.credentials" "oracle.net.ldap.security.principal" "oracle.net.ldap.ssl.walletLocation"
+   "oracle.net.proxyRemoteDNS" "oracle.net.socksProxyPort" "oracle.net.ssl_server_cert_dn"
+   "oracle.net.ssl_server_dn_match" "oracle.net.wallet_location" "server"])
+
 (doseq [[feature supported?] {:convert-timezone                 true
                               :database-routing                 false
                               :datetime-diff                    true
@@ -308,7 +322,7 @@
     (sql.u/validate-convert-timezone-args has-timezone? target-timezone source-timezone)
     (-> (if has-timezone?
           expr
-          [:from_tz expr (or source-timezone (driver-api/results-timezone-id))])
+          [:from_tz expr (sql.qp/->honeysql driver (or source-timezone (driver-api/results-timezone-id)))])
         (h2x/at-time-zone target-timezone)
         h2x/->timestamp)))
 
@@ -676,7 +690,7 @@
       (try
         (.setFetchDirection stmt ResultSet/FETCH_FORWARD)
         (catch Throwable e
-          (log/debug e "Error setting result set fetch direction to FETCH_FORWARD")))
+          (log/debugf "Error setting result set fetch direction to FETCH_FORWARD: %s" (ex-message e))))
       (sql-jdbc.execute/set-parameters! driver stmt params)
       stmt
       (catch Throwable e
@@ -693,7 +707,7 @@
       (try
         (.setFetchDirection stmt ResultSet/FETCH_FORWARD)
         (catch Throwable e
-          (log/debug e "Error setting result set fetch direction to FETCH_FORWARD")))
+          (log/debugf "Error setting result set fetch direction to FETCH_FORWARD: %s" (ex-message e))))
       stmt
       (catch Throwable e
         (.close stmt)
@@ -813,3 +827,7 @@
                   (update :update pos?)
                   (update :insert pos?)
                   (update :delete pos?))))))
+
+(defmethod sql.qp/transform-literal-like-pattern-honeysql :oracle
+  [_driver like-rhs-honeysql]
+  [:escape like-rhs-honeysql [:raw "CHR(92)"]])

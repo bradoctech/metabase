@@ -7,6 +7,7 @@ import {
 } from "react";
 import { t } from "ttag";
 
+import { useSetting } from "metabase/common/hooks";
 import { Button, type ButtonProps, Icon, Loader, Tooltip } from "metabase/ui";
 import type { ColorName } from "metabase/ui/colors/types";
 import type {
@@ -15,12 +16,15 @@ import type {
   TransformRun,
 } from "metabase-types/api";
 
+import { LockedTransformsHoverCard } from "../LockedTransformsHoverCard/LockedTransformsHoverCard";
+
 const RECENT_TIMEOUT = 5000;
 
 type RunButtonProps = {
   id: TransformId | TransformJobId | undefined;
   run: TransformRun | null | undefined;
   isDisabled?: boolean;
+  isLoading?: boolean;
   allowCancellation?: boolean;
   size?: ButtonProps["size"];
   onRun: () => void;
@@ -32,6 +36,7 @@ export const RunButton = forwardRef(function RunButton(
     id,
     run,
     isDisabled: isExternallyDisabled = false,
+    isLoading = false,
     allowCancellation = false,
     size = "md",
     onRun,
@@ -39,11 +44,13 @@ export const RunButton = forwardRef(function RunButton(
   }: RunButtonProps,
   ref: Ref<HTMLButtonElement>,
 ) {
+  const isMeterLocked = useSetting("transforms-meter-locked");
   const [isRecent, setIsRecent] = useState(false);
   const { label, color, leftSection, isDisabled } = getRunButtonInfo({
     run,
     isRecent,
-    isDisabled: isExternallyDisabled,
+    isLoading,
+    isDisabled: isExternallyDisabled || !!isMeterLocked,
   });
 
   useLayoutEffect(() => {
@@ -56,7 +63,7 @@ export const RunButton = forwardRef(function RunButton(
     setIsRecent(false);
   }, [id]);
 
-  return (
+  const runButton = (
     <Button.Group>
       <Button
         ref={ref}
@@ -81,11 +88,17 @@ export const RunButton = forwardRef(function RunButton(
       )}
     </Button.Group>
   );
+
+  if (isMeterLocked) {
+    return <LockedTransformsHoverCard>{runButton}</LockedTransformsHoverCard>;
+  }
+  return runButton;
 });
 
 type RunButtonOpts = {
   run: TransformRun | null | undefined;
   isRecent: boolean;
+  isLoading: boolean;
   isDisabled: boolean;
 };
 
@@ -99,6 +112,7 @@ type RunButtonInfo = {
 function getRunButtonInfo({
   run,
   isRecent,
+  isLoading,
   isDisabled,
 }: RunButtonOpts): RunButtonInfo {
   if (run?.status === "started") {
@@ -118,6 +132,14 @@ function getRunButtonInfo({
     };
   }
 
+  if (isLoading) {
+    return {
+      label: t`Run now`,
+      leftSection: <Loader size="sm" />,
+      isDisabled: true,
+    };
+  }
+
   if (run == null || !isRecent || isDisabled) {
     return {
       label: t`Run now`,
@@ -129,7 +151,7 @@ function getRunButtonInfo({
   if (run.status === "succeeded") {
     return {
       label: t`Ran successfully`,
-      color: "success",
+      color: "feedback-positive",
       leftSection: <Icon name="check" aria-hidden />,
       isDisabled,
     };
@@ -138,15 +160,15 @@ function getRunButtonInfo({
   if (run.status === "canceled") {
     return {
       label: t`Canceled`,
-      color: "warning",
-      leftSection: <Icon name="close" c="white" aria-hidden />,
+      color: "feedback-warning",
+      leftSection: <Icon name="close" c="core-white" aria-hidden />,
       isDisabled,
     };
   }
 
   return {
     label: t`Run failed`,
-    color: "error",
+    color: "feedback-negative",
     leftSection: <Icon name="warning" aria-hidden />,
     isDisabled,
   };

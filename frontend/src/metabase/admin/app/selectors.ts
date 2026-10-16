@@ -1,7 +1,7 @@
 import { getEngines } from "metabase/databases/selectors";
-import { isDeprecatedEngine } from "metabase/lib/engine";
+import { isDeprecatedEngine } from "metabase/databases/utils/engine";
+import type { State } from "metabase/redux/store";
 import type Database from "metabase-lib/v1/metadata/Database";
-import type { State } from "metabase-types/store";
 
 interface Props {
   databases?: Database[];
@@ -14,10 +14,6 @@ export const hasDeprecatedDatabase = (state: State, props: Props): boolean => {
       (d) => !d.is_sample && d.engine && isDeprecatedEngine(engines, d.engine),
     ) ?? false
   );
-};
-
-export const getAdminPaths = (state: State) => {
-  return state.admin?.app?.paths ?? [];
 };
 
 export const isDeprecationNoticeEnabled = (state: State): boolean => {

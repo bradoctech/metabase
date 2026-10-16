@@ -18,18 +18,19 @@ import {
 import { ContentViewportContext } from "metabase/common/context/ContentViewportContext";
 import DashboardS from "metabase/css/dashboard.module.css";
 import { getVisibleCardIds } from "metabase/dashboard/utils";
-import { isQuestionDashCard } from "metabase/lib/dashboard";
+import EmbedFrameS from "metabase/embedding/theme.module.css";
+import { connect } from "metabase/redux";
+import type { State } from "metabase/redux/store";
+import { addUndo } from "metabase/redux/undo";
+import { Box, Flex, type FlexProps } from "metabase/ui";
+import { isQuestionDashCard } from "metabase/utils/dashboard";
 import {
   GRID_ASPECT_RATIO,
   GRID_BREAKPOINTS,
   GRID_COLUMNS,
   GRID_WIDTH,
   MIN_ROW_HEIGHT,
-} from "metabase/lib/dashboard_grid";
-import { connect } from "metabase/lib/redux";
-import EmbedFrameS from "metabase/public/components/EmbedFrame/EmbedFrame.module.css";
-import { addUndo } from "metabase/redux/undo";
-import { Box, Flex, type FlexProps } from "metabase/ui";
+} from "metabase/utils/dashboard_grid";
 import LegendS from "metabase/visualizations/components/Legend.module.css";
 import { VisualizerModal } from "metabase/visualizer/components/VisualizerModal";
 import {
@@ -45,7 +46,6 @@ import type {
   DashboardTabId,
   VisualizerVizDefinition,
 } from "metabase-types/api";
-import type { State } from "metabase-types/store";
 
 import type { SetDashCardAttributesOpts } from "../actions";
 import {
@@ -398,7 +398,6 @@ class DashboardGridInner extends Component<
 
       addUndo({
         message: getUndoReplaceCardMessage(replaceCardModalDashCard.card),
-        undo: true,
         action: () =>
           setDashCardAttributes({
             id: replaceCardModalDashCard.id,
@@ -522,14 +521,18 @@ class DashboardGridInner extends Component<
     );
   }
 
-  onVisualizerModalSave = (visualization: VisualizerVizDefinition) => {
+  onVisualizerModalSave = async (visualization: VisualizerVizDefinition) => {
     const { visualizerModalStatus } = this.state;
 
     if (!visualizerModalStatus) {
       return;
     }
 
-    this.props.replaceCardWithVisualization({
+    // Await the replacement before closing the modal: it commits the new
+    // card series to the dashcard only after fetching the referenced cards.
+    // Closing early lets a subsequent dashboard save run against the
+    // not-yet-updated dashcard, which would drop the new series.
+    await this.props.replaceCardWithVisualization({
       dashcardId: visualizerModalStatus.dashcardId,
       visualization,
     });
@@ -564,6 +567,7 @@ class DashboardGridInner extends Component<
         initialState={{ state: visualizerModalStatus.state }}
         saveLabel={t`Save`}
         allowSaveWhenPristine={allowSaveWhenPristine}
+        dashboardId={this.props.dashboard.id}
       />
     );
   }

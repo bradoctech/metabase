@@ -8,6 +8,7 @@
    [metabase.lib.schema.common :as lib.schema.common]
    [metabase.lib.schema.id :as lib.schema.id]
    [metabase.models.interface :as mi]
+   [metabase.permissions.core :as perms]
    [metabase.query-processor.core :as qp]
    [metabase.search.core :as search]
    [metabase.sync.schedules :as sync.schedules]
@@ -76,8 +77,11 @@
    [:value_ref some?]
    [:pk_ref    some?]])
 
-(mu/defn ^:private fetch-values
-  [model-index :- ::model-index]
+(mu/defn- values-query
+  "The query selecting `[pk value]` tuples from `model-index`'s model: every record when `pk` is nil, otherwise just
+  the record with that primary key."
+  [model-index :- ::model-index
+   pk          :- [:maybe :int]]
   (let [model     (t2/select-one :model/Card :id (:model_id model-index))
         fix       (mu/fn [field-ref :- some?
                           base-type :- ::lib.schema.common/base-type]
@@ -85,18 +89,38 @@
         ;; :type/Text and :type/Integer are ensured at creation time on the api.
         value-ref (-> model-index :value_ref (fix :type/Text))
         pk-ref    (-> model-index :pk_ref (fix :type/Integer))]
-    (try
-      [nil (->> (qp/process-query
-                 ;; TODO (Cam 10/1/25) -- update this to generate the query using Lib
-                 {:database (:database_id model)
-                  :type     :query
-                  :query    {:source-table (format "card__%d" (:id model))
-                             :breakout     [pk-ref value-ref]
-                             :limit        (inc max-indexed-values)}})
-                :data :rows (filter valid-tuples?))]
-      (catch Exception e
-        (log/warnf e "Error fetching indexed values for model %s" (:id model))
-        [(ex-message e) []]))))
+    ;; TODO (Cam 10/1/25) -- update this to generate the query using Lib
+    {:database (:database_id model)
+     :type     :query
+     :query    (cond-> {:source-table (format "card__%d" (:id model))
+                        :breakout     [pk-ref value-ref]
+                        :limit        (inc max-indexed-values)}
+                 pk (assoc :filter [:= pk-ref pk]
+                           :limit  1))}))
+
+(mu/defn ^:private fetch-values
+  [model-index :- ::model-index]
+  (try
+    [nil (->> (qp/process-query (values-query model-index nil))
+              :data :rows (filter valid-tuples?))]
+    (catch Exception e
+      (log/warnf "Error fetching indexed values for model %s: %s" (:model_id model-index) (ex-message e))
+      [(ex-message e) []])))
+
+(mu/defn value-for-pk :- [:maybe :string]
+  "The indexed value of the record of `model-index`'s model whose primary key is `pk`, as the current user sees it:
+  the model is queried through the QP, so data permissions, sandboxing, impersonation and routing all apply. This
+  deliberately never reads `model_index_value`, which is a lens-free copy shared by every user and reachable only
+  through search. Nil when no record matches or the user may not run the model."
+  [model-index :- ::model-index
+   pk          :- :int]
+  (try
+    (let [[[_pk value]] (->> (qp/process-query (values-query model-index pk))
+                             :data :rows (filter valid-tuples?))]
+      (some-> value str))
+    (catch Exception e
+      (log/debugf "Could not read indexed value %s of model %s: %s" pk (:model_id model-index) (ex-message e))
+      nil)))
 
 (defn find-changes
   "Find additions and deletions in indexed values. `source-values` are from the db, `indexed-values` are what we
@@ -156,8 +180,8 @@
                                      "indexed")}))
         (run! search/update! (t2/reducible-select :model/ModelIndexValue :model_index_id (:id model-index)))
         (catch Exception e
-          (log/errorf e "Error saving model-index values for model-index: %d, model: %d"
-                      (:id model-index) (:model_id model-index))
+          (log/errorf "Error saving model-index values for model-index: %d, model: %d: %s"
+                      (:id model-index) (:model_id model-index) (ex-message e))
           (t2/update! :model/ModelIndex (:id model-index)
                       {:state      "error"
                        :error      (ex-message e)
@@ -205,6 +229,8 @@
    :joins        {:model_index [:model/ModelIndex [:= :model_index.id :this.model_index_id]]
                   :model       [:model/Card [:= :model.id :model_index.model_id]]
                   :collection  [:model/Collection [:= :collection.id :model.collection_id]]}})
+
+(perms/define-collection-based-visibility! "indexed-entity" :denormalized-from :model/Card)
 
 ;; TODO resolve the toucan2 issue preventing us from using this hook
 (underive :model/ModelIndexValue :hook/search-index)

@@ -5,7 +5,7 @@ import { useLocation } from "react-use";
 import { t } from "ttag";
 
 import { formatCommentDate, getCommentNodeId } from "metabase/comments/utils";
-import { useSelector } from "metabase/lib/redux";
+import { useSelector } from "metabase/redux";
 import { getUser } from "metabase/selectors/user";
 import { Avatar, Box, Group, Icon, Text, Timeline, Tooltip } from "metabase/ui";
 import type { Comment, DocumentContent } from "metabase-types/api";
@@ -79,7 +79,7 @@ export function DiscussionComment({
         aria-current={isTarget ? "location" : undefined}
         data-testid="discussion-comment-deleted"
       >
-        <Text size="md" c="text-tertiary" fs="italic">
+        <Text size="md" c="text-disabled" fs="italic">
           {t`This comment was deleted.`}
         </Text>
         <DiscussionActionPanel

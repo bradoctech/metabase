@@ -1,24 +1,22 @@
 import dayjs from "dayjs";
 import { t } from "ttag";
 
-import { formatValue } from "metabase/lib/formatting";
-import { formatDateTimeRangeWithUnit } from "metabase/lib/formatting/date";
-import type { OptionsType } from "metabase/lib/formatting/types";
-import { isNumber } from "metabase/lib/types";
-import { isEmpty } from "metabase/lib/validate";
 import type { ColorGetter } from "metabase/ui/colors/types";
+import { isNumber } from "metabase/utils/types";
+import { isEmpty } from "metabase/utils/validate";
+import { formatValue } from "metabase/visualizations/lib/formatting";
+import { formatDateTimeRangeWithUnit } from "metabase/visualizations/lib/formatting/date";
 import { computeChange } from "metabase/visualizations/lib/numeric";
 import { findPreviousNonEmptyRowIndex } from "metabase/visualizations/lib/trend-helpers";
-import type { ColumnSettings } from "metabase/visualizations/types";
 import { COMPARISON_TYPES } from "metabase/visualizations/visualizations/SmartScalar/constants";
 import {
   formatChange,
   formatPreviousPeriodOptionName,
 } from "metabase/visualizations/visualizations/SmartScalar/utils";
 import type { ClickObject } from "metabase-lib";
-import Question from "metabase-lib/v1/Question";
 import { isDate } from "metabase-lib/v1/types/utils/isa";
 import type {
+  ColumnSettings,
   DatasetColumn,
   DateTimeAbsoluteUnit,
   LegacyDatasetQuery,
@@ -234,7 +232,7 @@ function computeComparison({
     return computeTrendStaticValue({ comparison });
   }
 
-  throw Error(t`Invalid comparison type specified.`);
+  throw Error("Invalid comparison type specified.");
 }
 
 function getCurrentMetricData({
@@ -248,7 +246,6 @@ function getCurrentMetricData({
 }): MetricData {
   const [
     {
-      card,
       data: { rows, cols },
     },
   ] = series;
@@ -262,12 +259,12 @@ function getCurrentMetricData({
   );
 
   if (dimensionColIndex === -1) {
-    throw Error(t`No date column was found.`);
+    throw Error("No date column was found.");
   }
 
   if (metricColIndex === -1) {
     throw Error(
-      t`There was a problem with the primary number you chose. Check the viz settings and select a valid column for the primary number field.`,
+      "There was a problem with the primary number you chose. Check the viz settings and select a valid column for the primary number field.",
     );
   }
 
@@ -279,7 +276,7 @@ function getCurrentMetricData({
     rows.length,
   );
   if (latestRowIndex === -1) {
-    throw Error(t`No rows contain a valid value.`);
+    throw Error("No rows contain a valid value.");
   }
   const date = rows[latestRowIndex][dimensionColIndex] as string;
   const value = rows[latestRowIndex][metricColIndex];
@@ -291,16 +288,31 @@ function getCurrentMetricData({
   );
   const dateUnit = metricInsight?.unit;
   const dateColumn = cols[dimensionColIndex];
+
+  const isNative = cols.some((col) => col.source === "native");
+
   const dateColumnWithUnit = { ...dateColumn };
-  dateColumnWithUnit.unit ??= dateUnit;
+  if (!isNative) {
+    dateColumnWithUnit.unit ??= dateUnit;
+  }
   const dateColumnSettings = settings?.column?.(dateColumnWithUnit) ?? {};
 
-  const question = new Question(card);
+  const { date_granularity } = dateColumnSettings;
+  const displayUnit = isAbsoluteDateTimeUnit(date_granularity)
+    ? date_granularity
+    : undefined;
+  const displaySettings = displayUnit
+    ? { ...dateColumnSettings, time_enabled: null }
+    : dateColumnSettings;
+  if (displayUnit) {
+    dateColumnWithUnit.unit = displayUnit;
+  }
+
   const dateUnitSettings: DateUnitSettings = {
     dateColumn: dateColumnWithUnit,
-    dateColumnSettings,
-    dateUnit,
-    queryType: question.isNative() ? "native" : "query",
+    dateColumnSettings: displaySettings,
+    dateUnit: displayUnit ?? dateUnit,
+    queryType: isNative ? "native" : "query",
   };
 
   const formatOptions = {
@@ -482,12 +494,12 @@ function computeTrendPeriodsAgo({
   } = currentMetricData;
 
   if (isEmpty(dateUnitSettings.dateUnit)) {
-    throw Error(t`No date unit supplied for periods ago comparison.`);
+    throw Error("No date unit supplied for periods ago comparison.");
   }
 
   const { type, value } = comparison;
   if (type === COMPARISON_TYPES.PERIODS_AGO && !Number.isInteger(value)) {
-    throw Error(t`No integer value supplied for periods ago comparison.`);
+    throw Error("No integer value supplied for periods ago comparison.");
   }
   const dateUnitsAgo = value ?? 1;
 
@@ -687,7 +699,7 @@ function formatDateStr({
 }: {
   date: string;
   dateUnitSettings: DateUnitSettings;
-  options?: OptionsType;
+  options?: ColumnSettings;
 }) {
   const { dateColumn, dateColumnSettings, dateUnit, queryType } =
     dateUnitSettings;
@@ -781,12 +793,12 @@ function getArrowColor(
 ) {
   const arrowIconColorNames = shouldSwitchPositiveNegative
     ? {
-        [CHANGE_ARROW_ICONS.ARROW_DOWN]: getColor("success"),
-        [CHANGE_ARROW_ICONS.ARROW_UP]: getColor("error"),
+        [CHANGE_ARROW_ICONS.ARROW_DOWN]: getColor("feedback-positive"),
+        [CHANGE_ARROW_ICONS.ARROW_UP]: getColor("feedback-negative"),
       }
     : {
-        [CHANGE_ARROW_ICONS.ARROW_DOWN]: getColor("error"),
-        [CHANGE_ARROW_ICONS.ARROW_UP]: getColor("success"),
+        [CHANGE_ARROW_ICONS.ARROW_DOWN]: getColor("feedback-negative"),
+        [CHANGE_ARROW_ICONS.ARROW_UP]: getColor("feedback-positive"),
       };
 
   return arrowIconColorNames[changeArrowIconName];

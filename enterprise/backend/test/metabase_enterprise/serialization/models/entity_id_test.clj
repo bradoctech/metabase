@@ -9,6 +9,8 @@
    [metabase-enterprise.serialization.v2.backfill-ids :as serdes.backfill]
    [metabase-enterprise.serialization.v2.entity-ids :as v2.entity-ids]
    [metabase-enterprise.serialization.v2.models :as serdes.models]
+   [metabase.classloader.core :as classloader]
+   [metabase.models.resolution :as models.resolution]
    [metabase.models.serialization :as serdes]))
 
 (set! *warn-on-reflection* true)
@@ -16,12 +18,17 @@
 (def ^:private entities-external-name
   "Entities with external names, so they don't need a generated entity_id."
   #{:model/Channel
+    ;; CustomVizPlugins have unique identifiers.
+    :model/CustomVizPlugin
     ;; Databases have external names based on their URLs; tables are nested under databases; fields under tables.
     :model/Database
     :model/Table
     :model/Field
     :model/FieldValues
     :model/FieldUserSettings
+    ;; OsiAiContext is identified by the entity it describes (entity_type + the entity's portable ref); its
+    ;; serdes path nests under that entity, so it has no generated entity_id.
+    :model/OsiAiContext
     ;; Settings have human-selected unique names.
     :model/Setting
     ;; Glossary items have unique `term` key
@@ -49,6 +56,7 @@
     :model/CollectionBookmark
     :model/ContentTranslation
     :model/DashboardBookmark
+    :model/DataComplexityScore
     :model/DataPermissions
     :model/DatabaseRouter
     :model/Dependency
@@ -57,9 +65,16 @@
     :model/CollectionPermissionGraphRevision
     :model/DashboardCardSeries
     :model/LoginHistory
+    :model/McpQueryHandle
     :model/FieldValues
     :model/MetabotConversation
+    :model/MetabotFeedback
+    :model/MetabotGroupLimit
+    :model/MetabotInstanceLimit
     :model/MetabotMessage
+    :model/MetabotPermissions
+    :model/MetabotSourceFeedback
+    :model/MetabotUsedTable
     :model/ModelIndex
     :model/ModelIndexValue
     :model/ModerationReview
@@ -71,6 +86,7 @@
     :model/OAuthAccessToken
     :model/OAuthAuthorizationCode
     :model/OAuthClient
+    :model/OAuthClientEvent
     :model/OAuthRefreshToken
     :model/ParameterCard
     :model/Permissions
@@ -95,8 +111,18 @@
     :model/Revision
     :model/SemanticSearchTokenTracking
     :model/SearchIndexMetadata
+    ;; Workspace remappings are runtime-only; they redirect QP queries against canonical
+    ;; tables to workspace-isolated copies. They aren't portable across instances and
+    ;; aren't included in serdes export/import.
+    :model/TableRemapping
     :model/Secret
     :model/Session
+    :model/SourceDimensionDaily
+    :model/SourceDimensionProfileDaily
+    :model/SourceMetricDaily
+    :model/SourceSegmentCompositeDaily
+    :model/SourceSegmentDaily
+    :model/SsoRelayState
     :model/SupportAccessGrantLog
     :model/TaskHistory
     :model/TaskRun
@@ -119,19 +145,11 @@
     :model/CloudMigration
     :model/Comment
     :model/CommentReaction
-    ;; TODO (lbrdnk 2025-12-17) -- I've added rest of the workspace models here as Workspace was present. I believe
-    ;; going forward all of that will be available for export. We should revisit this later in the project.
+    ;; Workspace and WorkspaceDatabase are runtime-only -- per-instance workspace
+    ;; provisioning state, not portable content. Same rationale as TableRemapping above.
     :model/Workspace
-    :model/WorkspaceInput
-    :model/WorkspaceInputExternal
-    :model/WorkspaceInputTransform
-    :model/WorkspaceLog
-    :model/WorkspaceMerge
-    :model/WorkspaceMergeTransform
-    :model/WorkspaceGraph
-    :model/WorkspaceOutput
-    :model/WorkspaceOutputExternal
-    :model/WorkspaceTransform})
+    :model/WorkspaceDatabase
+    :model/WorkspaceInstance})
 
 (deftest ^:parallel comprehensive-entity-id-test
   (let [entity-id-models (->> (v2.entity-ids/toucan-models)
@@ -148,6 +166,8 @@
       (testing (format (str "Model %s should either: have the ::mi/entity-id property, or be explicitly listed as having "
                             "an external name, or explicitly listed as excluded from serialization")
                        model)
+        ;; the property is registered by the model's own namespace, which nothing else here loads
+        (classloader/require (models.resolution/model->namespace model))
         (is (serdes.backfill/has-entity-id? model))))))
 
 (deftest ^:parallel comprehensive-identity-hash-test

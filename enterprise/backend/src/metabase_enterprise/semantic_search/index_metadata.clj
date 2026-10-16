@@ -204,7 +204,8 @@
 (defn- index-table-exists? [pgvector index]
   (semantic.util/table-exists? pgvector (:table-name index)))
 
-(defn- control-and-metadata-tables-exist?
+(defn control-and-metadata-tables-exist?
+  "Have the index bookkeeping tables been created, i.e. has init ever run against this pgvector DB?"
   [pgvector index-metadata]
   (and (semantic.util/table-exists? pgvector (:metadata-table-name index-metadata))
        (semantic.util/table-exists? pgvector (:control-table-name index-metadata))))
@@ -237,7 +238,7 @@
   the indexes metadata row."
   [pgvector index-metadata index-id]
   (assert index-id)
-  (assert (nat-int? index-id) (format "expected an integer id (hint do not pass the index map!)"))
+  (assert (nat-int? index-id) "expected an integer id (hint do not pass the index map!)")
   (let [{:keys [control-table-name]} index-metadata
         ;; only one row, no traditional WHERE for now
         activation-sql (-> {:update (keyword control-table-name)

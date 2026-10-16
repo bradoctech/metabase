@@ -187,7 +187,6 @@
                             (if (= new-metadata old-metadata)
                               ::graph/stop
                               [node-id new-metadata]))))))]
-
     (doseq [[card-id new-metadata] updates]
       (t2/update! :model/Card card-id {:result_metadata new-metadata}))))
 
@@ -197,6 +196,7 @@
 (methodical/defmethod events/publish-event! ::update-card-dependents-metadata
   [_ {{:keys [id dataset_query]} :object :keys [previous-object]}]
   (when (and (premium-features/has-feature? :dependencies)
+             (seq dataset_query)
              (not (lib/any-native-stage? dataset_query)))
     (async/submit!
      (fn []

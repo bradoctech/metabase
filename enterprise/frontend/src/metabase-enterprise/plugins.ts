@@ -10,6 +10,7 @@ import "./license";
 
 // PLUGINS THAT USE hasPremiumFeature (import initialization functions):
 import { initializePlugin as initializeAdvancedPermissions } from "./advanced_permissions";
+import { initializePlugin as initializeAiControls } from "./ai-controls";
 import { initializePlugin as initializeApplicationPermissions } from "./application_permissions";
 import { initializePlugin as initializeAuditApp } from "./audit_app";
 import { initializePlugin as initializeAuth } from "./auth";
@@ -18,8 +19,8 @@ import { initializePlugin as initializeCleanUp } from "./clean_up";
 import { initializePlugin as initializeCollections } from "./collections";
 import { initializePlugin as initializeContentTranslation } from "./content_translation";
 import { initializePlugin as initializeContentVerification } from "./content_verification";
+import { initializePlugin as initializeCustomViz } from "./custom_viz";
 import { initializePlugin as initializeLibrary } from "./data-studio/library";
-import { initializePlugin as initializeWorkspaces } from "./data-studio/workspaces";
 import { initializePlugin as initializeDatabaseReplication } from "./database_replication";
 import { initializePlugin as initializeDatabaseRouting } from "./database_routing";
 import { initializePlugin as initializeDependencies } from "./dependencies";
@@ -32,10 +33,13 @@ import { initializePlugin as initializeGroupManagers } from "./group_managers";
 import { initializePlugin as initializeMetabot } from "./metabot";
 import { initializePlugin as initializeModelPersistence } from "./model_persistence";
 import { initializePlugin as initializeModeration } from "./moderation";
+import { initializePlugin as initializeTools } from "./monitor/tools";
+import { initializePlugin as initializeMultiFactorAuth } from "./multi_factor_auth";
 import { initializePlugin as initializeRemoteSync } from "./remote_sync";
 import { initializePlugin as initializeReplacement } from "./replacement";
 import { initializePlugin as initializeResourceDownloads } from "./resource_downloads";
 import { initializePlugin as initializeSandboxes } from "./sandboxes";
+import { initializePlugin as initializeSchemaViewer } from "./schema_viewer";
 import { initializePlugin as initializeSecurityCenter } from "./security_center";
 import { initializePlugin as initializeSemanticSearch } from "./semantic_search";
 import { initializePlugin as initializeSharing } from "./sharing";
@@ -44,13 +48,13 @@ import { initializePlugin as initializeSnippets } from "./snippets";
 import { initializePlugin as initializeSupport } from "./support";
 import { initializePlugin as initializeTableEditing } from "./table-editing";
 import { initializePlugin as initializeTenants } from "./tenants";
-import { initializePlugin as initializeTools } from "./tools";
 import { initializePlugin as initializeTransforms } from "./transforms";
 import { initializePlugin as initializeTransformsInspector } from "./transforms-inspector";
 import { initializePlugin as initializeTransformsPython } from "./transforms-python";
 import { initializePlugin as initializeUploadManagement } from "./upload_management";
 import { initializePlugin as initializeUserProvisioning } from "./user_provisioning";
 import { initializePlugin as initializeWhitelabel } from "./whitelabel";
+import { initializePlugin as initializeWorkspaces } from "./workspaces";
 import { initializePlugin as initializeWritableConnection } from "./writable_connection";
 
 /**
@@ -65,6 +69,7 @@ export function initializePlugins() {
   initializeCollections();
   initializeContentTranslation();
   initializeContentVerification();
+  initializeCustomViz();
   initializeDatabaseRouting();
   initializeRemoteSync();
   initializeReplacement();
@@ -81,6 +86,7 @@ export function initializePlugins() {
   initializeAuditApp();
   initializeMetabot();
   initializeModelPersistence();
+  initializeMultiFactorAuth();
   initializeFeatureLevelPermissions();
   initializeApplicationPermissions();
   initializeGroupManagers();
@@ -92,6 +98,7 @@ export function initializePlugins() {
   initializeDatabaseReplication();
   initializeTableEditing();
   initializeDependencies();
+  initializeSchemaViewer();
   initializeSecurityCenter();
   initializeSemanticSearch();
   initializeTransforms();
@@ -99,6 +106,7 @@ export function initializePlugins() {
   initializeTransformsPython();
   initializeSupport();
   initializeTenants?.();
-  initializeWorkspaces();
   initializeWritableConnection();
+  initializeWorkspaces();
+  initializeAiControls();
 }

@@ -122,4 +122,20 @@ describe("LastEditInfoLabel", () => {
       }),
     ).toBeInTheDocument();
   });
+
+  it("does not crash when last-edit-info is missing", () => {
+    expect(() =>
+      renderWithProviders(
+        <LastEditInfoLabel
+          item={{ "last-edit-info": undefined as never }}
+          onClick={jest.fn()}
+        />,
+        {
+          storeInitialState: {
+            currentUser: TEST_USER,
+          },
+        },
+      ),
+    ).not.toThrow();
+  });
 });

@@ -9,6 +9,7 @@
    [honey.sql.helpers :as sql.helpers]
    [java-time.api :as t]
    [metabase-enterprise.semantic-search.env :as semantic.env]
+   [metabase-enterprise.semantic-search.index-metadata :as semantic.index-metadata]
    [metabase-enterprise.semantic-search.settings :as semantic.settings]
    [metabase-enterprise.semantic-search.util :as semantic.u]
    [metabase.task.core :as task]
@@ -30,7 +31,7 @@
              :left-join [[(keyword metadata-table-name) :meta]
                          [:= :meta.table_name :t.table_name]]
              :where [:and
-                     [:like :t.table_name [:inline "index_table_%"]]
+                     [:like :t.table_name ^:allow-raw-sql [:inline "index_table_%"]]
                      [:= :meta.table_name nil]]}
             (sql/format :quoted true))]
     (->> (jdbc/execute! pgvector orphaned-tables-sql {:builder-fn jdbc.rs/as-unqualified-lower-maps})
@@ -55,7 +56,7 @@
   (let [retention-cutoff (t/minus (t/instant) (t/hours (semantic.settings/repair-table-retention-hours)))
         repair-tables-sql (-> {:select [:t.table_name]
                                :from [[:information_schema.tables :t]]
-                               :where [:like :t.table_name [:inline "repair_%"]]}
+                               :where [:like :t.table_name ^:allow-raw-sql [:inline "repair_%"]]}
                               (sql/format :quoted true))
         all-repair-tables (->> (jdbc/execute! pgvector repair-tables-sql {:builder-fn jdbc.rs/as-unqualified-lower-maps})
                                (map :table_name))
@@ -146,7 +147,7 @@
           (when (pos? deleted-count)
             (log/infof "Cleaned up %d old tombstone records from gate table" deleted-count)))))
     (catch Exception e
-      (log/error e "Failed to clean up tombstone records from gate table"))))
+      (log/errorf "Failed to clean up tombstone records from gate table: %s" (ex-message e)))))
 
 (defn- cleanup-stale-indexes!
   [pgvector index-metadata]
@@ -165,11 +166,15 @@
 (defn- cleanup-stale-indexes-and-gate-tombstones!
   []
   (when (semantic.u/semantic-search-available?)
-    (let [pgvector             (semantic.env/get-pgvector-datasource!)
-          index-metadata       (semantic.env/get-index-metadata)]
-      (cleanup-stale-indexes! pgvector index-metadata)
-      (cleanup-old-gate-tombstones! pgvector index-metadata)
-      (cleanup-orphan-repair-tables! pgvector))))
+    (let [pgvector       (semantic.env/get-pgvector-datasource!)
+          index-metadata (semantic.env/get-index-metadata)]
+      ;; Available but never initialized is a steady state (semantic neither default nor additional);
+      ;; the bookkeeping tables only exist after init, and the cleanup queries would throw without them.
+      ;; Still runs while merely available, so an opted-out instance's leftover indexes get cleaned.
+      (when (semantic.index-metadata/control-and-metadata-tables-exist? pgvector index-metadata)
+        (cleanup-stale-indexes! pgvector index-metadata)
+        (cleanup-old-gate-tombstones! pgvector index-metadata)
+        (cleanup-orphan-repair-tables! pgvector)))))
 
 (def ^:private cleanup-job-key (jobs/key "metabase.task.semantic-index-cleanup.job"))
 (def ^:private cleanup-trigger-key (triggers/key "metabase.task.semantic-index-cleanup.trigger"))
@@ -180,7 +185,7 @@
   (cleanup-stale-indexes-and-gate-tombstones!))
 
 (defmethod task/init! ::SemanticIndexCleanup [_]
-  (when (semantic.u/semantic-search-available?)
+  (when (semantic.u/semantic-search-configured?)
     (let [job (jobs/build
                (jobs/of-type SemanticIndexCleanup)
                (jobs/with-identity cleanup-job-key))
@@ -188,7 +193,7 @@
                    (triggers/with-identity cleanup-trigger-key)
                    (triggers/start-now)
                    (triggers/with-schedule
-                  ;; Run daily at 3 AM
+                    ;; Run daily at 3 AM
                     (cron/cron-schedule "0 0 3 * * ? *")))]
       (task/schedule-task! job trigger))))
 

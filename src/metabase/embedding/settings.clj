@@ -127,8 +127,8 @@
   :type       :string
   :feature    :embedding
   :export?    false
-  :visibility :public
-  :encryption :no
+  :visibility :authenticated
+  :encryption :when-encryption-key-set
   :audit      :getter)
 
 (defsetting enable-embedding-static
@@ -181,9 +181,9 @@
   (deferred-tru "Allow Metabase SDK access to these space delimited origins.")
   :type       :string
   :export?    false
-  :visibility :public
+  :visibility :authenticated
   :default    ""
-  :encryption :no
+  :encryption :when-encryption-key-set
   :audit      :getter
   :getter     #'-embedding-app-origins-sdk
   :setter     #'-embedding-app-origins-sdk!)
@@ -319,3 +319,12 @@
   :visibility :admin
   :can-read-from-env? false
   :doc false)
+
+(defsetting default-embedding-themes-seeded
+  (deferred-tru "Whether the default Light and Dark embedding themes have been seeded into the database.")
+  :type       :boolean
+  :default    false
+  :visibility :admin
+  :export?    false
+  :can-read-from-env? false
+  :doc        false)

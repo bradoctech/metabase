@@ -83,7 +83,11 @@ describe(
       cy.intercept("POST", "/api/action/*/execute").as("executeAction");
       cy.intercept("POST", "/api/action").as("createAction");
       cy.intercept("GET", "/api/table/*/query_metadata*").as("fetchMetadata");
-      cy.intercept("GET", "/api/search?archived=true").as("getArchived");
+      cy.intercept({
+        method: "GET",
+        pathname: "/api/search",
+        query: { archived: "true" },
+      }).as("getArchived");
       cy.intercept("GET", "/api/search?*").as("getSearchResults");
       cy.intercept("GET", "/api/database?*").as("getDatabase");
     });
@@ -124,6 +128,11 @@ describe(
         .should("be.checked");
       cy.findByRole("button", { name: "Update" }).click();
 
+      cy.wait("@updateAction");
+      // The action editor closes after the update; wait until it is gone
+      // before asserting on the action list behind it.
+      cy.findByTestId("action-creator").should("not.exist");
+
       cy.findByLabelText("Action list")
         .findByText(
           "DELETE FROM orders WHERE id = {{ id }} AND status = 'pending'",
@@ -140,7 +149,9 @@ describe(
 
       cy.findByRole("listitem", { name: "Delete Order" }).should("not.exist");
 
-      cy.findByLabelText("Actions menu").click();
+      cy.findByTestId("model-actions-header")
+        .findByLabelText("Actions")
+        .click();
       H.popover().findByText("Disable basic actions").click();
       H.modal().within(() => {
         cy.findByText("Disable basic actions?").should("be.visible");
@@ -480,6 +491,11 @@ describe(
 
         cy.findByRole("button", { name: "Update" }).click();
 
+        cy.wait("@updateAction");
+        // The action editor closes after the update; wait until it is gone
+        // before clicking through to the run modal behind it.
+        cy.findByTestId("action-creator").should("not.exist");
+
         runActionFor(SAMPLE_QUERY_ACTION.name);
 
         H.modal().within(() => {
@@ -508,6 +524,9 @@ describe(
         });
         cy.findByRole("button", { name: "Update" }).click();
 
+        cy.wait("@updateAction");
+        cy.findByTestId("action-creator").should("not.exist");
+
         runActionFor(SAMPLE_QUERY_ACTION.name);
 
         H.modal().within(() => {
@@ -534,6 +553,10 @@ describe(
           cy.findByRole("button", { name: "Update" }).click();
         });
 
+        cy.wait("@updateAction");
+        cy.findByTestId("action-creator").should("not.exist");
+
+        cy.intercept("POST", "/api/action/*/execute").as("executeQueryAction");
         runActionFor(SAMPLE_QUERY_ACTION.name);
 
         H.modal().within(() => {
@@ -545,6 +568,9 @@ describe(
           cy.button(SAMPLE_QUERY_ACTION.name).click();
         });
 
+        cy.wait("@executeQueryAction")
+          .its("response.statusCode")
+          .should("eq", 200);
         verifyScoreValue(22, dialect);
       });
 
@@ -572,6 +598,9 @@ describe(
           });
 
         cy.findByRole("button", { name: "Update" }).click();
+
+        cy.wait("@updateAction");
+        cy.findByTestId("action-creator").should("not.exist");
 
         runActionFor("Create");
 
@@ -634,6 +663,9 @@ describe(
 
         cy.findByRole("button", { name: "Update" }).click();
 
+        cy.wait("@updateAction");
+        cy.findByTestId("action-creator").should("not.exist");
+
         cy.signOut();
 
         cy.get("@queryActionPublicUrl").then((url) => {
@@ -680,6 +712,7 @@ describe(
         cy.findByRole("button", { name: "Update" }).click();
 
         cy.wait("@updateAction");
+        cy.findByTestId("action-creator").should("not.exist");
 
         cy.signOut();
 
@@ -773,7 +806,8 @@ describe(
           cy.button(SAMPLE_QUERY_ACTION.name).click();
 
           cy.findByText(
-            /Error executing Action:.*Invalid impersonated native query\. Must be a single select statement\./,
+            "Error executing Action: Error executing write query: ERROR: permission denied for table scoreboard_actions",
+            { timeout: 30000 },
           );
         });
 

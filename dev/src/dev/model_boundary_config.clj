@@ -13,6 +13,7 @@
   (:require
    [clojure.string :as str]
    [dev.deps-graph :as deps-graph]
+   [rewrite-clj.node :as r.node]
    [rewrite-clj.parser :as r.parser]
    [rewrite-clj.zip :as z]))
 
@@ -28,50 +29,54 @@
   `:model-imports` for module M = models owned by other modules that M references.
 
   Modules with `:model-imports :bypass` are excluded: they don't need computed imports, and their
-  references don't drive exports (models used only by bypass modules need not be exported)."
-  []
-  (let [config      (deps-graph/kondo-config)
-        ownership   (deps-graph/model-ownership)
-        module-refs (deps-graph/model-references-by-module)
-        all-modules (set (keys config))
-        bypass-modules (into #{}
-                             (keep (fn [[mod mod-config]]
-                                     (when (= (:model-imports mod-config) :bypass)
-                                       mod)))
-                             config)
-        ;; {:model/X => #{modules that reference it}} — inverted index for fast export lookups
-        ;; Only non-bypass modules drive exports.
-        model->referencing-modules
-        (reduce-kv (fn [acc mod models]
-                     (if (contains? bypass-modules mod)
-                       acc
-                       (reduce (fn [acc model]
-                                 (update acc model (fnil conj #{}) mod))
-                               acc
-                               models)))
-                   {}
-                   module-refs)]
-    {:model-exports
-     (into (sorted-map)
-           (for [mod all-modules
-                 :let [owned (into #{} (comp (filter (fn [[_ owner]] (= owner mod))) (map key)) ownership)]
-                 :when (seq owned)]
-             [mod (into (sorted-set)
-                        (for [model owned
-                              :let [refs (get model->referencing-modules model)]
-                              :when (some #(not= % mod) refs)]
-                          model))]))
-     :model-imports
-     (into (sorted-map)
-           (for [mod all-modules
-                 :when (not (contains? bypass-modules mod))
-                 :let [imported (into (sorted-set)
-                                      (for [model (get module-refs mod)
-                                            :let [defining-mod (get ownership model)]
-                                            :when (and defining-mod (not= defining-mod mod))]
-                                        model))]
-                 :when (seq imported)]
-             [mod imported]))}))
+  references don't drive exports (models used only by bypass modules need not be exported).
+
+  The 3-arity variant takes precomputed `config`, `ownership`, and `module-refs` so callers that already
+  have them (e.g. a single shared parse pass) can avoid re-parsing every source file."
+  ([]
+   (compute-model-boundaries (deps-graph/kondo-config)
+                             (deps-graph/model-ownership)
+                             (deps-graph/model-references-by-module)))
+  ([config ownership module-refs]
+   (let [all-modules (set (keys config))
+         bypass-modules (into #{}
+                              (keep (fn [[mod mod-config]]
+                                      (when (= (:model-imports mod-config) :bypass)
+                                        mod)))
+                              config)
+         ;; {:model/X => #{modules that reference it}} — inverted index for fast export lookups
+         ;; Only non-bypass modules drive exports.
+         model->referencing-modules
+         (reduce-kv (fn [acc mod models]
+                      (if (contains? bypass-modules mod)
+                        acc
+                        (reduce (fn [acc model]
+                                  (update acc model (fnil conj #{}) mod))
+                                acc
+                                models)))
+                    {}
+                    module-refs)]
+     {:model-exports
+      (into (sorted-map)
+            (for [mod all-modules
+                  :let [owned (into #{} (comp (filter (fn [[_ owner]] (= owner mod))) (map key)) ownership)]
+                  :when (seq owned)]
+              [mod (into (sorted-set)
+                         (for [model owned
+                               :let [refs (get model->referencing-modules model)]
+                               :when (some #(not= % mod) refs)]
+                           model))]))
+      :model-imports
+      (into (sorted-map)
+            (for [mod all-modules
+                  :when (not (contains? bypass-modules mod))
+                  :let [imported (into (sorted-set)
+                                       (for [model (get module-refs mod)
+                                             :let [defining-mod (get ownership model)]
+                                             :when (and defining-mod (not= defining-mod mod))]
+                                         model))]
+                  :when (seq imported)]
+              [mod imported]))})))
 
 (def ^:private config-path ".clj-kondo/config/modules/config.edn")
 
@@ -124,15 +129,34 @@
            (reduce
             (fn [root config-key]
               (let [mod-cfg  (some-> (find-module-config root module-sym) z/right)
-                    val-zloc (when mod-cfg (find-key-value mod-cfg config-key))]
-                ;; Only update keys that already exist and are sets (skip :bypass, :any, etc.)
-                (if (and val-zloc (set? (z/sexpr val-zloc)))
-                  (let [computed (get-in boundaries [config-key module-sym] #{})]
-                    (if (seq computed)
-                      (z/root (z/replace val-zloc (r.parser/parse-string (model-set-str computed))))
-                      ;; Empty — remove the key-value pair
-                      (-> val-zloc z/remove z/remove z/root)))
-                  root)))
+                    val-zloc (when mod-cfg (find-key-value mod-cfg config-key))
+                    computed (get-in boundaries [config-key module-sym] #{})]
+                (cond
+                  ;; Key exists with a non-set value (e.g. :bypass, :any) — leave it alone.
+                  (and val-zloc (not (set? (z/sexpr val-zloc))))
+                  root
+
+                  ;; Key exists with a set value — replace or remove.
+                  val-zloc
+                  (if (seq computed)
+                    (z/root (z/replace val-zloc (r.parser/parse-string (model-set-str computed))))
+                    (-> val-zloc z/remove z/remove z/root))
+
+                  ;; Key missing and nothing to add.
+                  (empty? computed)
+                  root
+
+                  ;; Key missing — append `<newline><indent>:key <set>` to the module config map,
+                  ;; splicing new children directly to avoid the separator spaces `append-child` inserts.
+                  :else
+                  (let [m-node       (z/node mod-cfg)
+                        new-children (concat (r.node/children m-node)
+                                             [(r.node/newlines 1)
+                                              (r.node/spaces 3)
+                                              (r.node/keyword-node config-key)
+                                              (r.node/spaces 1)
+                                              (r.parser/parse-string (model-set-str computed))])]
+                    (z/root (z/replace mod-cfg (r.node/replace-children m-node new-children)))))))
             root
             [:model-exports :model-imports]))
          (z/root root-zloc)

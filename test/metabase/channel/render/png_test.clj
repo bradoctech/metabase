@@ -31,7 +31,7 @@
   (testing "Are the correct fonts available for rendering?"
     (is (contains?
          (into #{} (map #(.getName ^Font %)) (.getAllFonts (GraphicsEnvironment/getLocalGraphicsEnvironment)))
-         "Rawline"))))
+         "Lato Regular"))))
 
 (defn- bytes->image
   [bytes]
@@ -42,7 +42,7 @@
   [content width]
   (-> [:html
        [:body {:style (style/style
-                       {:font-family      "Rawline, 'Helvetica Neue', 'Lucida Grande', sans-serif"
+                       {:font-family      "Lato, 'Helvetica Neue', 'Lucida Grande', sans-serif"
                         :margin           0
                         :padding          0
                         :background-color :white})}
@@ -51,31 +51,33 @@
       (#'png/render-to-png width)))
 
 (defn- render-with-wrapping
-  [content width]
-  (-> {:content     content
-       :attachments {}}
-      (png/render-html-to-png width)
-      bytes->image))
+  ([content width]
+   (render-with-wrapping content width nil))
+  ([content width options]
+   (-> {:content     content
+        :attachments {}}
+       (png/render-html-to-png width options)
+       bytes->image)))
 
-(deftest wrap-non-app-font-characters-test
-  (testing "HTML Content inside tables with characters not supported by the app font are wrapped in a span."
+(deftest wrap-non-lato-characters-test
+  (testing "HTML Content inside tables with characters not supported by the Lato font are wrapped in a span."
     (is (= [:td {:not-wrapped-in-here "안녕"}
             [:span {:style "font-family: sans-serif;"} "안녕"]]
-           (#'png/wrap-non-app-font-chars [:td {:not-wrapped-in-here "안녕"} "안녕"])))
+           (#'png/wrap-non-lato-chars [:td {:not-wrapped-in-here "안녕"} "안녕"])))
     (is (= [:table
             [:tr
              [:td "this is all Lato-compatible, baby!"]
              [:td "What do you think about різні шрифти в одному документі?"]
              [:td [:span {:style "font-family: sans-serif;"} "This part's English. This part is 英語ではありません"]]]]
-           (#'png/wrap-non-app-font-chars
+           (#'png/wrap-non-lato-chars
             [:table
              [:tr
               [:td "this is all Lato-compatible, baby!"]
               [:td "What do you think about різні шрифти в одному документі?"]
               [:td "This part's English. This part is 英語ではありません"]]])))))
 
-(deftest non-app-font-characters-can-render-test
-  (testing "Strings containing characters that are not included in the app font can still be rendered."
+(deftest non-lato-characters-can-render-test
+  (testing "Strings containing characters that are not included in the Lato font can still be rendered."
     (let [content                       [:span "안녕"]
           ^BufferedImage broken-render  (render-without-wrapping content 200)
           ^BufferedImage working-render (render-with-wrapping content 200)]
@@ -83,3 +85,11 @@
       ;; We assert that the working render is wider based on the assumption (verified manually by
       ;; actually looking at the rendered images) that the correctly rendered glyphs are wider.
       (is (< (.getWidth broken-render) (.getWidth working-render))))))
+
+(deftest render-html-to-png-scale-test
+  (testing "the :channel.render/scale option supersamples the raster without changing layout"
+    (let [content              [:div {:style "width: 100px; height: 40px;"} "hello"]
+          ^BufferedImage png1x (render-with-wrapping content 200)
+          ^BufferedImage png2x (render-with-wrapping content 200 {:channel.render/scale 2.0})]
+      (is (= (* 2 (.getWidth png1x)) (.getWidth png2x)))
+      (is (= (* 2 (.getHeight png1x)) (.getHeight png2x))))))

@@ -1,5 +1,5 @@
 import type { ScheduleSettings } from "./settings";
-import type { Table } from "./table";
+import type { SchemaName, Table } from "./table";
 
 import type { ISO8601Time, LongTaskStatus } from ".";
 
@@ -10,6 +10,7 @@ export type InitialSyncStatus = LongTaskStatus;
 export type DatabaseSettings = {
   [key: string]: any;
   "database-enable-actions"?: boolean;
+  "database-enable-workspaces"?: boolean;
 };
 
 export type DatabaseFeature =
@@ -69,6 +70,7 @@ export interface Database extends DatabaseData {
   native_permissions: "write" | "none";
   transforms_permissions?: "write" | "none";
   initial_sync_status: InitialSyncStatus;
+  description?: string;
   caveats?: string;
   points_of_interest?: string;
   created_at: ISO8601Time;
@@ -85,7 +87,9 @@ export interface Database extends DatabaseData {
   // Only appears in  GET /api/database/:id
   "can-manage"?: boolean;
   tables?: Table[];
-  workspace_permissions_status: CheckWorkspacePermissionsResponse | null;
+  // Populated when GET /api/database is called with include=schemas; lists
+  // schema names that contain at least one readable table.
+  schemas?: SchemaName[];
 }
 
 export interface DatabaseData {
@@ -97,6 +101,7 @@ export interface DatabaseData {
   // [[metabase.models.interface/to-json]] for `:model/Database`:
   details?: Record<string, unknown>;
   write_data_details?: Record<string, unknown> | null;
+  admin_details?: Record<string, unknown> | null;
   schedules: DatabaseSchedules;
   auto_run_queries: boolean | null;
   refingerprint: boolean | null;
@@ -117,6 +122,7 @@ export interface DatabaseUsageInfo {
   dataset: number;
   metric: number;
   segment: number;
+  transform: number;
 }
 
 export interface GetDatabaseRequest {
@@ -139,7 +145,7 @@ export type DatabaseLocalSettingAvailability =
   | { enabled: true }
   | { enabled: false; reasons: DatabaseLocalSettingDisableReason[] };
 
-export type DatabaseConnectionType = "default" | "write-data";
+export type DatabaseConnectionType = "default" | "write-data" | "admin";
 
 export type GetDatabaseHealthRequest = {
   id: DatabaseId;
@@ -151,7 +157,7 @@ export type GetDatabaseHealthResponse =
   | { status: "error"; message: string; errors: unknown };
 
 export interface ListDatabasesRequest {
-  include?: "tables";
+  include?: "tables" | "schemas";
   saved?: boolean;
   include_editable_data_model?: boolean;
   exclude_uneditable_details?: boolean;
@@ -187,6 +193,7 @@ export interface ListDatabaseSchemaTablesRequest {
   include_editable_data_model?: boolean;
   "can-query"?: boolean;
   "can-write-metadata"?: boolean;
+  include_measures?: boolean;
 }
 
 export interface ListVirtualDatabaseTablesRequest {
@@ -199,7 +206,7 @@ export interface GetDatabaseMetadataRequest {
   include_hidden?: boolean;
   include_editable_data_model?: boolean;
   remove_inactive?: boolean;
-  skip_fields?: boolean;
+  skip_fields: true; // make sure we don't get every field of every table
 }
 
 export interface CreateDatabaseRequest {
@@ -221,6 +228,7 @@ export interface UpdateDatabaseRequest {
   refingerprint?: boolean | null;
   details?: Record<string, unknown>;
   write_data_details?: Record<string, unknown> | null;
+  admin_details?: Record<string, unknown> | null;
   schedules?: DatabaseSchedules;
   description?: string;
   caveats?: string;
@@ -258,14 +266,3 @@ export interface UpdateDatabaseRouterRequest {
   id: DatabaseId;
   user_attribute: string | null;
 }
-
-export type CheckWorkspacePermissionsRequest = {
-  id: DatabaseId;
-  cached?: boolean;
-};
-
-export type CheckWorkspacePermissionsResponse = {
-  status: "ok" | "failed" | "unknown";
-  checked_at: string;
-  error?: string;
-};

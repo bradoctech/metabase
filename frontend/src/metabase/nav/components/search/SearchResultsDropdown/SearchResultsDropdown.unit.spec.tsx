@@ -11,7 +11,7 @@ import {
   screen,
   waitForLoaderToBeRemoved,
 } from "__support__/ui";
-import { checkNotNull } from "metabase/lib/types";
+import { checkNotNull } from "metabase/utils/types";
 import type { SearchResult } from "metabase-types/api";
 import {
   createMockCollection,
@@ -70,6 +70,7 @@ const setup = async ({
           searchText={searchText}
           onSearchItemSelect={onSearchItemSelect}
           goToSearchApp={goToSearchApp}
+          context="search-bar"
         />
       )}
     />,

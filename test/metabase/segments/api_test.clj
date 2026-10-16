@@ -1,5 +1,6 @@
 (ns metabase.segments.api-test
   "Tests for /api/segment endpoints."
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase.segments.api-test]}}}}}}
   (:require
    [clojure.test :refer :all]
    [metabase.api.response :as api.response]
@@ -29,12 +30,15 @@
       (update :definition map?)))
 
 (defn- mbql4-segment-definition
-  "Create a legacy MBQL4 segment definition"
+  "Create a legacy MBQL4 segment definition. A full query, not a bare fragment: a fragment has no `:database`, so it
+  cannot be validated as a query and is no longer accepted."
   [table-id field-id value]
-  {:source-table table-id
-   :filter [:= [:field field-id nil] value]})
+  {:database (t2/select-one-fn :db_id :model/Table :id table-id)
+   :type     :query
+   :query    {:source-table table-id
+              :filter       [:= [:field field-id nil] value]}})
 
-(defn- pmbql-segment-definition
+(defn- mbql5-segment-definition
   "Create an MBQL5 segment definition"
   [table-id field-id value]
   (let [metadata-provider (lib-be/application-database-metadata-provider (t2/select-one-fn :db_id :model/Table :id table-id))
@@ -50,7 +54,6 @@
 (deftest authentication-test
   (is (= (get api.response/response-unauthentic :body)
          (client/client :get 401 "segment")))
-
   (is (= (get api.response/response-unauthentic :body)
          (client/client :put 401 "segment/13"))))
 
@@ -60,34 +63,32 @@
   (testing "POST /api/segment"
     (testing "Test security. Requires superuser perms."
       (is (= "You don't have permissions to do that."
-             (mt/user-http-request :rasta :post 403 "segment" {:name       "abc"
-                                                               :table_id   (mt/id :users)
-                                                               :definition {}}))))))
+             (mt/user-http-request :rasta :post 403 "segment"
+                                   {:name       "abc"
+                                    :table_id   (mt/id :users)
+                                    :definition (mbql4-segment-definition (mt/id :users) (mt/id :users :name) "cans")}))))))
 
 (deftest create-segment-input-validation-test
   (testing "POST /api/segment"
     (is (=? {:errors {:name "value must be a non-blank string."}}
             (mt/user-http-request :crowberto :post 400 "segment" {})))
-
     (is (=? {:errors {:table_id "value must be an integer greater than zero."}}
             (mt/user-http-request :crowberto :post 400 "segment" {:name "abc"})))
-
     (is (=? {:errors {:table_id "value must be an integer greater than zero."}}
             (mt/user-http-request :crowberto :post 400 "segment" {:name     "abc"
                                                                   :table_id "foobar"})))
-
-    (is (=? {:errors {:definition "Value must be a map."}}
+    (is (=? {:errors {:definition "value must be a valid MBQL query with a source table and filters."}}
             (mt/user-http-request :crowberto :post 400 "segment" {:name     "abc"
                                                                   :table_id 123})))
-
-    (is (=? {:errors {:definition "Value must be a map."}}
-            (mt/user-http-request :crowberto :post 400 "segment" {:name       "abc"
-                                                                  :table_id   123
-                                                                  :definition "foobar"})))))
+    (testing "a non-map definition is rejected while decoding, so the body is the message rather than :errors"
+      (is (=? "value must be a valid MBQL query."
+              (mt/user-http-request :crowberto :post 400 "segment" {:name       "abc"
+                                                                    :table_id   123
+                                                                    :definition "foobar"}))))))
 
 (deftest create-segment-test
   (doseq [[format-name definition-fn] {"MBQL4" (partial mbql4-segment-definition (mt/id :users))
-                                       "pMBQL" (partial pmbql-segment-definition (mt/id :users))}]
+                                       "MBQL5" (partial mbql5-segment-definition (mt/id :users))}]
     (testing format-name
       (is (= {:name                    "A Segment"
               :description             "I did it!"
@@ -120,22 +121,19 @@
         (is (= "You don't have permissions to do that."
                (mt/user-http-request :rasta :put 403 (str "segment/" (:id segment))
                                      {:name             "abc"
-                                      :definition       {}
+                                      :definition       (mbql4-segment-definition (mt/id :users) (mt/id :users :name) "cans")
                                       :revision_message "something different"})))))))
 
 (deftest update-input-validation-test
   (testing "PUT /api/segment/:id"
     (is (=? {:errors {:name "nullable value must be a non-blank string."}}
             (mt/user-http-request :crowberto :put 400 "segment/1" {:name "" :revision_message "abc"})))
-
     (is (=? {:errors {:revision_message "value must be a non-blank string."}}
             (mt/user-http-request :crowberto :put 400 "segment/1" {:name "abc"})))
-
     (is (=? {:errors {:revision_message "value must be a non-blank string."}}
             (mt/user-http-request :crowberto :put 400 "segment/1" {:name             "abc"
                                                                    :revision_message ""})))
-
-    (is (=? {:errors {:definition "nullable map"}}
+    (is (=? "value must be a valid MBQL query."
             (mt/user-http-request :crowberto :put 400 "segment/1" {:name             "abc"
                                                                    :revision_message "123"
                                                                    :definition       "foobar"})))))
@@ -145,7 +143,7 @@
     (mt/with-temp [:model/Segment {:keys [id]} {:table_id (mt/id :users)
                                                 :definition (mbql4-segment-definition (mt/id :users) (mt/id :users :name) "cans")}]
       (doseq [[format-name eq-fn] [["MBQL4" (partial mbql4-segment-definition (mt/id :users))]
-                                   ["pMBQL" (partial pmbql-segment-definition (mt/id :users))]]]
+                                   ["MBQL5" (partial mbql5-segment-definition (mt/id :users))]]]
         (testing format-name
           (is (= {:name                    "Costa Rica"
                   :description             nil
@@ -179,8 +177,7 @@
         ;; just make sure API call doesn't barf
         (is (some? (mt/user-http-request :crowberto :put 200 (str "segment/" (u/the-id segment))
                                          {:name             "Cool name"
-                                          :revision_message "WOW HOW COOL"
-                                          :definition       {}})))))))
+                                          :revision_message "WOW HOW COOL"})))))))
 
 (deftest update-with-full-legacy-query-test
   (testing "PUT /api/segment/:id"
@@ -236,7 +233,6 @@
   (testing "DELETE /api/segment/:id"
     (is (=? {:errors {:revision_message "value must be a non-blank string."}}
             (mt/user-http-request :crowberto :delete 400 "segment/1" {:name "abc"})))
-
     (is (=? {:errors {:revision_message "value must be a non-blank string."}}
             (mt/user-http-request :crowberto :delete 400 "segment/1" :revision_message "")))))
 
@@ -276,7 +272,7 @@
 (deftest fetch-segment-test
   (testing "GET /api/segment/:id"
     (doseq [[format-name definition-fn] {"MBQL4" (partial mbql4-segment-definition (mt/id :users))
-                                         "pMBQL" (partial pmbql-segment-definition (mt/id :users))}]
+                                         "MBQL5" (partial mbql5-segment-definition (mt/id :users))}]
       (testing format-name
         (mt/with-temp [:model/Segment {:keys [id]} {:creator_id (mt/user->id :crowberto)
                                                     :table_id   (mt/id :users)

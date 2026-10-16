@@ -84,7 +84,7 @@ export const LayoutRightPanel = styled.div`
   align-items: center;
   flex: 1;
   padding: 3rem 2rem;
-  background-color: var(--mb-color-background);
+  background-color: var(--mb-color-background_page-primary);
 
   ${breakpointMaxSmall} {
     padding: 2rem 1.5rem;

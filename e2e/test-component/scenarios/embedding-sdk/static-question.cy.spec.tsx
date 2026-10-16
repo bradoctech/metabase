@@ -5,6 +5,7 @@ import {
   StaticQuestion,
   type StaticQuestionProps,
 } from "@metabase/embedding-sdk-react";
+import { useState } from "react";
 
 import { SAMPLE_DATABASE } from "e2e/support/cypress_sample_database";
 import { createQuestion, modal, popover } from "e2e/support/helpers";
@@ -12,6 +13,7 @@ import { getSdkRoot } from "e2e/support/helpers/e2e-embedding-sdk-helpers";
 import {
   DEFAULT_SDK_AUTH_PROVIDER_CONFIG,
   mountSdk,
+  mountSdkContent,
   mountStaticQuestion,
 } from "e2e/support/helpers/embedding-sdk-component-testing";
 import { signInAsAdminAndEnableEmbeddingSdk } from "e2e/support/helpers/embedding-sdk-testing";
@@ -120,6 +122,67 @@ describe("scenarios > embedding-sdk > static-question", () => {
     });
   });
 
+  it("should show a loader instead of the empty results state until `questionId` resolves (EMB-2390)", () => {
+    const EMPTY_STATE_SELECTOR = 'img[alt="Code prompt icon"]';
+    const PENDING_ID_HOLD_MS = 1500;
+
+    const DeferredQuestion = ({ resolvedId }: { resolvedId: number }) => {
+      const [questionId, setQuestionId] = useState<number | null>(null);
+
+      return (
+        <div>
+          <StaticQuestion questionId={questionId} />
+          <button onClick={() => setQuestionId(resolvedId)}>Resolve id</button>
+        </div>
+      );
+    };
+
+    cy.get<number>("@questionId").then((questionId) => {
+      mountSdkContent(<DeferredQuestion resolvedId={questionId} />);
+
+      cy.log("keeps the loader up while the id is still null");
+      cy.window().then((win) => {
+        return new Cypress.Promise((resolve, reject) => {
+          const startedAt = Date.now();
+
+          const checkInterval = setInterval(() => {
+            if (win.document.querySelector(EMPTY_STATE_SELECTOR)) {
+              clearInterval(checkInterval);
+              reject(
+                new Error(
+                  "the empty results state must not show while `questionId` is null",
+                ),
+              );
+            } else if (Date.now() - startedAt >= PENDING_ID_HOLD_MS) {
+              clearInterval(checkInterval);
+              resolve();
+            }
+          }, 20);
+        });
+      });
+      getSdkRoot().within(() => {
+        cy.findByTestId("loading-indicator").should("be.visible");
+      });
+
+      cy.findByRole("button", { name: "Resolve id" }).click();
+
+      cy.log("no flash between the id resolving and the results rendering");
+      H.assertElementNeverExists({
+        shouldNotExistSelector: EMPTY_STATE_SELECTOR,
+        successSelector: "[data-testid='table-header']",
+        rejectionMessage:
+          "the empty results state must not flash between the id resolving and the results rendering",
+        pollInterval: 20,
+        timeout: 15000,
+      });
+
+      getSdkRoot().within(() => {
+        cy.findByText("Product ID").should("be.visible");
+        cy.findByText("Max of Quantity").should("be.visible");
+      });
+    });
+  });
+
   it("should show question title", () => {
     mountStaticQuestion({ title: true });
 
@@ -199,6 +262,13 @@ describe("scenarios > embedding-sdk > static-question", () => {
     });
 
     it("should be able to create, edit, and delete alerts", () => {
+      // QuestionAlertListModal stays in null-render limbo until
+      // /api/notification?card_id=... resolves. On fetch (microtask
+      // resolution), the click can land before the recipients/channels
+      // queries have fired; wait for the GET both on first open and on
+      // re-open so the modal has its picked variant by the time we assert.
+      cy.intercept("GET", "/api/notification?card_id=*").as("listAlerts");
+
       mountStaticQuestion({
         withAlerts: true,
       });
@@ -207,6 +277,7 @@ describe("scenarios > embedding-sdk > static-question", () => {
       getSdkRoot().button("Alerts").should("be.visible").click();
 
       cy.log("alerts modal is open");
+      cy.wait("@listAlerts");
       modal().within(() => {
         cy.findByRole("heading", { name: "New alert" }).should("be.visible");
         cy.button("Done").click();
@@ -215,6 +286,7 @@ describe("scenarios > embedding-sdk > static-question", () => {
 
       cy.log("alerts list modal");
       getSdkRoot().button("Alerts").should("be.visible").click();
+      cy.wait("@listAlerts");
       modal().within(() => {
         cy.findByRole("heading", { name: "Edit alerts" }).should("be.visible");
         cy.findByText("Alert when this has results").should("be.visible");
@@ -247,6 +319,28 @@ describe("scenarios > embedding-sdk > static-question", () => {
       cy.log("the alert is deleted");
       getSdkRoot().button("Alerts").should("be.visible").click();
       modal().findByRole("heading", { name: "New alert" }).should("be.visible");
+    });
+
+    it("should hide the Alerts button when the question's container is narrow", () => {
+      cy.intercept("GET", "/api/card/*").as("getCard");
+
+      cy.get<number>("@questionId").then((questionId) => {
+        mountSdkContent(
+          <div style={{ width: 400 }}>
+            <StaticQuestion questionId={questionId} withAlerts />
+          </div>,
+        );
+      });
+
+      cy.wait("@getCard");
+
+      getSdkRoot().button("Alerts").should("not.exist");
+    });
+
+    it("should show the Alerts button when the question's container is wide", () => {
+      mountStaticQuestion({ withAlerts: true });
+
+      getSdkRoot().button("Alerts").should("be.visible");
     });
   });
 });

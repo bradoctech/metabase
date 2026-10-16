@@ -3,15 +3,7 @@ import { type CSSProperties, Component } from "react";
 import { t } from "ttag";
 
 import CS from "metabase/css/core/index.css";
-import {
-  AM_PM_OPTIONS,
-  HOUR_OPTIONS,
-  MINUTE_OPTIONS,
-  MONTH_DAY_OPTIONS,
-  getDayOfWeekOptions,
-} from "metabase/lib/date-time";
-import { capitalize } from "metabase/lib/formatting/strings";
-import { useSelector } from "metabase/lib/redux";
+import { useSelector } from "metabase/redux";
 import { getApplicationName } from "metabase/selectors/whitelabel";
 import {
   Box,
@@ -19,14 +11,20 @@ import {
   SegmentedControl,
   type SelectOption,
 } from "metabase/ui";
+import {
+  AM_PM_OPTIONS,
+  HOUR_OPTIONS,
+  MINUTE_OPTIONS,
+  MONTH_DAY_OPTIONS,
+  getDayOfWeekOptions,
+} from "metabase/utils/date-time";
+import { capitalize } from "metabase/utils/formatting/strings";
 import type {
   ScheduleDayType,
   ScheduleFrameType,
   ScheduleSettings,
   ScheduleType,
 } from "metabase-types/api";
-
-import type { SelectOption as LegacySelectOption } from "../Select";
 
 import { DynamicWidthSelect } from "./DynamicWidthSelect";
 import {
@@ -77,7 +75,9 @@ const DEFAULT_DAY = "mon";
 /**
  * Transforms legacy Select data format to Mantine Select data format
  */
-function toMantineData(options: LegacySelectOption[]): SelectOption[] {
+type LegacyScheduleOption = { name?: string; value: string | number };
+
+function toMantineData(options: LegacyScheduleOption[]): SelectOption[] {
   return options.map((option) => ({
     label: option.name ?? "",
     value: option.value.toString(),
@@ -316,7 +316,7 @@ export class SchedulePicker extends Component<SchedulePickerProps> {
             minButtonWidth={110}
             value={scheduleType}
             onChange={(value) =>
-              this.handleChangeProperty("schedule_type", value as ScheduleType)
+              this.handleChangeProperty("schedule_type", value)
             }
             data={scheduleOptions.map((scheduleOption) => ({
               label:

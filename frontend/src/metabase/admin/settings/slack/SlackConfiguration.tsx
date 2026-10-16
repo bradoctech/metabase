@@ -29,11 +29,11 @@ export const SlackConfiguration = () => {
         <Box
           component="img"
           src={iconUrl}
-          alt={t`Metabot icon`}
+          alt="Metabot icon"
           w={80}
           h={80}
           bdrs="sm"
-          bd="1px solid var(--mb-color-border)"
+          bd="1px solid var(--mb-color-border-neutral)"
         />
         <Stack gap="sm" align="flex-start">
           <Button

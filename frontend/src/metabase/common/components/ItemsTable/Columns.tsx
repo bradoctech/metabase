@@ -1,29 +1,27 @@
 import type { PropsWithChildren } from "react";
 import { c, t } from "ttag";
 
-import type { ActionMenuProps } from "metabase/collections/components/ActionMenu";
-import ActionMenu from "metabase/collections/components/ActionMenu";
-import { CheckBox } from "metabase/common/components/CheckBox";
+import type { ActionMenuProps } from "metabase/common/collections/components/ActionMenu";
+import ActionMenu from "metabase/common/collections/components/ActionMenu";
 import { DateTime } from "metabase/common/components/DateTime";
-import { Ellipsified } from "metabase/common/components/Ellipsified";
 import { EntityItem } from "metabase/common/components/EntityItem";
 import { Markdown } from "metabase/common/components/Markdown";
+import { useTranslateContent } from "metabase/content-translation/hooks";
 import { ArchiveButton } from "metabase/embedding/components/ArchiveButton";
 import { isEmbeddingSdk } from "metabase/embedding-sdk/config";
-import { useTranslateContent } from "metabase/i18n/hooks";
-import { modelToUrl } from "metabase/lib/urls";
-import { getUserName } from "metabase/lib/user";
 import { PLUGIN_MODERATION } from "metabase/plugins";
-import type { IconProps } from "metabase/ui";
-import { Tooltip } from "metabase/ui";
+import { Checkbox, Ellipsified, type IconProps, Tooltip } from "metabase/ui";
+import { modelToUrl } from "metabase/urls";
+import { isTouchDevice } from "metabase/utils/browser";
+import { getUserName } from "metabase/utils/user";
 import type {
   CollectionItem,
   ListCollectionItemsSortColumn,
   SearchResult,
 } from "metabase-types/api";
 
-import type { SortableColumnHeaderProps } from "./BaseItemsTable";
-import { SortableColumnHeader } from "./BaseItemsTable";
+import type { SortableColumnHeaderProps } from "./BaseItemsTable/BaseItemsTable";
+import { SortableColumnHeader } from "./BaseItemsTable/BaseItemsTable";
 import {
   BulkSelectWrapper,
   ColumnHeader,
@@ -77,7 +75,8 @@ export const Columns = {
     }) => (
       <ColumnHeader>
         <BulkSelectWrapper>
-          <CheckBox
+          <Checkbox
+            size="sm"
             checked={!!selectedItems?.length}
             indeterminate={!!selectedItems?.length && !!hasUnselected}
             onChange={hasUnselected ? onSelectAll : onSelectNone}
@@ -185,6 +184,13 @@ export const Columns = {
                     {tc(item.description)}
                   </Markdown>
                 }
+                onClick={(event) => {
+                  // On mobile devices we allow clicking on the icon to show the description
+                  if (isTouchDevice()) {
+                    event.stopPropagation();
+                    event.preventDefault();
+                  }
+                }}
               />
             )}
           </ItemLinkComponent>

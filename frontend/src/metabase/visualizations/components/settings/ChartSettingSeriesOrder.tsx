@@ -6,13 +6,13 @@ import _ from "underscore";
 
 import { ColorSelector } from "metabase/common/components/ColorSelector";
 import type { DragEndEvent } from "metabase/common/components/Sortable";
-import { NULL_DISPLAY_VALUE } from "metabase/lib/constants";
-import { getEventTarget } from "metabase/lib/dom";
-import { isEmpty } from "metabase/lib/validate";
 import { Box, Button, Flex, Group, Icon, Select, Text } from "metabase/ui";
 import { color } from "metabase/ui/colors";
 import { SP_PALETTE_COLORS } from "metabase/ui/colors/constants/accent-colors";
 import type { AccentColorOptions } from "metabase/ui/colors/types";
+import { NULL_DISPLAY_VALUE } from "metabase/utils/constants";
+import { getEventTarget } from "metabase/utils/dom";
+import { isEmpty } from "metabase/utils/validate";
 import type { Series } from "metabase-types/api";
 
 import { ChartSettingMessage } from "./ChartSettingMessage";
@@ -43,6 +43,7 @@ export type ChartSettingSeriesOrderProps = {
   hasEditSettings: boolean;
   onChangeSeriesColor: (seriesKey: string, color: string) => void;
   onSortEnd: (newItems: SortableItem[]) => void;
+  isSortable?: boolean;
   accentColorOptions?: AccentColorOptions;
   getItemColor?: (item: SortableChartSettingOrderedItem) => string | undefined;
   addButtonLabel?: string;
@@ -63,6 +64,7 @@ export const ChartSettingSeriesOrder = ({
   hasEditSettings = true,
   onChangeSeriesColor,
   onSortEnd,
+  isSortable = true,
   getItemColor,
   accentColorOptions,
   otherColor,
@@ -220,6 +222,7 @@ export const ChartSettingSeriesOrder = ({
             onRemove={visibleItems.length > 1 ? toggleDisplay : undefined}
             onEnable={toggleDisplay}
             onSortEnd={handleSortEnd}
+            isSortable={isSortable}
             onEdit={hasEditSettings ? handleOnEdit : undefined}
             onColorChange={handleColorChange}
             getId={getId}

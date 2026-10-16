@@ -1,6 +1,8 @@
-import registerCypressGrep from "@cypress/grep"; // eslint-disable-line import/order
+import { register as registerCypressGrep } from "@cypress/grep";
 registerCypressGrep();
-
+// No-op when the bundle isn't instrumented (window.__coverage__ undefined),
+// so always-on is safe and avoids env-conditional support imports.
+import "@cypress/code-coverage/support";
 import "@cypress/skip-test/support";
 import "@testing-library/cypress/add-commands";
 import { configure } from "@testing-library/cypress";
@@ -11,6 +13,15 @@ import "./commands";
 const isCI = Cypress.expose("CI");
 const isNetworkThrottlingEnabled = Cypress.expose("ENABLE_NETWORK_THROTTLING");
 const isFailFastEnabled = Cypress.expose("FAIL_FAST");
+
+// @cypress/code-coverage accumulates coverage across all specs in a `cypress
+// run` (headless never resets). For a per-spec manifest we need each spec
+// isolated, so force a reset at the start of every spec.
+if (Cypress.expose("codeCoverageTasksRegistered") === true) {
+  before(() => {
+    cy.task("resetCoverage", { isInteractive: true }, { log: false });
+  });
+}
 
 // remove default html output on test failure
 configure({
@@ -122,19 +133,6 @@ if (isCI) {
     cy.wait(50, { log: false }).then(() =>
       cy.addTestContext(Cypress.TerminalReport.getLogs("txt")),
     );
-  });
-
-  // Fast failure notifications
-  afterEach(() => {
-    const testInfo = Cypress.mocha.getRunner().suite.ctx.currentTest;
-    const isLastRetry = testInfo.currentRetry() === testInfo.retries();
-
-    if (testInfo.state === "failed" && isLastRetry) {
-      cy.task("reportCIFailure", {
-        spec: Cypress.spec,
-        test: Cypress.currentTest,
-      });
-    }
   });
 
   const options = {

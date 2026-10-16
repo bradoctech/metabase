@@ -10,14 +10,18 @@
   TODO:
   - figure out what's lacking compared to ai-service"
   (:require
-   [metabase.analytics.core :as analytics]
-   [metabase.analytics.prometheus :as prometheus]
+   [metabase.analytics-interface.core :as analytics]
+   [metabase.analytics.core :as analytics.core]
    [metabase.api.common :as api]
    [metabase.metabot.provider-util :as provider-util]
+   [metabase.metabot.self.azure :as azure]
+   [metabase.metabot.self.bedrock :as bedrock]
    [metabase.metabot.self.claude :as claude]
    [metabase.metabot.self.core :as core]
+   [metabase.metabot.self.mistral :as mistral]
    [metabase.metabot.self.openai :as openai]
    [metabase.metabot.self.openrouter :as openrouter]
+   [metabase.metabot.self.zai :as zai]
    [metabase.metabot.usage :as usage]
    [metabase.util :as u]
    [metabase.util.log :as log]
@@ -29,8 +33,12 @@
   ;; a `case` inside of function instead of a map so that with-redefs work well
   (case provider
     "anthropic"  claude/claude
+    "azure"      azure/azure
+    "bedrock"    bedrock/bedrock
+    "mistral"    mistral/mistral
     "openai"     openai/openai
     "openrouter" openrouter/openrouter
+    "zai"        zai/zai
     (throw (ex-info (str "Unknown LLM provider: " provider)
                     {:provider provider}))))
 
@@ -38,8 +46,12 @@
   ;; a `case` inside of function instead of a map so that with-redefs work well
   (case provider
     "anthropic"  claude/list-models
+    "azure"      azure/list-models
+    "bedrock"    bedrock/list-models
+    "mistral"    mistral/list-models
     "openai"     openai/list-models
     "openrouter" openrouter/list-models
+    "zai"        zai/list-models
     (throw (ex-info (str "Unknown LLM provider: " provider)
                     {:provider provider}))))
 
@@ -51,8 +63,9 @@
      :ai-proxy?  (provider-util/metabase-provider? s)}))
 
 (defn list-models
-  "List available models for a provider using its configured API key,
-  or an override API key when provided."
+  "List available models for a provider using its configured credentials, or `:credentials` in `opts`.
+  The shape of the credentials map varies by provider: API-key providers take `{:api-key ...}`, while Bedrock takes
+  AWS key material and region (see [[bedrock/list-models]])."
   ([provider]
    ((resolve-model-lister provider)))
   ([provider opts]
@@ -133,14 +146,21 @@
        jitter)))
 
 (defn- report-aisdk-errors-xf
-  "Transducer that increments the llm-errors counter for :error parts in the aisdk stream."
+  "Transducer that logs and increments the llm-errors counter for :error parts in the aisdk stream."
   [tracking-opts]
   (map (fn [part]
          (when (= (:type part) :error)
-           (prometheus/inc! :metabase-metabot/llm-errors
-                            {:model      (:model tracking-opts "unknown")
-                             :source     (:tag tracking-opts "none")
-                             :error-type "llm-sse-error"}))
+           ;; A streamed `:error` part means the provider failed mid-response (e.g. an OpenAI
+           ;; `response.failed`) without throwing, so nothing else logs it. Surface it here so it
+           ;; shows up in the server logs alongside the metric and the persisted turn error.
+           (log/error "Metabot LLM stream returned an error"
+                      {:model  (:model tracking-opts "unknown")
+                       :source (:tag tracking-opts "none")
+                       :error  (:error part)})
+           (analytics/inc! :metabase-metabot/llm-errors
+                           {:model      (:model tracking-opts "unknown")
+                            :source     (:tag tracking-opts "none")
+                            :error-type "llm-sse-error"}))
          part)))
 
 (defn- report-token-usage-xf
@@ -148,7 +168,7 @@
 
   Prometheus + Snowplow:
     - `:profile-id` — the profile id (e.g. `:internal`)
-    - `:model`      — the model (e.g. `openrouter/anthropic/claude-haiku-4-5`)
+    - `:model`      — the model (e.g. `openrouter/anthropic/claude-haiku-4.5`)
     - `:tag`        — the specific purpose for which the tokens were used (e.g. 'agent', 'sql-fixing')
 
    Snowplow only:
@@ -160,35 +180,41 @@
   (let [start-ms      (u/start-timer)]
     (map (fn [part]
            (when (= (:type part) :usage)
-             (let [usage      (:usage part)
-                   model      (or model (:model part) "unknown")
-                   prompt     (:promptTokens usage 0)
-                   completion (:completionTokens usage 0)]
-               (analytics/track-token-usage!
+             (let [usage           (:usage part)
+                   model           (or model (:model part) "unknown")
+                   prompt          (:promptTokens usage 0)
+                   completion      (:completionTokens usage 0)
+                   cache-creation  (:cacheCreationTokens usage 0)
+                   cache-read      (:cacheReadTokens usage 0)]
+               (analytics.core/track-token-usage!
                 ;; The caller can omit request-id (and other snowplow opts) to skip snowplow tracking.
-                {:prometheus          true
-                 :snowplow            (some? request-id)
-                 :profile             (some-> profile-id name)
-                 :model-id            model
-                 :prompt-tokens       prompt
-                 :completion-tokens   completion
-                 :total-tokens        (+ prompt completion)
-                 :estimated-costs-usd 0.0
-                 :duration-ms         (long (u/since-ms start-ms))
-                 :user-id             api/*current-user-id*
-                 :request-id          (some-> request-id analytics/uuid->ai-service-hex-uuid)
-                 :session-id          session-id
-                 :source              source
-                 :tag                 tag})
+                {:prometheus            true
+                 :snowplow              (some? request-id)
+                 :profile               (some-> profile-id name)
+                 :model-id              model
+                 :prompt-tokens         prompt
+                 :completion-tokens     completion
+                 :cache-creation-tokens cache-creation
+                 :cache-read-tokens     cache-read
+                 :total-tokens          (+ prompt completion)
+                 :estimated-costs-usd   0.0
+                 :duration-ms           (long (u/since-ms start-ms))
+                 :user-id               api/*current-user-id*
+                 :request-id            (some-> request-id analytics.core/uuid->ai-service-hex-uuid)
+                 :session-id            session-id
+                 :source                source
+                 :tag                   tag})
                (usage/log-ai-usage!
-                {:source            (or tag source "unknown")
-                 :model             model
-                 :prompt-tokens     prompt
-                 :completion-tokens completion
-                 :conversation-id   session-id
-                 :profile-id        profile-id
-                 :request-id        request-id
-                 :ai-proxied        (boolean ai-proxy?)})))
+                {:source                (or source tag "unknown")
+                 :model                 model
+                 :prompt-tokens         prompt
+                 :completion-tokens     completion
+                 :cache-creation-tokens cache-creation
+                 :cache-read-tokens     cache-read
+                 :conversation-id       session-id
+                 :profile-id            profile-id
+                 :request-id            request-id
+                 :ai-proxied            (boolean ai-proxy?)})))
            part))))
 
 (defn- report-tool-usage-xf
@@ -199,18 +225,18 @@
          (when (and (some? source)
                     (some? request-id)
                     (= (:type part) :tool-output))
-           (analytics/track-event! :snowplow/ai_service_event
-                                   {:hashed-metabase-license-token (analytics/hashed-metabase-token-or-uuid)
-                                    :request-id                    (analytics/uuid->ai-service-hex-uuid request-id)
-                                    :source                        source
-                                    :event                         "agent_used_tool"
-                                    :user-id                       api/*current-user-id*
-                                    :session-id                    session-id
-                                    :profile                       (some-> profile-id name)
-                                    :duration-ms                   (some-> (:duration-ms part) long)
-                                    :result                        (if (:error part) "error" "success")
-                                    :event-details                 (cond-> {"tool_name" (:function part)}
-                                                                     (some? iteration) (assoc "step" iteration))}))
+           (analytics.core/track-event! :snowplow/ai_service_event
+                                        {:hashed-metabase-license-token (analytics.core/hashed-metabase-token-or-uuid)
+                                         :request-id                    (analytics.core/uuid->ai-service-hex-uuid request-id)
+                                         :source                        source
+                                         :event                         "agent_used_tool"
+                                         :user-id                       api/*current-user-id*
+                                         :session-id                    session-id
+                                         :profile                       (some-> profile-id name)
+                                         :duration-ms                   (some-> (:duration-ms part) long)
+                                         :result                        (if (:error part) "error" "success")
+                                         :event-details                 (cond-> {"tool_name" (:function part)}
+                                                                          (some? iteration) (assoc "step" iteration))}))
          part)))
 
 (defn- with-retries
@@ -220,7 +246,7 @@
   [tracking-opts thunk]
   (let [labels {:model (:model tracking-opts) :source (:tag tracking-opts)}]
     (loop [attempt 1]
-      (prometheus/inc! :metabase-metabot/llm-requests labels)
+      (analytics/inc! :metabase-metabot/llm-requests labels)
       (let [timer  (u/start-timer)
             result (try
                      {:ok (thunk)}
@@ -228,18 +254,19 @@
                        (if (and (< attempt max-llm-retries)
                                 (retryable-error? e))
                          (let [delay (retry-delay-ms attempt e)]
-                           (log/warn e "LLM call failed with retryable error, retrying"
+                           (log/warn "LLM call failed with retryable error, retrying"
                                      {:attempt attempt
                                       :max     max-llm-retries
                                       :delay   delay
-                                      :status  (:status (ex-data e))})
-                           (prometheus/inc! :metabase-metabot/llm-retries labels)
+                                      :status  (:status (ex-data e))
+                                      :error   (ex-message e)})
+                           (analytics/inc! :metabase-metabot/llm-retries labels)
                            {:retry delay})
-                         (do (prometheus/inc! :metabase-metabot/llm-errors
-                                              (assoc labels :error-type (.getSimpleName (class e))))
+                         (do (analytics/inc! :metabase-metabot/llm-errors
+                                             (assoc labels :error-type (.getSimpleName (class e))))
                              (throw e))))
                      (finally
-                       (prometheus/observe! :metabase-metabot/llm-duration-ms labels (u/since-ms timer))))]
+                       (analytics/observe! :metabase-metabot/llm-duration-ms labels (u/since-ms timer))))]
         (if-let [delay (:retry result)]
           (do (Thread/sleep ^long delay)
               (recur (inc attempt)))
@@ -249,7 +276,7 @@
   "Call an LLM and stream processed parts.
 
   `provider-and-model` is a string like `anthropic/claude-haiku-4-5` or
-  `openrouter/anthropic/claude-haiku-4-5`.  The first segment selects the
+  `openrouter/anthropic/claude-haiku-4.5`.  The first segment selects the
   provider adapter; the rest is the model name passed to the API.
 
   `parts` is a sequence of AISDK parts (`:text`, `:tool-input`, `:tool-output`)
@@ -270,31 +297,35 @@
   ([provider-and-model system-msg parts tools tracking-opts]
    (call-llm provider-and-model system-msg parts tools tracking-opts nil))
   ([provider-and-model system-msg parts tools tracking-opts {:keys [tool-choice]}]
-   (let [{:keys [provider stream-fn model ai-proxy?]} (parse-provider-model provider-and-model)]
-     (log/info "Calling LLM" {:provider    provider :model model :parts (count parts) :tools (count tools)
-                              :tool-choice tool-choice :ai-proxy? ai-proxy?})
-     (let [tracking-opts  (assoc tracking-opts :model provider-and-model :ai-proxy? ai-proxy?)
-           streaming-opts (cond-> {:model model :input parts :tools (vals tools) :ai-proxy? ai-proxy?}
-                            system-msg        (assoc :system system-msg)
-                            (and (seq tools)
-                                 tool-choice) (assoc :tool_choice tool-choice))
-           make-source    (fn []
-                            (eduction (comp (core/tool-executor-xf tools)
-                                            (core/lite-aisdk-xf)
-                                            (report-aisdk-errors-xf tracking-opts)
-                                            (report-token-usage-xf tracking-opts)
-                                            (report-tool-usage-xf tracking-opts))
-                                      (stream-fn streaming-opts)))]
-       (reify clojure.lang.IReduceInit
-         (reduce [_ rf init]
-           (with-span :info {:name       :metabot.agent/call-llm
-                             :provider   provider
-                             :model      model
-                             :part-count (count parts)
-                             :tool-count (count tools)}
-             (with-retries
-               tracking-opts
-               #(reduce rf init (make-source))))))))))
+   (if-let [limit-msg (usage/check-usage-limits!)]
+     (reify clojure.lang.IReduceInit
+       (reduce [_ rf init]
+         (rf init {:type :error :error {:message limit-msg :error-code "ai_usage_limit_reached"}})))
+     (let [{:keys [provider stream-fn model ai-proxy?]} (parse-provider-model provider-and-model)]
+       (log/info "Calling LLM" {:provider    provider :model model :parts (count parts) :tools (count tools)
+                                :tool-choice tool-choice :ai-proxy? ai-proxy?})
+       (let [tracking-opts  (assoc tracking-opts :model provider-and-model :ai-proxy? ai-proxy?)
+             streaming-opts (cond-> {:model model :input parts :tools (vals tools) :ai-proxy? ai-proxy?}
+                              system-msg                    (assoc :system system-msg)
+                              (and (seq tools) tool-choice) (assoc :tool_choice tool-choice)
+                              (:session-id tracking-opts)   (assoc :prompt-cache-key (:session-id tracking-opts)))
+             make-source    (fn []
+                              (eduction (comp (core/tool-executor-xf tools)
+                                              (core/lite-aisdk-xf)
+                                              (report-aisdk-errors-xf tracking-opts)
+                                              (report-token-usage-xf tracking-opts)
+                                              (report-tool-usage-xf tracking-opts))
+                                        (stream-fn streaming-opts)))]
+         (reify clojure.lang.IReduceInit
+           (reduce [_ rf init]
+             (with-span :info {:name       :metabot.agent/call-llm
+                               :provider   provider
+                               :model      model
+                               :part-count (count parts)
+                               :tool-count (count tools)}
+               (with-retries
+                 tracking-opts
+                 #(reduce rf init (make-source)))))))))))
 
 (defn call-llm-structured
   "Make an LLM call that returns structured JSON output.
@@ -304,7 +335,7 @@
   Includes the same retry logic as [[call-llm]] for transient errors.
 
   Args:
-    model         - Model identifier (e.g. \"openrouter/anthropic/claude-haiku-4-5\")
+    model         - Model identifier (e.g. \"openrouter/anthropic/claude-haiku-4.5\")
     messages      - Sequence of Chat Completions message maps
                     (e.g. [{:role \"user\" :content \"...\"}])
     json-schema   - JSON Schema map for the expected response shape
@@ -320,12 +351,13 @@
                                                 :msg-count (count messages)
                                                 :ai-proxy? ai-proxy?})
         tracking-opts  (assoc tracking-opts :model provider-and-model :ai-proxy? ai-proxy?)
-        streaming-opts {:model       model
-                        :input       messages
-                        :schema      json-schema
-                        :temperature temperature
-                        :max-tokens  max-tokens
-                        :ai-proxy?   ai-proxy?}]
+        streaming-opts (cond-> {:model       model
+                                :input       messages
+                                :schema      json-schema
+                                :temperature temperature
+                                :max-tokens  max-tokens
+                                :ai-proxy?   ai-proxy?}
+                         (:session-id tracking-opts) (assoc :prompt-cache-key (:session-id tracking-opts)))]
     (with-span :info {:name      :metabot.agent/call-llm-structured
                       :model     model
                       :msg-count (count messages)}

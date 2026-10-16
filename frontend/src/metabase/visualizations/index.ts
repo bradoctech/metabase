@@ -1,20 +1,26 @@
+import type { ComponentType } from "react";
 import { t } from "ttag";
 import _ from "underscore";
 
 import { isStorybookActive } from "metabase/env";
 import type {
   DatasetData,
+  IconName,
   RawSeries,
   Series,
   TransformedSeries,
   VisualizationDisplay,
 } from "metabase-types/api";
 
-import type { RemappingHydratedDatasetColumn } from "./types";
+import type {
+  RemappingHydratedChartData,
+  RemappingHydratedDatasetColumn,
+} from "./types";
 import type { Visualization } from "./types/visualization";
 
 const visualizations = new Map<VisualizationDisplay, Visualization>();
 const aliases = new Map<string, Visualization>();
+const settingWidgets = new Map<string, ComponentType<any>>();
 visualizations.get = function (key) {
   return (
     Map.prototype.get.call(this, key) ||
@@ -38,6 +44,10 @@ export function setDefaultVisualization(visualization: Visualization) {
   defaultVisualization = visualization;
 }
 
+function isVisualizationComponent(visualization: Visualization | undefined) {
+  return typeof visualization === "function";
+}
+
 export function registerVisualization(visualization: Visualization) {
   if (visualization == null) {
     throw new Error(t`Visualization is null`);
@@ -50,25 +60,51 @@ export function registerVisualization(visualization: Visualization) {
     );
   }
   if (visualizations.has(identifier)) {
-    if (isStorybookActive) {
-      console.error(
-        `Visualization with that identifier is already registered: ` +
-          visualization.name,
-      );
+    const registeredVisualization = visualizations.get(identifier);
+    const isReplacingDefinitionWithComponent =
+      isVisualizationComponent(visualization) &&
+      !isVisualizationComponent(registeredVisualization);
+    const isRegisteringDefinitionOverComponent =
+      !isVisualizationComponent(visualization) &&
+      isVisualizationComponent(registeredVisualization);
 
-      // do not throw if it's storybook
+    if (isRegisteringDefinitionOverComponent) {
       return;
     }
 
-    throw new Error(
-      t`Visualization with that identifier is already registered: ` +
-        visualization.name,
-    );
+    if (!isReplacingDefinitionWithComponent) {
+      if (isStorybookActive) {
+        console.error(
+          `Visualization with that identifier is already registered: ` +
+            visualization.name,
+        );
+
+        // do not throw if it's storybook
+        return;
+      }
+
+      throw new Error(
+        t`Visualization with that identifier is already registered: ` +
+          visualization.name,
+      );
+    }
   }
   visualizations.set(identifier, visualization);
   for (const alias of visualization.aliases || []) {
     aliases.set(alias, visualization);
   }
+}
+
+export function registerSettingWidgets(
+  widgets: Record<string, ComponentType<any>>,
+) {
+  for (const [key, widget] of Object.entries(widgets)) {
+    settingWidgets.set(key, widget);
+  }
+}
+
+export function getSettingWidgetComponent(key: string) {
+  return settingWidgets.get(key);
 }
 
 type SeriesLike = Array<{ card: { display: VisualizationDisplay } }>;
@@ -116,9 +152,15 @@ export function getVisualizationTransformed(
   return { series, visualization };
 }
 
-export function getIconForVisualizationType(display: VisualizationDisplay) {
+export function getIconForVisualizationType(display: VisualizationDisplay): {
+  name: IconName;
+  iconUrl?: string;
+} {
   const viz = visualizations.get(display);
-  return viz?.iconName ?? "unknown";
+  return {
+    name: viz?.iconName ?? "unknown",
+    iconUrl: viz?.iconUrl,
+  };
 }
 
 export const extractRemappings = (series: Series) => {
@@ -158,15 +200,28 @@ export function isCartesianChart(display: VisualizationDisplay) {
   );
 }
 
+const getRemapping = (col: RemappingHydratedDatasetColumn) => {
+  // copy existing entries so this is idempotent, without mutating the caller's Map
+  if (col.remapping instanceof Map) {
+    return new Map(col.remapping);
+  }
+  if (col.remapped_to != null) {
+    return new Map();
+  }
+  return undefined;
+};
+
 // removes columns with `remapped_from` property and adds a `remapping` to the appropriate column
-export const extractRemappedColumns = (data: DatasetData) => {
+export const extractRemappedColumns = (
+  data: DatasetData,
+): RemappingHydratedChartData => {
   const cols: RemappingHydratedDatasetColumn[] = data.cols.map((col) => ({
     ...col,
     remapped_from_index:
       col.remapped_from != null
         ? _.findIndex(data.cols, (c) => c.name === col.remapped_from)
         : undefined,
-    remapping: col.remapped_to != null ? new Map() : undefined,
+    remapping: getRemapping(col),
   }));
 
   const rows = data.rows.map((row) =>

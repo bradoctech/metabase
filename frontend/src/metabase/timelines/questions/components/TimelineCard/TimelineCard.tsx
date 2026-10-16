@@ -3,14 +3,13 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { t } from "ttag";
 import _ from "underscore";
 
-import { Ellipsified } from "metabase/common/components/Ellipsified";
-import { getTimelineName } from "metabase/lib/timelines";
+import { getTimelineName } from "metabase/common/utils/timelines";
+import { Checkbox, Ellipsified } from "metabase/ui";
 import type { Timeline, TimelineEvent } from "metabase-types/api";
 
 import EventCard from "../EventCard";
 
 import {
-  CardCheckbox,
   CardContent,
   CardHeader,
   CardIcon,
@@ -90,7 +89,8 @@ const TimelineCard = ({
         onClick={handleHeaderClick}
         aria-label={t`Timeline card header`}
       >
-        <CardCheckbox
+        <Checkbox
+          size="sm"
           checked={anyEventVisible}
           indeterminate={anyEventVisible && !allEventsVisible}
           onClick={handleCheckboxClick}

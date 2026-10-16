@@ -17,6 +17,7 @@
 
 (p/import-vars
  [metabase.queries.card
+  card-param-constraints
   card-param-values
   card-param-remapped-value]
  [metabase.queries.models.card
@@ -28,23 +29,26 @@
   batch-fetch-query-metadata]
  [metabase.queries.models.card
   fully-parameterized?
+  maybe-unverify!
   model-supports-implicit-actions?
   model?
+  parameter-template-tag?
   sole-dashboard-id
   starting-card-schema-version
-  update-card!
-   ;; TODO -- not convinced whether this belongs here or in `permissions`
-  with-can-run-adhoc-query]
+  update-card!]
  [metabase.queries.models.card.metadata
   infer-metadata
   maybe-async-result-metadata
   refresh-metadata
   save-metadata-async!]
- [metabase.queries.models.parameter-card]
+ [metabase.queries.models.parameter-card
+  check-new-parameter-source-card-permissions
+  check-parameter-source-card-permissions
+  values-source-card-ids]
  [metabase.queries.models.query
   average-execution-time-ms
   query->database-and-table-ids
-  save-query-and-update-average-execution-time!])
+  save-queries-and-update-average-execution-times!])
 
 #_{:clj-kondo/ignore [:missing-docstring]}
 (p/import-def metabase.queries.models.card/populate-query-fields populate-card-query-fields)

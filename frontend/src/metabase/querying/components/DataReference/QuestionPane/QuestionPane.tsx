@@ -14,18 +14,20 @@ import {
   EmptyDescription,
 } from "metabase/common/components/MetadataInfo/MetadataInfo";
 import { SidebarContent } from "metabase/common/components/SidebarContent";
-import { useSelector } from "metabase/lib/redux";
+import { useSelector } from "metabase/redux";
 import { getMetadata } from "metabase/selectors/metadata";
-import { Box, Flex, Icon, type IconName } from "metabase/ui";
+import { Box, Flex, Icon } from "metabase/ui";
+import * as Urls from "metabase/urls";
 import type Question from "metabase-lib/v1/Question";
 import { getQuestionVirtualTableId } from "metabase-lib/v1/metadata/utils/saved-questions";
-import * as ML_Urls from "metabase-lib/v1/urls";
+import type { IconName } from "metabase-types/api";
 
 import { FieldList } from "../FieldList";
 import { NodeListTitleText } from "../NodeList";
 import type {
   DataReferencePaneProps,
   DataReferenceQuestionItem,
+  UniqueFieldId,
 } from "../types";
 
 import S from "./QuestionPane.module.css";
@@ -77,6 +79,8 @@ export const QuestionPane = ({
     return <LoadingAndErrorWrapper loading />;
   }
 
+  const lastEditInfo = question.lastEditInfo();
+
   return (
     <SidebarContent
       title={question.displayName() || undefined}
@@ -95,7 +99,7 @@ export const QuestionPane = ({
         <Flex color="text-secondary" align="center" p="0.25rem 0.5rem" fw={700}>
           <a
             className={S.QuestionPaneDetailLink}
-            href={ML_Urls.getUrl(question)}
+            href={Urls.question(question)}
             target="_blank"
             rel="noreferrer"
           >
@@ -117,7 +121,7 @@ export const QuestionPane = ({
             {collection?.name ?? t`Our analytics`}
           </Box>
         </Flex>
-        {question.lastEditInfo() && (
+        {lastEditInfo && (
           <Flex
             color="text-secondary"
             align="center"
@@ -127,11 +131,7 @@ export const QuestionPane = ({
             <Icon className={S.QuestionPaneIcon} name="calendar" />
             <Box component="span" ml="sm" fw="normal">
               {jt`Last edited ${(
-                <DateTime
-                  key="day"
-                  unit="day"
-                  value={question.lastEditInfo().timestamp}
-                />
+                <DateTime key="day" unit="day" value={lastEditInfo.timestamp} />
               )}`}
             </Box>
           </Flex>
@@ -143,7 +143,9 @@ export const QuestionPane = ({
               onItemClick({
                 type: "field",
                 id:
-                  typeof field.id === "number" ? field.id : field.getUniqueId(),
+                  typeof field.id === "number"
+                    ? field.id
+                    : (field.getUniqueId() as UniqueFieldId),
               });
             }}
           />

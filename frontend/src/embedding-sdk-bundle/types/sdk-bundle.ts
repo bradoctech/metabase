@@ -1,5 +1,6 @@
 import type { JSXElementConstructor } from "react";
 
+import type { MetabotSubscriber } from "embedding-sdk-bundle/components/private/MetabotSubscriber/MetabotSubscriber";
 import type { CollectionBrowser } from "embedding-sdk-bundle/components/public/CollectionBrowser";
 import type { ComponentProvider } from "embedding-sdk-bundle/components/public/ComponentProvider";
 import type { CreateDashboardModal } from "embedding-sdk-bundle/components/public/CreateDashboardModal";
@@ -11,6 +12,10 @@ import type { StaticQuestion } from "embedding-sdk-bundle/components/public/Stat
 import type { EditableDashboard } from "embedding-sdk-bundle/components/public/dashboard/EditableDashboard";
 import type { InteractiveDashboard } from "embedding-sdk-bundle/components/public/dashboard/InteractiveDashboard";
 import type { StaticDashboard } from "embedding-sdk-bundle/components/public/dashboard/StaticDashboard";
+import type {
+  ExecuteActionParams,
+  ExecuteActionResult,
+} from "embedding-sdk-bundle/lib/execute-action";
 import type { SdkStore, SdkStoreState } from "embedding-sdk-bundle/store/types";
 import type {
   CreateDashboardValues,
@@ -39,9 +44,10 @@ export type MetabaseEmbeddingSdkBundleExports = PublicExports &
   ReduxStoreUtilityFunctionExports &
   ReduxStoreSelectorsExports &
   InternalHooksExports &
-  SchemaValidationUtils;
+  SchemaValidationUtils &
+  InternalComponentExports;
 
-export type PublicExports = {
+type PublicExports = {
   CollectionBrowser: InternalComponent<typeof CollectionBrowser>;
   CreateDashboardModal: InternalComponent<typeof CreateDashboardModal>;
   CreateQuestion: InternalComponent<typeof CreateQuestion>;
@@ -55,30 +61,37 @@ export type PublicExports = {
   StaticQuestion: InternalComponent<typeof StaticQuestion>;
 };
 
-export type ReduxStoreExports = {
+type ReduxStoreExports = {
   getSdkStore: ReduxStoreFactory;
 };
 
-export type ReduxStoreUtilityFunctionExports = {
+type ReduxStoreUtilityFunctionExports = {
   createDashboard: ReduxStoreUtilityFunction<
     (params: CreateDashboardValues) => Promise<MetabaseDashboard>
   >;
+  executeAction: ReduxStoreUtilityFunction<
+    (params: ExecuteActionParams) => Promise<ExecuteActionResult>
+  >;
 };
 
-export type ReduxStoreSelectorsExports = {
+type ReduxStoreSelectorsExports = {
   getApplicationName: ReduxStoreSelector<string>;
   getAvailableFonts: ReduxStoreSelector<string[]>;
   getLoginStatus: ReduxStoreSelector<LoginStatus>;
   getUser: ReduxStoreSelector<User | null>;
 };
 
-export type InternalHooksExports = {
+type InternalHooksExports = {
   useInitData: InternalHook;
   useLogVersionInfo: InternalHook;
 };
 
-export type SchemaValidationUtils = {
+type SchemaValidationUtils = {
   validateFunctionSchema: (
     schema: any,
   ) => FunctionSchemaValidationResult<unknown[], unknown>;
+};
+
+type InternalComponentExports = {
+  MetabotSubscriber: typeof MetabotSubscriber;
 };

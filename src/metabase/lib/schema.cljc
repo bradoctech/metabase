@@ -8,6 +8,7 @@
   future we can deprecate that namespace and eventually do away with it entirely."
   (:refer-clojure :exclude [ref every? some select-keys empty? get-in])
   (:require
+   [malli.util :as mut]
    [medley.core :as m]
    [metabase.lib.options :as lib.options]
    [metabase.lib.schema.actions :as actions]
@@ -33,8 +34,8 @@
    [metabase.lib.schema.settings :as lib.schema.settings]
    [metabase.lib.schema.template-tag :as template-tag]
    [metabase.lib.schema.util :as lib.schema.util]
-   [metabase.lib.util.match :as lib.util.match]
    [metabase.util.malli.registry :as mr]
+   [metabase.util.match :as match]
    [metabase.util.performance :refer [every? select-keys some empty? get-in]]))
 
 (comment metabase.lib.schema.expression.arithmetic/keep-me
@@ -62,7 +63,9 @@
 
 (mr/def ::stage.common
   [:map
-   {:decode/normalize normalize-stage-common}
+   {:decode/normalize normalize-stage-common
+    :decode/api       common/remove-internal-keys
+    :encode/serialize common/remove-internal-keys}
    [:parameters         {:optional true} [:ref ::lib.schema.parameter/parameters]]
    [:lib/stage-metadata {:optional true} [:ref ::lib.schema.metadata/stage]]])
 
@@ -100,7 +103,9 @@
      [:collection {:optional true} ::common/non-blank-string]
      ;; optional template tag declarations. Template tags are things like `{{x}}` in the query (the value of the
      ;; `:native` key), but their definition lives under this key.
-     [:template-tags {:optional true} [:ref ::template-tag/template-tag-map]]
+     ;;
+     ;; Prior to 63, this was a map, but was changed to a list to preserve order with more than 8 template tags.
+     [:template-tags {:optional true} [:ref ::template-tag/template-tags]]
      ;; optional, set of Card IDs referenced by this query in `:card` template tags like `{{card}}`. This is added
      ;; automatically during parameter expansion. To run a native query you must have native query permissions as well
      ;; as permissions for any Cards' parent Collections used in `:card` template tag parameters.
@@ -202,7 +207,7 @@
                                (into #{} (map (comp :lib/expression-name second)) expressions)))
           pred             #(bad-ref-clause? :expression expression-names %)
           form             (-> (stage-with-joins-and-namespaced-keys-removed stage)
-                   ;; also ignore expression refs inside `:parameters` since they still use legacy syntax these days.
+                               ;; also ignore expression refs inside `:parameters` since they still use legacy syntax these days.
                                (dissoc :parameters))]
       (when (lib.schema.util/pred-matches-form? form pred)
         (lib.schema.util/matching-locations form pred)))))
@@ -255,7 +260,9 @@
     {:page 1, :items 10} = items 1-10
     {:page 2, :items 10} = items 11-20"
   [:map
-   {:decode/normalize common/normalize-map}
+   {:decode/normalize common/normalize-map
+    :decode/api       common/remove-internal-keys
+    :encode/serialize common/remove-internal-keys}
    [:page  pos-int?]
    [:items pos-int?]])
 
@@ -270,6 +277,16 @@
       ;; differently (see [[metabase.query-processor.middleware.cache-test/multiple-models-e2e-test]]) and this is a
       ;; reliable way to differentiate them since it gets populated by the QP.
       (merge (select-keys stage [:qp/stage-is-from-source-card :qp/stage-had-source-card]))))
+
+(mr/def ::stage.page-and-limit-are-mutually-exclusive
+  "If an MBQL query stage specifies `:page`, it should not also specify `:limit`"
+  [:fn
+   {:error/message    "A query stage should not specify both :page and :limit since they conflict"
+    ;; if both are specified, ignore `:limit` and prefer `:page`
+    :decode/normalize (fn [stage]
+                        (cond-> stage
+                          ((every-pred :page :limit) stage) (dissoc :limit)))}
+   (complement (every-pred :page :limit))])
 
 (mr/def ::stage.mbql
   [:and
@@ -294,6 +311,7 @@
     {:error/message "A query must have exactly one of :source-table or :source-card"}
     (complement (comp #(= (count %) 1) #{:source-table :source-card}))]
    [:ref ::stage.valid-refs]
+   [:ref ::stage.page-and-limit-are-mutually-exclusive]
    (common/disallowed-keys
     {:native             ":native is not allowed in an MBQL stage."
      :aggregation-idents ":aggregation-idents is deprecated and should not be used"
@@ -342,8 +360,6 @@
                                ;; it's supposed to be added to the top level. Investigate whether this was just a
                                ;; mistake or what.
                                :middleware)}
-   [:map
-    [:lib/type [:ref ::stage.type]]]
    [:multi {:dispatch      lib-type
             :error/message "Invalid stage :lib/type: expected :mbql.stage/native or :mbql.stage/mbql"}
     [:mbql.stage/native [:ref ::stage.native]]
@@ -351,7 +367,9 @@
    (common/disallowed-keys
     {:source-metadata "A query stage should not have :source-metadata, the prior stage should have :lib/stage-metadata instead"
      :source-query    ":source-query is not allowed in MBQL 5 queries."
-     :type            ":type is not allowed in a query stage in any version of MBQL"})])
+     :type            ":type is not allowed in a query stage in any version of MBQL"
+     :database        ":database is not allowed in a query stage, only at the top level of a query."
+     :lib/options     "A stage should not have :lib/options"})])
 
 (mr/def ::stage.initial
   [:multi {:dispatch      lib-type
@@ -408,8 +426,8 @@
       (let [visible-join-alias? (some-fn visible-join-alias? (visible-join-alias?-fn stage))]
         (or
          (when (map? stage)
-           (lib.util.match/match-lite (dissoc stage :joins :lib/stage-metadata)
-             [:field {:join-alias (join-alias :guard (and (some? join-alias)
+           (match/match-one (dissoc stage :joins :lib/stage-metadata)
+             [:field {:join-alias (join-alias :guard (and join-alias
                                                           (not (visible-join-alias? join-alias))))} _id-or-name]
              (str "Invalid :field reference in stage " i ": no join named " (pr-str join-alias))))
          (when (seq more)
@@ -469,13 +487,13 @@
 (defn- serialize-query [query]
   ;; this stuff all gets added in when you actually run a query with one of the QP entrypoints, and is not considered
   ;; to be part of the query itself. It doesn't get saved along with the query in the app DB.
+  ;;
+  ;; [[common/internal-key?]] also drops all internal namespaced keys the query processor adds, keeping `:lib` keys like
+  ;; `:lib/type`.
   (let [keys-to-remove #{:lib/metadata :info :parameters :viz-settings}]
     (m/filter-keys (fn [k]
                      (and (not (contains? keys-to-remove k))
-                          (or (simple-keyword? k)
-                              ;; remove all random namespaced keys like
-                              ;; `:metabase.query-permissions.impl/perms`. Keep `:lib` keys like `:lib/type`
-                              (= (namespace k) "lib"))))
+                          (not (common/internal-key? k))))
                    query)))
 
 (defn- encode-query-for-hashing [query]
@@ -497,6 +515,7 @@
    [:map
     {:description        "Valid MBQL 5 query."
      :decode/normalize   #'normalize-query
+     :decode/api         #'common/remove-internal-keys
      :encode/serialize   #'serialize-query
      :encode/for-hashing #'encode-query-for-hashing}
     [:lib/type [:=
@@ -519,6 +538,18 @@
     [:settings    {:optional true} [:ref ::lib.schema.settings/settings]]
     [:constraints {:optional true} [:ref ::lib.schema.constraints/constraints]]
     [:middleware  {:optional true} [:ref ::lib.schema.middleware-options/middleware-options]]
+    [:was-pivot
+     {:optional true
+      :description
+      "Whether this query was originally run as a pivot query. Stamped into the saved `json_query` by
+  `metabase.query-processor.middleware.process-userland-query` and sent back by clients re-downloading pivot query
+  results."}
+     [:maybe :boolean]]
+    [:pivot-rows         {:optional true} [:maybe [:sequential [:int {:min 0}]]]]
+    [:pivot-cols         {:optional true} [:maybe [:sequential [:int {:min 0}]]]]
+    [:pivot-measures     {:optional true} [:maybe [:sequential [:int {:min 0}]]]]
+    [:show-row-totals    {:optional true} [:maybe :boolean]]
+    [:show-column-totals {:optional true} [:maybe :boolean]]
     ;; TODO -- `:viz-settings` ?
     ;;
     ;; INFO
@@ -545,6 +576,28 @@
      :source-query ":source-query is not allowed in MBQL 5, and it's not allowed in the top-level of a stage in any MBQL version"
      :source-table ":source-table is not allowed in the top level of a query, only in MBQL stages"
      :type         ":type is not allowed in MBQL 5, use :lib/type instead."})])
+
+(mr/def ::external-query
+  "Schema for \"External MBQL\" 5 query."
+  [:schema {:registry {::id/database :string
+                       ::id/card :string
+                       ::id/segment :string
+                       ::id/measure :string
+                       ::id/snippet :string
+                       ::id/schema [:or nil? :string]
+                       ::id/table [:cat ::id/database ::id/schema :string]
+                       ::id/field [:cat ::id/database ::id/schema :string [:+ :string]]
+                       ;; this spec has a :multi clause that assumes field IDs
+                       ;; must be integers. the 3 in the assoc-in call refers to
+                       ;; the :multi and the 2 refers to :dispatch-type/integer;
+                       ;; if those get moved, this will need to change
+                       :mbql.clause/field (assoc-in (mr/schema :mbql.clause/field)
+                                                    [3 2 0] :dispatch-type/sequential)
+                       ;; similarly we need to get rid of the :lib/uuid key of
+                       ;; a map that's nested in position 2 of an :and schema:
+                       ::common/options (update (mr/schema ::common/options) 2
+                                                mut/dissoc :lib/uuid)}}
+   [:ref ::query]])
 
 (defn native-only-query?
   "Whether MBQL 5 `query` only has a single native stage (and is thus pure-native). This is the equivalent of the old

@@ -1,4 +1,4 @@
-import type { State } from "metabase-types/store";
+import type { State } from "metabase/redux/store";
 
 import type { RawDataRouteParams } from "../../types";
 
@@ -162,7 +162,7 @@ describe("getDataFocusSidebar", () => {
 
     it("returns flat list of tables for a schemaless database", () => {
       const sidebarData = getDataFocusSidebar(
-        state as any,
+        state,
         getRouteProps({ databaseId: "3" }),
       );
 

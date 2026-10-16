@@ -64,8 +64,22 @@
                       {:status-code 401})))
     attrs))
 
+(defn- saml-response->session-identity
+  "What the IdP used to identify this login: its `SessionIndex`, and the `NameID` (with `Format`)
+  naming the subject.
+
+  Recorded on the session because single logout must address the session and subject the IdP knows.
+  The IdP's NameID is not necessarily the user's email - Auth0, for instance, sends an opaque
+  `auth0|<id>` - so a LogoutRequest built from the email names a subject the IdP never issued.
+  Any of these may be nil if the IdP did not send them."
+  [saml-response]
+  (let [{:keys [session-index name-id]} (first (saml/assertions saml-response))]
+    {:session-index  session-index
+     :name-id        (:value name-id)
+     :name-id-format (:format name-id)}))
+
 (methodical/defmethod auth-identity/authenticate :provider/saml
-  [_provider {:keys [redirect-url] :as request}]
+  [_provider {:keys [redirect-url relay-state] :as request}]
   (cond
     (not (sso-settings/saml-enabled))
     {:success? false
@@ -76,8 +90,11 @@
     (= (:request-method request) :get)
     (try
       (let [idp-url (sso-settings/saml-identity-provider-uri)
-            relay-state (when redirect-url
-                          (u/encode-base64 redirect-url))
+            ;; Callers may pass an explicit `:relay-state` (short server-side key);
+            ;; otherwise fall back to Base64-encoding the continue URL.
+            relay-state (or relay-state
+                            (when redirect-url
+                              (u/encode-base64 redirect-url)))
             response (saml/idp-redirect-response {:request-id (str "id-" (random-uuid))
                                                   :sp-name (sso-settings/saml-application-name)
                                                   :issuer (sso-settings/saml-application-name)
@@ -90,7 +107,7 @@
          :redirect-url (get-in response [:headers "location"])
          :message "Redirecting to SAML provider"})
       (catch Throwable e
-        (log/errorf e "Error generating SAML request: %s" (.getMessage e))
+        (log/errorf "Error generating SAML request: %s" (.getMessage e))
         {:success? false
          :error :saml-request-generation-failed
          :message (str (tru "Error generating SAML request"))}))
@@ -113,6 +130,7 @@
                                                                                :issuer]
                                                         :issuer (sso-settings/saml-identity-provider-issuer)})
             attrs (saml-response->attributes validated-response)
+            session-identity (saml-response->session-identity validated-response)
             email (get attrs (sso-settings/saml-attribute-email))
             first-name (get attrs (sso-settings/saml-attribute-firstname))
             last-name (get attrs (sso-settings/saml-attribute-lastname))
@@ -134,16 +152,19 @@
                      :sso_source :saml
                      :login_attributes user-attributes}
          :tenant-slug tenant-slug
-         :saml-data {:group-names groups
-                     :user-attributes user-attributes}
+         :saml-data (merge {:group-names groups
+                            :user-attributes user-attributes}
+                           ;; Kept so the session row can record them: single logout sends them
+                           ;; back to name the session and subject the IdP should end.
+                           session-identity)
          :provider-id email})
       (catch clojure.lang.ExceptionInfo e
-        (log/errorf e "SAML authentication failed: %s" (.getMessage e))
+        (log/errorf "SAML authentication failed: %s" (.getMessage e))
         {:success? false
          :error (or (:error (ex-data e)) :authentication-failed)
          :message (.getMessage e)})
       (catch Exception e
-        (log/errorf e "Unexpected error during SAML authentication: %s" (.getMessage e))
+        (log/errorf "Unexpected error during SAML authentication: %s" (.getMessage e))
         {:success? false
          :error :server-error
          :message (str (tru "Unable to log in: SAML response validation failed"))}))))

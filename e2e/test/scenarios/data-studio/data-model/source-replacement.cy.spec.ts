@@ -404,6 +404,11 @@ describe(
         createTestTables();
         createSourceQuestion("Graph question").as("question");
 
+        // The replacement modal fetches the dependents of the source table
+        // exactly once when it opens; wait for the async dependency backfill
+        // so the question's dependency row exists by then.
+        H.waitForBackfillComplete();
+
         getTableId(SOURCE_TABLE).then((sourceTableId) => {
           cy.visit(`/data-studio/dependencies?id=${sourceTableId}&type=table`);
         });
@@ -821,12 +826,19 @@ function getTableId(tableName: string) {
 }
 
 function openReplacementModal(sourceTableLabel: string) {
+  // The modal fetches the dependents of the source table exactly once when it
+  // opens, and the card -> table dependency rows are written by an async
+  // backfill job. Wait for the backfill so the modal doesn't race it and show
+  // "Nothing uses this data source" for a table that does have dependents.
+  H.waitForBackfillComplete();
+
   H.DataModel.visitDataStudio();
 
   H.DataModel.TablePicker.getDatabase("Writable Postgres12").click();
   H.DataModel.TablePicker.getTable(sourceTableLabel).click();
   H.DataModel.TableSection.get().should("be.visible");
 
+  H.DataModel.TableSection.getActionsMenuButton().click();
   SourceReplacement.getFindAndReplaceButton().click();
   SourceReplacement.getModal()
     .findByText("Find and replace a data source")
@@ -847,7 +859,10 @@ function pickTarget(targetTableLabel: string) {
 function confirmReplacement() {
   SourceReplacement.getModal()
     .findByRole("tab", {
+      // The affected-items count comes from an async dependents computation
+      // that can exceed the default 4s timeout, so wait longer for the tab.
       name: /\d+ items? will be changed/,
+      timeout: 15000,
     })
     .should("be.visible");
 
@@ -1060,8 +1075,12 @@ function createSourceTotalAmountMeasure() {
           name: "Total amount",
           table_id: sourceTableId,
           definition: {
-            "source-table": sourceTableId,
-            aggregation: [["sum", ["field", amountFieldId, null]]],
+            database: WRITABLE_DB_ID,
+            type: "query",
+            query: {
+              "source-table": sourceTableId,
+              aggregation: [["sum", ["field", amountFieldId, null]]],
+            },
           },
         }),
     ),
@@ -1441,7 +1460,9 @@ function setNestedCardColumnTitle({
 
 function assertTargetRowVisible() {
   H.main()
-    .findAllByText(COMPATIBLE_TARGET_ROW_VALUE)
+    // Visiting the question re-runs its query against the writable DB; allow
+    // more than the default 4s for the result rows to render.
+    .findAllByText(COMPATIBLE_TARGET_ROW_VALUE, { timeout: 15000 })
     .first()
     .should("be.visible");
 }

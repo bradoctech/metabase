@@ -1,7 +1,6 @@
 (ns metabase.driver.vertica
   (:require
    [clojure.java.jdbc :as jdbc]
-   [clojure.set :as set]
    [honey.sql :as sql]
    [java-time.api :as t]
    [metabase.driver :as driver]
@@ -29,6 +28,13 @@
 (driver/register! :vertica, :parent #{:sql-jdbc
                                       ::sql-jdbc.legacy/use-legacy-classes-for-read-and-set
                                       ::sql.qp.empty-string-is-null/empty-string-is-null})
+
+(defmethod driver/host-carrying-parameters :vertica [_driver] ["backupservernode" "oauthdiscoveryurl"])
+
+(defmethod driver/non-host-parameters :vertica
+  [_driver]
+  ["failonmultinodeplans" "hostnameverifier" "kerberoshostname" "maxpooledconnectionspernode" "nodedownwaittime"
+   "preferredaddressfamily"])
 
 (doseq [[feature supported?] {:convert-timezone                 true
                               :database-routing                 false
@@ -297,12 +303,14 @@
   (try (set (jdbc/query (sql-jdbc.conn/db->pooled-connection-spec database)
                         ["SELECT TABLE_SCHEMA AS \"schema\", TABLE_NAME AS \"name\" FROM V_CATALOG.VIEWS;"]))
        (catch Throwable e
-         (log/error e "Failed to fetch materialized views for this database"))))
+         (log/errorf "Failed to fetch materialized views for this database: %s" (ex-message e)))))
 
 (defmethod driver/describe-database* :vertica
   [driver database]
+  ;; the JDBC default returns `:tables` as a reducible; fold it (and the materialized views) into a
+  ;; set rather than `set/union`, which would call `count` on the reducible
   (-> ((get-method driver/describe-database* :sql-jdbc) driver database)
-      (update :tables set/union (materialized-views database))))
+      (update :tables #(into (materialized-views database) %))))
 
 (defmethod driver/db-default-timezone :vertica
   [_driver _database]
@@ -318,7 +326,7 @@
   (fn read-time []
     (when-let [s (.getString rs i)]
       (let [t (u.date/parse s)]
-        (log/tracef "(.getString rs %d) [TIME] -> %s -> %s" i s t)
+        (log/tracef "(.getString rs %d) [TIME]" i)
         t))))
 
 (defmethod sql-jdbc.execute/read-column-thunk [:vertica Types/TIME_WITH_TIMEZONE]
@@ -326,7 +334,7 @@
   (fn read-time-with-timezone []
     (when-let [s (.getString rs i)]
       (let [t (u.date/parse s)]
-        (log/tracef "(.getString rs %d) [TIME_WITH_TIMEZONE] -> %s -> %s" i s t)
+        (log/tracef "(.getString rs %d) [TIME_WITH_TIMEZONE]" i)
         t))))
 
 ;; for some reason vertica `TIMESTAMP WITH TIME ZONE` columns still come back as `Type/TIMESTAMP`, which seems like a
@@ -338,7 +346,7 @@
     (fn read-timestamp []
       (when-let [s (.getString rs i)]
         (let [t (u.date/parse s timezone)]
-          (log/tracef "(.getString rs %d) [TIME_WITH_TIMEZONE] -> %s -> %s" i s t)
+          (log/tracef "(.getString rs %d) [TIME_WITH_TIMEZONE]" i)
           t)))))
 
 (defmethod sql.qp/->honeysql [:vertica ::sql.qp/cast-to-text]

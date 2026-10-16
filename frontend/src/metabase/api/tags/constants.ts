@@ -2,6 +2,7 @@ export type TagType = (typeof TAG_TYPES)[number];
 
 export const TAG_TYPES = [
   "action",
+  "activity",
   "alert",
   "api-key",
   "bookmark",
@@ -17,6 +18,8 @@ export const TAG_TYPES = [
   "database",
   "dataset",
   "document",
+  "embed-theme",
+  "erd",
   "external-transform",
   "public-document",
   "comment",
@@ -28,8 +31,10 @@ export const TAG_TYPES = [
   "llm-models",
   "logger-preset",
   "measure",
+  "mfa-status",
   "model-index",
   "notification",
+  "oauth-authorization",
   "parameter-values",
   "permissions-group",
   "persisted-info",
@@ -44,6 +49,7 @@ export const TAG_TYPES = [
   "subscription",
   "subscription-channel",
   "table",
+  "table-remapping",
   "task",
   "task-run",
   "timeline",
@@ -66,6 +72,7 @@ export const TAG_TYPES = [
   "metabot",
   "metabot-entities-list",
   "metabot-prompt-suggestions",
+  "metabot-permissions",
   "security-advisory",
 ] as const;
 

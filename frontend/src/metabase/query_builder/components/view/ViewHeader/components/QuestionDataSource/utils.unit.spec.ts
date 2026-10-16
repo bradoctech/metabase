@@ -86,4 +86,23 @@ describe("getDataSourceParts", () => {
     });
     expect(isValidElement(partsArray[1])).toBe(true);
   });
+
+  it("does not throw when a native question has no legacy native query", () => {
+    const question = createMockQuestion({
+      dataset_query: {
+        type: "native",
+        database: 1,
+        native: { query: "select 1" },
+      },
+    });
+    jest.spyOn(question, "legacyNativeQuery").mockReturnValue(undefined);
+
+    expect(() =>
+      getDataSourceParts({
+        question,
+        subHead: true,
+        isObjectDetail: false,
+      }),
+    ).not.toThrow();
+  });
 });

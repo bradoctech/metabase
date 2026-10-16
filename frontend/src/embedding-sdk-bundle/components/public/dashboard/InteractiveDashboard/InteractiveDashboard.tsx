@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 
+import { useTrackSdkComponentMount } from "embedding-sdk-bundle/analytics/component-events";
 import { withPublicComponentWrapper } from "embedding-sdk-bundle/components/private/PublicComponentWrapper";
 import { SdkInternalNavigationProvider } from "embedding-sdk-bundle/components/private/SdkInternalNavigation/SdkInternalNavigationProvider";
 import { useSdkInternalNavigation } from "embedding-sdk-bundle/components/private/SdkInternalNavigation/context";
@@ -9,7 +10,7 @@ import type { MetabasePluginsConfig } from "embedding-sdk-bundle/types/plugins";
 import { PublicOrEmbeddedDashCardMenu } from "metabase/dashboard/components/DashCard/PublicOrEmbeddedDashCardMenu";
 import { DASHBOARD_ACTION } from "metabase/dashboard/components/DashboardHeader/DashboardHeaderButtonRow/dashboard-action-keys";
 import type { MetabasePluginsConfig as InternalMetabasePluginsConfig } from "metabase/embedding-sdk/types/plugins";
-import { isQuestionCard } from "metabase/lib/dashboard";
+import { isQuestionCard } from "metabase/utils/dashboard";
 import { getEmbeddingMode } from "metabase/visualizations/click-actions/lib/modes";
 import { createEmbeddingSdkMode } from "metabase/visualizations/click-actions/modes/EmbeddingSdkMode";
 import type { ClickActionModeGetter } from "metabase/visualizations/types";
@@ -34,6 +35,23 @@ export const InteractiveDashboardContent = (
 ) => {
   const globalPlugins = useSdkSelector(getPlugins);
   const { push: pushNavigation } = useSdkInternalNavigation();
+
+  const {
+    dashboardId,
+    withTitle,
+    withDownloads,
+    withSubscriptions,
+    autoRefreshInterval,
+    enableEntityNavigation,
+  } = props;
+
+  useTrackSdkComponentMount("InteractiveDashboard", dashboardId, {
+    with_title: withTitle,
+    with_downloads: withDownloads,
+    with_subscriptions: withSubscriptions,
+    auto_refresh: autoRefreshInterval != null,
+    enable_entity_navigation: enableEntityNavigation,
+  });
 
   const plugins: MetabasePluginsConfig = useMemo(() => {
     return { ...globalPlugins, ...props.plugins };

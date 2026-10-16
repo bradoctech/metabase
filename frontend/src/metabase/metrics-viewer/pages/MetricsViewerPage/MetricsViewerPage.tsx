@@ -1,24 +1,20 @@
 import type { Location } from "history";
-import { useCallback } from "react";
 
-import { Box, Flex, Stack } from "metabase/ui";
-
-import {
-  trackMetricsViewerMetricAdded,
-  trackMetricsViewerMetricRemoved,
-} from "../../analytics";
-import { BreakoutLegend } from "../../components/BreakoutLegend/BreakoutLegend";
+import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
+import { BreakoutLegend } from "metabase/metrics-viewer/components/BreakoutLegend/BreakoutLegend";
+import { DimensionPickerSidebar } from "metabase/metrics-viewer/components/DimensionPickerSidebar";
 import {
   MetricsViewerEmptyState,
-  MetricsViewerNoTabsEmptyState,
-} from "../../components/EmptyState";
-import { MetricSearchPanel } from "../../components/MetricSearchPanel";
+  MetricsViewerNoDimensionBreakoutEmptyState,
+} from "metabase/metrics-viewer/components/EmptyState";
+import { MetricSearchPanel } from "metabase/metrics-viewer/components/MetricSearchPanel";
+import { MetricsViewerDimensionBreakoutContent } from "metabase/metrics-viewer/components/MetricsViewerDimensionBreakoutContent";
 import {
-  MetricsViewerTabContent,
-  MetricsViewerTabs,
-} from "../../components/MetricsViewerTabs";
-import { useMetricsViewer } from "../../hooks/use-metrics-viewer";
-import type { SelectedMetric } from "../../types/viewer-state";
+  MetricsViewerProvider,
+  useMetricsViewerContext,
+} from "metabase/metrics-viewer/context";
+import { useViewerState } from "metabase/metrics-viewer/hooks";
+import { Box, Center, Flex, Stack } from "metabase/ui";
 
 import S from "./MetricsViewerPage.module.css";
 
@@ -27,87 +23,43 @@ export type MetricsViewerPageProps = {
 };
 
 export function MetricsViewerPage(props: MetricsViewerPageProps) {
-  const {
-    definitions,
-    tabs,
-    activeTab,
-    activeTabId,
-    errorsByDefinitionId,
-    modifiedDefinitions,
-    series,
-    cardIdToDefinitionId,
-    activeBreakoutColors,
-    sourceColors,
-    selectedMetrics,
-    sourceOrder,
-    sourceDataById,
-    availableDimensions,
-    isExecuting,
-    addMetric,
-    swapMetric,
-    removeMetric,
-    changeTab,
-    addAndSelectTab,
-    removeTab,
-    updateActiveTab,
-    changeTabDimension,
-    removeTabDimension,
-    updateDefinition,
-    setBreakoutDimension,
-  } = useMetricsViewer(props);
+  const viewerState = useViewerState(props);
 
-  const handleAddMetric = useCallback(
-    (metric: SelectedMetric) => {
-      addMetric(metric);
-      trackMetricsViewerMetricAdded(metric.id, metric.sourceType);
-    },
-    [addMetric],
+  if (!viewerState.initialLoadComplete) {
+    // parsing formulas won't work until the initial set of definitions are loaded
+    return (
+      <Center h="100%">
+        <LoadingAndErrorWrapper loading />
+      </Center>
+    );
+  }
+
+  return (
+    <MetricsViewerProvider value={viewerState}>
+      <MetricsViewerPageBody />
+    </MetricsViewerProvider>
   );
+}
 
-  const handleRemoveMetric = useCallback(
-    (metricId: number, sourceType: "metric" | "measure") => {
-      removeMetric(metricId, sourceType);
-      trackMetricsViewerMetricRemoved(metricId, sourceType);
-    },
-    [removeMetric],
-  );
+function MetricsViewerPageBody() {
+  const { definitions, activeDimensionBreakout, isSidebarOpen } =
+    useMetricsViewerContext();
 
-  const hasDefinitions = definitions.length > 0;
-  const hasLoadedDefinitions = definitions.some(
+  const hasDefinitions = Object.keys(definitions).length > 0;
+  const hasLoadedDefinitions = Object.values(definitions).some(
     (entry) => entry.definition != null,
   );
+  const showDimensionPickerSidebar = isSidebarOpen && activeDimensionBreakout;
+  const showBreakoutLegend =
+    !showDimensionPickerSidebar && activeDimensionBreakout?.type !== "scalar";
 
   return (
     <Stack px="3rem" h="100%" gap={0} className={S.root}>
       <Box pt="md" flex="0 0 auto">
-        <MetricSearchPanel
-          selectedMetrics={selectedMetrics}
-          metricColors={sourceColors}
-          definitions={definitions}
-          onAddMetric={handleAddMetric}
-          onRemoveMetric={handleRemoveMetric}
-          onSwapMetric={swapMetric}
-          onSetBreakout={setBreakoutDimension}
-          onUpdateDefinition={updateDefinition}
-        />
+        <MetricSearchPanel />
       </Box>
       <Flex flex="1 1 auto" mih={0}>
         <Stack gap={0} flex={1} mih={0} miw={0}>
-          {hasDefinitions && (
-            <Box pt="sm" flex="0 0 auto" className={S.tabsBar}>
-              <MetricsViewerTabs
-                tabs={tabs}
-                activeTabId={activeTabId}
-                isLoading={!hasLoadedDefinitions}
-                availableDimensions={availableDimensions}
-                sourceOrder={sourceOrder}
-                sourceDataById={sourceDataById}
-                onTabChange={changeTab}
-                onAddTab={addAndSelectTab}
-                onRemoveTab={removeTab}
-              />
-            </Box>
-          )}
           <Flex flex="1 1 auto" mih={0} pt="lg">
             <Flex
               direction="column"
@@ -119,32 +71,18 @@ export function MetricsViewerPage(props: MetricsViewerPageProps) {
             >
               {!hasDefinitions ? (
                 <MetricsViewerEmptyState />
-              ) : activeTab ? (
-                <MetricsViewerTabContent
-                  definitions={definitions}
-                  tab={activeTab}
-                  errorsByDefinitionId={errorsByDefinitionId}
-                  modifiedDefinitions={modifiedDefinitions}
-                  series={series}
-                  cardIdToDefinitionId={cardIdToDefinitionId}
-                  sourceColors={sourceColors}
-                  isExecuting={isExecuting}
-                  onTabUpdate={updateActiveTab}
-                  onDimensionChange={(defId, dim) =>
-                    changeTabDimension(activeTab.id, defId, dim)
-                  }
-                  onDimensionRemove={(defId) =>
-                    removeTabDimension(activeTab.id, defId)
-                  }
-                />
+              ) : activeDimensionBreakout ? (
+                <MetricsViewerDimensionBreakoutContent />
               ) : hasLoadedDefinitions ? (
-                <MetricsViewerNoTabsEmptyState />
+                <MetricsViewerNoDimensionBreakoutEmptyState />
               ) : null}
             </Flex>
-            <BreakoutLegend
-              definitions={definitions}
-              activeBreakoutColors={activeBreakoutColors}
-            />
+            {showBreakoutLegend && <BreakoutLegend />}
+            {showDimensionPickerSidebar && (
+              <DimensionPickerSidebar
+                activeDimensionBreakout={activeDimensionBreakout}
+              />
+            )}
           </Flex>
         </Stack>
       </Flex>

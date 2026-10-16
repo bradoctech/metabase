@@ -1,6 +1,8 @@
 (ns metabase-enterprise.sandbox.api.card-test
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase-enterprise.sandbox.api.card-test]}}}}}}
   (:require
    [clojure.test :refer :all]
+   [metabase-enterprise.sandbox.query-processor.middleware.sandboxing :as sandboxing]
    [metabase-enterprise.test :as met]
    [metabase.permissions.core :as perms]
    [metabase.permissions.models.data-permissions :as data-perms]
@@ -9,6 +11,9 @@
    [metabase.query-processor.test :as qp]
    [metabase.test :as mt]
    [metabase.util :as u]))
+
+;;; required for the `::sandboxing/sandbox?` keyword below
+(comment sandboxing/keep-me)
 
 (deftest sandboxed-users-can-save-cards-test
   (testing "Users with sandboxed permissions should be able to save cards"
@@ -109,7 +114,6 @@
                                                                                                       :type :query,
                                                                                                       :query {:source-table (mt/id :venues)
                                                                                                               :limit 1}}}]
-
       (perms/add-user-to-group! user-id group)
       (let [cases [[:unrestricted           :query-builder-and-native true]
                    [:unrestricted           :query-builder            true]
@@ -157,7 +161,6 @@
             (mt/user-http-request :rasta :post 403 "card"
                                   (assoc (api.card-test/card-with-name-and-query (mt/random-name) query)
                                          :collection_id (u/the-id collection))))
-
           (mt/with-temp [:model/Card card {:dataset_query (mt/mbql-query products)}]
             (let [query (mt/mbql-query orders
                           {:limit 5
@@ -187,7 +190,6 @@
                                                                :values_source_config {:card_id     source-card-id
                                                                                       :value_field (mt/$ids $categories.name)}}]
                                             :table_id        (mt/id :venues)}]
-
         (testing "when getting values"
           (let [get-values (fn [user]
                              (mt/user-http-request user :get 200 (api.card-test/param-values-url card-id "abc")))]
@@ -196,7 +198,6 @@
             (is (=? {:values          [["African"] ["American"] ["Artisan"]]
                      :has_more_values false}
                     (get-values :rasta)))))
-
         (testing "when searching values"
           ;; return BBQ if not sandboxed
           (let [search (fn [user]
@@ -204,7 +205,6 @@
             (is (=? {:values          [["BBQ"]]
                      :has_more_values false}
                     (search :crowberto)))
-
             (is (=? {:values          []
                      :has_more_values false}
                     (search :rasta)))))))))
@@ -217,3 +217,16 @@
                                        :dataset_query (mt/mbql-query categories)}]
         (is (=? {:data {:is_sandboxed true}}
                 (qp/process-query (qp/userland-query (:dataset_query card)))))))))
+
+(deftest ^:synchronized source-card-persisted-sandbox-marker-is-ignored-test
+  (testing "a ::sandbox? marker persisted inside a source Card's query does not bypass sandboxing when the Card is used as a source card"
+    (met/with-gtaps! {:gtaps {:venues {:query      (mt/mbql-query venues)
+                                       :remappings {:cat ["variable" [:field (mt/id :venues :category_id) nil]]}}}
+                      :attributes {"cat" 50}}
+      (letfn [(count-rows [query] (ffirst (get-in (qp/process-query query) [:data :rows])))]
+        (testing "sanity: the sandbox limits venues to 10 rows"
+          (is (= 10 (count-rows (mt/mbql-query venues {:aggregation [[:count]]})))))
+        (let [marked-query (assoc-in (mt/mbql-query venues {}) [:query ::sandboxing/sandbox?] true)]
+          (mt/with-temp [:model/Card {card-id :id} {:dataset_query marked-query}]
+            (testing "running that Card as a source card is still sandboxed (10 rows, not the full 100)"
+              (is (= 10 (count-rows (mt/mbql-query nil {:source-table (str "card__" card-id), :aggregation [[:count]]})))))))))))

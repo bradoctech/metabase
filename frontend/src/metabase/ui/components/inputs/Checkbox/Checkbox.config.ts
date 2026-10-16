@@ -7,7 +7,6 @@ const SIZES: Record<string, string> = {
   xs: rem(16),
   sm: rem(16),
   md: rem(20),
-  lg: rem(24),
 };
 
 export const checkboxOverrides = {

@@ -4,8 +4,8 @@
    [clojure.set :as set]
    [clojure.string :as str]
    [clojure.test :refer :all]
-   [metabase.analytics.sdk :as sdk]
    [metabase.notification.seed :as notification.seed]
+   [metabase.permissions.core :as perms]
    [metabase.test :as mt]
    [metabase.util :as u]
    [toucan2.core :as t2]))
@@ -95,7 +95,6 @@
                                                           doc-id
                                                           (:id created)))}]}]}
                           (first (swap-vals! mt/inbox empty)))))
-
                 (testing "creates a reply to an existing comment"
                   (let [content2  (tiptap [:p "Other comment"])
                         child     (mt/user-http-request :crowberto :post 200 "comment/"
@@ -121,7 +120,6 @@
                                  :body    [{:content (relaxed-re
                                                       (str (:common_name (mt/fetch-user :crowberto)) " replied to a thread"))}]}]}
                               (first (swap-vals! mt/inbox empty)))))))
-
                 (testing "comment in a thread should send emails to all participants of the thread"
                   (let [_another (mt/user-http-request :lucky :post 200 "comment/"
                                                        {:target_type       "document"
@@ -137,7 +135,6 @@
                                :body    [{:content (relaxed-re
                                                     (str (:common_name (mt/fetch-user :lucky)) " replied to a thread"))}]}]}
                             (first (swap-vals! mt/inbox empty))))))))
-
             (testing "creates a comment for part of an entity"
               (let [part-id (-> doc :content first :attrs :_id)
                     created (mt/user-http-request :rasta :post 200 "comment/"
@@ -161,7 +158,6 @@
                                                                      part-id
                                                                      (:id created)))}]}]}
                           (first (swap-vals! mt/inbox empty)))))))
-
             (testing "Comments with mentions send notification emails"
               (let [_created (mt/user-http-request :rasta :post 200 "comment/"
                                                    {:target_type "document"
@@ -190,7 +186,6 @@
                 (is (not (str/includes? email-body "<script>")))
                 (is (str/includes? email-body "&lt;script&gt;")))
               (swap! mt/inbox empty))
-
             (testing "javascript: links in content are stripped in email"
               (mt/user-http-request :rasta :post 200 "comment/"
                                     {:target_type "document"
@@ -205,7 +200,6 @@
                 (is (not (str/includes? email-body "javascript:")))
                 (is (str/includes? email-body "click here")))
               (swap! mt/inbox empty))
-
             (testing "unknown node types are dropped in email"
               (mt/user-http-request :rasta :post 200 "comment/"
                                     {:target_type "document"
@@ -229,11 +223,74 @@
         (is (=? {:content {:text "Updated content"}}
                 (mt/user-http-request :rasta :put 200 (str "comment/" comment-id)
                                       {:content {"text" "Updated content"}}))))
-
       (testing "updates comment resolution status"
         (is (=? {:is_resolved true}
                 (mt/user-http-request :rasta :put 200 (str "comment/" comment-id)
                                       {:is_resolved true})))))))
+
+(deftest update-delete-non-creator-non-admin-test
+  (testing "PUT/DELETE /api/comment/:comment-id - a user with document access who isn't the creator or an admin cannot edit or delete another user's comment"
+    (mt/with-temp [:model/Document {doc-id :id} {}
+                   :model/Comment  {c-id :id}   {:target_id doc-id :creator_id (mt/user->id :rasta)}]
+      (is (= "You don't have permissions to do that."
+             (mt/user-http-request :lucky :put 403 (str "comment/" c-id) {:content {:text "hi"}})))
+      (is (= "You don't have permissions to do that."
+             (mt/user-http-request :lucky :delete 403 (str "comment/" c-id)))))))
+
+(deftest unresolve-comment-test
+  (testing "PUT /api/comment/:comment-id can flip is_resolved back off after being set"
+    (mt/with-temp [:model/Document {doc-id :id}     {}
+                   :model/Comment  {comment-id :id} {:target_id doc-id}]
+      (mt/user-http-request :rasta :put 200 (str "comment/" comment-id) {:is_resolved true})
+      (is (=? {:is_resolved false}
+              (mt/user-http-request :rasta :put 200 (str "comment/" comment-id) {:is_resolved false}))))))
+
+(deftest resolve-reply-comment-test
+  (testing "PUT /api/comment/:comment-id allows resolving a non-root reply comment (no server-side root-only restriction)"
+    (mt/with-temp [:model/Document {doc-id :id} {}
+                   :model/Comment  {root :id}   {:target_id doc-id}
+                   :model/Comment  {reply :id}  {:target_id doc-id :parent_comment_id root}]
+      (is (=? {:is_resolved true}
+              (mt/user-http-request :rasta :put 200 (str "comment/" reply) {:is_resolved true}))))))
+
+(deftest resolve-deleted-comment-test
+  (testing "PUT /api/comment/:comment-id can set is_resolved on a comment whose content has been soft-deleted"
+    (mt/with-temp [:model/Document {doc-id :id}     {}
+                   :model/Comment  {comment-id :id} {:target_id doc-id}]
+      (mt/user-http-request :rasta :delete 204 (str "comment/" comment-id))
+      (is (=? {:is_resolved true}
+              (mt/user-http-request :rasta :put 200 (str "comment/" comment-id) {:is_resolved true}))))))
+
+(deftest resolve-other-users-thread-test
+  (testing "PUT /api/comment/:comment-id - any user with document write access can resolve a thread they didn't create"
+    (mt/with-temp [:model/Document {doc-id :id} {:creator_id (mt/user->id :crowberto)}
+                   :model/Comment  {c-id :id}   {:target_id doc-id :creator_id (mt/user->id :crowberto)}]
+      (is (=? {:is_resolved true}
+              (mt/user-http-request :rasta :put 200 (str "comment/" c-id) {:is_resolved true}))))))
+
+(deftest reply-to-resolved-comment-test
+  (testing "POST /api/comment/ allows replying to a resolved parent thread (no server-side restriction)"
+    (mt/with-temp [:model/Document {doc-id :id} {}
+                   :model/Comment  {root :id}   {:target_id doc-id}]
+      (mt/with-model-cleanup [:model/Comment]
+        (mt/user-http-request :rasta :put 200 (str "comment/" root) {:is_resolved true})
+        (is (=? {:parent_comment_id root}
+                (mt/user-http-request :rasta :post 200 "comment/"
+                                      {:target_type       "document"
+                                       :target_id         doc-id
+                                       :parent_comment_id root
+                                       :content           (tiptap [:p "reply"])})))))))
+
+(deftest deleted-comment-without-replies-omitted-test
+  (testing "a deleted comment with no replies is omitted entirely from GET"
+    (mt/with-temp [:model/Document {doc-id :id} {}
+                   :model/Comment  {c1 :id}     {:target_id doc-id}
+                   :model/Comment  {c2 :id}     {:target_id doc-id}]
+      (mt/user-http-request :rasta :delete 204 (str "comment/" c1))
+      (is (=? {:comments [{:id c2}]}
+              (mt/user-http-request :rasta :get 200 "comment/"
+                                    :target_type "document"
+                                    :target_id doc-id))))))
 
 (deftest delete-comment-test
   (testing "DELETE /api/comment/:comment-id"
@@ -252,7 +309,6 @@
           ;; NOTE: maybe it's fine and we should just noop here rather than return an error?
           (is (= "Comment is already deleted"
                  (mt/user-http-request :rasta :delete 400 (str "comment/" c1))))))
-
       (testing "deleting parent comment still leaves it in a response"
         (is (= nil
                (mt/user-http-request :rasta :delete 204 (str "comment/" c2))))
@@ -272,7 +328,6 @@
         (is (=? {:reacted true}
                 (mt/user-http-request :rasta :post 200 (str "comment/" comment-id "/reaction")
                                       {:emoji "👍"})))
-
         (is (=? {:comments [{:id        comment-id
                              :reactions [{:emoji "👍"
                                           :count 1
@@ -280,17 +335,59 @@
                 (mt/user-http-request :rasta :get 200 "comment/"
                                       :target_type "document"
                                       :target_id doc-id))))
-
       (testing "removes an existing reaction when toggled again"
         (is (=? {:reacted false}
                 (mt/user-http-request :rasta :post 200 (str "comment/" comment-id "/reaction")
                                       {:emoji "👍"})))
-
         (is (=? {:comments [{:id        comment-id
                              :reactions []}]}
                 (mt/user-http-request :rasta :get 200 "comment/"
                                       :target_type "document"
                                       :target_id doc-id)))))))
+
+(deftest multiple-emoji-reactions-test
+  ;; Relies on comment_reaction.emoji using an exact (not linguistic) collation on MySQL/MariaDB -- see
+  ;; migration v63.2026-07-06T00:00:00. Under the table's original utf8mb4_unicode_ci collation, distinct
+  ;; supplementary-plane emoji like 👍 and 🎉 compared as equal, so the second POST below looked like a
+  ;; toggle-off of the first reaction instead of a new one.
+  (testing "POST /api/comment/:comment-id/reaction supports multiple distinct emoji on the same comment"
+    (mt/with-temp [:model/Document {doc-id :id}     {}
+                   :model/Comment  {comment-id :id} {:target_id doc-id}]
+      (mt/with-model-cleanup [:model/CommentReaction]
+        (mt/user-http-request :rasta :post 200 (str "comment/" comment-id "/reaction") {:emoji "👍"})
+        (mt/user-http-request :rasta :post 200 (str "comment/" comment-id "/reaction") {:emoji "🎉"})
+        (let [{:keys [comments]} (mt/user-http-request :rasta :get 200 "comment/"
+                                                       :target_type "document" :target_id doc-id)
+              reactions          (->> comments (filter #(= comment-id (:id %))) first :reactions
+                                      (map #(select-keys % [:emoji :count])) set)]
+          (is (= #{{:emoji "👍" :count 1} {:emoji "🎉" :count 1}} reactions)))))))
+
+(deftest multi-user-reaction-aggregation-test
+  (testing "reactions from different users on the same emoji aggregate, and one user removing theirs doesn't affect the other's"
+    (mt/with-temp [:model/Document {doc-id :id}     {}
+                   :model/Comment  {comment-id :id} {:target_id doc-id}]
+      (mt/with-model-cleanup [:model/CommentReaction]
+        (mt/user-http-request :rasta :post 200 (str "comment/" comment-id "/reaction") {:emoji "👍"})
+        (mt/user-http-request :crowberto :post 200 (str "comment/" comment-id "/reaction") {:emoji "👍"})
+        (is (=? {:comments [{:id        comment-id
+                             :reactions [{:emoji "👍" :count 2}]}]}
+                (mt/user-http-request :rasta :get 200 "comment/"
+                                      :target_type "document"
+                                      :target_id doc-id)))
+        (mt/user-http-request :crowberto :post 200 (str "comment/" comment-id "/reaction") {:emoji "👍"})
+        (is (=? {:comments [{:id        comment-id
+                             :reactions [{:emoji "👍" :count 1 :users [{:id (mt/user->id :rasta)}]}]}]}
+                (mt/user-http-request :rasta :get 200 "comment/"
+                                      :target_type "document"
+                                      :target_id doc-id)))))))
+
+(deftest cannot-react-to-deleted-comment-test
+  (testing "POST /api/comment/:comment-id/reaction 400s on a soft-deleted comment"
+    (mt/with-temp [:model/Document {doc-id :id}     {}
+                   :model/Comment  {comment-id :id} {:target_id doc-id}]
+      (mt/user-http-request :rasta :delete 204 (str "comment/" comment-id))
+      (is (= "Cannot react to deleted comments"
+             (mt/user-http-request :rasta :post 400 (str "comment/" comment-id "/reaction") {:emoji "👍"}))))))
 
 (deftest comments-permissions-test
   (testing "Comment permissions - users without document access cannot read or write comments"
@@ -299,34 +396,134 @@
                      :model/Document   {restricted-doc-id :id}     {:collection_id restricted-col
                                                                     :name          "Restricted Document"}
                      :model/Comment    {restricted-comment-id :id} {:target_id restricted-doc-id}]
-
         (mt/with-model-cleanup [:model/Comment]
           (testing "GET /api/comment/ - users without document read permissions cannot see comments"
             (is (= "You don't have permissions to do that."
                    (mt/user-http-request :lucky :get 403 "comment/"
                                          :target_type "document"
                                          :target_id restricted-doc-id))))
-
           (testing "POST /api/comment/ - users without document read permissions cannot create comments"
             (is (= "You don't have permissions to do that."
                    (mt/user-http-request :lucky :post 403 "comment/"
                                          {:target_type "document"
                                           :target_id   restricted-doc-id
                                           :content     (tiptap "Comment by lucky")}))))
-
           (testing "PUT /api/comment/:id - users without document access cannot update comments"
             (is (= "You don't have permissions to do that."
                    (mt/user-http-request :lucky :put 403 (str "comment/" restricted-comment-id)
                                          {:content {:text "Updated by lucky"}}))))
-
           (testing "DELETE /api/comment/:id - users without document access cannot delete comments"
             (is (= "You don't have permissions to do that."
                    (mt/user-http-request :lucky :delete 403 (str "comment/" restricted-comment-id)))))
-
           (testing "POST /api/comment/:id/reaction - users without document access cannot react to comments"
             (is (= "You don't have permissions to do that."
                    (mt/user-http-request :lucky :post 403 (str "comment/" restricted-comment-id "/reaction")
                                          {:emoji "👍"})))))))))
+
+(deftest mention-notification-content-test
+  (testing "@mention notifications pin heading text and comment link, not just the subject"
+    (mt/with-temporary-setting-values [site-url "http://localhost:3000"]
+      (mt/with-temp [:model/Document {doc-id :id} {:name       "Mentions Doc"
+                                                   :creator_id (mt/user->id :lucky)}]
+        (mt/with-model-cleanup [:model/Comment :model/Notification]
+          (mt/with-fake-inbox
+            (notification.seed/seed-notification!)
+            (let [created  (mt/user-http-request :rasta :post 200 "comment/"
+                                                 {:target_type "document"
+                                                  :target_id   doc-id
+                                                  :content     (tiptap
+                                                                [:smartLink {:model    "user"
+                                                                             :entityId (mt/user->id :crowberto)}])})
+                  expected [{:subject "Comment on Mentions Doc"
+                             :body    [{:content (relaxed-re
+                                                  (str (:common_name (mt/fetch-user :rasta)) " left a comment on a document")
+                                                  (format "http://localhost:\\d+/document/%s#comment-%s"
+                                                          doc-id
+                                                          (:id created)))}]}]]
+              (is (=? {(:email (mt/fetch-user :lucky))     expected
+                       (:email (mt/fetch-user :crowberto)) expected}
+                      (first (swap-vals! mt/inbox empty)))))))))))
+
+(deftest mention-wrong-entity-id-test
+  (testing "an entityId that isn't a user ID never reaches the query that resolves the recipients"
+    (mt/with-temp [:model/Document {doc-id :id} {:name       "Mentions Doc"
+                                                 :creator_id (mt/user->id :lucky)}]
+      (mt/with-model-cleanup [:model/Comment :model/Notification]
+        (mt/with-fake-inbox
+          (notification.seed/seed-notification!)
+          (let [content (tiptap [:smartLink {:model "user" :entityId {:data "string"}}])]
+            (testing "the comment is still created, and the notification path does not blow up"
+              (is (=? {:content content}
+                      (mt/user-http-request :rasta :post 200 "comment/"
+                                            {:target_type "document"
+                                             :target_id   doc-id
+                                             :content     content}))))
+            (testing "only the document creator is notified"
+              (is (= #{(:email (mt/fetch-user :lucky))}
+                     (set (keys (first (swap-vals! mt/inbox empty)))))))))))))
+
+(deftest mention-notifications-follow-document-access-test
+  (testing "@mention notifications are only delivered to users who can read the target document"
+    (mt/with-temporary-setting-values [site-url "http://localhost:3000"]
+      (mt/with-non-admin-groups-no-root-collection-perms
+        (mt/with-temp [:model/Collection {col-id :id} {}
+                       :model/Document   {doc-id :id} {:name          "Limited Audience"
+                                                       :collection_id col-id
+                                                       :creator_id    (mt/user->id :crowberto)}]
+          (mt/with-model-cleanup [:model/Comment :model/Notification]
+            (mt/with-fake-inbox
+              (notification.seed/seed-notification!)
+              (let [mention! (fn [entity-id & [parent-id]]
+                               (mt/user-http-request :crowberto :post 200 "comment/"
+                                                     (cond-> {:target_type "document"
+                                                              :target_id   doc-id
+                                                              :content     (tiptap [:smartLink {:model    "user"
+                                                                                                :entityId entity-id}])}
+                                                       parent-id (assoc :parent_comment_id parent-id))))]
+                (testing "no email for a mentioned user who cannot read the document"
+                  (let [root (mention! (mt/user->id :rasta))]
+                    (is (not (contains? @mt/inbox (:email (mt/fetch-user :rasta)))))
+                    (testing "the reply path applies the same check"
+                      (mention! (mt/user->id :rasta) (:id root))
+                      (is (not (contains? @mt/inbox (:email (mt/fetch-user :rasta))))))))
+                (testing "mentioning an id that matches no user is a no-op"
+                  (mention! Integer/MAX_VALUE)
+                  (is (empty? @mt/inbox)))
+                (testing "the email is delivered once the mentioned user can read the document"
+                  (perms/grant-collection-read-permissions! (perms/all-users-group) col-id)
+                  (mention! (mt/user->id :rasta))
+                  (is (contains? @mt/inbox (:email (mt/fetch-user :rasta)))))))))))))
+
+(deftest mention-entities-visibility-test
+  (testing "GET /api/comment/mentions applies the same visibility rules as GET /api/user/recipients"
+    (mt/with-premium-features #{:email-restrict-recipients}
+      (testing "user-visibility :none returns only the caller"
+        (mt/with-temporary-setting-values [user-visibility :none]
+          (is (= [(mt/user->id :rasta)]
+                 (->> (:data (mt/user-http-request :rasta :get 200 "comment/mentions"))
+                      (map :id))))
+          (testing "admins are unaffected"
+            (is (= ["crowberto@metabase.com" "lucky@metabase.com" "rasta@metabase.com"]
+                   (->> (:data (mt/user-http-request :crowberto :get 200 "comment/mentions"))
+                        (filter mt/test-user?)
+                        (map :email)))))))
+      (testing "user-visibility :group returns only users sharing a group with the caller"
+        (mt/with-temporary-setting-values [user-visibility :group]
+          (mt/with-temp [:model/PermissionsGroup           {group-id :id} {}
+                         :model/PermissionsGroupMembership _              {:user_id  (mt/user->id :rasta)
+                                                                           :group_id group-id}
+                         :model/PermissionsGroupMembership _              {:user_id  (mt/user->id :lucky)
+                                                                           :group_id group-id}]
+            (is (= ["lucky@metabase.com" "rasta@metabase.com"]
+                   (->> (:data (mt/user-http-request :rasta :get 200 "comment/mentions"))
+                        (filter mt/test-user?)
+                        (map :email)))))))
+      (testing "user-visibility :all returns everyone"
+        (mt/with-temporary-setting-values [user-visibility :all]
+          (is (= ["crowberto@metabase.com" "lucky@metabase.com" "rasta@metabase.com"]
+                 (->> (:data (mt/user-http-request :rasta :get 200 "comment/mentions"))
+                      (filter mt/test-user?)
+                      (map :email)))))))))
 
 (deftest mention-entities-test
   (testing "We can get users to mention"
@@ -351,10 +548,10 @@
         (is (=? {:comments []
                  :disabled true}
                 (mt/user-http-request :rasta :get 200 "comment/"
-                                      {:request-options {:headers {"x-metabase-client" @#'sdk/embedding-iframe-client}}}
+                                      {:request-options {:headers {"x-metabase-client" "embedding-iframe"}}}
                                       :target_type "document"
                                       :target_id doc-id))))
       (testing "Users mentions are not available either"
         (is (= "Not found."
                (mt/user-http-request :rasta :get 404 "comment/mentions"
-                                     {:request-options {:headers {"x-metabase-client" @#'sdk/embedding-iframe-client}}})))))))
+                                     {:request-options {:headers {"x-metabase-client" "embedding-iframe"}}})))))))

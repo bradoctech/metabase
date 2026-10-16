@@ -1,7 +1,7 @@
 import type { XAXisOption, YAXisOption } from "echarts/types/dist/shared";
 import type { AxisBaseOptionCommon } from "echarts/types/src/coord/axisCommonTypes";
 
-import { parseNumberValue } from "metabase/lib/number";
+import { parseNumberValue } from "metabase/utils/number";
 import { CHART_STYLE } from "metabase/visualizations/echarts/cartesian/constants/style";
 import type {
   AxisFormatter,
@@ -193,7 +193,9 @@ const getCommonDimensionAxisOptions = (
     axisLine: {
       show: !!settings["graph.x_axis.axis_enabled"],
       lineStyle: {
-        color: getColor(isSplitPanels ? "border-strong" : "border"),
+        color: getColor(
+          isSplitPanels ? "border-neutral-strong" : "border-neutral",
+        ),
       },
     },
   };
@@ -264,7 +266,6 @@ export const buildNumericDimensionAxis = (
     axisLabel: {
       margin: CHART_STYLE.axisTicksMarginX,
       ...getDimensionTicksDefaultOption(settings, renderingContext),
-      triggerEvent: true,
       formatter: (rawValue: number) => {
         if (isPadded && (rawValue < min || rawValue > max)) {
           return "";
@@ -305,7 +306,6 @@ export const buildTimeSeriesDimensionAxis = (
         CHART_STYLE.axisTicksMarginX +
         (hasTimelineEvents ? CHART_STYLE.timelineEvents.height : 0),
       ...getDimensionTicksDefaultOption(settings, renderingContext),
-      triggerEvent: true,
       formatter: (rawValue: number) => {
         const value = xAxisModel.fromEChartsAxisValue(rawValue);
         if (canRender(value)) {
@@ -356,7 +356,6 @@ export const buildCategoricalDimensionAxis = (
         renderingContext,
       ),
       interval: () => true,
-      triggerEvent: true,
       formatter: (value: string) => {
         const numberValue = parseNumberValue(value);
         let fullText: string;

@@ -4,6 +4,7 @@
    [clojure.test :as t]
    [medley.core :as m]
    [metabase.app-db.core :as mdb]
+   [metabase.auth-identity.core :as auth-identity]
    [metabase.request.core :as request]
    [metabase.session.core :as session]
    [metabase.test.http-client :as client]
@@ -69,14 +70,14 @@
   (or (t2/select-one :model/User :email email)
       (locking create-user-lock
         (or (t2/select-one :model/User :email email)
-            (t2/insert-returning-instance! :model/User
-                                           {:email        email
-                                            :first_name   first-name
-                                            :last_name    last-name
-                                            :password     password
-                                            :is_superuser superuser
-                                            :is_qbnewb    true
-                                            :is_active    active})))))
+            (u/prog1 (t2/insert-returning-instance! :model/User
+                                                    {:email        email
+                                                     :first_name   first-name
+                                                     :last_name    last-name
+                                                     :is_superuser superuser
+                                                     :is_qbnewb    true
+                                                     :is_active    active})
+              (auth-identity/set-password! (u/the-id <>) password))))))
 
 (mu/defn fetch-user :- (ms/InstanceOf :model/User)
   "Fetch the User object associated with `username`. Creates user if needed.
@@ -152,10 +153,15 @@
 ;;; consistently fails for me when using [[metabase.test.http-client/authenticate]] instead of the code below. See #48489 for
 ;;; more info
 (mu/defn ^:private authenticate! :- ms/UUIDString
-  "Create a new `:model/Session` for one of the test users."
+  "Create a new `:model/Session` for one of the test users, linked to their password `:model/AuthIdentity`."
   [username :- TestUserName]
-  (let [session-key (session/generate-session-key)]
-    (t2/insert! :model/Session {:id (session/generate-session-id) :key_hashed (session/hash-session-key session-key), :user_id (user->id username)})
+  (let [session-key  (session/generate-session-key)
+        user-id      (user->id username)
+        auth-id      (t2/select-one-pk :model/AuthIdentity :user_id user-id :provider "password")]
+    (t2/insert! :model/Session (cond-> {:id (session/generate-session-id)
+                                        :key_hashed (session/hash-session-key session-key)
+                                        :user_id user-id}
+                                 auth-id (assoc :auth_identity_id auth-id)))
     session-key))
 
 (mu/defn username->token :- ms/UUIDString
@@ -236,6 +242,13 @@
                     request-options? http-body-map? & {:as query-params}])} user-real-request
   "Like [[user-http-request]] but instead of calling the app handler, this makes an actual http request."
   (partial user-request client/real-client))
+
+(def ^{:arglists '([test-user-name-or-user-or-id method expected-status-code? endpoint
+                    request-options? http-body-map? & {:as query-params}])} user-real-request-full-response
+  "Like [[user-real-request]] but returns the full HTTP response map instead of just the body. Useful for
+  tests that need the underlying `:http-client` (e.g. to forcibly close the connection and simulate a client
+  disconnect on a streaming response)."
+  (partial user-request client/client-real-response))
 
 (defn do-with-test-user [user-kwd thunk]
   (t/testing (format "\nwith test user %s\n" user-kwd)

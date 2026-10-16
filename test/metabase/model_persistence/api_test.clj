@@ -88,6 +88,31 @@
                  :state   "persisted"}
                 (mt/user-http-request :crowberto :get 200 (format "persist/card/%d" (u/the-id model)))))))))
 
+(deftest persisted-info-endpoints-authorize-the-card-test
+  (testing "the persisted-info endpoints leak a model's name and collection, so they check the Card, not just its Database"
+    (with-setup! db
+      (mt/with-non-admin-groups-no-root-collection-perms
+        (mt/with-temp
+          [:model/Collection    collection {}
+           :model/Card          model      {:database_id   (u/the-id db)
+                                            :type          :model
+                                            :collection_id (u/the-id collection)}
+           :model/PersistedInfo pinfo      {:database_id (u/the-id db), :card_id (u/the-id model)}]
+          (testing "sanity: the caller cannot read the model"
+            (is (= "You don't have permissions to do that."
+                   (mt/user-http-request :rasta :get 403 (format "card/%d" (u/the-id model))))))
+          (testing "GET /api/persist/card/:card-id"
+            (is (= "You don't have permissions to do that."
+                   (mt/user-http-request :rasta :get 403 (format "persist/card/%d" (u/the-id model))))))
+          (testing "GET /api/persist/:persisted-info-id"
+            (is (= "You don't have permissions to do that."
+                   (mt/user-http-request :rasta :get 403 (format "persist/%d" (u/the-id pinfo))))))
+          (testing "an admin still sees both"
+            (is (=? {:card_id (u/the-id model)}
+                    (mt/user-http-request :crowberto :get 200 (format "persist/card/%d" (u/the-id model)))))
+            (is (=? {:card_id (u/the-id model)}
+                    (mt/user-http-request :crowberto :get 200 (format "persist/%d" (u/the-id pinfo)))))))))))
+
 ;;;
 ;;; Card tests
 ;;;
@@ -103,6 +128,7 @@
                                        (.setProperty "org.quartz.threadPool.threadCount" "6")
                                        (.setProperty "org.quartz.threadPool.class" "org.quartz.simpl.SimpleThreadPool"))))]
     ;; a binding won't work since we need to cross thread boundaries
+    #_{:clj-kondo/ignore [:metabase/prefer-with-dynamic-fn-redefs]}
     (with-redefs [task/scheduler (constantly sched)]
       (try
         (qs/standby sched)
@@ -214,12 +240,10 @@
           (testing "requires persist setting to be enabled"
             (is (= "Persisting models is not enabled."
                    (mt/user-http-request :crowberto :post 400 (str "persist/database/" db-id "/persist"))))))
-
         (mt/with-temporary-setting-values [persisted-models-enabled true]
           (testing "only users with permissions can persist a database"
             (is (= "You don't have permissions to do that."
                    (mt/user-http-request :rasta :post 403 (str "persist/database/" db-id "/persist")))))
-
           (testing "should be able to persit an database"
             (mt/user-http-request :crowberto :post 204 (str "persist/database/" db-id "/persist"))
             (is (= "creating" (t2/select-one-fn :state 'PersistedInfo

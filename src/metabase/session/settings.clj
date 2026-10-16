@@ -1,5 +1,7 @@
 (ns metabase.session.settings
   (:require
+   [buddy.core.codecs :as codecs]
+   [buddy.core.nonce :as nonce]
    [metabase.settings.core :as setting :refer [defsetting]]
    [metabase.sso.core :as sso]
    [metabase.util.i18n :refer [deferred-tru]]
@@ -23,6 +25,7 @@
 
 (defsetting password-complexity
   "Current password complexity requirements"
+  :encryption :no
   :visibility :public
   :setter     :none
   :getter     u.password/active-password-complexity)
@@ -43,3 +46,15 @@
   :type       :integer
   :default    48
   :audit      :getter)
+
+(defsetting mfa-challenge-signing-key
+  (deferred-tru "Key used to sign MFA challenge tokens. Generated automatically on first use.")
+  :visibility :internal
+  :type       :string
+  :export?    false
+  :audit      :never
+  :encryption :when-encryption-key-set
+  ;; :init generates and persists on first access. Two nodes touching it simultaneously can still
+  ;; race (last write wins; the loser's in-flight 5-min challenge tokens fail verification), but
+  ;; the window is one first-ever MFA login. Generate eagerly at startup if this ever bites.
+  :init       (fn [] (codecs/bytes->hex (nonce/random-bytes 32))))

@@ -7,10 +7,10 @@ import type { InputProps } from "metabase/common/components/Input";
 import { Input } from "metabase/common/components/Input";
 import { LoadingSpinner } from "metabase/common/components/LoadingSpinner";
 import { useDebouncedValue } from "metabase/common/hooks/use-debounced-value";
-import { useTranslateContent } from "metabase/i18n/hooks";
-import { delay } from "metabase/lib/delay";
+import { useTranslateContent } from "metabase/content-translation/hooks";
 import { PLUGIN_CONTENT_TRANSLATION } from "metabase/plugins";
 import { Flex } from "metabase/ui";
+import { delay } from "metabase/utils/delay";
 import type { RowValue } from "metabase-types/api";
 
 import {
@@ -197,8 +197,8 @@ const SingleSelectListField = ({
                 data-testid={`${option[0]}-filter-value`}
                 selectedColor={
                   (checkedColor ?? isDashboardFilter)
-                    ? "var(--mb-color-background-selected)"
-                    : "var(--mb-color-filter)"
+                    ? "var(--mb-color-background_surface-selected)"
+                    : "var(--mb-color-core-filter)"
                 }
                 selected={selectedValue === option[0]}
                 onClick={() => onClickOption(option[0])}

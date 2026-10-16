@@ -5,6 +5,7 @@ import {
   SettingsPageWrapper,
   SettingsSection,
 } from "metabase/admin/components/SettingsSection";
+import { UpsellHostingBanner } from "metabase/admin/upsells";
 import { NotFound } from "metabase/common/components/ErrorPages";
 import { useSetting } from "metabase/common/hooks";
 import CS from "metabase/css/core/index.css";
@@ -40,6 +41,7 @@ export function UpdatesSettingsPage() {
         )}
         <NewVersionInfo />
       </SettingsSection>
+      <UpsellHostingBanner location="settings-updates-migrate_to_cloud" />
     </SettingsPageWrapper>
   );
 }

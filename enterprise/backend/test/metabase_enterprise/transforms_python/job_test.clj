@@ -4,10 +4,10 @@
    ^{:clj-kondo/ignore [:discouraged-namespace]}
    [clojure.tools.logging :as log]
    [metabase.driver :as driver]
-   [metabase.models.transforms.transform-run :as transform-run]
    [metabase.task.core :as task]
    [metabase.test :as mt]
    [metabase.transforms.jobs :as jobs]
+   [metabase.transforms.models.transform-run :as transform-run]
    [metabase.transforms.schedule :as transforms.schedule]
    [metabase.transforms.test-dataset :as transforms-dataset]
    [metabase.transforms.test-util :as transforms.tu]
@@ -62,7 +62,7 @@
         (mt/with-dynamic-fn-redefs [log/log* (fn [_ level _ message]
                                                (swap! logged-messages conj {:level level :message message}))
                                     transform-run/running-run-for-transform-id (constantly nil)]
-          (#'jobs/run-transform! run-id :scheduled nil python-transform)
+          (#'jobs/run-transform! run-id :scheduled nil (promise) python-transform)
           (is (= 1 (count @logged-messages))
               "Should log exactly one warning")
           (is (= :warn (:level (first @logged-messages)))

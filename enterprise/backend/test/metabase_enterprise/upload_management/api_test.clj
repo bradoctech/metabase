@@ -1,11 +1,17 @@
 (ns metabase-enterprise.upload-management.api-test
   (:require
+   [clojure.java.jdbc :as jdbc]
    [clojure.test :refer :all]
    [java-time.api :as t]
+   [metabase.models.interface :as mi]
+   [metabase.sync.core :as sync]
    [metabase.test :as mt]
+   [metabase.test.data :as data]
+   [metabase.test.data.one-off-dbs :as one-off-dbs]
    [metabase.upload.core :as upload]
    [metabase.upload.impl-test :as upload-test]
-   [metabase.warehouse-schema-rest.api.table-test :as oss-test]))
+   [metabase.warehouse-schema-rest.api.table-test :as oss-test]
+   [toucan2.core :as t2]))
 
 (def list-url "ee/upload-management/tables")
 
@@ -71,7 +77,6 @@
           (testing "Behind a feature flag"
             (mt/with-premium-features #{} ;; not :upload-management
               (mt/assert-has-premium-feature-error "Upload Management" (mt/user-http-request :crowberto :delete 402 (delete-url 1)))))
-
           (mt/with-premium-features #{:upload-management}
             (testing "Happy path\n"
               (let [table-id (:id (oss-test/create-csv!))]
@@ -81,17 +86,14 @@
                   (is (true? (mt/user-http-request :crowberto :delete 200 (delete-url table-id)))))
                 (testing "The table is gone from the list"
                   (is (not (contains? (listed-table-ids) table-id))))))
-
             (testing "Uploads may be deleted even when *uploading* has been disabled"
               (upload-test/with-uploads-disabled!
                 (let [table-id (:id (oss-test/create-csv!))]
                   (is (true? (mt/user-http-request :crowberto :delete 200 (delete-url table-id)))))))
-
             (testing "The table must be uploaded"
               (mt/with-temp [:model/Table {table-id :id}]
                 (is (= {:message "The table must be an uploaded table."}
                        (mt/user-http-request :rasta :delete 422 (delete-url table-id))))))
-
             (testing "Write permissions to the table are required to delete it\n"
               (let [table-id (:id (oss-test/create-csv!))]
                 (testing "The delete request is rejected"
@@ -99,7 +101,6 @@
                          (mt/user-http-request :rasta :delete 403 (delete-url table-id)))))
                 (testing "The table remains in the list"
                   (is (contains? (listed-table-ids) table-id)))))
-
             (testing "The archive_cards argument is passed through"
               (let [passed-value (atom nil)]
                 (mt/with-dynamic-fn-redefs [upload/delete-upload! (fn [_ & {:keys [archive-cards?]}]
@@ -108,3 +109,38 @@
                   (let [table-id (:id (oss-test/create-csv!))]
                     (is (mt/user-http-request :crowberto :delete 200 (delete-url table-id) :archive-cards true))
                     (is (true? @passed-value))))))))))))
+
+(defn- physical-table-exists? [table-name]
+  (-> (jdbc/query one-off-dbs/*conn*
+                  ["SELECT count(*) AS c FROM information_schema.tables WHERE upper(table_name) = upper(?)"
+                   table-name])
+      first :c pos?))
+
+(deftest ^:synchronized delete-attached-dwh-table-permissions-test
+  (testing "DELETE ee/upload-management/tables/:id on an attached-DWH database"
+    ;; For an attached-DWH database `can-delete-error` used to short-circuit and skip ALL access control, letting any
+    ;; authenticated user drop any table on the attached DWH (even a non-upload table they cannot write). Managing
+    ;; those tables (google-sheets uploads) is superuser-only, so a non-superuser delete must be rejected.
+    (mt/with-premium-features #{:attached-dwh :upload-management}
+      (one-off-dbs/with-blank-db
+        (jdbc/execute! one-off-dbs/*conn* ["CREATE TABLE secret_dwh (id INTEGER, secret TEXT);"])
+        (jdbc/execute! one-off-dbs/*conn* ["INSERT INTO secret_dwh VALUES (1, 'topsecret');"])
+        (sync/sync-database! (data/db))
+        (t2/update! :model/Database (data/id) {:is_attached_dwh true})
+        (let [table (t2/select-one :model/Table :db_id (data/id) :name "SECRET_DWH")]
+          (testing "preconditions: not an upload, rasta has no write permission, table physically present"
+            (is (false? (:is_upload table)))
+            (is (not (mt/with-test-user :rasta (mi/can-write? table))))
+            (is (physical-table-exists? "secret_dwh")))
+          (testing "a non-superuser delete is rejected and the table is not dropped"
+            (is (= {:message "You don't have permissions to do that."}
+                   (mt/user-http-request :rasta :delete 403 (delete-url (:id table)))))
+            (is (physical-table-exists? "secret_dwh")
+                "SECRET_DWH must still exist in the warehouse after a non-privileged delete attempt")
+            (is (t2/select-one-fn :active :model/Table :id (:id table))
+                "the Metabase Table must still be active after a non-privileged delete attempt"))
+          (testing "a superuser can still delete an attached-DWH table (gsheets-upload management path)"
+            (is (true? (mt/user-http-request :crowberto :delete 200 (delete-url (:id table)))))
+            (is (not (physical-table-exists? "secret_dwh"))
+                "the warehouse table is dropped for a superuser")
+            (is (false? (t2/select-one-fn :active :model/Table :id (:id table))))))))))

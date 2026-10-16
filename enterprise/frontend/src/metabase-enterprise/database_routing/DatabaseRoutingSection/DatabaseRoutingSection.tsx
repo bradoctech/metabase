@@ -10,7 +10,6 @@ import {
   DatabaseInfoSection,
   DatabaseInfoSectionDivider,
 } from "metabase/admin/databases/components/DatabaseInfoSection";
-import { hasDbRoutingEnabled } from "metabase/admin/databases/utils";
 import {
   skipToken,
   useListTransformsQuery,
@@ -19,7 +18,8 @@ import {
 import { getErrorMessage } from "metabase/api/utils";
 import { useSetting } from "metabase/common/hooks";
 import { useToast } from "metabase/common/hooks/use-toast";
-import { useSelector } from "metabase/lib/redux";
+import { hasDbRoutingEnabled } from "metabase/common/utils/database";
+import { useSelector } from "metabase/redux";
 import { getUserIsAdmin } from "metabase/selectors/user";
 import {
   Alert,
@@ -139,7 +139,7 @@ export const DatabaseRoutingSection = ({
             <Text lh="lg">{t`Enable database routing`}</Text>
           </Label>
           {error ? (
-            <Error role="alert" color="error">
+            <Error role="alert" color="feedback-negative">
               {getErrorMessage(error)}
             </Error>
           ) : null}
@@ -196,7 +196,7 @@ export const DatabaseRoutingSection = ({
               <Box>
                 <Label htmlFor="db-routing-user-attribute">
                   {t`User attribute to match destination database slug`}{" "}
-                  <Text component="span" c="error">
+                  <Text component="span" c="feedback-negative">
                     *
                   </Text>
                 </Label>

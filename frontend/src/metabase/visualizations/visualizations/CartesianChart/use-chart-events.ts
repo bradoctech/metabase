@@ -43,6 +43,7 @@ import {
 import { getVisualizerSeriesCardIndex } from "metabase/visualizer/utils";
 import type { CardId } from "metabase-types/api";
 
+import { useBrush } from "./use-brush";
 import { useTooltipMouseLeave } from "./use-tooltip-mouse-leave";
 import { getHoveredEChartsSeriesDataKeyAndIndex } from "./utils";
 
@@ -78,6 +79,10 @@ export const useChartEvents = (
     metadata,
     isDashboard,
   }: VisualizationProps,
+  // The ECharts instance, mirrored into state by the caller. Used as a signal
+  // to re-run chart-instance-dependent effects (e.g. brush) once it is ready,
+  // which matters because the lazily loaded renderer calls `onInit` late.
+  chartInstance?: EChartsType,
 ) => {
   const isBrushing = useRef<boolean>();
   useTooltipMouseLeave(chartRef, onHoverChange, containerRef);
@@ -199,6 +204,7 @@ export const useChartEvents = (
 
           if (!visualizationIsClickable(clickData)) {
             onOpenQuestion(clickData?.cardId);
+            return;
           }
 
           onVisualizationClick?.(clickData);
@@ -356,41 +362,22 @@ export const useChartEvents = (
 
   useClickedStateTooltipSync(chartRef.current, clicked);
 
-  // In order to keep brushing always enabled we have to re-enable it on every model change
-  useEffect(
-    function toggleBrushing() {
-      const shouldEnableBrushing =
-        canBrush(rawSeries, settings, onChangeCardAndRun, onBrush) &&
-        !hovered &&
-        !clicked;
+  const canBrushChart = canBrush(
+    rawSeries,
+    settings,
+    chartModel.dimensionModel.column,
+    onChangeCardAndRun,
+    onBrush,
+  );
+  const isBrushable = canBrushChart && !hovered && !clicked;
 
-      setTimeout(() => {
-        if (shouldEnableBrushing) {
-          chartRef.current?.dispatchAction({
-            type: "takeGlobalCursor",
-            key: "brush",
-            brushOption: {
-              brushType: "lineX",
-              brushMode: "single",
-            },
-          });
-        } else {
-          chartRef.current?.dispatchAction({
-            type: "takeGlobalCursor",
-          });
-        }
-      }, 0);
-    },
-    [
-      chartRef,
-      hovered,
-      onChangeCardAndRun,
-      onBrush,
-      option,
-      rawSeries,
-      settings,
-      clicked,
-    ],
+  useBrush(
+    chartRef,
+    containerRef,
+    canBrushChart,
+    isBrushable,
+    option,
+    chartInstance,
   );
 
   const onSelectSeries = useCallback(

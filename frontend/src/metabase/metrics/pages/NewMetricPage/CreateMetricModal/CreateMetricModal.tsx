@@ -3,8 +3,8 @@ import { t } from "ttag";
 import * as Yup from "yup";
 
 import { useCreateCardMutation } from "metabase/api";
-import FormCollectionPicker from "metabase/collections/containers/FormCollectionPicker";
-import { trackMetricCreated } from "metabase/data-studio/analytics";
+import FormCollectionPicker from "metabase/common/collections/containers/FormCollectionPicker";
+import { trackMetricCreated } from "metabase/common/data-studio/analytics";
 import {
   Form,
   FormErrorMessage,
@@ -13,8 +13,8 @@ import {
   FormTextInput,
   FormTextarea,
 } from "metabase/forms";
-import * as Errors from "metabase/lib/errors";
 import { Box, Button, Group, Modal, Stack } from "metabase/ui";
+import * as Errors from "metabase/utils/errors";
 import * as Lib from "metabase-lib";
 import type { Card, CreateCardRequest } from "metabase-types/api";
 
