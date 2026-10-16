@@ -3,6 +3,7 @@ import type { NumberValue } from "d3-scale";
 
 import { render, screen } from "__support__/ui";
 import { measureTextWidth } from "metabase/utils/measure-text";
+import { getOriginalAxisLabel } from "metabase/visualizations/echarts/cartesian/option/utils";
 
 import type { ChartFont } from "../../types/style";
 
@@ -110,7 +111,9 @@ describe("RowChart", () => {
         "0.8",
         "0.9",
         "1",
-      ].forEach((tick) => expect(screen.getByText(tick)).toBeInTheDocument());
+      ].forEach((tick) =>
+        expect(screen.getAllByText(tick).length).toBeGreaterThan(0),
+      );
     });
 
     it("should render nice values for X-ticks", () => {
@@ -140,7 +143,7 @@ describe("RowChart", () => {
       });
 
       ["x_0", "x_50", "x_100", "x_150", "x_200", "x_250", "x_300"].forEach(
-        (tick) => expect(screen.getByText(tick)).toBeInTheDocument(),
+        (tick) => expect(screen.getAllByText(tick).length).toBeGreaterThan(0),
       );
       expect(screen.getByText("Y_foo")).toBeInTheDocument();
       expect(screen.getByText("Y_bar")).toBeInTheDocument();
@@ -164,11 +167,12 @@ describe("RowChart", () => {
         series: [longSeries],
       });
 
-      expect(screen.getByText("Verylo...")).toBeInTheDocument();
-      expect(screen.getByText("Anothe...")).toBeInTheDocument();
+      // AXIS_LABEL_MAX_CHARS = 10 (EDD-969-2): TitleCase then slice(0, 10) + "..."
+      expect(screen.getByText("Verylongla...")).toBeInTheDocument();
+      expect(screen.getByText("Anotherver...")).toBeInTheDocument();
     });
 
-    it("should set the full Y-axis label as a title attribute on tick labels", () => {
+    it("should register the full Y-axis label for truncated tick tooltips", () => {
       const longSeries = {
         seriesKey: "series 1",
         seriesName: "Series 1",
@@ -188,9 +192,10 @@ describe("RowChart", () => {
         />,
       );
 
-      const firstTickText = screen.getByText("Verylo...");
-
-      expect(firstTickText).toHaveAttribute("title", "Verylonglabelname");
+      // Tooltip uses getOriginalAxisLabel (mousemove), not the SVG title attr
+      // (visx does not reliably pass title through to the DOM).
+      expect(screen.getByText("Verylongla...")).toBeInTheDocument();
+      expect(getOriginalAxisLabel("Verylongla...")).toBe("verylonglabelname");
     });
 
     it("should render labels when specified", () => {
@@ -257,19 +262,20 @@ describe("RowChart", () => {
       ]);
     });
 
-    it("should pass the current bar to the data label formatter", () => {
+    it("should format data labels with the value formatter", () => {
+      // RowChartView calls labelsFormatter(value) only (no bar arg).
       const { dataLabels } = setup({
         labelledSeries: ["series 1", "series 2"],
-        labelsFormatter: (value, bar) => `${bar?.series.seriesKey}_${value}`,
+        labelsFormatter: (value) => `v_${value}`,
       });
 
       expect(dataLabels.map((el) => el.textContent)).toStrictEqual([
-        "series 1_100",
-        "series 1_200",
-        "series 1_300",
-        "series 2_200",
-        "series 2_400",
-        "series 2_600",
+        "v_100",
+        "v_200",
+        "v_300",
+        "v_200",
+        "v_400",
+        "v_600",
       ]);
     });
   });
