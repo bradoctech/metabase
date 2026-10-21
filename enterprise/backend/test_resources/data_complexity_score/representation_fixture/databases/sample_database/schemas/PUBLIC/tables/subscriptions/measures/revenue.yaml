@@ -1,0 +1,9 @@
+name: revenue
+entity_id: rEvEnUeSuBs000000001
+archived: false
+table_id:
+- Sample Database
+- PUBLIC
+- subscriptions
+serdes/meta:
+- model: Measure

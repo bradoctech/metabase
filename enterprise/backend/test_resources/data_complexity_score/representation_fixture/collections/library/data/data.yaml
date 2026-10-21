@@ -1,0 +1,7 @@
+name: Data
+entity_id: LiBrArYdAtA000000001
+slug: data
+type: library-data
+parent_id: LiBrArYrOoT000000001
+serdes/meta:
+- model: Collection

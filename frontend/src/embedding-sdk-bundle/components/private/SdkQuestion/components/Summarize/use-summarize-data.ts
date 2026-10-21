@@ -1,12 +1,12 @@
 import { useCallback, useMemo } from "react";
 
 import { useLocale } from "metabase/common/hooks";
-import { useTranslateContent } from "metabase/i18n/hooks";
-import { PLUGIN_CONTENT_TRANSLATION } from "metabase/plugins";
+import { useTranslateContent } from "metabase/content-translation/hooks";
+import { PLUGIN_CONTENT_TRANSLATION } from "metabase/content-translation/plugins";
 import {
   type AggregationItem,
   getAggregationItems,
-} from "metabase/query_builder/utils/get-aggregation-items";
+} from "metabase/query_builder";
 import * as Lib from "metabase-lib";
 
 import { useSdkQuestionContext } from "../../context";
@@ -17,20 +17,23 @@ export interface SDKAggregationItem extends AggregationItem {
 }
 
 export const useSummarizeData = () => {
-  const { question, updateQuestion } = useSdkQuestionContext();
+  const {
+    question,
+    updateAndNormalizeQuestion,
+    lastVisibleStageIndex: stageIndex,
+  } = useSdkQuestionContext();
   const tc = useTranslateContent();
   const { locale } = useLocale();
 
   const query = question?.query();
-  const stageIndex = -1;
 
   const onQueryChange = useCallback(
     (newQuery: Lib.Query) => {
       if (question) {
-        updateQuestion(question.setQuery(newQuery), { run: true });
+        updateAndNormalizeQuestion(question.setQuery(newQuery), { run: true });
       }
     },
-    [question, updateQuestion],
+    [question, updateAndNormalizeQuestion],
   );
 
   const aggregationItems: SDKAggregationItem[] = useMemo(

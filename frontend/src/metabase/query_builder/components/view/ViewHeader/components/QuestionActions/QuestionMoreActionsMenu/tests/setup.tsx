@@ -7,6 +7,7 @@ import { setupGetUserKeyValueEndpoint } from "__support__/server-mocks";
 import { setupWebhookChannelsEndpoint } from "__support__/server-mocks/channel";
 import { setupListNotificationEndpoints } from "__support__/server-mocks/notification";
 import { mockSettings } from "__support__/settings";
+import { createMockState } from "__support__/state";
 import { renderWithProviders, screen } from "__support__/ui";
 import { QuestionAlertListModal } from "metabase/notifications/modals";
 import Question from "metabase-lib/v1/Question";
@@ -22,7 +23,6 @@ import {
   createMockTokenFeatures,
   createMockUser,
 } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { QuestionMoreActionsMenu } from "../QuestionMoreActionsMenu";
 
@@ -63,6 +63,7 @@ export function setup({
 
   const state = createMockState({
     settings: mockSettings(settingValues),
+    // Unjustified type cast. FIXME
     currentUser: {
       ...user,
       permissions: {

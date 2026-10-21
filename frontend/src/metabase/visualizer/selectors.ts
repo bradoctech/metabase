@@ -1,21 +1,17 @@
 import { createSelector } from "@reduxjs/toolkit";
 import _ from "underscore";
 
+import type { VisualizerState } from "metabase/redux/store/visualizer";
 import {
+  type ComputedVisualizationSettings,
   extractRemappings,
+  getComputedSettingsForSeries,
   getVisualization,
   getVisualizationTransformed,
   isCartesianChart,
-} from "metabase/visualizations";
-import { getComputedSettingsForSeries } from "metabase/visualizations/lib/settings/visualization";
-import type { ComputedVisualizationSettings } from "metabase/visualizations/types";
-import type {
-  Card,
-  DatasetData,
-  RawSeries,
-  SingleSeries,
-} from "metabase-types/api";
-import type { VisualizerState } from "metabase-types/store/visualizer";
+} from "metabase/viz-core";
+import { STRUCTURED_QUERY_TEMPLATE } from "metabase-lib/v1/queries/StructuredQuery";
+import type { DatasetData, RawSeries } from "metabase-types/api";
 
 import {
   createDataSource,
@@ -132,6 +128,7 @@ const getVisualizerDatasetData = createSelector(
     getVisualizerColumnValuesMapping,
   ],
   (dataSources, datasets, columns, columnValuesMapping): DatasetData =>
+    // Unjustified type cast. FIXME
     mergeVisualizerData({
       columns,
       columnValuesMapping,
@@ -162,11 +159,11 @@ const getVisualizerFlatRawSeries = createSelector(
       {
         card: {
           display,
-          dataset_query: {},
+          dataset_query: STRUCTURED_QUERY_TEMPLATE,
           name: cards[0].name,
           description: cards[0].description,
           visualization_settings: settings,
-        } as Card,
+        },
 
         data,
 
@@ -175,7 +172,7 @@ const getVisualizerFlatRawSeries = createSelector(
         // Certain visualizations memoize settings computation based on series keys
         // This guarantees a visualization always rerenders on changes
         started_at: new Date().toISOString(),
-      } as SingleSeries,
+      },
     ];
 
     return series;
@@ -239,28 +236,6 @@ export const getVisualizerComputedSettingsForFlatSeries = createSelector(
     series.length > 0 ? getComputedSettingsForSeries(series) : {},
 );
 
-export const getVisualizerPrimaryColumn = createSelector(
-  [
-    getVisualizationType,
-    getVisualizerComputedSettings,
-    getVisualizerDatasetColumns,
-  ],
-  (display, settings, columns) => {
-    if (!display) {
-      return undefined;
-    }
-
-    if (isCartesianChart(display)) {
-      const dimensionName = settings["graph.dimensions"]?.[0];
-      if (dimensionName) {
-        return columns.find((column) => column.name === dimensionName);
-      }
-    }
-
-    return undefined;
-  },
-);
-
 export const getTabularPreviewSeries = createSelector(
   [getVisualizerFlatRawSeries],
   (rawSeries) => {
@@ -276,11 +251,11 @@ export const getTabularPreviewSeries = createSelector(
         ...rest,
         card: {
           display: "table",
-          dataset_query: {},
+          dataset_query: STRUCTURED_QUERY_TEMPLATE,
           visualization_settings: {},
-        } as Card,
+        },
       },
-    ];
+    ] satisfies RawSeries;
   },
 );
 

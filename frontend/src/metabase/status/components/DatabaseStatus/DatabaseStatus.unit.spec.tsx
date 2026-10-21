@@ -1,10 +1,10 @@
 import userEvent from "@testing-library/user-event";
 
 import { setupDatabasesEndpoints } from "__support__/server-mocks";
+import { createMockState } from "__support__/state";
 import { renderWithProviders, screen, waitFor } from "__support__/ui";
 import type { Database, User } from "metabase-types/api";
 import { createMockDatabase, createMockUser } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { DatabaseStatus } from "./DatabaseStatus";
 interface SetupOpts {

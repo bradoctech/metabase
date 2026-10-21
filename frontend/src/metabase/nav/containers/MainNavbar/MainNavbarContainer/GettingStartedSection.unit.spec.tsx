@@ -1,9 +1,9 @@
 import userEvent from "@testing-library/user-event";
 
 import { setupDatabaseListEndpoint } from "__support__/server-mocks";
+import { createMockState } from "__support__/state";
 import { renderWithProviders, screen } from "__support__/ui";
 import { createMockDatabase, createMockUser } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { GettingStartedSection } from "./GettingStartedSection";
 

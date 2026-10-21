@@ -2,9 +2,12 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
 import { createMockMetadata } from "__support__/metadata";
-import { setupFieldValuesEndpoint } from "__support__/server-mocks";
+import {
+  setupDatabaseEndpoints,
+  setupFieldValuesEndpoint,
+} from "__support__/server-mocks";
 import { renderWithProviders, screen, within } from "__support__/ui";
-import { checkNotNull } from "metabase/lib/types";
+import { checkNotNull } from "metabase/utils/types";
 import * as Lib from "metabase-lib";
 import { SAMPLE_PROVIDER } from "metabase-lib/test-helpers";
 import Question from "metabase-lib/v1/Question";
@@ -33,6 +36,8 @@ function setup({
   isExpanded = true,
 }: SetupOpts = {}) {
   const onChange = jest.fn();
+
+  setupDatabaseEndpoints(createSampleDatabase());
 
   if (fieldValues) {
     setupFieldValuesEndpoint(fieldValues);

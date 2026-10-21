@@ -1,9 +1,13 @@
-import { screen } from "__support__/ui";
+import userEvent from "@testing-library/user-event";
+import fetchMock from "fetch-mock";
+
+import { screen, waitFor } from "__support__/ui";
 import {
   createMockDatabase,
   createMockSegment,
   createMockTable,
 } from "metabase-types/api/mocks";
+import { createOrdersQuantityField } from "metabase-types/api/mocks/presets";
 
 import { setup } from "./setup";
 
@@ -20,12 +24,72 @@ describe("TableSection", () => {
     );
   });
 
-  it("should not render sync settings button when the database is datawarehouse attached", () => {
-    setup({
-      database: createMockDatabase({ is_attached_dwh: true }),
+  describe("actions menu", () => {
+    it("should expose the sync actions in the actions menu", async () => {
+      setup();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "More actions" }),
+      );
+
+      expect(
+        await screen.findByRole("menuitem", { name: /Re-sync schema/ }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("menuitem", { name: /Re-scan field values/ }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("menuitem", { name: /Discard cached field values/ }),
+      ).toBeInTheDocument();
     });
 
-    expect(screen.queryByText("Sync settings")).not.toBeInTheDocument();
+    it("should trigger a field values rescan from the actions menu", async () => {
+      const table = createMockTable();
+      setup({ table });
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "More actions" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: /Re-scan field values/ }),
+      );
+
+      await waitFor(() => {
+        expect(
+          fetchMock.callHistory.calls(
+            "path:/api/data-studio/table/rescan-values",
+            { method: "POST" },
+          ),
+        ).toHaveLength(1);
+      });
+    });
+
+    it("should expose the schema viewer in the actions menu", async () => {
+      setup();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "More actions" }),
+      );
+
+      expect(
+        await screen.findByRole("menuitem", { name: /View schema/ }),
+      ).toBeInTheDocument();
+    });
+
+    it("should not expose sync actions when the database is datawarehouse attached", () => {
+      setup({
+        database: createMockDatabase({ is_attached_dwh: true }),
+      });
+
+      // With no sync actions and no source replacement, the menu collapses to a
+      // standalone schema viewer link rather than a "More actions" menu.
+      expect(
+        screen.getByRole("link", { name: /View schema/ }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "More actions" }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe("tabs", () => {
@@ -75,6 +139,71 @@ describe("TableSection", () => {
       setup({ activeTab: "segments", segments: [] });
 
       expect(screen.getByText("No segments yet")).toBeInTheDocument();
+    });
+  });
+
+  describe("read-only table", () => {
+    const READ_ONLY_TABLE = createMockTable({
+      db: createMockDatabase(),
+      can_write: false,
+      fields: [createOrdersQuantityField()],
+    });
+
+    it("shows the details of a table that cannot be written as read-only", async () => {
+      setup({ table: READ_ONLY_TABLE });
+
+      expect(
+        screen.getByPlaceholderText("Give this table a name"),
+      ).toHaveAttribute("readonly");
+      expect(
+        screen.getByPlaceholderText("Give this table a description"),
+      ).toHaveAttribute("readonly");
+      expect(
+        screen.getByPlaceholderText("Pick someone, or type an email"),
+      ).toBeDisabled();
+      expect(
+        screen.getByPlaceholderText("Select visibility layer"),
+      ).toBeDisabled();
+      expect(screen.getByPlaceholderText("Select entity type")).toBeDisabled();
+      expect(
+        screen.getByPlaceholderText("Select a data source"),
+      ).toBeDisabled();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "More actions" }),
+      );
+      expect(
+        await screen.findByRole("menuitem", { name: /Re-sync schema/ }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("menuitem", { name: /Re-scan field values/ }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("menuitem", { name: /Discard cached field values/ }),
+      ).toBeInTheDocument();
+    });
+
+    it("shows the fields of a table that cannot be written as read-only", () => {
+      setup({ table: READ_ONLY_TABLE, activeTab: "field" });
+
+      expect(
+        screen.queryByRole("button", { name: /Sorting/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText("Give this field a name"),
+      ).toBeDisabled();
+    });
+
+    it("keeps the details and fields of a writable table editable", () => {
+      setup({
+        table: { ...READ_ONLY_TABLE, can_write: true },
+        activeTab: "field",
+      });
+
+      expect(screen.getByRole("button", { name: /Sorting/ })).toBeEnabled();
+      expect(
+        screen.getByPlaceholderText("Give this field a name"),
+      ).toBeEnabled();
     });
   });
 });

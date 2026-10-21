@@ -5,12 +5,13 @@ import {
   setupCollectionItemsEndpoint,
   setupCollectionsEndpoints,
 } from "__support__/server-mocks";
+import { createMockDashboardState, createMockState } from "__support__/state";
 import { renderWithProviders, screen, waitFor } from "__support__/ui";
 import { getNextId } from "__support__/utils";
-import { ROOT_COLLECTION as ROOT } from "metabase/entities/collections";
-import { checkNotNull } from "metabase/lib/types";
+import { ROOT_COLLECTION as ROOT } from "metabase/common/collections/constants";
+import { MockDashboardContext } from "metabase/dashboard/context/mock-context";
+import { checkNotNull } from "metabase/utils/types";
 // TODO: Move this to a more suitable location for sharing.
-import { MockDashboardContext } from "metabase/public/containers/PublicOrEmbeddedDashboard/mock-context";
 import type { Collection, CollectionItem, Dashboard } from "metabase-types/api";
 import {
   createMockCollection,
@@ -20,10 +21,6 @@ import {
   createMockUser,
   createMockUserPermissions,
 } from "metabase-types/api/mocks";
-import {
-  createMockDashboardState,
-  createMockState,
-} from "metabase-types/store/mocks";
 
 import { AddCardSidebar } from "./AddCardSidebar";
 

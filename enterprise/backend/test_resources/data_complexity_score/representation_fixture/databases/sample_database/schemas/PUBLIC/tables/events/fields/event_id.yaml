@@ -1,0 +1,8 @@
+name: event_id
+active: true
+table_id:
+- Sample Database
+- PUBLIC
+- events
+serdes/meta:
+- model: Field

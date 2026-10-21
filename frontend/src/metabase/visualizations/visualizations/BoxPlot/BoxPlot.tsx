@@ -1,42 +1,34 @@
 import type { EChartsType } from "echarts/core";
-import {
-  type MouseEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type MouseEvent, useCallback, useMemo, useRef, useState } from "react";
 import { useSet } from "react-use";
 
-import { isReducedMotionPreferred } from "metabase/lib/dom";
-import { extractRemappings } from "metabase/visualizations";
+import { isReducedMotionPreferred } from "metabase/utils/dom";
+import { assignLazily } from "metabase/utils/merge-lazily";
 import { ChartRenderingErrorBoundary } from "metabase/visualizations/components/ChartRenderingErrorBoundary";
+import { DataPointsVisiblePopover } from "metabase/visualizations/components/DataPointsVisiblePopover/DataPointsVisiblePopover";
 import { ResponsiveEChartsRenderer } from "metabase/visualizations/components/EChartsRenderer";
 import { LegendCaption } from "metabase/visualizations/components/legend/LegendCaption";
-import {
-  getBoxPlotLayoutModel,
-  getBoxPlotModel,
-  getBoxPlotOption,
-  getBoxPlotTooltipOption,
-} from "metabase/visualizations/echarts/boxplot";
-import { getChartLayout } from "metabase/visualizations/echarts/cartesian/layout";
-import { getLegendItems } from "metabase/visualizations/echarts/cartesian/model/legend";
-import { getOriginalAxisLabel } from "metabase/visualizations/echarts/cartesian/option/utils";
-import {
-  useClickedStateTooltipSync,
-  useCloseTooltipOnScroll,
-} from "metabase/visualizations/echarts/tooltip";
 import { useBrowserRenderingContext } from "metabase/visualizations/hooks/use-browser-rendering-context";
-import { getDashboardAdjustedSettings } from "metabase/visualizations/shared/settings-adjustments";
 import type { VisualizationProps } from "metabase/visualizations/types";
 import {
   CartesianChartLegendLayout,
   CartesianChartRoot,
 } from "metabase/visualizations/visualizations/CartesianChart/CartesianChart.styled";
 import { useTooltipMouseLeave } from "metabase/visualizations/visualizations/CartesianChart/use-tooltip-mouse-leave";
+import {
+  extractRemappings,
+  getBoxPlotLayoutModel,
+  getBoxPlotModel,
+  getBoxPlotOption,
+  getBoxPlotTooltipOption,
+  getChartLayout,
+  getDashboardAdjustedSettings,
+  getLegendItems,
+  useClickedStateTooltipSync,
+  useCloseTooltipOnScroll,
+} from "metabase/viz-core";
 
-import { BOXPLOT_CHART_DEFINITION } from "./chart-definition";
+import { BOXPLOT_CHART_DEFINITION } from "./definition";
 import { useBoxPlotEvents } from "./events";
 
 function BoxPlotInner({
@@ -48,6 +40,7 @@ function BoxPlotInner({
   width,
   height,
   isDashboard,
+  isVisualizer,
   isEditing,
   isQueryBuilder,
   isFullscreen,
@@ -67,7 +60,7 @@ function BoxPlotInner({
 }: VisualizationProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<EChartsType>();
-  const [chartDom, setChartDom] = useState<HTMLElement | null>(null);
+  const [chartInstance, setChartInstance] = useState<EChartsType>();
   const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
   const [hiddenSeries, { toggle: toggleSeriesVisibility }] = useSet<string>();
 
@@ -165,8 +158,6 @@ function BoxPlotInner({
       ...getBoxPlotOption(
         chartModel,
         layoutModel,
-        null,
-        [],
         settings,
         shouldAnimate,
         renderingContext,
@@ -187,59 +178,12 @@ function BoxPlotInner({
     onChangeCardAndRun,
   });
 
-  const [axisLabelTooltip, setAxisLabelTooltip] = useState<{
-    text: string;
-    x: number;
-    y: number;
-  } | null>(null);
-
+  // The popover subscribes to the instance in an effect, and a ref mutation
+  // would not re-run it, so the instance is held in state as well.
   const handleInit = useCallback((chart: EChartsType) => {
     chartRef.current = chart;
-    setChartDom(chart.getDom());
+    setChartInstance(chart);
   }, []);
-
-  useEffect(() => {
-    const el = chartDom;
-    if (!el) {
-      return;
-    }
-
-    const handleMouseMove = (e: globalThis.MouseEvent) => {
-      const target = e.target as Element;
-      const textEl =
-        target.tagName === "text"
-          ? (target as SVGTextElement)
-          : target.closest("text");
-
-      if (!textEl) {
-        setAxisLabelTooltip(null);
-        return;
-      }
-
-      const content = textEl.textContent?.trim() ?? "";
-      const fullText = getOriginalAxisLabel(content);
-      if (fullText) {
-        const containerRect = el.getBoundingClientRect();
-        setAxisLabelTooltip({
-          text: fullText,
-          x: e.clientX - containerRect.left,
-          y: e.clientY - containerRect.top,
-        });
-      } else {
-        setAxisLabelTooltip(null);
-      }
-    };
-
-    const handleMouseLeave = () => setAxisLabelTooltip(null);
-
-    el.addEventListener("mousemove", handleMouseMove);
-    el.addEventListener("mouseleave", handleMouseLeave);
-
-    return () => {
-      el.removeEventListener("mousemove", handleMouseMove);
-      el.removeEventListener("mouseleave", handleMouseLeave);
-    };
-  }, [chartDom]);
 
   const handleResize = useCallback((width: number, height: number) => {
     setChartSize({ width, height });
@@ -291,36 +235,18 @@ function BoxPlotInner({
           onInit={handleInit}
           onResize={handleResize}
         >
-          {axisLabelTooltip && (
-            <div
-              style={{
-                position: "absolute",
-                left: axisLabelTooltip.x,
-                top: axisLabelTooltip.y - 36,
-                transform: "translateX(-50%)",
-                background: "var(--mb-color-tooltip-background)",
-                color: "var(--mb-color-tooltip-text)",
-                padding: "4px 8px",
-                borderRadius: "4px",
-                fontSize: "12px",
-                pointerEvents: "none",
-                whiteSpace: "nowrap",
-                zIndex: 100,
-                maxWidth: "300px",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {axisLabelTooltip.text}
-            </div>
-          )}
+          <DataPointsVisiblePopover
+            isDashboard={isDashboard}
+            isVisualizer={isVisualizer}
+            chartInstance={chartInstance}
+          />
         </ResponsiveEChartsRenderer>
       </CartesianChartLegendLayout>
     </CartesianChartRoot>
   );
 }
 
-export function BoxPlot(props: VisualizationProps) {
+function BoxPlotComponent(props: VisualizationProps) {
   return (
     <ChartRenderingErrorBoundary onRenderError={props.onRenderError}>
       <BoxPlotInner {...props} />
@@ -328,4 +254,4 @@ export function BoxPlot(props: VisualizationProps) {
   );
 }
 
-Object.assign(BoxPlot, BOXPLOT_CHART_DEFINITION);
+export const BoxPlot = assignLazily(BoxPlotComponent, BOXPLOT_CHART_DEFINITION);

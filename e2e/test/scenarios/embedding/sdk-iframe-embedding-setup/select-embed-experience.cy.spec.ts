@@ -8,6 +8,7 @@ import {
   assertDashboard,
   assertRecentItemName,
   getEmbedSidebar,
+  getResourceSelectorButton,
   visitNewEmbedPage,
 } from "./helpers";
 
@@ -21,12 +22,12 @@ describe(suiteTitle, () => {
     H.restore();
     H.resetSnowplow();
     cy.signInAsAdmin();
-    H.activateToken("bleeding-edge");
+    H.activateToken("pro-self-hosted");
     H.enableTracking();
 
     H.updateSetting("enable-embedding-simple", true);
     H.updateSetting("enable-embedding-static", true);
-    H.updateSetting("llm-anthropic-api-key", "sk-ant-test-key");
+    H.setupAnthropicLlmProvider();
 
     cy.intercept("GET", "/api/dashboard/*").as("dashboard");
     cy.intercept("POST", "/api/card/*/query").as("cardQuery");
@@ -50,6 +51,16 @@ describe(suiteTitle, () => {
       H.waitForSimpleEmbedIframesToLoad();
 
       getEmbedSidebar().within(() => {
+        cy.findByLabelText("Guest").click();
+      });
+      embedModalEnableEmbedding();
+
+      getEmbedSidebar().within(() => {
+        cy.findByText("Select a dashboard to embed").should("be.visible");
+
+        cy.log("a default dashboard is preselected");
+        getResourceSelectorButton().should("contain", dashboardName);
+
         cy.findByText("Next").click();
       });
 
@@ -57,6 +68,11 @@ describe(suiteTitle, () => {
         event: "embed_wizard_experience_completed",
         event_detail:
           "authType=guest-embed,experience=dashboard,isDefaultExperience=true",
+      });
+
+      H.expectUnstructuredSnowplowEvent({
+        event: "embed_wizard_resource_selection_completed",
+        event_detail: "isDefaultResource=true,experience=dashboard",
       });
 
       H.getSimpleEmbedIframeContent().within(() => {
@@ -80,6 +96,11 @@ describe(suiteTitle, () => {
       H.expectUnstructuredSnowplowEvent({ event: "embed_wizard_opened" });
 
       getEmbedSidebar().within(() => {
+        cy.findByLabelText("Guest").click();
+      });
+      embedModalEnableEmbedding();
+
+      getEmbedSidebar().within(() => {
         cy.findByText("Chart").click();
         cy.findByText("Next").click();
       });
@@ -96,31 +117,7 @@ describe(suiteTitle, () => {
       });
     });
 
-    it("shows exploration template when selected", { tags: "@skip" }, () => {
-      visitNewEmbedPage();
-
-      getEmbedSidebar().within(() => {
-        cy.findByLabelText("Metabase account (SSO)").click();
-
-        cy.findByText("Exploration").click();
-        cy.findByText("Next").click();
-      });
-
-      H.expectUnstructuredSnowplowEvent({
-        event: "embed_wizard_experience_completed",
-        event_detail:
-          "authType=sso,experience=exploration,isDefaultExperience=false",
-      });
-
-      H.waitForSimpleEmbedIframesToLoad();
-
-      H.getSimpleEmbedIframeContent().within(() => {
-        cy.log("data picker is visible");
-        cy.findByText("Pick your starting data").should("be.visible");
-      });
-    });
-
-    it("shows browser template when selected", () => {
+    it("shows browser template when selected and can pick a collection", () => {
       visitNewEmbedPage();
 
       getEmbedSidebar().within(() => {
@@ -149,6 +146,40 @@ describe(suiteTitle, () => {
 
         cy.log("collection is visible in browser");
         cy.findAllByText("Orders in a dashboard").should("be.visible");
+      });
+
+      cy.log("a different collection can be selected via the picker");
+      getEmbedSidebar().within(() => {
+        cy.findByText("Back").click();
+        cy.findByText("Select initial collection").should("be.visible");
+        getResourceSelectorButton().click();
+      });
+
+      H.entityPickerModal().within(() => {
+        cy.findByText("Select initial collection").should("be.visible");
+
+        cy.findByTestId("item-picker-level-0")
+          .findByText("Our analytics")
+          .click();
+        cy.findByTestId("item-picker-level-1")
+          .findByText("First collection")
+          .click();
+        cy.findByText("Select").click();
+      });
+
+      cy.log("button reflects the newly selected collection");
+      getEmbedSidebar().within(() => {
+        getResourceSelectorButton().should("contain", "First collection");
+      });
+
+      cy.log("collection is shown in the breadcrumbs and preview");
+      H.getSimpleEmbedIframeContent().within(() => {
+        cy.findByTestId("sdk-breadcrumbs")
+          .findAllByText("First collection")
+          .first()
+          .should("be.visible");
+
+        cy.findByText("Second collection").should("be.visible");
       });
     });
   });
@@ -183,33 +214,6 @@ describe(suiteTitle, () => {
         cy.findByText("Person detail").should("be.visible");
       });
     });
-
-    it(
-      "shows question of id=1 when activity log is empty and chart is selected",
-      { tags: "@skip" },
-      () => {
-        visitNewEmbedPage();
-        cy.wait("@emptyRecentItems");
-
-        getEmbedSidebar().within(() => {
-          cy.findByText("Chart").click();
-          cy.findByText("Next").click();
-        });
-
-        H.expectUnstructuredSnowplowEvent({
-          event: "embed_wizard_experience_completed",
-          event_detail:
-            "authType=guest-embed,experience=chart,isDefaultExperience=false",
-        });
-
-        H.waitForSimpleEmbedIframesToLoad();
-
-        H.getSimpleEmbedIframeContent().within(() => {
-          cy.log("question title of id=1 is visible");
-          cy.findByText("Query log").should("be.visible");
-        });
-      },
-    );
   });
 
   it("should show a fake loading indicator in embed preview", () => {
@@ -272,29 +276,5 @@ describe(suiteTitle, () => {
     cy.wait("@emptyRecentItems");
 
     cy.findByAltText("No results").should("be.visible");
-  });
-
-  it("shows Metabot experience when selected", () => {
-    visitNewEmbedPage();
-
-    getEmbedSidebar().within(() => {
-      cy.findByLabelText("Metabase account (SSO)").click();
-    });
-
-    embedModalEnableEmbedding();
-
-    getEmbedSidebar().within(() => {
-      cy.findByText("Metabot").click();
-      cy.findByText("Next").click();
-    });
-
-    H.expectUnstructuredSnowplowEvent({
-      event: "embed_wizard_experience_completed",
-      event_detail: "authType=sso,experience=metabot,isDefaultExperience=false",
-    });
-
-    H.getSimpleEmbedIframeContent().within(() => {
-      cy.findByText("Ask questions to AI.").should("be.visible");
-    });
   });
 });

@@ -4,6 +4,7 @@ import {
   setupSettingsEndpoints,
 } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
+import { createMockEmbedState, createMockState } from "__support__/state";
 import type { SdkState, SdkStoreState } from "embedding-sdk-bundle/store/types";
 import {
   createMockLoginStatusState,
@@ -20,10 +21,6 @@ import {
   createMockTokenFeatures,
   createMockUser,
 } from "metabase-types/api/mocks";
-import {
-  createMockEmbedState,
-  createMockState,
-} from "metabase-types/store/mocks";
 
 export const setupSdkState = ({
   currentUser = createMockUser(),

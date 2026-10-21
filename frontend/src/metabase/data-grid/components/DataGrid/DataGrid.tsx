@@ -9,8 +9,8 @@ import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import _ from "underscore";
 
-import { useForceUpdate } from "metabase/common/hooks/use-force-update";
-import { getScrollBarSize } from "metabase/lib/dom";
+import { getScrollBarSize } from "metabase/utils/dom";
+import { useForceUpdate } from "metabase/utils/use-force-update";
 
 import {
   ADD_COLUMN_BUTTON_WIDTH,
@@ -30,7 +30,7 @@ import type {
 import { AddColumnButton } from "../AddColumnButton/AddColumnButton";
 import { DataGridHeader } from "../DataGridHeader/DataGridHeader";
 import { DataGridRow } from "../DataGridRow/DataGridRow";
-import { Footer } from "../Footer/Footer";
+import { Footer, type FooterProps } from "../Footer/Footer";
 
 import S from "./DataGrid.module.css";
 import type { DataGridStylesProps } from "./types";
@@ -39,11 +39,12 @@ export interface DataGridProps<TData>
   extends DataGridInstance<TData>, DataGridStylesProps {
   emptyState?: React.ReactNode;
   showRowsCount?: boolean;
-  rowsTruncated?: number;
   isColumnReorderingDisabled?: boolean;
   theme?: DataGridTheme;
   zoomedRowIndex?: number;
   tableFooterExtraButtons?: React.ReactNode;
+  formatRowsCountMessage?: FooterProps<TData>["formatRowsCountMessage"];
+  formatPaginationMessage?: FooterProps<TData>["formatPaginationMessage"];
 }
 
 export const DataGrid = function DataGrid<TData>({
@@ -70,7 +71,8 @@ export const DataGrid = function DataGrid<TData>({
   onBodyCellClick,
   onWheel,
   tableFooterExtraButtons,
-  rowsTruncated,
+  formatRowsCountMessage,
+  formatPaginationMessage,
   onAddColumnClick,
   onHeaderCellClick,
   isColumnReorderingDisabled,
@@ -101,11 +103,11 @@ export const DataGrid = function DataGrid<TData>({
 
   const rowsCount = table.getRowModel().rows.length;
   const backgroundColor =
-    theme?.cell?.backgroundColor ?? "var(--mb-color-background-primary)";
+    theme?.cell?.backgroundColor ?? "var(--mb-color-background_page-primary)";
   const stickyElementsBackgroundColor =
     theme?.stickyBackgroundColor ??
     (backgroundColor == null || backgroundColor === "transparent"
-      ? "var(--mb-color-background-primary)"
+      ? "var(--mb-color-background_page-primary)"
       : backgroundColor);
 
   const centerRows = getCenterRows();
@@ -379,10 +381,11 @@ export const DataGrid = function DataGrid<TData>({
             table={table}
             enablePagination={enablePagination}
             showRowsCount={showRowsCount}
-            rowsTruncated={rowsTruncated}
             style={styles?.footer}
             className={classNames?.footer}
             tableFooterExtraButtons={tableFooterExtraButtons}
+            formatRowsCountMessage={formatRowsCountMessage}
+            formatPaginationMessage={formatPaginationMessage}
           />
         </div>
       </DndContext>

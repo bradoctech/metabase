@@ -8,6 +8,7 @@ import {
   setupPropertiesEndpoints,
   setupSettingsEndpoints,
 } from "__support__/server-mocks";
+import { createMockSettingsState } from "__support__/state";
 import { renderWithProviders, screen, waitFor } from "__support__/ui";
 import type { GdrivePayload } from "metabase-types/api";
 import {
@@ -15,7 +16,6 @@ import {
   createMockTokenFeatures,
   createMockUser,
 } from "metabase-types/api/mocks";
-import { createMockSettingsState } from "metabase-types/store/mocks";
 
 import { GdriveConnectionModal } from "./GdriveConnectionModal";
 

@@ -6,6 +6,7 @@ import {
   setupSettingsEndpoints,
 } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
+import { createMockSetupState } from "__support__/state";
 import { renderWithProviders, screen, within } from "__support__/ui";
 import { BrowseModels } from "metabase/browse";
 import {
@@ -18,7 +19,6 @@ import {
   createMockDatabase,
   createMockTokenFeatures,
 } from "metabase-types/api/mocks";
-import { createMockSetupState } from "metabase-types/store/mocks";
 
 const setup = (modelCount: number, recentModelCount = 5) => {
   const databases = [createMockDatabase()];
@@ -27,11 +27,10 @@ const setup = (modelCount: number, recentModelCount = 5) => {
   // Add some instance analytics models to ensure they don't affect the page
   models.push(...mockInstanceAnalyticsModels);
 
-  const mockRecentModels = mockModels
-    .slice(0, recentModelCount)
-    .map((model) =>
-      createMockRecentModel(model as unknown as RecentCollectionItem),
-    );
+  const mockRecentModels = mockModels.slice(0, recentModelCount).map((model) =>
+    // Unjustified type cast. FIXME
+    createMockRecentModel(model as unknown as RecentCollectionItem),
+  );
   setupRecentViewsEndpoints(mockRecentModels);
   setupDatabasesEndpoints(databases);
   setupSearchEndpoints(models);

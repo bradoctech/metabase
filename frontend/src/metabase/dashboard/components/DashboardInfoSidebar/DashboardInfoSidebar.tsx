@@ -6,25 +6,28 @@ import { t } from "ttag";
 
 import ErrorBoundary from "metabase/ErrorBoundary";
 import { skipToken, useListRevisionsQuery } from "metabase/api";
-import { isInstanceAnalyticsCollection } from "metabase/collections/utils";
+import { isInstanceAnalyticsCollection } from "metabase/common/collections/utils";
 import { RevisionHistoryTimeline } from "metabase/common/components/RevisionHistoryTimeline";
 import { getTimelineEvents } from "metabase/common/components/RevisionHistoryTimeline/utils";
 import {
+  SIDESHEET_HORIZONTAL_PADDING,
   Sidesheet,
   SidesheetCard,
   SidesheetTabPanelContainer,
 } from "metabase/common/components/Sidesheet";
 import { SidesheetEditableDescription } from "metabase/common/components/Sidesheet/components/SidesheetEditableDescription";
 import SidesheetS from "metabase/common/components/Sidesheet/sidesheet.module.css";
+import { InsightsUpsellTab } from "metabase/common/components/upsells/InsightsUpsellTab";
+import { InsightsTabOrLink } from "metabase/common/components/upsells/components/InsightsTabOrLink";
+import { DASHBOARD_DESCRIPTION_MAX_LENGTH } from "metabase/common/utils/dashboard";
+import { getUser } from "metabase/current-user";
 import { revertToRevision, updateDashboard } from "metabase/dashboard/actions";
-import { DASHBOARD_DESCRIPTION_MAX_LENGTH } from "metabase/dashboard/constants";
 import {
   type DashboardContextReturned,
   useDashboardContext,
 } from "metabase/dashboard/context";
-import { useDispatch, useSelector } from "metabase/lib/redux";
 import { PLUGIN_MODERATION } from "metabase/plugins";
-import { getUser } from "metabase/selectors/user";
+import { useDispatch, useSelector } from "metabase/redux";
 import { Stack, Tabs, Text } from "metabase/ui";
 import type {
   Dashboard,
@@ -139,7 +142,7 @@ export function DashboardInfoSidebarInner({
             defaultValue={Tab.Overview}
             className={SidesheetS.FlexScrollContainer}
           >
-            <Tabs.List mx="xl">
+            <Tabs.List mx={SIDESHEET_HORIZONTAL_PADDING}>
               <Tabs.Tab value={Tab.Overview}>{t`Overview`}</Tabs.Tab>
               {!isIADashboard && (
                 <Tabs.Tab value={Tab.History}>{t`History`}</Tabs.Tab>
@@ -189,8 +192,8 @@ const OverviewTab = ({
   canWrite: boolean;
 }) => {
   return (
-    <Stack gap="lg">
-      <SidesheetCard title={t`Description`} pb="md">
+    <Stack gap="xl">
+      <SidesheetCard title={t`Description`} pb="lg">
         <SidesheetEditableDescription
           description={dashboard.description}
           onChange={handleDescriptionChange}
@@ -199,7 +202,7 @@ const OverviewTab = ({
           onBlur={handleDescriptionBlur}
         />
         {!!descriptionError && (
-          <Text color="error" size="xs" mt="xs">
+          <Text color="feedback-negative" size="xs" mt="xxs">
             {descriptionError}
           </Text>
         )}

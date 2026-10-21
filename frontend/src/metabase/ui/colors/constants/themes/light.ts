@@ -1,10 +1,201 @@
-/* eslint-disable metabase/no-color-literals */
 import type { MetabaseThemeV2 } from "../../types";
 import { LIGHT_THEME_ACCENT_COLORS } from "../accent-colors";
 import { getBaseColorsForThemeDefinitionOnly } from "../base-colors";
-import { spColors } from "../sp-colors";
+import { SP_LIGHT_THEME_COLORS } from "../sp-theme";
 
 const baseColors = getBaseColorsForThemeDefinitionOnly();
+
+// To be removed once the rename in GDGT-2517 is complete. Prefer the keys in
+// `actualColors` below.
+const deprecatedColors = {
+  "admin-navbar": baseColors.octopus[60],
+  "admin-navbar-secondary": baseColors.octopus[40],
+  "admin-navbar-inverse": baseColors.octopus[80],
+  "background-brand": baseColors.brand[10],
+  "background-filter": baseColors.filter[5],
+  "background-disabled": baseColors.orionAlpha[10],
+  "background-disabled-inverse": baseColors.orionAlphaInverse[10],
+  "background-error-secondary": baseColors.lobster[5],
+  "background-highlight":
+    "color-mix(in srgb, var(--mb-color-core-brand) 7%, transparent)",
+  "background-hover":
+    "color-mix(in srgb, var(--mb-color-core-brand) 7%, transparent)",
+  "background-selected":
+    "color-mix(in srgb, var(--mb-color-core-brand) 21%, transparent)",
+  "background-primary": baseColors.white,
+  "background-secondary": baseColors.orion[5],
+  "background-tertiary": baseColors.orion[10],
+  "background-primary-inverse": baseColors.orion[80],
+  "background-secondary-inverse": baseColors.orion[70],
+  "background-tertiary-inverse": baseColors.orion[40],
+  overlay: baseColors.orionAlpha[60],
+  "background-error": baseColors.lobster[10],
+  "background-success": baseColors.palm[5],
+  "background-success-secondary": baseColors.palm[20],
+  brand: baseColors.blue[40],
+  "brand-hover": baseColors.brand[50],
+  danger: baseColors.lobster[50],
+  error: baseColors.lobster[50],
+  filter: baseColors.octopus[50],
+  focus: baseColors.blue[20],
+  "icon-brand": baseColors.brand[50], // Matches text-brand
+  "icon-brand-inverse": baseColors.brand[20],
+  "icon-primary": baseColors.orionAlpha[80], // Matches text-primary
+  "icon-primary-inverse": baseColors.orionAlphaInverse[80], // Matches text-primary-inverse
+  "icon-disabled": baseColors.orionAlpha[40], // Matches text-disabled
+  "icon-disabled-inverse": baseColors.orionAlphaInverse[40], // Matches text-disabled-inverse
+  "icon-secondary": baseColors.orionAlpha[60], // Matches text-secondary
+  "icon-secondary-inverse": baseColors.orionAlphaInverse[60], // Matches text-secondary-inverse
+  "illustration-brand-secondary": baseColors.brand[10],
+  "illustration-brand-tertiary": baseColors.brand[5],
+  "metabase-brand": baseColors.blue[40],
+  "metabase-brand-hover": baseColors.blue[30],
+  "saturated-blue": baseColors.ocean[60],
+  "saturated-green": baseColors.palm[60],
+  "saturated-purple": baseColors.octopus[60],
+  "saturated-red": baseColors.lobster[60],
+  "saturated-yellow": baseColors.dubloon[30],
+  shadow: baseColors.orionAlpha[20],
+  "success-secondary": baseColors.palm[60],
+  success: baseColors.palm[50],
+  summarize: baseColors.palm[50],
+  "syntax-parameters-active": baseColors.mango[10],
+  "syntax-parameters": baseColors.mango[60],
+  "text-tertiary": baseColors.orionAlpha[40],
+  "text-tertiary-inverse": baseColors.orionAlphaInverse[40],
+  "text-hover": baseColors.brand[60],
+  "text-secondary-opaque": baseColors.orion[60],
+  warning: baseColors.dubloon[30],
+  "background-warning": baseColors.dubloon[5],
+  "background-warning-secondary": baseColors.dubloon[20],
+  info: baseColors.orion[40],
+  "background-info": baseColors.orion[10],
+  white: baseColors.white,
+  border: baseColors.orion[20],
+  "border-strong": baseColors.orionAlpha[30],
+  "border-stronger": baseColors.orionAlpha[50],
+  "border-subtle": baseColors.orionAlpha[10],
+  gold: baseColors.gold,
+  "upsell-primary": baseColors.ocean[70],
+  "upsell-secondary": baseColors.ocean[20],
+  "upsell-gem": baseColors.upsellGem,
+};
+
+const actualColors = {
+  "background_page-filter": baseColors.filter[5],
+  "background_page-highlighted":
+    "color-mix(in srgb, var(--mb-color-core-brand) 7%, transparent)",
+  "background_page-primary": baseColors.white,
+  "background_page-primary-inverse": baseColors.orion[95],
+  "background_page-secondary": baseColors.orion[5],
+  "background_page-secondary-inverse": baseColors.orion[100],
+  "background_page-tertiary": baseColors.orion[10],
+  "background_page-tertiary-inverse": baseColors.orion[110],
+  "background_surface-brand-strong": baseColors.brand[60],
+  "background_surface-brand-strong-hover": baseColors.brand[70],
+  "background_surface-brand-strong-pressed": baseColors.brand[80],
+  "background_surface-brand-subtle":
+    "color-mix(in srgb, var(--mb-color-core-brand) 10%, transparent)",
+  "background_surface-brand-subtle-hover":
+    "color-mix(in srgb, var(--mb-color-core-brand) 30%, transparent)",
+  "background_surface-brand-subtle-pressed":
+    "color-mix(in srgb, var(--mb-color-core-brand) 60%, transparent)",
+  "background_surface-disabled": baseColors.orionAlpha[10],
+  "background_surface-disabled-inverse": baseColors.orionAlphaInverse[10],
+  "background_surface-error": baseColors.lobster[10],
+  "background_surface-error-subtle": baseColors.lobster[5],
+  "background_surface-hover":
+    "color-mix(in srgb, var(--mb-color-core-brand) 7%, transparent)",
+  "background_surface-primary": baseColors.white, // Matches background_page-primary
+  "background_surface-primary-hover": baseColors.orionAlpha[10],
+  "background_surface-primary-inverse": baseColors.orion[95], // Matches background_page-primary-inverse
+  "background_surface-primary-inverse-hover": baseColors.orionAlphaInverse[20],
+  "background_surface-primary-inverse-pressed":
+    baseColors.orionAlphaInverse[10],
+  "background_surface-primary-pressed": baseColors.orionAlpha[20],
+  "background_surface-secondary": baseColors.orionAlpha[10],
+  "background_surface-secondary-hover": baseColors.orionAlpha[20],
+  "background_surface-secondary-inverse": baseColors.orionAlphaInverse[10],
+  "background_surface-secondary-inverse-hover":
+    baseColors.orionAlphaInverse[20],
+  "background_surface-secondary-inverse-pressed":
+    baseColors.orionAlphaInverse[10],
+  "background_surface-secondary-pressed": baseColors.orionAlpha[30],
+  "background_surface-selected":
+    "color-mix(in srgb, var(--mb-color-core-brand) 21%, transparent)",
+  "background_surface-success": baseColors.palm[5],
+  "background_surface-warning": baseColors.dubloon[5],
+  "background_surface-warning-strong": baseColors.dubloon[20],
+  "border-brand": baseColors.brand[10],
+  "border-filter": baseColors.filter[20],
+  "border-highlight": baseColors.brand[60],
+  "border-neutral": baseColors.orion[20],
+  "border-neutral-strong": baseColors.orionAlpha[30],
+  "border-neutral-strongest": baseColors.orionAlpha[50],
+  "border-neutral-subtle": baseColors.orionAlpha[10],
+  "border-on_dark": baseColors.orionAlphaInverse[20],
+  "button-label-on_dark-disabled": baseColors.orionAlphaInverse[40],
+  "button-label-on_dark-primary": baseColors.orionAlpha[80],
+  "button-label-on_dark-secondary": baseColors.white,
+  "button-on_dark-disabled": baseColors.orionAlphaInverse[10],
+  "button-on_dark-primary-default": baseColors.white,
+  "button-on_dark-primary-hover": baseColors.orion[20],
+  "button-on_dark-primary-pressed": baseColors.orion[30],
+  "button-on_dark-secondary-default": baseColors.orionAlphaInverse[10],
+  "button-on_dark-secondary-hover": baseColors.orionAlphaInverse[20],
+  "button-on_dark-secondary-pressed": baseColors.orionAlphaInverse[10],
+  "core-blue-saturated": baseColors.ocean[60],
+  "core-brand-hover": baseColors.brand[50],
+  "core-gold": baseColors.gold,
+  "core-green-saturated": baseColors.palm[60],
+  "core-info": baseColors.orion[40],
+  "core-metabase_brand": baseColors.blue[40],
+  "core-metabase_brand-hover": baseColors.blue[30],
+  "core-purple-saturated": baseColors.octopus[60],
+  "core-red-saturated": baseColors.lobster[60],
+  "core-white": baseColors.white,
+  "core-white_constant": baseColors.white,
+  "core-yellow-saturated": baseColors.dubloon[30],
+  "feedback-negative": baseColors.lobster[50],
+  "feedback-negative-strong": baseColors.lobster[60],
+  "feedback-neutral-strong": baseColors.orionAlpha[60],
+  "feedback-positive": baseColors.palm[50],
+  "feedback-positive-selected": baseColors.palm[60],
+  "feedback-positive-strong": baseColors.palm[60],
+  "feedback-warning": baseColors.dubloon[30],
+  "feedback-warning-strong": baseColors.mango[60],
+  "illustration-secondary-brand": baseColors.brand[10],
+  "illustration-tertiary-brand": baseColors.brand[5],
+  "input-background": baseColors.orionAlpha[5],
+  "input-focus": baseColors.blue[20],
+  "modal-overlay": baseColors.orionAlpha[60],
+  "navbar-admin": baseColors.octopus[60],
+  "navbar-admin-inverse": baseColors.octopus[80],
+  "navbar-admin-secondary": baseColors.octopus[40],
+  "shadow-default": baseColors.orionAlpha[20],
+  "switch-checked": baseColors.brand[60],
+  "switch-disabled": baseColors.orionAlpha[20],
+  "switch-unchecked": baseColors.orionAlpha[30],
+  "switch_thumb-disabled": baseColors.white,
+  "text-brand": baseColors.brand[50],
+  "text-brand-hover": baseColors.brand[60],
+  "text-brand-strong": baseColors.brand[60],
+  "text-brand-strong-hover": baseColors.brand[70],
+  "text-disabled": baseColors.orionAlpha[40],
+  "text-disabled-inverse": baseColors.orionAlphaInverse[40],
+  "text-filter": baseColors.filter[50],
+  "text-primary": baseColors.orionAlpha[80],
+  "text-primary-inverse": baseColors.orionAlphaInverse[80],
+  "text-secondary": baseColors.orionAlpha[60],
+  "text-secondary-inverse": baseColors.orionAlphaInverse[60],
+  "text-selected": baseColors.orionAlpha[80],
+  "text-syntax-parameter": baseColors.mango[60],
+  "text-syntax-parameter-active": baseColors.mango[10],
+  "tooltip-background": baseColors.orion[80],
+  "tooltip-background-focused": baseColors.orion[90],
+  "tooltip-text": baseColors.white,
+  "tooltip-text-secondary": baseColors.orionAlphaInverse[60],
+};
 
 /**
  * The default light theme for Metabase.
@@ -13,126 +204,8 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
   version: 2,
   chartColors: LIGHT_THEME_ACCENT_COLORS,
   colors: {
-    "admin-navbar": "#1a1a1a",
-    "admin-navbar-secondary": "#404040",
-    "admin-navbar-inverse": "#FFFFFF",
-    "background-brand": spColors.red[10], // SP Paleta Primaria: sp-red
-    "background-filter": baseColors.filter[5],
-    "background-disabled": baseColors.orionAlpha[10],
-    "background-disabled-inverse": baseColors.orionAlphaInverse[10],
-    "background-error-secondary": spColors.redDark[5], // SP Paleta Secundaria: sp-red-dark
-    "background-highlight":
-      "color-mix(in srgb, var(--mb-color-brand) 7%, transparent)",
-    "background-home": "#F2F2F2",
-    "background-hover":
-      "color-mix(in srgb, var(--mb-color-brand) 7%, transparent)",
-    "background-menu-hover": "color-mix(in srgb, #ebebeb, white 20%)",
-    "background-selected":
-      "color-mix(in srgb, var(--mb-color-brand) 21%, transparent)",
-    "background-menu-selected": "color-mix(in srgb, #ebebeb, white 0%)",
-    "background-primary": baseColors.white,
-    "background-secondary": spColors.bgSecondary,
-    "background-tertiary": baseColors.orion[10],
-    "background-primary-inverse": baseColors.orion[80],
-    "background-secondary-inverse": baseColors.orion[70],
-    "background-tertiary-inverse": baseColors.orion[40],
-    overlay: baseColors.orionAlpha[60],
-    "background-error": spColors.redDark[10], // SP Paleta Secundaria: sp-red-dark
-    "background-success": spColors.green.bg, // SP Paleta Secundaria: sp-green
-    brand: spColors.red[40], // SP Paleta Primaria: sp-red
-    "brand-hover": "color-mix(in srgb, #FF161F, white 12%)", // SP Paleta Primaria: sp-red
-    danger: spColors.redDark.base, // SP Paleta Secundaria: sp-red-dark
-    error: spColors.status.error.base, // utiliza spColors.status.error
-    filter: spColors.blueMedium.base, // azul medio na paleta SP
-    focus: spColors.grayLight.base, // SP Paleta Prim?ria: sp-gray-light
-    "icon-brand": spColors.red[30], // SP Paleta Primaria: sp-red
-    "icon-primary": spColors.black.alpha80, // SP Paleta Primaria: sp-black
-    "icon-disabled": spColors.grayLight.base, // SP Paleta Primaria: sp-gray-light
-    "icon-secondary": spColors.gray.base, // SP Paleta Primaria: sp-gray
-    "illustration-brand-secondary": spColors.red[10], // SP Paleta Primária: sp-red
-    "illustration-brand-tertiary": spColors.red[5], // SP Paleta Primaria: sp-red
-    "metabase-brand": spColors.red[40], // SP Paleta Primaria: sp-red
-    "metabase-brand-hover": "color-mix(in srgb, #FF161F, white 12%)", // SP Paleta Primária: sp-red
-    "saturated-blue": spColors.blue.base, // SP Paleta Secundaria
-    "saturated-green": spColors.green[60], // SP Paleta Secundaria: sp-green
-    "saturated-purple": baseColors.octopus[60], // original sem roxo na paleta SP
-    "saturated-red": spColors.redDark.base, // SP Paleta Secundaria: sp-red-dark
-    "saturated-yellow": spColors.yellow.base, // SP Paleta Secundaria: sp-yellow
-    shadow: baseColors.orionAlpha[20],
-    "shadow-card-hover": "rgba(0, 0, 0, 0.15)",
-    "success-secondary": spColors.green.dark, // SP Paleta Secundaria: sp-green
-    success: spColors.green.base, // SP Paleta Secundaria: sp-green
-    summarize: spColors.green.base, // SP Paleta Secundaria: sp-green
-    "switch-off": spColors.grayLight.base, // SP Paleta Primaria: sp-gray-light
-    "syntax-parameters-active": spColors.yellow[10], // SP Paleta Secundaria: sp-yellow
-    "syntax-parameters": spColors.yellow.base, // SP Paleta Secundaria: sp-yellow
-    "text-brand": spColors.red[40], // SP Paleta Primaria: sp-red
-    "text-filter": baseColors.filter[50],
-    "text-tertiary": spColors.grayLight.base, // SP Paleta Primaria: sp-gray-light
-    "text-tertiary-inverse": baseColors.orionAlphaInverse[40],
-    "text-hover": spColors.red[60], // SP Paleta Primaria: sp-red
-    "text-secondary-opaque": spColors.gray.base, // SP Paleta Primaria: sp-gray
-    "text-primary": spColors.black.base, // SP Paleta Primaria: sp-black
-    "text-primary-inverse": baseColors.orionAlphaInverse[80],
-    "text-secondary": spColors.gray.base, // SP Paleta Primaria: sp-gray
-    "text-secondary-inverse": baseColors.orionAlphaInverse[60],
-    "text-selected": spColors.black.base, // SP Paleta Primaria: sp-black
-    "tooltip-background-focused": `color-mix(in srgb, ${baseColors.orion[80]} 50%, #000)`,
-    "tooltip-background": baseColors.orion[80],
-    "tooltip-text-secondary": baseColors.orionAlphaInverse[60],
-    "tooltip-text": baseColors.white,
-    warning: spColors.yellow.base, // SP Paleta Secundaria: sp-yellow
-    "background-warning": spColors.yellow.bg, // SP Paleta Secundaria: sp-yellow
-    info: spColors.gray.base, // SP Paleta Primaria: sp-gray
-    "background-info": spColors.gray.bg, // SP Paleta Primaria: sp-gray
-    white: baseColors.white,
-    border: spColors.black[15], // SP Paleta Primaria: sp-black
-    "border-brand": spColors.red[10], // SP Paleta Primaria: sp-red
-    "border-card-home": "#E2E2E2",
-    "border-strong": spColors.gray.base, // SP Paleta Primaria: sp-gray
-    "border-stronger": baseColors.orionAlpha[50],
-    "border-subtle": spColors.black.alpha10, // SP Paleta Primaria: sp-black
-    "border-filter": baseColors.filter[20],
-    "button-primary": spColors.black.base, // SP Paleta Primaria: sp-black
-    "button-primary-hover": spColors.black.hover, // SP Paleta Primaria: sp-black
-    copper: "#B87333",
-    bronze: "#CD7F32",
-    silver: "#C0C0C0",
-    gold: "#FFD700",
-    "upsell-primary": spColors.blue.base, // SP Paleta Secundria: sp-blue
-    "upsell-secondary": spColors.skyLight.base, // SP Paleta Secundaria: sp-sky-light
-    "upsell-gem": "#00d4ff",
-    // SP Design System Paleta Primaria
-    "sp-black": "#000000",
-    "sp-black-hover": spColors.black.hover,
-    "sp-red": "#FF161F",
-    "sp-white": "#FFFFFF",
-    "sp-gray": "#808080",
-    "sp-gray-light": spColors.grayLight.base,
-    "sp-gray-medium": spColors.grayMedium.base,
-    "sp-primary-40": spColors.primary40,
-    "sp-color-border": spColors.colorBorder,
-    // SP Design System Paleta Secundaria
-    "sp-yellow": "#FBB900",
-    "sp-blue": "#034EA2",
-    "sp-green": "#0B9247",
-    "sp-sky-light": "#A1DDF7",
-    "sp-sky": spColors.sky.base, // SP Paleta Secundaria: sp-sky #62C9E0
-    "sp-blue-medium": "#4297D3",
-    "sp-blue-dark": "#005992",
-    "sp-navy": "#233254",
-    "sp-olive": spColors.olive.base, // SP Paleta Secundaria: sp-olive #94AA54
-    "sp-red-dark": spColors.redDark.base, // SP Paleta Secundaria: sp-red-dark #842519
-    // SP Design System — Paleta ampliada (tons e variacoes)
-    "sp-green-light": spColors.green.light, // #E3F5E1
-    "sp-green-medium": spColors.green.medium, // #B4D0BB
-    "sp-green-darker": spColors.green.darker, // #086732
-    "sp-yellow-light": spColors.yellow.light, // #FFF5C2
-    "sp-yellow-medium": spColors.yellow.medium, // #FFC572
-    "sp-red-light": spColors.red.light, // #FFE5E5
-    "sp-red-medium": spColors.red.medium, // #EB7B7B
-    "sp-red-dark2": spColors.red.dark, // #B22929
-    "sp-blue-light": spColors.blue.light, // #E6F0FC
-    "sp-blue-soft": spColors.blue.medium, // #ADD7FB
+    ...deprecatedColors,
+    ...actualColors,
+    ...SP_LIGHT_THEME_COLORS,
   },
 };

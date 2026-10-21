@@ -13,6 +13,7 @@ import { QuestionVisualization } from "embedding-sdk-bundle/components/private/S
 import { SdkQuestion } from "embedding-sdk-bundle/components/public/SdkQuestion";
 import { QuestionAlertsButton } from "embedding-sdk-bundle/components/public/notifications/QuestionAlertsButton";
 import { useCollectionData } from "embedding-sdk-bundle/hooks/private/use-collection-data";
+import { useMobileLayout } from "embedding-sdk-bundle/hooks/private/use-mobile-layout";
 import { useQuestionEditorSync } from "embedding-sdk-bundle/hooks/private/use-question-editor-sync";
 import { useSdkBreadcrumbs } from "embedding-sdk-bundle/hooks/private/use-sdk-breadcrumb";
 import { shouldRunCardQuery } from "embedding-sdk-bundle/lib/sdk-question";
@@ -44,6 +45,7 @@ import { Editor } from "../SdkQuestion/components/Editor";
 import { EditorButton } from "../SdkQuestion/components/EditorButton/EditorButton";
 import { FilterDropdown } from "../SdkQuestion/components/Filter/FilterDropdown";
 import { QuestionSettingsDropdown } from "../SdkQuestion/components/QuestionSettings";
+import { RefreshButton } from "../SdkQuestion/components/RefreshButton";
 import { ResultToolbar } from "../SdkQuestion/components/ResultToolbar/ResultToolbar";
 import {
   SaveButton,
@@ -65,6 +67,11 @@ export interface SdkQuestionDefaultViewProps extends FlexibleSizeProps {
    * Determines whether the chart type selector and corresponding settings button are shown. Only relevant when using the default layout.
    */
   withChartTypeSelector?: boolean;
+
+  /**
+   * Determines whether the editor button is shown. Only relevant when using the default layout.
+   */
+  withEditorButton?: boolean;
 }
 
 export const SdkQuestionDefaultView = ({
@@ -74,6 +81,7 @@ export const SdkQuestionDefaultView = ({
   style,
   title,
   withChartTypeSelector,
+  withEditorButton = true,
 }: SdkQuestionDefaultViewProps): ReactElement => {
   const { isLocaleLoading } = useLocale();
   const {
@@ -119,29 +127,18 @@ export const SdkQuestionDefaultView = ({
     question && shouldRunCardQuery({ question, isGuestEmbed }) && !queryResults;
 
   useEffect(() => {
-    const isNewQuestion = originalId === "new" || originalId === "new-native";
-    const isExistingQuestion =
-      question &&
+    if (
       !isQuestionLoading &&
       question?.isSaved() &&
-      !isNewQuestion &&
-      queryResults;
-
-    const onNavigate = onNavigateBack ?? onReset ?? undefined;
-
-    if (isNewQuestion) {
-      reportLocation({
-        type: "question",
-        id: originalId,
-        name: "New question",
-        onNavigate,
-      });
-    } else if (isExistingQuestion) {
+      originalId !== "new" &&
+      originalId !== "new-native" &&
+      queryResults
+    ) {
       reportLocation({
         type: "question",
         id: question.id(),
         name: question.displayName() || "Question",
-        onNavigate,
+        onNavigate: onNavigateBack ?? onReset ?? undefined,
       });
     }
   }, [
@@ -159,19 +156,34 @@ export const SdkQuestionDefaultView = ({
     { skipCollectionFetching: !isSaveEnabled },
   );
 
+  const { ref: containerRef, isMobile } = useMobileLayout();
+
+  // EMB-2177: the loader and the error states have to sit in the same box as
+  // the rendered state, otherwise the component collapses and then jumps to
+  // the caller's height once the question resolves.
+  const sizeProps = { height, width, className, style };
+
   if (
     !isEditorOpen &&
     (isLocaleLoading || isQuestionLoading || isQueryResultLoading)
   ) {
-    return <SdkLoader />;
+    return (
+      <FlexibleSizeComponent {...sizeProps}>
+        <SdkLoader />
+      </FlexibleSizeComponent>
+    );
   }
 
   if (!isEditorOpen && !question) {
-    if (originalId) {
-      return <QuestionNotFoundError id={originalId} />;
-    } else {
-      return <SdkError message={t`Question not found`} />;
-    }
+    return (
+      <FlexibleSizeComponent {...sizeProps}>
+        {originalId ? (
+          <QuestionNotFoundError id={originalId} />
+        ) : (
+          <SdkError message={t`Question not found`} />
+        )}
+      </FlexibleSizeComponent>
+    );
   }
 
   const showSaveButton =
@@ -183,6 +195,7 @@ export const SdkQuestionDefaultView = ({
 
   return (
     <FlexibleSizeComponent
+      ref={containerRef}
       height={height}
       width={width}
       className={cx(InteractiveQuestionS.Container, className)}
@@ -192,7 +205,7 @@ export const SdkQuestionDefaultView = ({
         component={Stack}
         className={InteractiveQuestionS.TopBar}
         gap="sm"
-        p="md"
+        p="lg"
       >
         <RenderIfHasContent
           component={Group}
@@ -200,24 +213,24 @@ export const SdkQuestionDefaultView = ({
           align="flex-end"
           data-testid="interactive-question-top-toolbar"
         >
-          <RenderIfHasContent component={Group} gap="xs">
+          <RenderIfHasContent component={Group} gap="xxs">
             <Stack align="flex-start">
               <SdkInternalNavigationBackButton />
               <DefaultViewTitle title={title} />
             </Stack>
           </RenderIfHasContent>
-          {showSaveButton && <SaveButton onClick={openSaveModal} />}
+          {showSaveButton && <SaveButton onClick={openSaveModal} ml="auto" />}
         </RenderIfHasContent>
         {queryResults && (
           <RenderIfHasContent
             component={ResultToolbar}
             data-testid="interactive-question-result-toolbar"
           >
-            <RenderIfHasContent component={Group} gap="xs">
+            <RenderIfHasContent component={Group} gap="xxs">
               {isEditorOpen ? (
                 <PopoverBackButton
                   onClick={toggleEditor}
-                  c="brand"
+                  c="core-brand"
                   fz="md"
                   ml="sm"
                 >
@@ -232,19 +245,19 @@ export const SdkQuestionDefaultView = ({
                         <QuestionSettingsDropdown />
                       </Button.Group>
 
-                      {!isNativeQuestion && (
+                      {!isNativeQuestion && !isMobile && (
                         <Divider
-                          mx="xs"
+                          mx="xxs"
                           orientation="vertical"
                           style={{
-                            color: "var(--mb-color-border) !important",
+                            color: "var(--mb-color-border-neutral) !important",
                           }}
                         />
                       )}
                     </>
                   )}
 
-                  {!isNativeQuestion && (
+                  {!isNativeQuestion && !isMobile && (
                     <>
                       <FilterDropdown />
                       <SummarizeDropdown />
@@ -255,13 +268,16 @@ export const SdkQuestionDefaultView = ({
               )}
             </RenderIfHasContent>
             <RenderIfHasContent component={Group} gap="sm" ml="auto">
-              {!isEditorOpen && (
+              {!isEditorOpen && !isMobile && (
                 <>
                   <DownloadWidgetDropdown />
                   <QuestionAlertsButton />
                 </>
               )}
-              <EditorButton isOpen={isEditorOpen} onClick={toggleEditor} />
+              {!isEditorOpen && <RefreshButton />}
+              {withEditorButton && (
+                <EditorButton isOpen={isEditorOpen} onClick={toggleEditor} />
+              )}
             </RenderIfHasContent>
           </RenderIfHasContent>
         )}
@@ -307,6 +323,7 @@ const DefaultViewSaveModal = ({
     onSave,
     isSaveEnabled,
     targetCollection,
+    initialCollection,
   } = useSdkQuestionContext();
 
   if (!isSaveEnabled || !isOpen || !question) {
@@ -326,6 +343,7 @@ const DefaultViewSaveModal = ({
         close();
       }}
       targetCollection={targetCollection}
+      initialCollectionId={initialCollection}
     />
   );
 };

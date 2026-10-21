@@ -34,41 +34,62 @@ describe("scenarios > embedding > sdk iframe embedding > theming", () => {
     H.prepareSdkIframeEmbedTest({ signOut: true });
   });
 
-  it("should apply custom themes", () => {
-    const frame = H.loadSdkIframeEmbedTestPage({
+  it("should measure table column widths based on themed font size", () => {
+    const SMALL_FONT_THEME = {
+      components: {
+        table: { cell: { fontSize: "10px" } },
+      },
+    } as const satisfies MetabaseTheme;
+
+    let defaultColumnWidth: number;
+
+    cy.log("1. load with default theme and measure column width");
+
+    const defaultFrame = H.loadSdkIframeEmbedTestPage({
       elements: [
         {
-          component: "metabase-dashboard",
-          attributes: {
-            dashboardId: ORDERS_DASHBOARD_ID,
-          },
+          component: "metabase-question",
+          attributes: { questionId: ORDERS_QUESTION_ID },
+        },
+      ],
+    });
+
+    cy.wait("@getCardQuery");
+
+    defaultFrame.within(() => {
+      cy.findAllByTestId("header-cell")
+        .filter(":contains('Product ID')")
+        .first()
+        .then(($el) => {
+          defaultColumnWidth = $el[0].getBoundingClientRect().width;
+          expect(defaultColumnWidth).to.be.greaterThan(0);
+        });
+    });
+
+    cy.log("2. load with smaller font theme and verify column is narrower");
+
+    const themedFrame = H.loadSdkIframeEmbedTestPage({
+      elements: [
+        {
+          component: "metabase-question",
+          attributes: { questionId: ORDERS_QUESTION_ID },
         },
       ],
       metabaseConfig: {
-        theme: DARK_THEME,
+        theme: SMALL_FONT_THEME,
       },
     });
 
-    cy.wait("@getDashboard");
+    cy.wait("@getCardQuery");
 
-    frame.within(() => {
-      cy.findByTestId("dashboard").should(
-        "have.css",
-        "background-color",
-        DARK_THEME.colors.background,
-      );
-
-      cy.findByText("Showing first 2,000 rows").should(
-        "have.css",
-        "color",
-        DARK_THEME.colors["text-primary"],
-      );
-
-      cy.findByText("Product ID").should(
-        "have.css",
-        "color",
-        DARK_THEME.colors.brand,
-      );
+    themedFrame.within(() => {
+      cy.findAllByTestId("header-cell")
+        .filter(":contains('Product ID')")
+        .first()
+        .then(($el) => {
+          const themedColumnWidth = $el[0].getBoundingClientRect().width;
+          expect(themedColumnWidth).to.be.lessThan(defaultColumnWidth);
+        });
     });
   });
 
@@ -162,74 +183,18 @@ describe("scenarios > embedding > sdk iframe embedding > theming", () => {
         },
       ],
       metabaseConfig: {
-        theme: LIGHT_THEME,
+        theme: DARK_THEME,
       },
       insertHtml: { beforeEmbed: THEME_SWITCHER_HTML },
     });
 
     cy.wait("@getDashboard");
 
-    cy.log("1. verify colors in light theme");
+    cy.log("1. verify colors in the initial dark theme");
 
-    frame.within(() => {
-      cy.findByTestId("dashboard").should(
-        "have.css",
-        "background-color",
-        "rgb(255, 255, 255)",
-      );
+    assertDarkTheme(frame);
 
-      cy.findByTestId("dashboard-header-container").should(
-        "have.css",
-        "background-color",
-        "rgb(255, 255, 255)",
-      );
-
-      cy.findByText("Product ID").should(
-        "have.css",
-        "color",
-        LIGHT_THEME.colors.brand,
-      );
-
-      cy.findByText("Showing first 2,000 rows").should(
-        "have.css",
-        "color",
-        LIGHT_THEME.colors["text-primary"],
-      );
-    });
-
-    cy.log("2. switch to dark theme and verify colors");
-
-    cy.get("body").within(() => {
-      cy.findByText("Dark").click();
-    });
-
-    frame.within(() => {
-      cy.findByTestId("dashboard").should(
-        "have.css",
-        "background-color",
-        DARK_THEME.colors.background,
-      );
-
-      cy.findByTestId("dashboard-header-container").should(
-        "have.css",
-        "background-color",
-        DARK_THEME.colors.background,
-      );
-
-      cy.findByText("Product ID").should(
-        "have.css",
-        "color",
-        DARK_THEME.colors.brand,
-      );
-
-      cy.findByText("Showing first 2,000 rows").should(
-        "have.css",
-        "color",
-        DARK_THEME.colors["text-primary"],
-      );
-    });
-
-    cy.log("3. switch to light theme and verify colors");
+    cy.log("2. switch to light theme and verify colors");
 
     cy.get("body").within(() => {
       cy.findByText("Light").click();
@@ -260,5 +225,41 @@ describe("scenarios > embedding > sdk iframe embedding > theming", () => {
         LIGHT_THEME.colors["text-primary"],
       );
     });
+
+    cy.log("3. switch back to dark theme and verify colors");
+
+    cy.get("body").within(() => {
+      cy.findByText("Dark").click();
+    });
+
+    assertDarkTheme(frame);
   });
 });
+
+function assertDarkTheme(frame: Cypress.Chainable<JQuery<HTMLElement>>) {
+  frame.within(() => {
+    cy.findByTestId("dashboard").should(
+      "have.css",
+      "background-color",
+      DARK_THEME.colors.background,
+    );
+
+    cy.findByTestId("dashboard-header-container").should(
+      "have.css",
+      "background-color",
+      DARK_THEME.colors.background,
+    );
+
+    cy.findByText("Product ID").should(
+      "have.css",
+      "color",
+      DARK_THEME.colors.brand,
+    );
+
+    cy.findByText("Showing first 2,000 rows").should(
+      "have.css",
+      "color",
+      DARK_THEME.colors["text-primary"],
+    );
+  });
+}

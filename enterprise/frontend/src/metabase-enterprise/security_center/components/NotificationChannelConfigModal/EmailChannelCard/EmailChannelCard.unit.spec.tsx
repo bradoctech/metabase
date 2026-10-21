@@ -1,7 +1,7 @@
 import { setupRecentViewsAndSelectionsEndpoints } from "__support__/server-mocks";
+import { createMockSettingsState } from "__support__/state";
 import { renderWithProviders, screen } from "__support__/ui";
 import { createMockSettings } from "metabase-types/api/mocks";
-import { createMockSettingsState } from "metabase-types/store/mocks";
 
 import type { NotificationConfig } from "../../../hooks/use-notification-config";
 import { useNotificationConfig } from "../../../hooks/use-notification-config";
@@ -14,6 +14,7 @@ jest.mock("../../../hooks/use-notification-config", () => ({
 }));
 
 const mockedUseNotificationConfig =
+  // Unjustified type cast. FIXME
   useNotificationConfig as any as jest.MockedFn<typeof useNotificationConfig>;
 
 const DEFAULT_CONFIG: NotificationConfig = {

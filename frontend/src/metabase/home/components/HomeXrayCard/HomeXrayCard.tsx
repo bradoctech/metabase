@@ -1,10 +1,7 @@
-import {
-  CardIcon,
-  CardIconWrapper,
-  CardTitle,
-  CategoryBadge,
-  XrayCardRoot,
-} from "./HomeXrayCard.styled";
+import { Ellipsified, Icon, Text } from "metabase/ui";
+
+import { HomeCard } from "../HomeCard";
+
 import { trackHomeXRayClicked } from "./analytics";
 
 interface HomeXrayCardProps {
@@ -19,12 +16,22 @@ export const HomeXrayCard = ({
   message,
 }: HomeXrayCardProps): JSX.Element => {
   return (
-    <XrayCardRoot to={url} onClick={trackHomeXRayClicked}>
-      <CategoryBadge>{title}</CategoryBadge>
-      <CardIconWrapper>
-        <CardIcon name="bolt_filled" />
-      </CardIconWrapper>
-      <CardTitle>{message}</CardTitle>
-    </XrayCardRoot>
+    <HomeCard url={url} onClick={trackHomeXRayClicked}>
+      <Icon
+        name="bolt_filled"
+        c="accent4"
+        display="block"
+        flex="0 0 auto"
+        size={20}
+      />
+      <Ellipsified fz="md" fw="bold" ml="sm" pr="xxs">
+        <Text component="span" c="text-secondary">
+          {message}
+        </Text>{" "}
+        <Text component="span" c="text-primary">
+          {title}
+        </Text>
+      </Ellipsified>
+    </HomeCard>
   );
 };

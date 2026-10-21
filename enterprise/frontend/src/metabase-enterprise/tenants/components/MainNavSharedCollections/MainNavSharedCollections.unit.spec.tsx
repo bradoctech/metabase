@@ -2,10 +2,11 @@ import fetchMock from "fetch-mock";
 
 import { setupCollectionsEndpoints } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
+import { createMockState } from "__support__/state";
 import { renderWithProviders, screen } from "__support__/ui";
+import { Route } from "metabase/router";
 import type { Collection } from "metabase-types/api";
 import { createMockCollection, createMockUser } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { MainNavSharedCollections } from "./MainNavSharedCollections";
 
@@ -43,12 +44,20 @@ const setup = ({
   });
 
   renderWithProviders(
-    <MainNavSharedCollections
-      canAccessTenantSpecificCollections={canAccessTenantSpecificCollections}
-      canCreateSharedCollection={canWriteToSharedCollectionRoot}
-      sharedTenantCollections={tenantCollections}
+    <Route
+      path="/"
+      element={
+        <MainNavSharedCollections
+          canAccessTenantSpecificCollections={
+            canAccessTenantSpecificCollections
+          }
+          canCreateSharedCollection={canWriteToSharedCollectionRoot}
+          sharedTenantCollections={tenantCollections}
+        />
+      }
     />,
     {
+      withRouter: true,
       storeInitialState: createMockState({ settings, currentUser }),
     },
   );

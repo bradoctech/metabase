@@ -15,6 +15,7 @@ import { EnsureSingleInstance } from "embedding-sdk-shared/components/EnsureSing
 import { useLocale } from "metabase/common/hooks/use-locale";
 import { useMetabotEnabledEmbeddingAware } from "metabase/metabot/hooks";
 import { useMetabotReactions } from "metabase/metabot/hooks/use-metabot-reactions";
+import { useSetting } from "metabase/settings";
 import { Stack } from "metabase/ui";
 
 import { MetabotChatHistory } from "./MetabotChatHistory";
@@ -45,6 +46,7 @@ const MetabotQuestionInner = ({
   targetCollection,
 }: MetabotQuestionProps) => {
   const isEmbeddedMetabotEnabled = useMetabotEnabledEmbeddingAware();
+  const metabotName = useSetting("metabot-name");
   const { isLocaleLoading } = useLocale();
   const { navigateToPath } = useMetabotReactions();
   const { ref: containerRef, width: containerWidth } = useElementSize();
@@ -69,7 +71,9 @@ const MetabotQuestionInner = ({
 
   if (isEmbeddedMetabotEnabled === false) {
     return (
-      <SdkError message={t`Metabot is not enabled for embedded analytics.`} />
+      <SdkError
+        message={t`${metabotName} is not enabled for embedded analytics.`}
+      />
     );
   }
 

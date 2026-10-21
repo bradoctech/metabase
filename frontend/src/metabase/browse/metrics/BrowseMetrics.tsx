@@ -7,14 +7,11 @@ import { skipToken } from "metabase/api";
 import { EmptyState } from "metabase/common/components/EmptyState";
 import { ForwardRefLink, Link } from "metabase/common/components/Link";
 import { DelayedLoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper/DelayedLoadingAndErrorWrapper";
+import { trackMetricCreateStarted } from "metabase/common/data-studio/analytics";
 import { useDocsUrl } from "metabase/common/hooks";
-import { useFetchMetrics } from "metabase/common/hooks/use-fetch-metrics";
-import { trackMetricCreateStarted } from "metabase/data-studio/analytics";
-import { useSelector } from "metabase/lib/redux";
-import * as Urls from "metabase/lib/urls";
+import { canUserCreateQueries } from "metabase/current-user";
 import { PLUGIN_CONTENT_VERIFICATION, PLUGIN_LIBRARY } from "metabase/plugins";
-import { getIsEmbeddingIframe } from "metabase/selectors/embed";
-import { canUserCreateQueries } from "metabase/selectors/user";
+import { useSelector } from "metabase/redux";
 import {
   ActionIcon,
   Box,
@@ -27,12 +24,15 @@ import {
   Title,
   Tooltip,
 } from "metabase/ui";
+import * as Urls from "metabase/urls";
+import { isWithinIframe } from "metabase/utils/iframe";
 
 import S from "../components/BrowseContainer.module.css";
 
 import { MetricsTable } from "./MetricsTable";
 import { trackNewMetricInitiated } from "./analytics";
 import type { MetricFilterSettings, MetricResult } from "./types";
+import { useFetchMetrics } from "./use-fetch-metrics";
 
 const {
   contentVerificationEnabled,
@@ -48,7 +48,7 @@ export function BrowseMetrics() {
   const isEmpty = !isLoading && !error && !metrics?.length;
   const titleId = useMemo(() => _.uniqueId("browse-metrics"), []);
 
-  const libraryMetricCollection =
+  const { data: libraryMetricCollection } =
     PLUGIN_LIBRARY.useGetLibraryChildCollectionByType({
       type: "library-metrics",
     });
@@ -58,7 +58,7 @@ export function BrowseMetrics() {
   });
 
   const hasDataAccess = useSelector(canUserCreateQueries);
-  const isEmbeddingIframe = useSelector(getIsEmbeddingIframe);
+  const isEmbeddingIframe = isWithinIframe();
 
   const canCreateMetric = !isEmbeddingIframe && hasDataAccess;
 
@@ -68,7 +68,7 @@ export function BrowseMetrics() {
       flex={1}
       direction="column"
       wrap="nowrap"
-      pt="md"
+      pt="lg"
       aria-labelledby={titleId}
     >
       <Flex
@@ -91,7 +91,7 @@ export function BrowseMetrics() {
                 {t`Metrics`}
               </Group>
             </Title>
-            <Group gap="xs">
+            <Group gap="xxs">
               {canCreateMetric && (
                 <Tooltip label={t`Create a new metric`} position="bottom">
                   <ActionIcon
@@ -121,7 +121,7 @@ export function BrowseMetrics() {
       </Flex>
       <Flex className={S.browseMain} direction="column" wrap="nowrap" flex={1}>
         <Flex maw="64rem" mx="auto" w="100%">
-          <Stack mb="lg" gap="md" w="100%">
+          <Stack mb="xl" gap="lg" w="100%">
             {isEmpty ? (
               <MetricsEmptyState
                 canCreateMetric={canCreateMetric}
@@ -165,7 +165,7 @@ function MetricsEmptyState({
               <Text mt="sm" maw="25rem">
                 {t`Metrics are like pre-defined calculations: create your aggregations once, save them as metrics, and use them whenever you need to analyze your data.`}
               </Text>
-              <Flex pt="md" align="center" justify="center" gap="md">
+              <Flex pt="lg" align="center" justify="center" gap="lg">
                 {showMetabaseLinks && (
                   <Link
                     target="_blank"
@@ -242,6 +242,7 @@ function useFilteredMetrics(metricFilters: MetricFilterSettings) {
 
   const isLoading = hasVerifiedMetrics.isLoading || metricsResult.isLoading;
   const error = hasVerifiedMetrics.error || metricsResult.error;
+  // Unjustified type cast. FIXME
   const metrics = metricsResult.data?.data as MetricResult[] | undefined;
 
   return {

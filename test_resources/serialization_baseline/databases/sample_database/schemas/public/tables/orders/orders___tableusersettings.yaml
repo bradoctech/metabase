@@ -1,0 +1,24 @@
+description: Every order placed, as the team describes it
+display_name: Customer Orders
+fields:
+- description: Total order amount including tax
+  serdes/meta:
+  - id: Sample Database
+    model: Database
+  - id: PUBLIC
+    model: Schema
+  - id: ORDERS
+    model: Table
+  - id: TOTAL
+    model: Field
+  - id: '1'
+    model: FieldUserSettings
+serdes/meta:
+- id: Sample Database
+  model: Database
+- id: PUBLIC
+  model: Schema
+- id: ORDERS
+  model: Table
+- id: '1'
+  model: TableUserSettings

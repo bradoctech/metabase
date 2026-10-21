@@ -1,13 +1,14 @@
 import { t } from "ttag";
 
-import { SettingsPageWrapper } from "metabase/admin/components/SettingsSection";
-import { useGetSettingsQuery } from "metabase/api";
-import { hasAnySsoFeature } from "metabase/common/utils/plan";
+import { UpsellSSO } from "metabase/admin/upsells";
 import {
   type AuthSettingsPageTab,
   PLUGIN_AUTH_PROVIDERS,
+  PLUGIN_MULTI_FACTOR_AUTH,
 } from "metabase/plugins";
-import { Stack } from "metabase/ui";
+import { hasAnySsoFeature, useGetSettingsQuery } from "metabase/settings";
+import { SettingsPageWrapper } from "metabase/settings-components";
+import { Box, Flex, Stack } from "metabase/ui";
 
 import { ApiKeysAuthCard } from "../../auth/components/ApiKeysAuthCard";
 import { GoogleAuthCard } from "../../auth/containers/GoogleAuthCard/GoogleAuthCard";
@@ -31,11 +32,17 @@ export function AuthenticationSettingsPage({
 
   return (
     <SettingsPageWrapper title={t`Authentication`}>
-      <Stack gap="lg">
-        <GoogleAuthCard />
-        <LdapAuthCard />
-        <ApiKeysAuthCard />
-      </Stack>
+      <Flex justify={"space-between"} gap="xl">
+        <Stack gap="xl">
+          <GoogleAuthCard />
+          <LdapAuthCard />
+          <ApiKeysAuthCard />
+          <PLUGIN_MULTI_FACTOR_AUTH.AdminAuthCard />
+        </Stack>
+        <Box style={{ flexShrink: 0 }}>
+          <UpsellSSO location="authentication-sidebar" />
+        </Box>
+      </Flex>
     </SettingsPageWrapper>
   );
 }

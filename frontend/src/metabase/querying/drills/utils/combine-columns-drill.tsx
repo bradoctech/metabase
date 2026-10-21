@@ -1,7 +1,7 @@
 import { t } from "ttag";
 
-import { useDispatch } from "metabase/lib/redux";
-import { setUIControls } from "metabase/query_builder/actions";
+import { useDispatch } from "metabase/redux";
+import { setUIControls } from "metabase/redux/query-builder";
 import { Box, Title } from "metabase/ui";
 import type {
   ClickActionPopoverProps,
@@ -27,7 +27,7 @@ export const combineColumnsDrill: Drill<Lib.CombineColumnsDrillThruInfo> = ({
 
     return (
       <>
-        <Box p="lg" pb={0}>
+        <Box p="xl" pb={0}>
           <Title
             order={4}
           >{t`Combine “${columnInfo.displayName}” with other columns`}</Title>

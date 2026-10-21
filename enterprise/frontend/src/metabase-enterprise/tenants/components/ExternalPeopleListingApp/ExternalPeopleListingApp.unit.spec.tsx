@@ -5,6 +5,7 @@ import {
   setupUsersEndpoints,
 } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
+import { createMockState } from "__support__/state";
 import { renderWithProviders, screen } from "__support__/ui";
 import type { Tenant, User } from "metabase-types/api";
 import {
@@ -12,7 +13,6 @@ import {
   createMockTokenFeatures,
   createMockUser,
 } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { ExternalPeopleListingApp } from "./ExternalPeopleListingApp";
 

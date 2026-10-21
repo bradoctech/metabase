@@ -1,10 +1,13 @@
 (ns metabase.server.handler
   "Top-level Metabase Ring handler."
   (:require
+   [metabase.agent-api.usage :as agent-api.usage]
    [metabase.analytics.core :as analytics]
    [metabase.api.macros :as api.macros]
    [metabase.config.core :as config]
+   [metabase.embedding.sdk-react-18 :as embedding.sdk-react-18]
    [metabase.server.middleware.auth :as mw.auth]
+   [metabase.server.middleware.body-limit :as mw.body-limit]
    [metabase.server.middleware.browser-cookie :as mw.browser-cookie]
    [metabase.server.middleware.exceptions :as mw.exceptions]
    [metabase.server.middleware.json :as mw.json]
@@ -63,16 +66,28 @@
           (wrap-reload handler {:dirs ["src" "enterprise/backend/src"]}))))
     (catch Exception _ nil)))
 
+(def wrap-remote-api-proxy-dev-mw
+  "In dev, optionally proxy `/api` calls to a remote backend. Returns nil in prod."
+  (try
+    (when (and config/dev-available? (not *compile-files*))
+      (requiring-resolve 'dev.server.middleware.proxy/wrap-remote-api-proxy))
+    (catch Exception e
+      (log/warnf "Failed to load dev remote API proxy middleware: %s" (ex-message e))
+      nil)))
+
 (def ^:private middleware
   "Ring async middleware has the form
 
     (defn middleware-fn [handler]
       (fn handler' [request respond raise]
         (handler request respond raise)))"
-  ;; ▼▼▼ Middleware is APPLIED from TOP-TO-BOTTOM, but the returned `handlers` will see the requests in order from BOTTOM-TO-TOP. ▼▼▼
-  (->> [#'mw.exceptions/catch-uncaught-exceptions    ; catch any Exceptions that weren't passed to `raise`
+  ;; ▼▼▼ The returned `handlers` will see the requests in order from BOTTOM-TO-TOP, but the middleware is CONSTRUCTED/WRAPPED from TOP-TO-BOTTOM. ▼▼▼
+  (->> [        ;; Inside of the middleware onion
+        #'mw.exceptions/catch-uncaught-exceptions    ; catch any Exceptions that weren't passed to `raise`
         #'mw.exceptions/catch-api-exceptions         ; catch exceptions and return them in our expected format
         #'mw.log/log-api-call                        ; log info about the request, db call counts etc.
+        #'agent-api.usage/wrap-record-cli-usage      ; record CLI usage analytics for metabase-cli REST API calls
+        #'embedding.sdk-react-18/wrap-record-react-18-sdk-host ; record host apps that use the React SDK with React 18; must run after auth
         #'mw.browser-cookie/ensure-browser-id-cookie ; add cookie to identify browser; add `:browser-id` to the request
         #'mw.security/add-security-headers           ; Add HTTP headers to API responses to prevent them from being cached
         #'mw.json/wrap-json-body                     ; extracts json POST/PUT body and makes it available on request
@@ -82,6 +97,7 @@
         #'wrap-keyword-params                        ; converts string keys in :params to keyword keys
         #'wrap-params                                ; parses GET and POST params as :query-params/:form-params and both as :params
         #'mw.auth/verify-slack-request               ; looks for requests from slack and assocs a :slack/validated? on the request if valid
+        #'mw.body-limit/wrap-limit-request-body      ; bounds unauthenticated request body sizes; must be inside wrap-current-user-info and outside everything that reads the body
         #'mw.misc/maybe-set-site-url                 ; set the value of `site-url` if it hasn't been set yet
         #'mw.session/reset-session-timeout           ; Resets the timeout cookie for user activity to [[metabase.request.cookies/session-timeout]]
         #'mw.session/bind-current-user               ; Binds *current-user* and *current-user-id* if :metabase-user-id is non-nil
@@ -101,6 +117,8 @@
         #'mw.misc/bind-request                       ; bind `metabase.middleware.misc/*request*` for the duration of the request
         #'mw.ssl/redirect-to-https-middleware
         wrap-reload-dev-mw                           ; reloads outdated clojure code when --hot flag is passed with the :dev-start alias
+        wrap-remote-api-proxy-dev-mw                 ; proxies /api/* to remote backend if MB_REMOTE_API_URL is set (dev only)
+        ;; Outside of middleware onion
         ]
        (remove nil?)))
 

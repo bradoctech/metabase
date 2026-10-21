@@ -1,0 +1,7 @@
+name: event_log
+db_id: Sample Database
+schema: PUBLIC
+active: true
+is_published: false
+serdes/meta:
+- model: Table

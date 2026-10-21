@@ -1,9 +1,13 @@
 import type { JSXElementConstructor } from "react";
 
+import type { MetabotSubscriber } from "embedding-sdk-bundle/components/private/MetabotSubscriber/MetabotSubscriber";
+import type { SdkThemeProviderWithStore } from "embedding-sdk-bundle/components/private/SdkThemeProvider";
 import type { CollectionBrowser } from "embedding-sdk-bundle/components/public/CollectionBrowser";
 import type { ComponentProvider } from "embedding-sdk-bundle/components/public/ComponentProvider";
 import type { CreateDashboardModal } from "embedding-sdk-bundle/components/public/CreateDashboardModal";
 import type { CreateQuestion } from "embedding-sdk-bundle/components/public/CreateQuestion";
+import type { DateRangeCalendar } from "embedding-sdk-bundle/components/public/DateRangeCalendar/DateRangeCalendar";
+import type { DateRangePopover } from "embedding-sdk-bundle/components/public/DateRangePopover/DateRangePopover";
 import type { InteractiveQuestion } from "embedding-sdk-bundle/components/public/InteractiveQuestion/InteractiveQuestion";
 import type { MetabotQuestion } from "embedding-sdk-bundle/components/public/MetabotQuestion";
 import type { SdkDebugInfo } from "embedding-sdk-bundle/components/public/SdkDebugInfo/SdkDebugInfo";
@@ -11,6 +15,23 @@ import type { StaticQuestion } from "embedding-sdk-bundle/components/public/Stat
 import type { EditableDashboard } from "embedding-sdk-bundle/components/public/dashboard/EditableDashboard";
 import type { InteractiveDashboard } from "embedding-sdk-bundle/components/public/dashboard/InteractiveDashboard";
 import type { StaticDashboard } from "embedding-sdk-bundle/components/public/dashboard/StaticDashboard";
+import type { ResolveDatasetQuery } from "embedding-sdk-bundle/lib/create-metabase-query";
+import type {
+  ExecuteActionParams,
+  ExecuteActionResult,
+} from "embedding-sdk-bundle/lib/execute-action";
+import type {
+  formatDate,
+  formatDateRange,
+} from "embedding-sdk-bundle/lib/format-date-range";
+import type {
+  QueryDatasetParams,
+  QueryDatasetResult,
+} from "embedding-sdk-bundle/lib/query-dataset";
+import type {
+  QueryQuestionParams,
+  QueryQuestionResult,
+} from "embedding-sdk-bundle/lib/query-question";
 import type { SdkStore, SdkStoreState } from "embedding-sdk-bundle/store/types";
 import type {
   CreateDashboardValues,
@@ -39,12 +60,16 @@ export type MetabaseEmbeddingSdkBundleExports = PublicExports &
   ReduxStoreUtilityFunctionExports &
   ReduxStoreSelectorsExports &
   InternalHooksExports &
-  SchemaValidationUtils;
+  SchemaValidationUtils &
+  InternalComponentExports &
+  DateFormattingExports;
 
-export type PublicExports = {
+type PublicExports = {
   CollectionBrowser: InternalComponent<typeof CollectionBrowser>;
   CreateDashboardModal: InternalComponent<typeof CreateDashboardModal>;
   CreateQuestion: InternalComponent<typeof CreateQuestion>;
+  DateRangeCalendar: typeof DateRangeCalendar;
+  DateRangePopover: typeof DateRangePopover;
   EditableDashboard: InternalComponent<typeof EditableDashboard>;
   InteractiveDashboard: InternalComponent<typeof InteractiveDashboard>;
   InteractiveQuestion: InternalComponent<typeof InteractiveQuestion>;
@@ -55,30 +80,52 @@ export type PublicExports = {
   StaticQuestion: InternalComponent<typeof StaticQuestion>;
 };
 
-export type ReduxStoreExports = {
+type ReduxStoreExports = {
   getSdkStore: ReduxStoreFactory;
 };
 
-export type ReduxStoreUtilityFunctionExports = {
+type ReduxStoreUtilityFunctionExports = {
+  resolveDatasetQuery: ReduxStoreUtilityFunction<
+    ReturnType<ResolveDatasetQuery>
+  >;
   createDashboard: ReduxStoreUtilityFunction<
     (params: CreateDashboardValues) => Promise<MetabaseDashboard>
   >;
+  queryQuestion: ReduxStoreUtilityFunction<
+    (params: QueryQuestionParams) => Promise<QueryQuestionResult>
+  >;
+  queryDataset: ReduxStoreUtilityFunction<
+    (params: QueryDatasetParams) => Promise<QueryDatasetResult>
+  >;
+  executeAction: ReduxStoreUtilityFunction<
+    (params: ExecuteActionParams) => Promise<ExecuteActionResult>
+  >;
 };
 
-export type ReduxStoreSelectorsExports = {
+type ReduxStoreSelectorsExports = {
   getApplicationName: ReduxStoreSelector<string>;
   getAvailableFonts: ReduxStoreSelector<string[]>;
   getLoginStatus: ReduxStoreSelector<LoginStatus>;
   getUser: ReduxStoreSelector<User | null>;
 };
 
-export type InternalHooksExports = {
+type InternalHooksExports = {
   useInitData: InternalHook;
   useLogVersionInfo: InternalHook;
 };
 
-export type SchemaValidationUtils = {
+type SchemaValidationUtils = {
   validateFunctionSchema: (
     schema: any,
   ) => FunctionSchemaValidationResult<unknown[], unknown>;
+};
+
+type DateFormattingExports = {
+  formatDate: typeof formatDate;
+  formatDateRange: typeof formatDateRange;
+};
+
+type InternalComponentExports = {
+  MetabotSubscriber: typeof MetabotSubscriber;
+  SdkThemeProviderWithStore: typeof SdkThemeProviderWithStore;
 };
