@@ -123,7 +123,7 @@ export const SP_LIGHT_THEME_COLORS = {
   success: spColors.green.base,
   "success-secondary": spColors.green.dark,
   summarize: spColors.green.base,
-  "switch-off": spColors.grayLight.base,
+  "switch-unchecked": spColors.grayLight.base,
   "syntax-parameters": spColors.yellow.base,
   "syntax-parameters-active": spColors.yellow[10],
   "text-brand": SP_BRAND,

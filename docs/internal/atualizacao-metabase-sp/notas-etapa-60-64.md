@@ -17,7 +17,9 @@
 | `scan` | stale=9 · missing=0 · orphan=34 · hybrid=71 · protegidos=193 |
 | `scan --apply` | stale/orphan aplicados; re-scan: stale=0 orphan=0 hybrid=71 |
 | Híbridos | **feito** — 53 restaurados ao upstream; SP mantidos + porte EDD-969; **re-scan: hybrid=0** protected=215 |
-| `verify` / `build-check` / smoke | **pendente** |
+| `verify` | **ok** |
+| `build-check` | **ok** (BE 2199 ns · static-viz · tsc 0 · FE EE) — ver lições abaixo |
+| smoke | **pendente** |
 
 ---
 
@@ -165,17 +167,25 @@ Listas `behavior-manual` / `dual-changed` atualizadas (paths mortos 60/63 removi
 
 ---
 
+## Lições do `build-check` (60→64)
+
+1. **Adapters SP na API 63** quebram o bundle: `metabase/lib/urls` → `metabase/urls`; `selectors/user` → `current-user`; `useSetting` em `metabase/settings`; `NULL_DISPLAY_VALUE` → `getNullDisplayValue()`; `EmbeddingHubHomePage` → `SetupGuideHomePage`; LoginForm sem `buttons.module.css` / `size` no checkbox.
+2. **Paleta SP** em ChartSetting*: manter `SP_PALETTE_COLORS`, mas portar `forwardColorName` / tipos da 64 (`ChartSettingSeriesOrder` via `viz-core`).
+3. **`tsc` precisa de CLJS fresco:** após merge, `bun run build-pure:cljs` (ou o `static-viz` do script) antes do `tsc` — senão `metabase-lib` aponta para stubs velhos (`with_page`, `projectDimension`, …).
+4. **prosemirror duplicado no Bun** (`1.25.4` + `1.25.11`, view `1.40.1` + `1.42.3`) gera dezenas de erros TS; dedupe local (symlink das cópias aninhadas para a versão do `resolutions`) zera o `tsc`. Reaparece após `bun install` limpo — não commitamos `node_modules`.
+5. **FE OOM no WSL (~8 GiB):** `NODE_OPTIONS=--max-old-space-size=6144` (4096 mata o rspack).
+
+---
+
 ## Próximos comandos
 
 ```bash
-bash bin/merge-upstream-preserve-sp.sh verify
-# BE/FE parados:
-bash bin/merge-upstream-preserve-sp.sh build-check
-# smoke: checklist-smoke-test.md (eixos 969 + row + home + login)
+# smoke: checklist-smoke-test.md (eixos 969 + row + home + login + logo)
+# commit dos adapters FE quando fizer sentido
 ```
 
 ---
 
 ## Como orientar a IA nesta etapa
 
-> Leia `INSTRUCOES-AGENTE.md`, `estrategia-salto-60-64.md` e `notas-etapa-60-64.md`. Branch `metabasev64`. stale/orphan já aplicados; faltam híbridos + reaplicar EDD-969/RowChart em `viz-core`. Não restaurar paths mortos de `visualizations/echarts/cartesian/option/`.
+> Leia `INSTRUCOES-AGENTE.md`, `estrategia-salto-60-64.md` e `notas-etapa-60-64.md`. Branch `metabasev64`. Merge/híbridos/`verify`/`build-check` ok. Próximo: smoke canónico; não reabrir paths mortos de `visualizations/echarts/cartesian/option/`.
