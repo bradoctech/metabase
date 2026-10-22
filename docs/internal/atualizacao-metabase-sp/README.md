@@ -27,6 +27,7 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 | [runbook-atualizacao.md](./runbook-atualizacao.md)         | Como executar o merge (`bin/merge-upstream-preserve-sp.sh`)               |
 | [checklist-smoke-test.md](./checklist-smoke-test.md)       | Checklist canônica de smoke (UI/marca, charts, datagrid, i18n)            |
 | [notas-etapa-62-63.md](./notas-etapa-62-63.md)             | Diário da etapa 62→63                                                     |
+| [notas-etapa-60-64.md](./notas-etapa-60-64.md)             | Diário do salto 60→64 (`metabasev64`): orphans, riscos SP 969/RowChart    |
 | [lists/](./lists/)                                         | Listas canônicas restore-ours / dual-changed / behavior-manual            |
 
 ---

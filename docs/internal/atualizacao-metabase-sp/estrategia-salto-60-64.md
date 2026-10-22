@@ -99,6 +99,9 @@ bash bin/merge-upstream-preserve-sp.sh build-check    # backend + static-viz + t
 # smoke: checklist-smoke-test.md
 ```
 
+**Diário da leva (orphans, riscos EDD-969 / RowChartView, híbridos):** [notas-etapa-60-64.md](./notas-etapa-60-64.md).  
+`scan --apply` já rodou nesta branch (stale=0 orphan=0; hybrid=71 pendente).
+
 ### Depois do merge estável
 
 - Atualizar `INSTRUCOES-AGENTE.md` / `manual-orientar-ia.md` (estado: base 64 nesta branch).

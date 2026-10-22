@@ -41,6 +41,7 @@ Variações úteis (acrescentar uma linha ao prompt):
 | Índice humano da pasta | [README.md](./README.md) |
 | Bootstrap do agente (entrada) | [INSTRUCOES-AGENTE.md](./INSTRUCOES-AGENTE.md) |
 | Salto 60→64 (`metabasev64`) | [estrategia-salto-60-64.md](./estrategia-salto-60-64.md) |
+| Diário 60→64 (orphans / riscos SP) | [notas-etapa-60-64.md](./notas-etapa-60-64.md) |
 | Fluxo passo a passo do merge | [runbook-atualizacao.md](./runbook-atualizacao.md) |
 | Script v2 (`scan` / `build-check` / `sp-extra`) | [edd-1356-v2.md](./edd-1356-v2.md) |
 | Tema / marca (resumo + métricas) | [edd-1362.md](./edd-1362.md) · [edd-1362-metricas.pdf](./edd-1362-metricas.pdf) |
