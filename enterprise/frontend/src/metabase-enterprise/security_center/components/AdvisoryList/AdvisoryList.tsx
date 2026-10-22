@@ -69,11 +69,9 @@ export function AdvisoryList({
     <Box className={cx(className, S.root)}>
       {affecting.length > 0 && (
         <Box>
-          <Group gap="sm" mb="md" align="center">
-            <Badge size="sm" className={S.countBadge}>
-              {affecting.length}
-            </Badge>
-            <Title order={4}>{t`Affecting your instance`}</Title>
+          <Group gap="sm" mb="lg" align="center">
+            <Badge size="sm">{affecting.length}</Badge>
+            <Title order={4}>{t`Issues impacting your instance`}</Title>
           </Group>
           <AdvisorySection
             advisories={affecting}
@@ -85,8 +83,8 @@ export function AdvisoryList({
       {notAffecting.length > 0 && (
         <Box>
           <Group align="normal">
-            <Title order={4} mb="md">
-              {t`Other alerts`}
+            <Title order={4} mb="lg">
+              {t`Issues not impacting your instance`}
             </Title>
             {onAcknowledgeAll && undismissedNotAffecting.length > 0 && (
               <Button

@@ -2,6 +2,7 @@ import { setupEnterpriseOnlyPlugin } from "__support__/enterprise";
 import {
   findRequests,
   setupPropertiesEndpoints,
+  setupSdkReact18HostsEndpoint,
   setupSettingsEndpoints,
   setupTokenStatusEndpoint,
   setupUpdateSettingEndpoint,
@@ -10,15 +11,15 @@ import {
   setupUserKeyValueEndpoints,
 } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
+import { createMockState } from "__support__/state";
 import { waitFor } from "__support__/ui";
 import { PLUGIN_IS_EE_BUILD } from "metabase/plugins";
+import type { State } from "metabase/redux/store";
 import type { Settings, TokenFeatures } from "metabase-types/api";
 import {
   createMockSettings,
   createMockTokenFeatures,
 } from "metabase-types/api/mocks";
-import type { State } from "metabase-types/store";
-import { createMockState } from "metabase-types/store/mocks";
 
 export interface SetupOpts {
   renderCallback: (data: { state: Partial<State> }) => void;
@@ -66,6 +67,7 @@ export async function setup({
   setupUpdateSettingEndpoint();
   setupUpdateSettingsEndpoint();
   setupUpsellEndpoints();
+  setupSdkReact18HostsEndpoint([]);
   setupUserKeyValueEndpoints({
     namespace: "user_acknowledgement",
     key: "upsell-dev_instances",

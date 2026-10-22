@@ -1,7 +1,5 @@
-import type { FocusEvent } from "react";
 import { t } from "ttag";
 
-import { currency } from "metabase/lib/formatting";
 import {
   Combobox,
   Flex,
@@ -11,6 +9,7 @@ import {
   type SelectProps,
   Text,
 } from "metabase/ui";
+import { currency } from "metabase/utils/formatting";
 
 import S from "./CurrencyPicker.module.css";
 
@@ -26,14 +25,8 @@ export const CurrencyPicker = ({
   comboboxProps,
   value,
   onChange,
-  onFocus,
   ...props
 }: Props) => {
-  const handleFocus = (event: FocusEvent<HTMLInputElement>) => {
-    event.target.select();
-    onFocus?.(event);
-  };
-
   return (
     <Select
       comboboxProps={{
@@ -56,11 +49,11 @@ export const CurrencyPicker = ({
           <SelectItem selected={selected}>
             <Icon name={selected ? "check" : "empty"} />
 
-            <Flex align="center" flex="1" gap="xs" justify="space-between">
+            <Flex align="center" flex="1" gap="xxs" justify="space-between">
               <span>{item.option.label}</span>
 
               <Text
-                c="text-tertiary"
+                c="text-disabled"
                 className={S.symbol}
                 flex="0 0 auto"
                 lh="1rem"
@@ -72,8 +65,8 @@ export const CurrencyPicker = ({
         );
       }}
       rightSection={
-        <Flex align="center" gap="xs" pos="relative">
-          <Text c="text-tertiary" pos="absolute" px="sm" right="100%">
+        <Flex align="center" gap="xxs" pos="relative">
+          <Text c="text-disabled" pos="absolute" px="sm" right="100%">
             {SYMBOLS[value]}
           </Text>
 
@@ -83,7 +76,6 @@ export const CurrencyPicker = ({
       searchable
       value={value}
       onChange={(value) => onChange(value)}
-      onFocus={handleFocus}
       {...props}
     />
   );

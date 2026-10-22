@@ -6,6 +6,7 @@
    [clojure.test :refer :all]
    [java-time.api :as t]
    [metabase.driver :as driver]
+   [metabase.events.core :as events]
    [metabase.models.interface :as mi]
    [metabase.sync.core :as sync]
    [metabase.sync.sync-metadata :as sync-metadata]
@@ -13,10 +14,14 @@
    [metabase.sync.util :as sync-util]
    [metabase.task-history.models.task-history :as task-history]
    [metabase.test :as mt]
+   [metabase.test.fixtures :as fixtures]
    [metabase.test.util :as tu]
+   [metabase.util.quick-task :as quick-task]
    [toucan2.core :as t2]))
 
 (set! *warn-on-reflection* true)
+
+(use-fixtures :once (fixtures/initialize :db))
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                           Duplicate Sync Prevention                                            |
@@ -66,15 +71,14 @@
   [f]
   (let [step-info-atom           (atom [])
         created-task-history-ids (atom [])
-        orig-log-fn              @#'sync-util/log-sync-summary
-        origin-update-th!        @#'task-history/update-task-history!]
-    (with-redefs [sync-util/log-sync-summary        (fn [operation database operation-metadata]
-                                                      (swap! step-info-atom conj operation-metadata)
-                                                      (orig-log-fn operation database operation-metadata))
-
-                  task-history/update-task-history! (fn [th-id startime-ms info]
-                                                      (swap! created-task-history-ids conj th-id)
-                                                      (origin-update-th! th-id startime-ms info))]
+        orig-log-fn              (mt/original-fn #'sync-util/log-sync-summary)
+        origin-update-th!        (mt/original-fn #'task-history/update-task-history!)]
+    (mt/with-dynamic-fn-redefs [sync-util/log-sync-summary        (fn [operation database operation-metadata]
+                                                                    (swap! step-info-atom conj operation-metadata)
+                                                                    (orig-log-fn operation database operation-metadata))
+                                task-history/update-task-history! (fn [th-id startime-ms info]
+                                                                    (swap! created-task-history-ids conj th-id)
+                                                                    (origin-update-th! th-id startime-ms info))]
       (f))
     {:operation-results @step-info-atom
      :task-history-ids  @created-task-history-ids}))
@@ -112,7 +116,7 @@
   (let [process-name (mt/random-name)
         step-1-name  (mt/random-name)
         step-2-name  (mt/random-name)
-        sync-steps   [(sync-util/create-sync-step step-1-name (fn [_] (Thread/sleep 10) {:foo "bar"}))
+        sync-steps   [(sync-util/create-sync-step step-1-name (fn [_] (Thread/sleep 10) {:total-tables 1}))
                       (sync-util/create-sync-step step-2-name (fn [_] (Thread/sleep 10)))]
         mock-db      (mi/instance :model/Database {:name "test", :id 1, :engine :h2})
         [results]    (:operation-results
@@ -130,7 +134,7 @@
       (is (=? (merge default-task-history {:task process-name, :task_details nil})
               (fetch-task-history-row process-name))))
     (testing "step 1 history"
-      (is (=? (merge default-task-history {:task step-1-name, :task_details {:foo "bar"}})
+      (is (=? (merge default-task-history {:task step-1-name, :task_details {:total-tables 1}})
               (fetch-task-history-row step-1-name))))
     (testing "step 2 history"
       (is (=? (merge default-task-history {:task step-2-name, :task_details nil})
@@ -224,8 +228,8 @@
           (is (true?
                (str/includes? results "4.0 s"))))))))
 
-(derive ::sync-error-handling-begin ::sync-util/event)
-(derive ::sync-error-handling-end ::sync-util/event)
+(events/derive! ::sync-error-handling-begin ::sync-util/event)
+(events/derive! ::sync-error-handling-end ::sync-util/event)
 
 (deftest ^:parallel error-handling-test
   (testing "A ConnectException will cause sync to stop"
@@ -272,7 +276,6 @@
                                    (sync-util/create-sync-step "should-continue"
                                                                (fn [_]
                                                                  {}))]))]
-
         ;; make sure we've ran two steps. the first one will have thrown an exception,
         ;; but it wasn't an exception that can cause an abort.
         (is (= 2 (count (:steps actual))))
@@ -291,13 +294,11 @@
             db (t2/select-one :model/Database :id (mt/id))]
         (sync/sync-database! db)
         (is (= "complete" (t2/select-one-fn :initial_sync_status :model/Database :id (:id db))))))
-
     (testing "If `initial-sync-status` on a DB is `complete`, it remains `complete` when sync is run again"
       (let [_  (t2/update! :model/Database (mt/id) {:initial_sync_status "complete"})
             db (t2/select-one :model/Database :id (mt/id))]
         (sync/sync-database! db)
         (is (= "complete" (t2/select-one-fn :initial_sync_status :model/Database :id (:id db))))))
-
     (testing "If `initial-sync-status` on a table is `incomplete`, it is marked as `complete` after the sync-fks step
                        has finished"
       (let [table-id (t2/select-one-fn :id :model/Table :db_id (mt/id) :active true)
@@ -305,7 +306,6 @@
             _table   (t2/select-one :model/Table :id table-id)]
         (sync/sync-database! (mt/db))
         (is (= "complete" (t2/select-one-fn :initial_sync_status :model/Table :id table-id)))))
-
     (testing "Database and table syncs are marked as complete even if the initial scan is :schema only"
       (let [_        (t2/update! :model/Database (mt/id) {:initial_sync_status "incomplete"})
             db       (t2/select-one :model/Database :id (mt/id))
@@ -315,17 +315,15 @@
         (sync/sync-database! db {:scan :schema})
         (is (= "complete" (t2/select-one-fn :initial_sync_status :model/Database :id (:id db))))
         (is (= "complete" (t2/select-one-fn :initial_sync_status :model/Table :id table-id)))))
-
     (testing "If a non-recoverable error occurs during sync, `initial-sync-status` on the database is set to `aborted`"
       (let [_  (t2/update! :model/Database (mt/id) {:initial_sync_status "incomplete"})
             db (t2/select-one :model/Database :id (mt/id))]
-        (with-redefs [sync-metadata/make-sync-steps (fn [_]
-                                                      [(sync-util/create-sync-step
-                                                        "fake-step"
-                                                        (fn [_] (throw (java.net.ConnectException.))))])]
+        (mt/with-dynamic-fn-redefs [sync-metadata/make-sync-steps (fn [_]
+                                                                    [(sync-util/create-sync-step
+                                                                      "fake-step"
+                                                                      (fn [_] (throw (java.net.ConnectException.))))])]
           (sync/sync-database! db)
           (is (= "aborted" (t2/select-one-fn :initial_sync_status :model/Database :id (:id db)))))))
-
     (testing "If `initial-sync-status` is `aborted` for a database, it is set to `complete` the next time sync finishes
                        without error"
       (let [_  (t2/update! :model/Database (mt/id) {:initial_sync_status "complete"})
@@ -345,10 +343,10 @@
         (t2/update! :model/Table (:id inactive-table) {:initial_sync_status "complete" :active false})
         (let [syncing-chan   (a/chan)
               completed-chan (a/chan)]
-          (let [sync-fields! sync-fields/sync-fields!]
-            (with-redefs [sync-fields/sync-fields! (fn [database]
-                                                     (a/>!! syncing-chan ::syncing)
-                                                     (sync-fields! database))]
+          (let [sync-fields! (mt/original-fn #'sync-fields/sync-fields!)]
+            (mt/with-dynamic-fn-redefs [sync-fields/sync-fields! (fn [database]
+                                                                   (a/>!! syncing-chan ::syncing)
+                                                                   (sync-fields! database))]
               (future
                 (sync/sync-database! (mt/db))
                 (a/>!! completed-chan ::sync-completed))
@@ -373,3 +371,42 @@
            :sync db "test sync failure"
            (fn [] (throw (Exception. "sync boom"))))
           (is (< initial (mt/metric-value system :metabase-sync/failures {:driver "h2"}))))))))
+
+;;; +----------------------------------------------------------------------------------------------------------------+
+;;; |                                          Tables that take part in sync                                         |
+;;; +----------------------------------------------------------------------------------------------------------------+
+
+(defn- in-sync-tables? [table-id]
+  (contains? (into #{} (map :id) (sync-util/reducible-sync-tables (mt/id))) table-id))
+
+(defn- set-visibility-type-via-api! [table-id visibility-type]
+  (mt/user-http-request :crowberto :put 200 (format "table/%d" table-id) {:visibility_type visibility-type}))
+
+(deftest reducible-sync-tables-follows-user-visibility-test
+  (mt/with-dynamic-fn-redefs [quick-task/submit-task! (fn [_task])]
+    (testing "a visible table takes part in sync"
+      (mt/with-temp [:model/Table {table-id :id} {:db_id (mt/id) :name "VENUES"}]
+        (is (in-sync-tables? table-id))))
+    (testing "a table sync recorded as hidden is left out"
+      (mt/with-temp [:model/Table {table-id :id} {:db_id (mt/id) :name "VENUES" :visibility_type :hidden}]
+        (is (not (in-sync-tables? table-id)))))
+    (testing "a table hidden through PUT /api/table/:id is left out"
+      (mt/with-temp [:model/Table {table-id :id} {:db_id (mt/id) :name "VENUES"}]
+        (set-visibility-type-via-api! table-id "hidden")
+        (is (not (in-sync-tables? table-id)))))
+    (testing "a table hidden through the Data Studio data layer is left out"
+      (mt/with-temp [:model/Table {table-id :id} {:db_id (mt/id) :name "VENUES"}]
+        (mt/user-http-request :crowberto :post 200 "data-studio/table/edit" {:table_ids [table-id] :data_layer "hidden"})
+        (is (not (in-sync-tables? table-id)))))
+    (testing "a hidden table takes part in sync again once the user un-hides it"
+      (mt/with-temp [:model/Table {table-id :id} {:db_id (mt/id) :name "VENUES"}]
+        (set-visibility-type-via-api! table-id "hidden")
+        (set-visibility-type-via-api! table-id nil)
+        (is (in-sync-tables? table-id))))
+    (testing "a cruft table takes part in sync once the user sets its visibility_type to NULL"
+      (mt/with-temp [:model/Table {table-id :id} {:db_id (mt/id) :name "VENUES" :visibility_type :cruft}]
+        (is (not (in-sync-tables? table-id)))
+        (set-visibility-type-via-api! table-id nil)
+        (is (= {:visibility_type nil :visibility_type_set true}
+               (t2/select-one [:model/TableUserSettings :visibility_type :visibility_type_set] :table_id table-id)))
+        (is (in-sync-tables? table-id))))))

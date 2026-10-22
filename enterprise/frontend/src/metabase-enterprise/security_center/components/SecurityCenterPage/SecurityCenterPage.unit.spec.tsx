@@ -1,41 +1,66 @@
 import userEvent from "@testing-library/user-event";
 import fetchMock from "fetch-mock";
 
-import { setupRecentViewsAndSelectionsEndpoints } from "__support__/server-mocks";
+import {
+  setupRecentViewsAndSelectionsEndpoints,
+  setupSettingEndpoint,
+} from "__support__/server-mocks";
+import { createMockSettingsState } from "__support__/state";
 import { renderWithProviders, screen, within } from "__support__/ui";
-import type { Advisory } from "metabase-types/api";
-import { createMockVersion } from "metabase-types/api/mocks";
+import { getEolReachedMessage } from "metabase/admin/settings/components/widgets/VersionUpdateNotice/utils";
+import { Route } from "metabase/router";
+import type { Advisory, VersionInfo } from "metabase-types/api";
+import {
+  createMockMajorVersionSupport,
+  createMockVersion,
+  createMockVersionInfo,
+} from "metabase-types/api/mocks";
 import { createAdvisory } from "metabase-types/api/mocks/security-center";
-import { createMockSettingsState } from "metabase-types/store/mocks";
 
 import * as notificationHook from "../../hooks/use-notification-config";
 import * as advisoriesHook from "../../hooks/use-security-advisories";
 
 import { SecurityCenterPage } from "./SecurityCenterPage";
 
-jest.mock("metabase/common/components/AdminLayout/AdminSettingsLayout", () => ({
+jest.mock("metabase/admin/components/AdminLayout/AdminSettingsLayout", () => ({
   AdminSettingsLayout: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
+    <div data-testid="admin-settings-layout">{children}</div>
   ),
 }));
 
 const mockAcknowledge = jest.fn();
 const mockAcknowledgeAll = jest.fn();
 
+const PAST_EOL = "2000-06-01";
+
 function setup(
   advisories: Advisory[] = [],
-  { lastCheckedAt = null }: { lastCheckedAt?: string | null } = {},
+  {
+    lastCheckedAt = null,
+    initialRoute = "/",
+    isError = false,
+    versionInfo,
+  }: {
+    lastCheckedAt?: string | null;
+    initialRoute?: string;
+    isError?: boolean;
+    versionInfo?: VersionInfo;
+  } = {},
 ) {
   jest.spyOn(advisoriesHook, "useSecurityAdvisories").mockReturnValue({
     data: advisories,
     lastCheckedAt,
     isLoading: false,
-    isError: false,
+    isError,
     acknowledgeAdvisory: mockAcknowledge,
     acknowledgeAdvisories: mockAcknowledgeAll,
   });
 
   setupRecentViewsAndSelectionsEndpoints([], ["selections"]);
+  setupSettingEndpoint({
+    settingKey: "version-info",
+    settingValue: versionInfo ?? createMockVersionInfo(),
+  });
   jest.spyOn(notificationHook, "useNotificationConfigState").mockReturnValue({
     config: {
       email: {
@@ -57,7 +82,9 @@ function setup(
     resetConfig: jest.fn(),
   });
 
-  renderWithProviders(<SecurityCenterPage />, {
+  renderWithProviders(<Route path="*" element={<SecurityCenterPage />} />, {
+    withRouter: true,
+    initialRoute,
     storeInitialState: {
       settings: createMockSettingsState({
         version: createMockVersion({ tag: "v0.59.3" }),
@@ -78,6 +105,15 @@ describe("SecurityCenterPage", () => {
 
     expect(screen.getByText("Security Center")).toBeInTheDocument();
     expect(screen.getByTestId("current-version")).toHaveTextContent("v0.59.3");
+  });
+
+  it("renders the error state within the admin settings layout (GDGT-2748)", async () => {
+    setup([], { isError: true });
+
+    expect(
+      screen.getByText("Something went wrong loading security advisories."),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("admin-settings-layout")).toBeInTheDocument();
   });
 
   it("renders the empty state when there are no advisories", async () => {
@@ -151,6 +187,67 @@ describe("SecurityCenterPage", () => {
       "https://example.com/advisory/1",
     );
     expect(advisoryLink).toHaveAttribute("target", "_blank");
+  });
+
+  it("renders a single download button for the fix matching the instance's major version", async () => {
+    const advisories = [
+      createAdvisory({
+        advisory_id: "1",
+        match_status: "active",
+        affected_versions: [
+          { min: "0.58.0", fixed: "0.58.11" },
+          { min: "0.59.0", fixed: "0.59.11" },
+        ],
+        download_jar_urls: [
+          { version: "0.58.11", url: "https://downloads.example.com/58.jar" },
+          { version: "0.59.11", url: "https://downloads.example.com/59.jar" },
+        ],
+      }),
+    ];
+
+    setup(advisories);
+
+    expect(screen.queryByText("Download v0.58.11")).not.toBeInTheDocument();
+    const downloadButton = screen.getByRole("link", {
+      name: /Download v0.59.11/,
+    });
+    expect(downloadButton).toHaveAttribute(
+      "href",
+      "https://downloads.example.com/59.jar",
+    );
+    expect(downloadButton).toHaveAttribute("target", "_blank");
+  });
+
+  it("does not render a download button when there is no matching download url", async () => {
+    const advisories = [
+      createAdvisory({
+        advisory_id: "1",
+        match_status: "active",
+        affected_versions: [{ min: "0.59.0", fixed: "0.59.11" }],
+        download_jar_urls: [],
+      }),
+    ];
+
+    setup(advisories);
+
+    expect(screen.queryByText("Download v0.59.11")).not.toBeInTheDocument();
+  });
+
+  it("does not render a download button when the instance is not affected", async () => {
+    const advisories = [
+      createAdvisory({
+        advisory_id: "1",
+        match_status: "not_affected",
+        affected_versions: [{ min: "0.59.0", fixed: "0.59.11" }],
+        download_jar_urls: [
+          { version: "0.59.11", url: "https://downloads.example.com/59.jar" },
+        ],
+      }),
+    ];
+
+    setup(advisories);
+
+    expect(screen.queryByText("Download v0.59.11")).not.toBeInTheDocument();
   });
 
   it("calls acknowledgeAdvisory when dismiss button is clicked", async () => {
@@ -344,6 +441,57 @@ describe("SecurityCenterPage", () => {
       setup([]);
 
       expect(screen.queryByTestId("upgrade-banner")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("eol notice", () => {
+    const pastEolVersionInfo = createMockVersionInfo({
+      major_version_support: [
+        createMockMajorVersionSupport({ major: 59, eol: PAST_EOL }),
+      ],
+    });
+
+    it("shows the eol notice when the version is past eol and there is no upgrade target", async () => {
+      setup([], { versionInfo: pastEolVersionInfo });
+
+      const banner = await screen.findByTestId("upgrade-banner");
+      expect(banner).toHaveTextContent(getEolReachedMessage());
+    });
+
+    it("does not show the eol notice when an upgrade target is available", () => {
+      setup(
+        [
+          createAdvisory({
+            advisory_id: "1",
+            match_status: "active",
+            affected_versions: [{ min: "0.58.0", fixed: "0.59.4" }],
+          }),
+        ],
+        { versionInfo: pastEolVersionInfo },
+      );
+
+      expect(screen.getByTestId("upgrade-banner")).toBeInTheDocument();
+      expect(
+        screen.queryByText(getEolReachedMessage()),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("notification settings modal", () => {
+    it("opens the modal when the 'open=notifications' query param is set", async () => {
+      setup([], { initialRoute: "/?open=notifications" });
+
+      expect(
+        await screen.findByRole("dialog", { name: "Notification settings" }),
+      ).toBeInTheDocument();
+    });
+
+    it("does not open the modal when the query param is not set", async () => {
+      setup();
+
+      expect(
+        screen.queryByRole("dialog", { name: "Notification settings" }),
+      ).not.toBeInTheDocument();
     });
   });
 

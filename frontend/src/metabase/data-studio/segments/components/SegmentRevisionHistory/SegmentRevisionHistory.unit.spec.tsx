@@ -2,6 +2,7 @@ import {
   setupSegmentRevisionsEndpoint,
   setupSegmentRevisionsEndpointError,
 } from "__support__/server-mocks";
+import { createMockState } from "__support__/state";
 import {
   renderWithProviders,
   screen,
@@ -13,7 +14,6 @@ import {
   createMockSegment,
   createMockUser,
 } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { SegmentRevisionHistory } from "./SegmentRevisionHistory";
 

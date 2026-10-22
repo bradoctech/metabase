@@ -15,7 +15,6 @@
   (or (mr/registered-schema topic)
       :map))
 
-#_{:clj-kondo/ignore [:unused-private-var]}
 (defn- with-hydrate
   "Given a malli entry schema of a map, return a new entry schema with an additional option
   to hydrate information when sending system event notifications.
@@ -44,7 +43,7 @@
    [:user-id  pos-int?]
    [:object   [:fn #(t2/instance-of? :model/Collection %)]]])
 
- ;; collection write events
+;; collection write events
 
 (mr/def ::collection
   [:map {:closed true}
@@ -77,15 +76,22 @@
    [:user-id   [:maybe pos-int?]]
    [:object-id [:maybe pos-int?]]])
 
-(mr/def ::publicize
+(mr/def ::publicize-dashboard
   [:map {:closed true}
    [:user-id pos-int?]
-   [:object-id pos-int?]])
+   [:object-id pos-int?]
+   [:object [:fn #(t2/instance-of? :model/Dashboard %)]]])
 
-(mr/def :event/dashboard-public-link-created ::publicize)
-(mr/def :event/dashboard-public-link-deleted ::publicize)
-(mr/def :event/card-public-link-created ::publicize)
-(mr/def :event/card-public-link-deleted ::publicize)
+(mr/def ::publicize-card
+  [:map {:closed true}
+   [:user-id pos-int?]
+   [:object-id pos-int?]
+   [:object [:fn #(t2/instance-of? :model/Card %)]]])
+
+(mr/def :event/dashboard-public-link-created ::publicize-dashboard)
+(mr/def :event/dashboard-public-link-deleted ::publicize-dashboard)
+(mr/def :event/card-public-link-created ::publicize-card)
+(mr/def :event/card-public-link-deleted ::publicize-card)
 
 ;; user events
 
@@ -96,6 +102,13 @@
 (mr/def :event/user-login  ::user)
 (mr/def :event/user-joined ::user)
 
+(mr/def :event/user-credentials-revoked ::user)
+
+(mr/def :event/user-create
+  [:map {:closed true}
+   [:object [:map
+             [:id ms/PositiveInt]]]])
+
 (mr/def :event/user-invited
   [:map {:closed true}
    [:object [:map
@@ -103,12 +116,28 @@
              [:is_from_setup {:optional true} :boolean]
              [:first_name    {:optional true} [:maybe :string]]
              [:invite_method {:optional true} :string]
+             [:invite_target {:optional true}
+              [:map
+               [:type [:enum "dashboard" "question"]]
+               [:id   ms/PositiveInt]
+               [:name ms/NonBlankString]]]
              [:sso_source    {:optional true} [:maybe [:or :keyword :string]]]]]
    [:details {:optional true}
     [:map {:closed true}
      [:invitor [:map {:closed true}
                 [:email                       ms/Email]
                 [:first_name {:optional true} [:maybe :string]]]]]]])
+
+;; action events
+
+(mr/def ::action
+  [:map {:closed true}
+   [:user-id  [:maybe pos-int?]]
+   [:object   [:fn #(t2/instance-of? :model/Action %)]]])
+
+(mr/def :event/action-create ::action)
+(mr/def :event/action-update ::action)
+(mr/def :event/action-delete ::action)
 
 ;; segment events
 

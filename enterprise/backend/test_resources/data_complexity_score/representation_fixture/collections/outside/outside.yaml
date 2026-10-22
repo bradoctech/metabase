@@ -1,0 +1,5 @@
+name: Outside
+entity_id: OuTsIdEcOlL000000001
+slug: outside
+serdes/meta:
+- model: Collection

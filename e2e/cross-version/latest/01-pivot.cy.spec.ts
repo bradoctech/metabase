@@ -1,4 +1,4 @@
-import { Q1_NAME } from "../constants";
+import { Q1_NAME, XV_DATABASE_NAME } from "../constants";
 
 import * as X from "./helpers";
 
@@ -6,11 +6,15 @@ const { H } = cy;
 
 describe("Cross-version questions - pivot", () => {
   it("setup: creates a pivot table", { tags: ["@source"] }, () => {
-    H.restoreCrossVersionDev("00-complete");
     cy.signIn("admin", { skipCache: true });
 
     cy.log("-- Create a pivot table --");
-    X.startQuestionFromTable("People");
+    // Intentionally start from the root collection to prevent ambiguity
+    // in the collection picker when we attempt to save the question
+    cy.visit("/collection/root");
+    H.newButton("Question").click();
+    X.selectFromPopover(XV_DATABASE_NAME);
+    X.selectFromPopover("People");
 
     cy.log(
       "-- Add filter: Narrow down the states that start with K (only two) --",
@@ -52,7 +56,7 @@ describe("Cross-version questions - pivot", () => {
   it("verify: pivot table is preserved", { tags: ["@target"] }, () => {
     cy.signIn("admin", { skipCache: true });
 
-    cy.visit("/collection/root");
+    X.visitRootCollectionAndWait();
 
     cy.log(`-- ${Q1_NAME}: Assert that the pivot table viz is preserved --`);
     cy.findAllByTestId("collection-entry-name")
@@ -67,7 +71,5 @@ describe("Cross-version questions - pivot", () => {
       .and("contain", "Organic")
       .and("contain", "Row totals")
       .and("contain", "KS");
-
-    H.snapshotCrossVersionDev("01-complete");
   });
 });

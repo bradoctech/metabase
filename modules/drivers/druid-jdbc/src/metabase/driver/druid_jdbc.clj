@@ -15,6 +15,7 @@
    [metabase.driver.sql.query-processor :as sql.qp]
    [metabase.driver.sql.query-processor.util :as sql.qp.u]
    [metabase.util.honey-sql-2 :as h2x]
+   [metabase.util.i18n :refer [tru]]
    [metabase.util.json :as json]
    [metabase.util.log :as log]
    [metabase.util.performance :as perf :refer [mapv]])
@@ -24,24 +25,45 @@
 
 (set! *warn-on-reflection* true)
 
-(driver/register! :druid-jdbc :parent :sql-jdbc)
+(driver/register! :druid-jdbc :parent #{:sql-jdbc})
+
+(defmethod driver/host-carrying-parameters :druid-jdbc
+  [_driver]
+  ["url" "LB_URLS"])
+
+(defmethod driver/non-host-parameters :druid-jdbc
+  [_driver]
+  ["HOSTNAME_VERIFICATION"])
 
 (doseq [[feature supported?] {:set-timezone            true
                               :expression-aggregations true
-                              :expression-literals     true}]
+                              :expression-literals     true
+                              :native-pivot-tables     true}]
   (defmethod driver/database-supports? [:druid-jdbc feature] [_driver _feature _db] supported?))
+
+(defn- checked-connect-string-part
+  "`value` of the `detail` written into the Avatica connect string, refused when it carries the connect string's own
+  syntax: `;` starts another connection property, and quotes regroup what follows."
+  [detail value]
+  (let [s (str value)]
+    (when (re-find #"[;'\"\s]" s)
+      (throw (ex-info (tru "Invalid {0}." (name detail))
+                      {:status-code 400, :errors {detail (tru "must not contain spaces, quotes, or semicolons")}})))
+    s))
 
 (defmethod sql-jdbc.conn/connection-details->spec :druid-jdbc
   [driver {:keys [host port auth-enabled auth-username] :as db-details}]
-  (merge {:classname   "org.apache.calcite.avatica.remote.Driver"
-          :subprotocol "avatica:remote"
-          :subname     (str "url=" host ":" port "/druid/v2/sql/avatica/;transparent_reconnection=true")}
-         (when auth-enabled
-           {:user auth-username
-            :password (driver-api/secret-value-as-string driver db-details "auth-password")})
-         (when (some? (driver/report-timezone))
-           {:sqlTimeZone (driver/report-timezone)
-            :timeZone (driver/report-timezone)})))
+  (let [host (checked-connect-string-part :host host)
+        port (checked-connect-string-part :port port)]
+    (merge {:classname   "org.apache.calcite.avatica.remote.Driver"
+            :subprotocol "avatica:remote"
+            :subname     (str "url=" host ":" port "/druid/v2/sql/avatica/;transparent_reconnection=true")}
+           (when auth-enabled
+             {:user auth-username
+              :password (driver-api/secret-value-as-string driver db-details "auth-password")})
+           (when (some? (driver/report-timezone))
+             {:sqlTimeZone (driver/report-timezone)
+              :timeZone (driver/report-timezone)}))))
 
 (defmethod driver/db-default-timezone :druid-jdbc
   [_driver _database]
@@ -68,7 +90,8 @@
 (defmethod sql-jdbc.execute/read-column-thunk [:druid-jdbc Types/TIMESTAMP]
   [_driver ^ResultSet rs _rsmeta ^Long i]
   (fn []
-    (t/instant (.getObject rs i))))
+    (when-let [ts (.getObject rs i)]
+      (t/instant ts))))
 
 ;; Druid's COMPLEX<...> types are encoded as JDBC's other -- 1111. Values are rendered as string.
 (defmethod sql-jdbc.execute/read-column-thunk [:druid-jdbc Types/OTHER]
@@ -161,16 +184,27 @@
   [:length [:to_json_string json-field-identifier]])
 
 (defmethod sql.qp/->honeysql [:druid-jdbc :field]
-  [driver [_ id-or-name opts :as clause]]
+  [driver [_ opts id-or-name :as clause]]
   (let [stored-field  (when (integer? id-or-name)
                         (driver-api/field (driver-api/metadata-provider) id-or-name))
         parent-method (get-method sql.qp/->honeysql [:sql :field])
         identifier    (parent-method driver clause)]
     (if-not (driver-api/json-field? stored-field)
       identifier
-      (if (or (::sql.qp/forced-alias opts)
-              (= driver-api/qp.add.source (driver-api/qp.add.source-table opts)))
-        (keyword (driver-api/qp.add.source-alias opts))
+      (cond
+        (or (::sql.qp/forced-alias opts)
+            (= driver-api/qp.add.source (driver-api/qp.add.source-table opts)))
+        (h2x/identifier :field-alias (driver-api/qp.add.source-alias opts))
+
+        ;; The field is referenced through a join (source-table is a join-alias
+        ;; string). The join target is compiled as a subquery that already
+        ;; projects this nfc column with JSON extraction applied — reference the
+        ;; projected column directly instead of re-applying extraction, which
+        ;; would derive the wrong column name through nested projections. (#73198)
+        (string? (driver-api/qp.add.source-table opts))
+        identifier
+
+        :else
         (perf/postwalk #(if (h2x/identifier? %)
                           (sql.qp/json-query :druid-jdbc % stored-field)
                           %)

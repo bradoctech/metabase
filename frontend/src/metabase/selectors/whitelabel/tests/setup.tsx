@@ -2,10 +2,10 @@
 
 import { setupEnterpriseOnlyPlugin } from "__support__/enterprise";
 import { mockSettings } from "__support__/settings";
+import { createMockState } from "__support__/state";
 import { renderWithProviders } from "__support__/ui";
 import type { LoadingMessage, TokenFeatures } from "metabase-types/api";
 import { createMockTokenFeatures } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 export interface SetupOpts {
   loadingMessage?: LoadingMessage;

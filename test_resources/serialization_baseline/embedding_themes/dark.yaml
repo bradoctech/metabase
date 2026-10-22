@@ -1,0 +1,7 @@
+entity_id: cAGrIWAv42Lh6i9Jcpu0J
+name: Dark
+settings: {}
+serdes/meta:
+- id: cAGrIWAv42Lh6i9Jcpu0J
+  label: dark
+  model: EmbeddingTheme

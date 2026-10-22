@@ -2,6 +2,10 @@
   (:require
    [clojure.java.io :as io]
    [clojure.string :as str]
+   [mb.hawk.parallel]
+   [metabase.metabot.agent.profiles :as profiles]
+   [metabase.metabot.self.core :as self.core]
+   [metabase.metabot.tools :as metabot.tools]
    [metabase.util.json :as json]
    [metabase.util.log :as log]))
 
@@ -91,6 +95,19 @@
                     [{:type :tool-input-available :toolName (:function part) :toolCallId id}])))
    parts))
 
+(defn tool-boundary-error
+  "Run one tool call through the agent tool boundary — the path production uses — and
+  return the error message the model would see, or nil when the call was accepted."
+  [tool-name tool-var arguments]
+  (let [tools  (metabot.tools/wrap-tools-with-state {tool-name tool-var} (atom {}) nil nil)
+        chunks (parts->aisdk-chunks
+                [{:type :start :id "msg-boundary"}
+                 {:type :tool-input :id "call-boundary" :function tool-name :arguments arguments}])]
+    (-> (into [] (self.core/tool-executor-xf tools) chunks)
+        last
+        :error
+        :message)))
+
 (defn mock-llm-response
   "Create a mock LLM response (reducible) from high-level parts."
   [parts]
@@ -155,3 +172,19 @@
   "Tool map for tests — keyed by tool name string."
   (let [tool-defs (map #(%) [get-time-tool convert-currency-tool mock-llm-tool no-arg-tool])]
     (into {} (map (juxt :tool-name identity)) tool-defs)))
+
+;;; ──────────────────────────────────────────────────────────────────
+;;; Profiles
+;;; ──────────────────────────────────────────────────────────────────
+
+(defn do-with-registered-profile!
+  "Run `thunk` with `profile` registered in the agent profile registry, restoring the registry afterwards. For
+  profiles the application defines but does not register, such as [[profiles/explorations-profile]]."
+  [profile thunk]
+  (mb.hawk.parallel/assert-test-is-not-parallel "do-with-registered-profile!")
+  (let [registry @#'profiles/*profiles]
+    (try
+      (#'profiles/register-profile! profile)
+      (thunk)
+      (finally
+        (swap! registry dissoc (:name profile))))))

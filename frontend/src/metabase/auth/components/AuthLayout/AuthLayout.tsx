@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { t } from "ttag";
 
 import { LogoIcon } from "metabase/common/components/LogoIcon";
-import { getSubpathSafeUrl } from "metabase/lib/urls";
+import { getSubpathSafeUrl } from "metabase/urls";
 
 import {
   LayoutCard,

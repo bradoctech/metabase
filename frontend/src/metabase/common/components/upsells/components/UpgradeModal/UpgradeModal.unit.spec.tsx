@@ -6,9 +6,9 @@ import {
   setupGetPlanEndpoint,
   setupTrialAvailableEndpoint,
 } from "__support__/server-mocks";
+import { createMockState } from "__support__/state";
 import { renderWithProviders, screen } from "__support__/ui";
 import { createMockUser } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { UpgradeModal } from "./UpgradeModal";
 

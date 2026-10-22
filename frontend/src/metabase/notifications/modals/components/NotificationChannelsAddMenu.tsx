@@ -4,7 +4,7 @@ import { t } from "ttag";
 
 import { Link } from "metabase/common/components/Link/Link";
 import CS from "metabase/css/core/index.css";
-import { getNotificationHandlersGroupedByTypes } from "metabase/lib/notifications";
+import { getNotificationHandlersGroupedByTypes } from "metabase/notifications/utils";
 import { Button, Menu, Text } from "metabase/ui";
 import type {
   ChannelApiResponse,
@@ -50,6 +50,7 @@ export const NotificationChannelsAddMenu = ({
         result[item.channel_id] = true;
         return result;
       },
+      // Unjustified type cast. FIXME
       {} as { [key: number]: true },
     );
 

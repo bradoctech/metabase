@@ -1,0 +1,9 @@
+name: revenue
+entity_id: rEvEnUeEvEnTs000001
+archived: false
+table_id:
+- Sample Database
+- PUBLIC
+- events
+serdes/meta:
+- model: Measure

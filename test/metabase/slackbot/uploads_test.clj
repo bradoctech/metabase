@@ -3,6 +3,7 @@
    [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.test :refer :all]
+   [metabase.app-db.encryption-test-util :as encryption-tu]
    [metabase.channel.settings :as channel.settings]
    [metabase.slackbot.client :as slackbot.client]
    [metabase.slackbot.test-util :as tu]
@@ -15,7 +16,9 @@
 
 (set! *warn-on-reflection* true)
 
-(use-fixtures :once (fixtures/initialize :test-users))
+(use-fixtures :once
+  (fixtures/initialize :test-users)
+  (encryption-tu/with-encrypted-app-db-fixture tu/test-encryption-key))
 
 (defn- with-upload-mocks!
   "Helper to set up common mocks for CSV upload tests.
@@ -51,7 +54,34 @@
       (body-fn {:upload-calls   upload-calls
                 :download-calls download-calls}))))
 
-(deftest csv-upload-disabled-test
+(defn- failed-upload-result!
+  "Run one CSV file through [[slackbot.uploads/handle-file-uploads]] with
+   `create-csv-upload!` throwing `thrown`."
+  [thrown]
+  (with-upload-mocks!
+    {:uploads-enabled? true}
+    (fn [_]
+      (mt/with-dynamic-fn-redefs [upload.impl/create-csv-upload! (fn [_] (throw thrown))]
+        (slackbot.uploads/handle-file-uploads [tu/slack-csv-file])))))
+
+(deftest csv-upload-failure-message-test
+  (testing "a deliberate upload error keeps its message, filename attached"
+    (let [result (failed-upload-result! (ex-info "Uploads are not enabled." {:status-code 422}))]
+      (is (= "Uploads are not enabled."
+             (get-in result [:upload-result :results 0 :error])))
+      (is (str/includes? (-> result :system-messages first :content)
+                         "data.csv: Uploads are not enabled."))))
+  (testing "a driver error rewrapped with its raw message is replaced with the generic line"
+    (let [raw    "Connection to db.internal.example.com:5432 refused. Check that the hostname and port are correct."
+          result (failed-upload-result! (ex-info raw {:status-code 400} (java.sql.SQLException. raw)))]
+      (is (= @#'slackbot.uploads/generic-upload-error
+             (get-in result [:upload-result :results 0 :error])))))
+  (testing "a raw driver exception is replaced with the generic line"
+    (let [result (failed-upload-result! (java.sql.SQLException. "FATAL: password authentication failed for user \"metabase\""))]
+      (is (= @#'slackbot.uploads/generic-upload-error
+             (get-in result [:upload-result :results 0 :error]))))))
+
+(deftest ^:synchronized csv-upload-disabled-test
   (testing "POST /events with file upload when uploads are disabled"
     (tu/with-slackbot-setup
       (let [event-body (update tu/base-dm-event :event merge
@@ -77,7 +107,7 @@
                     (is (some #(= "CSV uploads are not enabled on this Metabase instance." %)
                               @append-text-calls))))))))))))
 
-(deftest csv-upload-success-test
+(deftest ^:synchronized csv-upload-success-test
   (testing "POST /events with successful CSV upload"
     (tu/with-slackbot-setup
       (let [event-body (update tu/base-dm-event :event merge
@@ -110,7 +140,7 @@
                     (is (some #(= "Your CSV has been uploaded successfully as a model." %)
                               @append-text-calls))))))))))))
 
-(deftest csv-upload-non-csv-skipped-test
+(deftest ^:synchronized csv-upload-non-csv-skipped-test
   (testing "POST /events with non-CSV file is skipped"
     (tu/with-slackbot-setup
       (let [event-body (update tu/base-dm-event :event merge
@@ -142,7 +172,7 @@
                     (is (some #(= "Only CSV files can be uploaded." %)
                               @append-text-calls))))))))))))
 
-(deftest csv-upload-non-csv-no-text-test
+(deftest ^:synchronized csv-upload-non-csv-no-text-test
   (testing "POST /events with non-CSV file and no text responds directly without AI"
     (tu/with-slackbot-setup
       ;; No :text field - user uploaded file without typing anything
@@ -178,12 +208,11 @@
                   (testing "no upload was attempted"
                     (is (= 0 (count @upload-calls))))
                   (testing "responds directly with skip message"
-                    #_{:clj-kondo/ignore [:unresolved-namespace]}
                     (let [message-text (:text (first @post-calls))]
                       (is (str/includes? message-text "can only process CSV and TSV"))
                       (is (str/includes? message-text "query_result.xlsx")))))))))))))
 
-(deftest csv-upload-mixed-files-test
+(deftest ^:synchronized csv-upload-mixed-files-test
   (testing "POST /events with mix of CSV and non-CSV files"
     (tu/with-slackbot-setup
       (let [event-body (update tu/base-dm-event :event merge
@@ -222,7 +251,7 @@
                   (testing "only CSV/TSV files were uploaded"
                     (is (= 2 (count @upload-calls)))))))))))))
 
-(deftest csv-upload-file-too-large-test
+(deftest ^:synchronized csv-upload-file-too-large-test
   (testing "POST /events with file exceeding size limit"
     (tu/with-slackbot-setup
       (let [too-large-size (inc (* 200 1024 1024)) ;; Just over 200MB
@@ -251,7 +280,7 @@
                   (testing "upload was not attempted"
                     (is (= 0 (count @upload-calls)))))))))))))
 
-(deftest csv-upload-no-permission-test
+(deftest ^:synchronized csv-upload-no-permission-test
   (testing "POST /events with file upload when user lacks permission"
     (tu/with-slackbot-setup
       (let [event-body (update tu/base-dm-event :event merge
@@ -304,4 +333,33 @@
     (is (false? (#'slackbot.uploads/csv-file? {:filetype "pdf"})))
     (is (false? (#'slackbot.uploads/csv-file? {:filetype "xlsx"})))
     (is (false? (#'slackbot.uploads/csv-file? {:filetype nil})))
-    (is (false? (#'slackbot.uploads/csv-file? {})))))
+    (is (false? (#'slackbot.uploads/csv-file? {}))))
+  (testing "a file stored outside Slack is refused whatever filetype it claims, ordinary upload modes are kept"
+    (is (true? (#'slackbot.uploads/remote-file? {:filetype "csv" :mode "external"})))
+    (is (false? (#'slackbot.uploads/remote-file? {:filetype "csv" :mode "snippet"})))
+    (is (false? (#'slackbot.uploads/remote-file? {:filetype "csv" :mode "hosted"})))
+    (is (false? (#'slackbot.uploads/remote-file? {:filetype "csv"})))))
+
+(deftest ^:parallel remote-files-are-reported-separately-test
+  (testing "a remote CSV is refused for being remote, not reported as an unsupported filetype"
+    (let [{:keys [skipped remote results]}
+          (#'slackbot.uploads/process-file-uploads
+           {:db_id 1}
+           [{:name "evil.csv" :filetype "csv" :mode "external" :url_private "https://evil.test/x.csv" :size 0}
+            {:name "notes.pdf" :filetype "pdf" :mode "hosted" :url_private "https://files.slack.com/notes.pdf" :size 10}])]
+      (is (= ["evil.csv"] remote))
+      (is (= ["notes.pdf"] skipped))
+      (is (empty? results)))))
+
+(deftest copy-to-file!-enforces-the-size-limit-test
+  (testing "a stream longer than the limit is refused, since the event only carries the size the sender declared"
+    (let [file (java.io.File/createTempFile "slackbot-cap-" ".csv")]
+      (try
+        (with-redefs-fn {#'slackbot.uploads/max-file-size-bytes 8}
+          (fn []
+            (is (thrown-with-msg? clojure.lang.ExceptionInfo #"exceeds"
+                                  (#'slackbot.uploads/copy-to-file!
+                                   (io/input-stream (.getBytes "0123456789abcdefghij"))
+                                   file
+                                   "big.csv")))))
+        (finally (io/delete-file file true))))))

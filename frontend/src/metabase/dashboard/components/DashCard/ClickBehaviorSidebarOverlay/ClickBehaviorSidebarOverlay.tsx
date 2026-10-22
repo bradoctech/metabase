@@ -2,9 +2,10 @@ import cx from "classnames";
 import { useCallback } from "react";
 import { t } from "ttag";
 
-import { getClickBehaviorDescription } from "metabase/lib/click-behavior";
 import { Box, Flex, Icon } from "metabase/ui";
 import type { DashboardCard, QuestionDashboardCard } from "metabase-types/api";
+
+import { getClickBehaviorDescription } from "../../../utils";
 
 import S from "./ClickBehaviorSidebarOverlay.module.css";
 
@@ -39,9 +40,9 @@ export function ClickBehaviorSidebarOverlay({
     <Flex align="center" justify="center" h="100%">
       <Flex
         component="button"
-        mb="md"
+        mb="lg"
         fw="bold"
-        px="md"
+        px="lg"
         py="sm"
         className={cx(S.Button, {
           [S.isActive]: isShowingThisClickBehaviorSidebar,
@@ -56,7 +57,7 @@ export function ClickBehaviorSidebarOverlay({
           })}
         />
         {dashcardWidth > MIN_WIDTH_FOR_ON_CLICK_LABEL && (
-          <Box component="span" display="block" mr="md">{t`On click`}</Box>
+          <Box component="span" display="block" mr="lg">{t`On click`}</Box>
         )}
         <Box
           component="span"

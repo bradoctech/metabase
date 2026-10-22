@@ -2,13 +2,13 @@ import type { ReactNode } from "react";
 import { useId } from "react";
 import { t } from "ttag";
 
-import { Ellipsified } from "metabase/common/components/Ellipsified";
+import { DateTime } from "metabase/common/components/DateTime";
 import { Link } from "metabase/common/components/Link";
 import { useNumberFormatter } from "metabase/common/hooks/use-number-formatter";
-import { isNullOrUndefined } from "metabase/lib/types";
-import { dependencyGraph } from "metabase/lib/urls/dependencies";
 import { PLUGIN_DEPENDENCIES } from "metabase/plugins";
-import { Group, Stack, Text } from "metabase/ui";
+import { Ellipsified, Group, Stack, Text } from "metabase/ui";
+import { dependencyGraph } from "metabase/urls/dependencies";
+import { isNullOrUndefined } from "metabase/utils/types";
 import type { Table } from "metabase-types/api";
 
 interface Props {
@@ -16,7 +16,6 @@ interface Props {
 }
 
 export function TableMetadata({ table }: Props) {
-  const formattedDate = new Date(table.updated_at).toLocaleString();
   const formatNumber = useNumberFormatter();
   const isDependenciesEnabled = PLUGIN_DEPENDENCIES.isEnabled;
 
@@ -27,9 +26,12 @@ export function TableMetadata({ table }: Props) {
     });
 
   return (
-    <Stack gap="md">
+    <Stack gap="lg">
       <MetadataRow label={t`Name in the database`} value={table.name} />
-      <MetadataRow label={t`Last updated at`} value={formattedDate} />
+      <MetadataRow
+        label={t`Last updated at`}
+        value={<DateTime value={table.updated_at} />}
+      />
       <MetadataRow
         label={t`View count`}
         value={formatNumber(table.view_count)}
@@ -95,7 +97,7 @@ function MetadataRow({
 }) {
   const id = useId();
   return (
-    <Group justify="space-between" gap="lg" wrap="nowrap">
+    <Group justify="space-between" gap="xl" wrap="nowrap">
       <Text size="md" c="text-primary" id={id} flex="1 0 auto">
         {label}
       </Text>

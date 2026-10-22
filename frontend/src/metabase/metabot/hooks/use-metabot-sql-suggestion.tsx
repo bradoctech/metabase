@@ -1,18 +1,18 @@
 import { isFulfilled, isRejected } from "@reduxjs/toolkit";
 import { useCallback, useMemo, useState } from "react";
 
-import { useDispatch, useSelector } from "metabase/lib/redux";
 import {
   METABOT_ERR_MSG,
   METABOT_PROFILE_OVERRIDES,
 } from "metabase/metabot/constants";
 import {
-  type MetabotErrorMessage,
+  type MetabotAgentTurnDisplayError,
   addDeveloperMessage,
   getMetabotSuggestedCodeEdit,
   removeSuggestedCodeEdit,
-  resetConversation,
+  startNewConversation,
 } from "metabase/metabot/state";
+import { useDispatch, useSelector } from "metabase/redux";
 import type { SuggestionModel } from "metabase/rich_text_editing/tiptap/extensions/shared/types";
 import type { DatabaseId } from "metabase-types/api";
 
@@ -32,11 +32,7 @@ const responseHasCodeEdit = (action: SubmitInputResult) => {
   return (
     isFulfilled(action) &&
     action.payload.data?.processedResponse.data.some(
-      (dp) =>
-        typeof dp === "object" &&
-        dp !== null &&
-        "type" in dp &&
-        (dp as { type: string }).type === "code_edit",
+      (dp) => dp.type === "data-code_edit",
     )
   );
 };
@@ -45,9 +41,10 @@ export function useMetabotSQLSuggestion({
   bufferId,
   onGenerated,
 }: UseMetabotSQLSuggestionOptions) {
-  const { isDoingScience, submitInput, cancelRequest } = useMetabotAgent("sql");
+  const { isDoingScience, submitInput, cancelRequest, conversationId } =
+    useMetabotAgent("sql");
 
-  const [error, setError] = useState<MetabotErrorMessage>();
+  const [error, setError] = useState<MetabotAgentTurnDisplayError>();
 
   const dispatch = useDispatch();
   const source = useSelector((state) =>
@@ -69,9 +66,7 @@ export function useMetabotSQLSuggestion({
       });
 
       const nextError =
-        isFulfilled(action) &&
-        !action.payload.success &&
-        action.payload.errorMessage;
+        isFulfilled(action) && !action.payload.success && action.payload.error;
 
       if (
         isRejected(action) ||
@@ -95,11 +90,11 @@ export function useMetabotSQLSuggestion({
   const reject = useCallback(() => {
     dispatch(
       addDeveloperMessage({
-        agentId: "sql",
+        conversationId,
         message: `User rejected the following suggestion:\n\n${source}`,
       }),
     );
-  }, [dispatch, source]);
+  }, [dispatch, source, conversationId]);
 
   const clear = useCallback(() => {
     dispatch(removeSuggestedCodeEdit(bufferId));
@@ -107,7 +102,7 @@ export function useMetabotSQLSuggestion({
 
   const reset = useCallback(() => {
     dispatch(removeSuggestedCodeEdit(bufferId));
-    dispatch(resetConversation({ agentId: "sql" }));
+    dispatch(startNewConversation({ agentId: "sql" }));
   }, [dispatch, bufferId]);
 
   const suggestionModels: SuggestionModel[] = useMemo(

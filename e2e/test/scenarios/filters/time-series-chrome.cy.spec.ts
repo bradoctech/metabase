@@ -27,7 +27,7 @@ describe("time-series chrome filter widget", () => {
       });
     });
 
-    it("should properly display the component and all its operators", () => {
+    it("should display all operators and stay in sync with the relative date filter", () => {
       const operators = [
         "Previous",
         "Next",
@@ -67,11 +67,10 @@ describe("time-series chrome filter widget", () => {
         cy.findByLabelText(/^Include/).should("not.exist");
         cy.button("Apply").should("not.be.disabled");
       });
-    });
 
-    it("should stay in sync with the relative date filter", () => {
-      cy.findByTestId("timeseries-filter-button").click();
-      updateOperator("All time", "Previous");
+      cy.findByRole("listbox")
+        .findByRole("option", { name: "Previous" })
+        .click();
 
       cy.log("Check the state of the time-series chrome");
       cy.findByTestId("date-filter-picker").within(() => {
@@ -82,20 +81,12 @@ describe("time-series chrome filter widget", () => {
 
         cy.log("Toggle should be always off initially");
         // This is targeting the input checkbox that is hidden
-        cy.findByLabelText("Include today").should(
-          "have.attr",
-          "aria-checked",
-          "false",
-        );
+        cy.findByLabelText("Include today").should("not.be.checked");
 
         // This is clicking on an actual label in the UI
-        cy.findByText("Include today").click();
+        cy.findByLabelText("Include today").click();
 
-        cy.findByLabelText("Include today").should(
-          "have.attr",
-          "aria-checked",
-          "true",
-        );
+        cy.findByLabelText("Include today").should("be.checked");
         cy.button("Apply").click();
         cy.wait("@dataset");
       });
@@ -114,21 +105,13 @@ describe("time-series chrome filter widget", () => {
           "true",
         );
 
-        cy.findByLabelText("Include today").should(
-          "have.attr",
-          "aria-checked",
-          "true",
-        );
+        cy.findByLabelText("Include today").should("be.checked");
 
         cy.log(
           "Switch should preserve its state after we change the direction",
         );
         cy.findByRole("tab", { name: "Next" }).click();
-        cy.findByLabelText("Include today").should(
-          "have.attr",
-          "aria-checked",
-          "true",
-        );
+        cy.findByLabelText("Include today").should("be.checked");
       });
     });
   });
@@ -197,7 +180,7 @@ describe("time-series chrome filter widget", () => {
         );
 
         // Toggle off
-        cy.findByText("Include this quarter").click();
+        cy.findByLabelText("Include this quarter").click();
       });
 
       cy.log("Change the direction");
@@ -222,9 +205,10 @@ describe("time-series chrome filter widget", () => {
       });
 
       updateOperator("Next", "Current");
-      cy.findByTestId("date-filter-picker")
-        .findByLabelText("Include today")
-        .should("not.exist");
+      cy.findByTestId("date-filter-picker").within(() => {
+        cy.findByDisplayValue("Current").should("be.visible");
+        cy.findByLabelText("Include this year").should("not.exist");
+      });
 
       updateOperator("Current", "Previous");
       cy.findByTestId("date-filter-picker").within(() => {

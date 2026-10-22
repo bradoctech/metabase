@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { jt, t } from "ttag";
 
-import { hasFeature } from "metabase/admin/databases/utils";
 import {
   usePersistDatabaseMutation,
   useUnpersistDatabaseMutation,
 } from "metabase/api";
+import { findErrorMessage } from "metabase/api/utils/errors";
 import { ExternalLink } from "metabase/common/components/ExternalLink";
-import { useDocsUrl, useSetting } from "metabase/common/hooks";
+import { useDocsUrl } from "metabase/common/hooks";
+import { hasFeature } from "metabase/databases";
+import { useSetting } from "metabase/settings";
 import { Alert, Box, Flex, Icon, Switch } from "metabase/ui";
 import { getModelCacheSchemaName } from "metabase-lib/v1/metadata/utils/models";
 import type { Database } from "metabase-types/api";
@@ -17,16 +19,6 @@ import { Description, Error, Label } from "../../DatabaseFeatureComponents";
 interface Props {
   database: Database;
   disabled: boolean;
-}
-
-interface ErrorResponse {
-  data?: {
-    message?: string;
-  };
-}
-
-function isLackPermissionsError(response: ErrorResponse) {
-  return response?.data?.message?.startsWith("Lack permissions");
 }
 
 export function ModelCachingControl({ database, disabled }: Props) {
@@ -50,13 +42,13 @@ export function ModelCachingControl({ database, disabled }: Props) {
         await persistDatabase(databaseId).unwrap();
       }
     } catch (error) {
-      const response = error as ErrorResponse;
-      if (isLackPermissionsError(response)) {
+      const message = findErrorMessage(error);
+      if (message?.startsWith("Lack permissions")) {
         setError(
           t`For models to be cached, the user should have create table permission or create schema permission in this database.`,
         );
       } else {
-        setError(response.data?.message || t`An error occurred`);
+        setError(message ?? t`An error occurred`);
       }
       throw error;
     }
@@ -66,7 +58,7 @@ export function ModelCachingControl({ database, disabled }: Props) {
 
   return (
     <div>
-      <Flex align="center" justify="space-between" mb="xs">
+      <Flex align="center" justify="space-between" mb="xxs">
         <Label htmlFor="model-persistence-toggle">{t`Model persistence`}</Label>
         <Box>
           <Switch
@@ -91,10 +83,10 @@ export function ModelCachingControl({ database, disabled }: Props) {
       {disabled && (
         <Box>
           <Alert
+            size="compact"
             variant="light"
-            color="info"
             icon={<Icon name="info" />}
-            mb="md"
+            mb="lg"
           >
             {t`Model persistence can't be enabled when database routing is enabled.`}
           </Alert>

@@ -1,7 +1,7 @@
+import { createMockState } from "__support__/state";
 import { renderWithProviders, screen } from "__support__/ui";
 import type { User } from "metabase-types/api";
 import { createMockUser } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { HomeLayout } from "./HomeLayout";
 

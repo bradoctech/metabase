@@ -3,8 +3,7 @@ import { useCallback } from "react";
 import { t } from "ttag";
 
 import CS from "metabase/css/core/index.css";
-import { isTableDisplay } from "metabase/lib/click-behavior";
-import type { IconName } from "metabase/ui";
+import { hasColumnLevelClickBehavior } from "metabase/dashboard/utils";
 import type { UiParameter } from "metabase-lib/v1/parameters/types";
 import type {
   ArbitraryCustomDestinationClickBehavior,
@@ -12,6 +11,7 @@ import type {
   CustomDestinationClickBehavior,
   CustomDestinationClickBehaviorLinkType,
   DashboardCard,
+  IconName,
 } from "metabase-types/api";
 
 import { SidebarContent } from "../ClickBehaviorSidebarComponents";
@@ -96,11 +96,12 @@ export function LinkOptions({
               clickBehavior={clickBehavior}
               updateSettings={updateSettings}
             />
-            {isTableDisplay(dashcard) && (
+            {hasColumnLevelClickBehavior(dashcard) && (
               <div>
                 <CustomLinkText
                   updateSettings={updateSettings}
                   clickBehavior={
+                    // Unjustified type cast. FIXME
                     clickBehavior as unknown as ArbitraryCustomDestinationClickBehavior
                   }
                 />

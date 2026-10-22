@@ -1,0 +1,6 @@
+name: Audit Database
+entity_id: aUdItDaTaBaSe0000001
+engine: h2
+is_audit: true
+serdes/meta:
+- model: Database

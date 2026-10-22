@@ -6,9 +6,11 @@
    [java-time.api :as t]
    [metabase.driver :as driver]
    [metabase.notification.test-util :as notification.tu]
+   [metabase.pulse.db :as pulse.db]
    [metabase.pulse.models.pulse-channel-test :as pulse-channel-test]
    [metabase.pulse.send :as pulse.send]
    [metabase.pulse.task.send-pulses :as task.send-pulses]
+   [metabase.pulse.task.send-pulses-trigger :as task.send-pulses-trigger]
    [metabase.task.core :as task]
    [metabase.test :as mt]
    [metabase.test.util :as mt.util]
@@ -27,7 +29,6 @@
         (is (= 0
                (t2/count :model/PulseChannel)))
         (is (:archived (t2/select-one :model/Pulse :id pulse-id)))))
-
     (testing "emails"
       (testing "keep if has PulseChannelRecipient"
         (mt/with-temp [:model/Pulse                 {pulse-id :id} {}
@@ -38,7 +39,6 @@
           (#'task.send-pulses/clear-pulse-channels-no-recipients! pulse-id)
           (is (= 1
                  (t2/count :model/PulseChannel)))))
-
       (testing "keep if has external email"
         (mt/with-temp [:model/Pulse        {pulse-id :id} {}
                        :model/PulseChannel _ {:pulse_id     pulse-id
@@ -47,7 +47,6 @@
           (#'task.send-pulses/clear-pulse-channels-no-recipients! pulse-id)
           (is (= 1
                  (t2/count :model/PulseChannel)))))
-
       (testing "clear if no recipients"
         (mt/with-temp [:model/Pulse        {pulse-id :id} {}
                        :model/PulseChannel _ {:pulse_id     pulse-id
@@ -55,7 +54,6 @@
           (#'task.send-pulses/clear-pulse-channels-no-recipients! pulse-id)
           (is (= 0
                  (t2/count :model/PulseChannel))))))
-
     (testing "slack"
       (testing "Has channel"
         (mt/with-temp [:model/Pulse        {pulse-id :id} {}
@@ -65,7 +63,6 @@
           (#'task.send-pulses/clear-pulse-channels-no-recipients! pulse-id)
           (is (= 1
                  (t2/count :model/PulseChannel)))))
-
       (testing "No channel"
         (mt/with-temp [:model/Pulse        {pulse-id :id} {}
                        :model/PulseChannel _ {:pulse_id     pulse-id
@@ -74,7 +71,6 @@
           (#'task.send-pulses/clear-pulse-channels-no-recipients! pulse-id)
           (is (= 0
                  (t2/count :model/PulseChannel))))))
-
     (testing "http"
       (testing "do not clear if has a channel_id"
         (mt/with-temp [:model/Channel {channel-id :id} {:type :channel/metabase-test
@@ -86,7 +82,6 @@
           (#'task.send-pulses/clear-pulse-channels-no-recipients! pulse-id)
           (is (= 1
                  (t2/count :model/PulseChannel)))))
-
       (testing "clear if there is no channel_id"
         (mt/with-temp [:model/Pulse  {pulse-id :id} {}
                        :model/PulseChannel _ {:pulse_id     pulse-id
@@ -110,8 +105,8 @@
 (deftest send-pulse!*-delete-pcs-no-recipients-test
   (testing "send-pulse!* should delete PulseChannels and only send to enabled channels"
     (let [sent-channel-ids (atom #{})]
-      (with-redefs [pulse.send/send-pulse! (fn [_pulse-id & {:keys [channel-ids]}]
-                                             (swap! sent-channel-ids set/union channel-ids))]
+      (mt/with-dynamic-fn-redefs [pulse.send/send-pulse! (fn [_pulse-id & {:keys [channel-ids]}]
+                                                           (swap! sent-channel-ids set/union channel-ids))]
         (mt/with-temp
           [:model/Pulse        {pulse :id}            {}
            :model/PulseChannel {pc :id}               (merge
@@ -133,9 +128,45 @@
           (#'task.send-pulses/send-pulse!* pulse #{pc pc-disabled pc-no-recipient})
           (testing "only send to enabled channels that has recipients"
             (is (= #{pc} @sent-channel-ids)))
-
           (testing "channels that has no recipients are deleted"
             (is (false? (t2/exists? :model/PulseChannel pc-no-recipient)))))))))
+
+(deftest send-pulse!*-skips-archived-dashboard-test
+  (testing "a trigger firing for a trashed Dashboard sends nothing and records no task run"
+    (let [sent-channel-ids (atom #{})]
+      (mt/with-dynamic-fn-redefs [pulse.send/send-pulse! (fn [_pulse & {:keys [channel-ids]}]
+                                                           (swap! sent-channel-ids set/union channel-ids))]
+        (mt/with-temp [:model/Dashboard    {dash-id :id}  {}
+                       :model/Pulse        {pulse-id :id} {:dashboard_id dash-id}
+                       :model/PulseChannel {pc-id :id}    (merge {:pulse_id     pulse-id
+                                                                  :channel_type :slack
+                                                                  :details      {:channel "#random"}}
+                                                                 daily-at-1am)]
+          ;; keyed on the Dashboard rather than the Pulse: subscription runs are recorded this way on both the Pulse and
+          ;; the Notification send paths
+          (let [task-runs #(t2/select-pks-set :model/TaskRun :entity_type :dashboard :entity_id dash-id)]
+            (try
+              (t2/update! :model/Dashboard dash-id {:archived true})
+              (#'task.send-pulses/send-pulse!* pulse-id #{pc-id})
+              (is (= #{} @sent-channel-ids))
+              (is (empty? (task-runs)))
+              (testing "once the Dashboard is restored, the same fire sends and records a task run"
+                (t2/update! :model/Dashboard dash-id {:archived false})
+                (#'task.send-pulses/send-pulse!* pulse-id #{pc-id})
+                (is (= #{pc-id} @sent-channel-ids))
+                (is (= 1 (count (task-runs)))))
+              (finally
+                (t2/delete! :model/TaskHistory :run_id [:in (conj (task-runs) -1)])
+                (t2/delete! :model/TaskRun :entity_type :dashboard :entity_id dash-id)))))))))
+
+(deftest dashboard-archived?-test
+  (mt/with-temp [:model/Dashboard {live-id :id}     {}
+                 :model/Dashboard {archived-id :id} {:archived true}]
+    (is (false? (pulse.db/dashboard-archived? live-id)))
+    (is (true? (pulse.db/dashboard-archived? archived-id)))
+    (testing "a Pulse with no Dashboard, or a missing Dashboard, is not archived"
+      (is (false? (pulse.db/dashboard-archived? nil)))
+      (is (false? (pulse.db/dashboard-archived? Integer/MAX_VALUE))))))
 
 (deftest init-dashboard-subscription-triggers!-group-runs-test
   (testing "a SendPulse trigger will send pulse to channels that have the same schedueld time"
@@ -197,7 +228,7 @@
           (testing "sanity check that there are no triggers"
             (is (empty? (all-send-pulse-triggers))))
           (testing "init-send-pulse-triggers! should create triggers for each pulse-channel"
-            (#'task.send-pulses/init-dashboard-subscription-triggers!)
+            (#'task.send-pulses-trigger/init-dashboard-subscription-triggers!)
             (is (=? #{(pulse-channel-test/pulse->trigger-info pulse-1 daily-at-1am [pc-1-1 pc-1-2])
                       ;; pc-2-1 has the same schedule as pc-1-1 and pc-1-2 but it's not on the same trigger because it's a
                       ;; different schedule
@@ -212,8 +243,13 @@
     (pulse-channel-test/with-send-pulse-setup!
       (mt/with-model-cleanup [:model/Pulse]
         (let [sent-channel-ids (atom #{})]
+          ;; with-redefs (cross-thread): quartz scheduler threads don't inherit *local-redefs*
+          ;; [kondo-keep] suppresses a warning :redundant-ignore can't see; --audit rechecks
+          #_{:clj-kondo/ignore [:metabase/prefer-with-dynamic-fn-redefs]}
           (with-redefs [;; run the job every second
                         u.cron/schedule-map->cron-string (constantly "* * * 1/1 * ? *")
+                        ;; quartz scheduler threads don't inherit *local-redefs*, so we have to swap the
+                        ;; root — see dynamic-redefs.clj docstring
                         task.send-pulses/send-pulse!     (fn [_pulse-id channel-ids]
                                                            (swap! sent-channel-ids set/union channel-ids))]
             (let [pc-count  (+ 2 mt.util/in-memory-scheduler-thread-count)
@@ -228,7 +264,6 @@
                                                                daily-at-6pm)))]
               (testing "sanity check that we have the correct number of triggers and no channel has been sent yet"
                 (is (= pc-count (->> pulse-ids (map pulse-channel-test/send-pulse-triggers) (apply set/union) count))))
-
               (testing "make sure that all channels will be sent even though number of jobs exceed the thread pool"
                 (u/poll {:thunk      (fn [] @sent-channel-ids)
                          :done?      #(= pc-count (count %))
@@ -243,7 +278,11 @@
           (notification.tu/with-captured-channel-send!
             (let [sent-pulse-ids (atom #{})
                   send-pulse-called (atom 0)
-                  original-send-pulse!* @#'task.send-pulses/send-pulse!*]
+                  original-send-pulse!* (mt/original-fn #'task.send-pulses/send-pulse!*)]
+              ;; quartz scheduler threads don't inherit *local-redefs*, so we have to swap the
+              ;; root — see dynamic-redefs.clj docstring
+              ;; [kondo-keep] suppresses a warning :redundant-ignore can't see; --audit rechecks
+              #_{:clj-kondo/ignore [:metabase/prefer-with-dynamic-fn-redefs]}
               (with-redefs [;; run the job every second - must be before creating PulseChannel
                             u.cron/schedule-map->cron-string (constantly "* * * 1/1 * ? *")
                             task.send-pulses/send-pulse!*    (fn [pulse-id channel-ids]
@@ -261,13 +300,11 @@
                                                             daily-at-6pm)]
                   (testing "trigger exists after creation"
                     (is (= 1 (count (pulse-channel-test/send-pulse-triggers pulse-id)))))
-
                   (testing "waiting for cron job to fire"
                     (is (u/poll {:thunk      #(pos? @send-pulse-called)
                                  :done?      identity
                                  :timeout-ms 5000})
                         "send-pulse!* was never called - cron job may not be firing"))
-
                   (testing "alert was not sent (no call to pulse.send/send-pulse!)"
                     (is (empty? @sent-pulse-ids))))))))))))
 
@@ -307,7 +344,6 @@
         ;; if its want to be fired at 8 am utc+7, then it should be fired at 1am utc
         (is (= (next-fire-hour 1)
                (send-pusle-triggers-next-fire-time pulse)))))
-
     (mt/with-temporary-setting-values [report-timezone "UTC"]
       (mt/with-temp
         [:model/Pulse        {pulse :id} {}
@@ -357,7 +393,7 @@
           (testing "sanity check that it has triggers to begin with"
             (is (not-empty pulse-triggers)))
           (testing "init send pulse triggers are idempotent if the pulse channel doesn't change"
-            (#'task.send-pulses/init-dashboard-subscription-triggers!)
+            (#'task.send-pulses-trigger/init-dashboard-subscription-triggers!)
             (is (= pulse-triggers (pulse-channel-test/send-pulse-triggers pulse-id)))))))))
 
 (deftest init-send-pulse-triggers-skip-alert-test
@@ -371,4 +407,4 @@
                                               :channel_type :slack
                                               :details      {:channel "#random"}}
                                              daily-at-1am)]
-        (is (not (contains? (set (map :id (#'task.send-pulses/active-dashsub-pcs))) pc-id)))))))
+        (is (not (contains? (set (map :id (#'task.send-pulses-trigger/active-dashsub-pcs))) pc-id)))))))

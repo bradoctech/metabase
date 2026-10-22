@@ -2,15 +2,16 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { t } from "ttag";
 
-import { useHasTokenFeature, useSetting } from "metabase/common/hooks";
-import { EmbeddingHubHomePage } from "metabase/embedding/embedding-hub";
-import { useSelector } from "metabase/lib/redux";
-import { getUser, getUserIsAdmin } from "metabase/selectors/user";
+import { useHasTokenFeature } from "metabase/common/hooks";
+import { getUser, getUserIsAdmin } from "metabase/current-user";
+import { useSelector } from "metabase/redux";
 import { getLandingPageIllustration } from "metabase/selectors/whitelabel";
+import { useSetting } from "metabase/settings";
 import { Box, Button, Icon, Tooltip } from "metabase/ui";
 
 import { CustomHomePageModal } from "../CustomHomePageModal";
 import { HomeGreeting } from "../HomeGreeting";
+import { SetupGuideHomePage } from "../SetupGuideHomePage";
 
 interface HomeLayoutProps {
   children?: ReactNode;
@@ -30,7 +31,7 @@ export const HomeLayout = ({ children }: HomeLayoutProps): ReactNode => {
     user?.is_superuser &&
     isSimpleEmbeddingAvailable
   ) {
-    return <EmbeddingHubHomePage />;
+    return <SetupGuideHomePage />;
   }
 
   return (

@@ -7,17 +7,12 @@ import type { VisualizationSettings } from "metabase-types/api";
  */
 export function removeInternalClickBehaviors(
   computedSettings: VisualizationSettings,
-) {
-  if (
-    computedSettings.click_behavior &&
-    computedSettings.click_behavior.type === "link" &&
-    computedSettings.click_behavior.linkType !== "url"
-  ) {
-    return {
-      ...computedSettings,
-      click_behavior: undefined,
-    };
+): VisualizationSettings {
+  const { click_behavior } = computedSettings;
+  if (click_behavior?.type === "link" && click_behavior.linkType !== "url") {
+    return { ...computedSettings, click_behavior: undefined };
   }
+
   return computedSettings;
 }
 

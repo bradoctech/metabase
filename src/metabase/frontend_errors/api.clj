@@ -1,6 +1,6 @@
 (ns metabase.frontend-errors.api
   (:require
-   [metabase.analytics.prometheus :as prometheus]
+   [metabase.analytics-interface.core :as analytics]
    [metabase.api.common :as api]
    [metabase.api.macros :as api.macros]
    [metabase.request.core :as request]
@@ -46,9 +46,9 @@
    with the given `type` label."
   [_route-params
    _query-params
-   {:keys [type]} :- [:map [:type ::frontend-error-type]]
+   {:keys [type]} :- [:map {:closed true} [:type ::frontend-error-type]]
    _req]
-  (prometheus/inc! :metabase-frontend/errors {:type type})
+  (analytics/inc! :metabase-frontend/errors {:type type})
   api/generic-204-no-content)
 
 (def ^{:arglists '([request respond raise])} routes

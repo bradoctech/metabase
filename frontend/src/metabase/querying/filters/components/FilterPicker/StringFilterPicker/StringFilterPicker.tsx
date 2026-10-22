@@ -2,7 +2,10 @@ import type { FormEvent } from "react";
 import { useMemo } from "react";
 import { t } from "ttag";
 
-import { Box, Checkbox, Flex, MultiAutocomplete } from "metabase/ui";
+import { skipToken, useGetDatabaseQuery } from "metabase/api";
+import { MultiAutocompleteWithTranslation } from "metabase/common/components/MultiAutocomplete";
+import { hasFeature } from "metabase/databases";
+import { Box, Checkbox, Flex } from "metabase/ui";
 import * as Lib from "metabase-lib";
 
 import { FilterOperatorPicker } from "../FilterOperatorPicker";
@@ -32,6 +35,16 @@ export function StringFilterPicker({
     () => Lib.displayInfo(query, stageIndex, column),
     [query, stageIndex, column],
   );
+
+  const databaseId = Lib.databaseID(query);
+  const { data: database } = useGetDatabaseQuery(
+    databaseId != null ? { id: databaseId } : skipToken,
+  );
+  // An unknown database keeps the option available rather than hiding a
+  // control the database probably supports.
+  const supportsCaseSensitivity =
+    database == null ||
+    hasFeature(database, "case-sensitivity-string-filter-options");
 
   const {
     type,
@@ -108,7 +121,7 @@ export function StringFilterPicker({
           withSubmitButton={withSubmitButton}
           onAddButtonClick={handleAddButtonClick}
         >
-          {type === "partial" && (
+          {type === "partial" && supportsCaseSensitivity && (
             <CaseSensitiveOption
               value={options.caseSensitive ?? false}
               onChange={(newValue) => setOptions({ caseSensitive: newValue })}
@@ -141,7 +154,7 @@ function StringValueInput({
 }: StringValueInputProps) {
   if (type === "exact") {
     return (
-      <Box p="md" pb={0} mah="25vh" style={{ overflow: "auto" }}>
+      <Box p="lg" pb={0} mah="25vh" style={{ overflow: "auto" }}>
         <StringFilterValuePicker
           query={query}
           stageIndex={stageIndex}
@@ -151,22 +164,22 @@ function StringValueInput({
           autoFocus={autoFocus}
           onChange={onChange}
         />
-        <Box pt="md" />
+        <Box pt="lg" />
       </Box>
     );
   }
 
   if (type === "partial") {
     return (
-      <Box p="md" pb={0} mah="40vh" style={{ overflow: "auto" }}>
-        <MultiAutocomplete
+      <Box p="lg" pb={0} mah="40vh" style={{ overflow: "auto" }}>
+        <MultiAutocompleteWithTranslation
           value={values}
           placeholder={t`Enter some text`}
           comboboxProps={COMBOBOX_PROPS}
           aria-label={t`Filter value`}
           onChange={onChange}
         />
-        <Box pt="md" />
+        <Box pt="lg" />
       </Box>
     );
   }
@@ -183,7 +196,6 @@ function CaseSensitiveOption({ value, onChange }: CaseSensitiveOptionProps) {
   return (
     <Flex align="center" px="sm">
       <Checkbox
-        size="xs"
         label={t`Case sensitive`}
         checked={value}
         onChange={(e) => onChange(e.target.checked)}

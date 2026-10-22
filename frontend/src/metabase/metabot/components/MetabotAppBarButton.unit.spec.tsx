@@ -1,9 +1,13 @@
 import userEvent from "@testing-library/user-event";
+import fetchMock from "fetch-mock";
 
 import { setupEnterprisePlugins } from "__support__/enterprise";
 import { mockSettings } from "__support__/settings";
-import { renderWithProviders, screen } from "__support__/ui";
-import { createMockState } from "metabase-types/store/mocks";
+import { createMockState } from "__support__/state";
+import { renderWithProviders, screen, waitFor } from "__support__/ui";
+import { Route } from "metabase/router";
+import type { UserMetabotPermissions } from "metabase-types/api";
+import { createMockUserMetabotPermissions } from "metabase-types/api/mocks";
 
 import { MetabotProvider } from "../context";
 
@@ -11,18 +15,37 @@ import { MetabotAppBarButton } from "./MetabotAppBarButton";
 
 function setup({
   isMetabotEnabled = true,
-}: { isMetabotEnabled?: boolean } = {}) {
+  isConfigured = true,
+  permissionOverrides,
+  pathname = "/",
+}: {
+  isMetabotEnabled?: boolean;
+  isConfigured?: boolean;
+  permissionOverrides?: Partial<UserMetabotPermissions>;
+  pathname?: string;
+} = {}) {
+  fetchMock.get(
+    "path:/api/metabot/permissions/user-permissions",
+    createMockUserMetabotPermissions(permissionOverrides),
+  );
+
   const settings = mockSettings({
-    "llm-metabot-configured?": true,
+    "llm-metabot-configured?": isConfigured,
     "metabot-enabled?": isMetabotEnabled,
   });
   setupEnterprisePlugins();
 
-  const { store } = renderWithProviders(
+  const TestComponent = () => (
     <MetabotProvider>
       <MetabotAppBarButton />
-    </MetabotProvider>,
+    </MetabotProvider>
+  );
+
+  const { store } = renderWithProviders(
+    <Route path="*" element={<TestComponent />} />,
     {
+      withRouter: true,
+      initialRoute: pathname,
       storeInitialState: createMockState({
         settings,
       }),
@@ -33,31 +56,72 @@ function setup({
 }
 
 describe("MetabotAppBarButton", () => {
-  it("should render the button when metabot is enabled", () => {
+  it("should render the button when metabot is enabled", async () => {
     setup({ isMetabotEnabled: true });
     expect(
-      screen.getByRole("button", { name: /Chat with Metabot/ }),
+      await screen.findByRole("button", { name: /Chat with Metabot/ }),
     ).toBeInTheDocument();
   });
 
-  it("should not render the button when metabot is disabled", () => {
+  it("should render the button when metabot is enabled but not configured", async () => {
+    setup({ isConfigured: false, isMetabotEnabled: true });
+    expect(
+      await screen.findByRole("button", { name: /Chat with Metabot/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("should not render the button when metabot is globally disabled", () => {
     setup({ isMetabotEnabled: false });
     expect(
       screen.queryByRole("button", { name: /Chat with Metabot/ }),
     ).not.toBeInTheDocument();
   });
 
+  it("should not render the button when user lacks metabot permission", async () => {
+    setup({ permissionOverrides: { metabot: "no" } });
+    // Wait for the API response to be processed
+    await waitFor(() => {
+      expect(fetchMock.callHistory.calls().length).toBeGreaterThan(0);
+    });
+    expect(
+      screen.queryByRole("button", { name: /Chat with Metabot/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    "/question/ask",
+    "/question/ask/",
+    "/metabot/conversation/past-conversation-id",
+  ])(
+    "should disable the button on the full-page metabot surface (%s)",
+    async (pathname) => {
+      setup({ isMetabotEnabled: true, pathname });
+      expect(
+        await screen.findByRole("button", { name: /Chat with Metabot/ }),
+      ).toBeDisabled();
+    },
+  );
+
+  it("should not disable the button on other question pages", async () => {
+    setup({ isMetabotEnabled: true, pathname: "/question/123" });
+    expect(
+      await screen.findByRole("button", { name: /Chat with Metabot/ }),
+    ).toBeEnabled();
+  });
+
   it("should toggle metabot visibility when clicked", async () => {
     const { store } = setup({ isMetabotEnabled: true });
 
+    // Unjustified type cast. FIXME
     const initialState = store.getState() as any;
-    expect(initialState.metabot.conversations.omnibot.visible).toBe(false);
+    expect(initialState.metabot.agents.omnibot.visible).toBe(false);
 
     await userEvent.click(
-      screen.getByRole("button", { name: /Chat with Metabot/ }),
+      await screen.findByRole("button", { name: /Chat with Metabot/ }),
     );
 
+    // Unjustified type cast. FIXME
     const newState = store.getState() as any;
-    expect(newState.metabot.conversations.omnibot.visible).toBe(true);
+    expect(newState.metabot.agents.omnibot.visible).toBe(true);
   });
 });

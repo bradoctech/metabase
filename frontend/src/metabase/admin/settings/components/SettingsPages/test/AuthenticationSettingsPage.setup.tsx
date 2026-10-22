@@ -7,6 +7,7 @@ import {
   setupTokenStatusEndpoint,
   setupUpdateSettingEndpoint,
 } from "__support__/server-mocks";
+import { createMockSettingsState } from "__support__/state";
 import { renderWithProviders } from "__support__/ui";
 import { UndoListing } from "metabase/common/components/UndoListing";
 import type { AuthSettingsPageTab } from "metabase/plugins";
@@ -15,7 +16,6 @@ import {
   createMockSettings,
   createMockTokenFeatures,
 } from "metabase-types/api/mocks";
-import { createMockSettingsState } from "metabase-types/store/mocks";
 
 import { AuthenticationSettingsPage } from "../AuthenticationSettingsPage";
 

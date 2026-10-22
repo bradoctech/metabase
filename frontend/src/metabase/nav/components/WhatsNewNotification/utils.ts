@@ -1,5 +1,5 @@
-import { isNotFalsy } from "metabase/lib/types";
-import { compareVersions } from "metabase/lib/utils";
+import { isNotFalsy } from "metabase/utils/types";
+import { compareVersions } from "metabase/utils/version";
 import type { VersionInfoRecord } from "metabase-types/api";
 import type { VersionInfo } from "metabase-types/api/settings";
 /**
@@ -47,6 +47,6 @@ export const getLatestEligibleReleaseNotes = ({
   });
 
   return eligibleVersions
-    .sort((a, b) => compareVersions(b.version, a.version))
+    .sort((a, b) => compareVersions(b.version, a.version) ?? 0)
     .find(({ announcement_url }) => announcement_url);
 };

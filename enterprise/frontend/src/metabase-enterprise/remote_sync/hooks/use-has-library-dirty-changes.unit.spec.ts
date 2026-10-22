@@ -6,6 +6,7 @@ import {
   setupSettingsEndpoints,
 } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
+import { createMockState } from "__support__/state";
 import { renderHookWithProviders, waitFor } from "__support__/ui";
 import type { Collection, RemoteSyncEntity } from "metabase-types/api";
 import {
@@ -15,7 +16,6 @@ import {
   createMockTokenFeatures,
   createMockUser,
 } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { useHasLibraryDirtyChanges } from "./use-has-library-dirty-changes";
 
@@ -323,6 +323,26 @@ describe("useHasLibraryDirtyChanges", () => {
 
       await waitFor(() => {
         expect(result.current).toBe(true);
+      });
+    });
+  });
+
+  describe("glossary dirty state", () => {
+    it("returns false for a dirty glossary entry because the Glossary tab carries its own badge", async () => {
+      const { result } = setup({
+        collections: [createLibraryCollection({ id: 1 })],
+        dirty: [
+          createMockDirtyEntity({
+            id: 10,
+            model: "glossary",
+            name: "ARR",
+            collection_id: undefined,
+          }),
+        ],
+      });
+
+      await waitFor(() => {
+        expect(result.current).toBe(false);
       });
     });
   });

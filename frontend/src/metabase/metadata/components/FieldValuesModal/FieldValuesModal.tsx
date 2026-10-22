@@ -1,6 +1,6 @@
 import { t } from "ttag";
 
-import { useSelector } from "metabase/lib/redux";
+import { useSelector } from "metabase/redux";
 import { getApplicationName } from "metabase/selectors/whitelabel";
 import { Modal, Stack, Text, rem } from "metabase/ui";
 import type { FieldId } from "metabase-types/api";
@@ -24,12 +24,12 @@ export const FieldValuesModal = ({
   return (
     <Modal
       opened={isOpen}
-      padding="xl"
+      padding="xxl"
       size={rem(512)}
       title={t`Field values`}
       onClose={onClose}
     >
-      <Stack gap="md" pt="sm">
+      <Stack gap="lg" pt="sm">
         <Text c="text-secondary" size="sm">
           {t`${applicationName} can scan the values in this table to enable checkbox filters in dashboards and questions.`}
         </Text>

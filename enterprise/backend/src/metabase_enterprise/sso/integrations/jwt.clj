@@ -45,15 +45,17 @@
   []
   (throw
    (ex-info (tru "Embedding SDK for React is disabled. Enable it in the embedding settings.")
-            {:status      "error-embedding-sdk-disabled"
-             :status-code 402})))
+            {:status        "error-embedding-sdk-disabled"
+             :status-code   402
+             :response/keys #{:status}})))
 
 (defn- throw-simple-embedding-disabled
   []
   (throw
    (ex-info (tru "You need to turn on modular embedding in the embedding settings.")
-            {:status      "error-embedding-simple-disabled"
-             :status-code 402})))
+            {:status        "error-embedding-simple-disabled"
+             :status-code   402
+             :response/keys #{:status}})))
 
 (defn ^:private generate-response-token
   [session jwt-data]
@@ -71,13 +73,15 @@
           (when redirect
             (str return-to-param redirect))))))
 
-(defmethod sso.i/sso-get :jwt
-  [{{:keys [jwt redirect]} :params, :as request}]
+(defn- handle-jwt-sso-request
+  [request]
   (premium-features/assert-has-feature :sso-jwt (tru "JWT-based authentication"))
-  (let [result (session-data jwt request)
+  (let [jwt (sso.i/request-jwt request)
+        result (session-data jwt request)
         is-react-sdk? (embed.util/has-react-sdk-header? request)
         is-embedded-analytics-js? (embed.util/has-embedded-analytics-js-header? request)
-        is-modular-embedding? (or is-react-sdk? is-embedded-analytics-js?)]
+        is-modular-embedding? (or is-react-sdk? is-embedded-analytics-js?)
+        redirect (get-in request [:params :redirect])]
     (cond
       ;; Embedding feature checks
       (and is-react-sdk? (not (embed.settings/enable-embedding-sdk)))
@@ -104,8 +108,10 @@
       :else
       (redirect-to-idp (sso-settings/jwt-identity-provider-uri) redirect))))
 
+(defmethod sso.i/sso-get :jwt
+  [request]
+  (handle-jwt-sso-request request))
+
 (defmethod sso.i/sso-post :jwt
-  [_]
-  (throw
-   (ex-info (tru "POST not valid for JWT SSO requests")
-            {:status "error-post-jwt-not-valid" :status-code 501})))
+  [request]
+  (handle-jwt-sso-request request))

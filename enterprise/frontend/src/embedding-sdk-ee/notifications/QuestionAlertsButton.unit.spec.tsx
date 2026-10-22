@@ -4,14 +4,18 @@ import {
   findRequests,
   setupNotificationChannelsEndpoints,
 } from "__support__/server-mocks";
+import { createMockState } from "__support__/state";
+import { createMockSettingsState } from "__support__/state/settings";
 import { renderWithSDKProviders } from "embedding-sdk-bundle/test/__support__/ui";
 import { createMockSdkConfig } from "embedding-sdk-bundle/test/mocks/config";
 import {
   createMockLoginStatusState,
   createMockSdkState,
 } from "embedding-sdk-bundle/test/mocks/state";
-import { createMockSettings, createMockUser } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
+import {
+  createMockTokenFeatures,
+  createMockUser,
+} from "metabase-types/api/mocks";
 
 import { QuestionAlertsButton } from "./QuestionAlertsButton";
 
@@ -43,22 +47,20 @@ jest.mock(
 function setup({ isGuestEmbed }: { isGuestEmbed: boolean }) {
   setupNotificationChannelsEndpoints({
     email: { configured: true },
-  } as any);
+  });
 
   const state = createMockState({
     currentUser: createMockUser({
       is_superuser: true,
       permissions: { can_access_subscription: true },
     }),
-    settings: {
-      values: {
-        ...createMockSettings({ "enable-embedding-sdk": true }),
-        "token-features": {
-          embedding_sdk: true,
-          advanced_permissions: false,
-        },
-      } as any,
-    },
+    settings: createMockSettingsState({
+      "enable-embedding-sdk": true,
+      "token-features": createMockTokenFeatures({
+        embedding_sdk: true,
+        advanced_permissions: false,
+      }),
+    }),
     sdk: createMockSdkState({
       isGuestEmbed,
       initStatus: createMockLoginStatusState({ status: "success" }),

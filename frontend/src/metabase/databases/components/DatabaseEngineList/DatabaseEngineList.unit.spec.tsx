@@ -1,5 +1,6 @@
 import userEvent from "@testing-library/user-event";
 
+import { createMockSettingsState, createMockState } from "__support__/state";
 import { renderWithProviders, screen } from "__support__/ui";
 import {
   ELEVATED_ENGINES,
@@ -7,10 +8,6 @@ import {
 } from "metabase/databases/constants";
 import type { Engine } from "metabase-types/api";
 import { createMockEngine } from "metabase-types/api/mocks";
-import {
-  createMockSettingsState,
-  createMockState,
-} from "metabase-types/store/mocks";
 
 import { DatabaseEngineList } from "./DatabaseEngineList";
 

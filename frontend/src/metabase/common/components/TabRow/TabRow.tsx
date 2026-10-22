@@ -1,9 +1,7 @@
-import type { DragEndEvent, UniqueIdentifier } from "@dnd-kit/core";
 import {
   DndContext,
-  MouseSensor,
-  PointerSensor,
-  useSensor,
+  type DragEndEvent,
+  type UniqueIdentifier,
 } from "@dnd-kit/core";
 import {
   restrictToHorizontalAxis,
@@ -27,11 +25,13 @@ import {
 import { usePreviousDistinct } from "react-use";
 
 import { ExplicitSize } from "metabase/common/components/ExplicitSize";
-import { Icon } from "metabase/ui";
+import { TabList } from "metabase/common/components/TabList";
+import { useDndSensors } from "metabase/common/hooks";
+import { Box, Icon, rem } from "metabase/ui";
 
 import type { TabListProps } from "../TabList/TabList";
 
-import { ScrollButton, TabList } from "./TabRow.styled";
+import S from "./TabRow.module.css";
 import { tabsCollisionDetection } from "./collision-detection";
 
 interface TabRowProps<T> extends TabListProps<T> {
@@ -65,15 +65,7 @@ const TabRowInner = forwardRef<HTMLDivElement, TabRowProps<unknown>>(
     const itemsCount = itemIds?.length ?? 0;
     const previousItemsCount = usePreviousDistinct(itemsCount) ?? 0;
 
-    const pointerSensor = useSensor(PointerSensor, {
-      activationConstraint: { distance: 10 },
-    });
-
-    // Needed for DnD e2e tests to work
-    // See https://github.com/clauderic/dnd-kit/issues/208#issuecomment-824469766
-    const mouseSensor = useSensor(MouseSensor, {
-      activationConstraint: { distance: 10 },
-    });
+    const sensors = useDndSensors({ distance: 10 });
 
     const scroll = useCallback(
       (direction: "left" | "right") => {
@@ -111,11 +103,13 @@ const TabRowInner = forwardRef<HTMLDivElement, TabRowProps<unknown>>(
 
     return (
       <TabList
+        // Unjustified type cast. FIXME
         onChange={onChange as (value: unknown) => void}
         onScroll={(event) => setScrollPosition(event.currentTarget.scrollLeft)}
         ref={mergedRef}
         {...props}
         className={cx(
+          S.tabList,
           {
             scrollable: showScrollLeft || showScrollRight,
           },
@@ -125,7 +119,7 @@ const TabRowInner = forwardRef<HTMLDivElement, TabRowProps<unknown>>(
         <DndContext
           onDragEnd={onDragEnd}
           modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
-          sensors={[pointerSensor, mouseSensor]}
+          sensors={sensors}
           collisionDetection={tabsCollisionDetection}
         >
           <SortableContext
@@ -146,6 +140,7 @@ const TabRowInner = forwardRef<HTMLDivElement, TabRowProps<unknown>>(
   },
 );
 
+// Unjustified type cast. FIXME
 export const TabRow = ExplicitSize<TabRowProps<unknown>>()(TabRowInner) as <T>(
   props: TabRowProps<T>,
 ) => ReactNode;
@@ -157,12 +152,17 @@ interface ScrollArrowProps {
 
 export function ScrollArrow({ direction, onClick }: ScrollArrowProps) {
   return (
-    <ScrollButton
+    <Box
+      component="button"
+      className={cx(S.scrollButton, S[direction])}
+      pos="absolute"
+      top={0}
+      w={rem(48)}
+      ta={direction}
       onClick={onClick}
-      direction={direction}
       aria-label={`scroll tabs ${direction}`}
     >
       <Icon name={`chevron${direction}`} />
-    </ScrollButton>
+    </Box>
   );
 }

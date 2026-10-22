@@ -1,16 +1,17 @@
 import fetchMock from "fetch-mock";
 
 import { renderWithProviders, screen } from "__support__/ui";
-import MetabaseSettings from "metabase/lib/settings";
 import {
   deriveChartShadeColor,
   deriveChartTintColor,
 } from "metabase/ui/colors/accents";
+import MetabaseSettings from "metabase/utils/settings";
 import type { SettingKey } from "metabase-types/api";
 
 import { ColorSettingsWidget } from "./ColorSettingsWidget";
 
 function setup(colors: Record<string, string>) {
+  // Unjustified type cast. FIXME
   MetabaseSettings.set("application-colors" as SettingKey, colors);
   fetchMock.get("path:/api/session/properties", {
     "application-colors": colors,

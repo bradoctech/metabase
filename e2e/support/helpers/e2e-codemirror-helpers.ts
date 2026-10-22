@@ -16,8 +16,6 @@ export function codeMirrorHelpers<T extends object>(testId: string, extra: T) {
       helpers.get().should("be.visible").click("right", {
         /**
          * We want to click on the right, because we want the caret to be positioned at the end of the editor.
-         * Transform editor in workspaces (data studio) has a resize handle at the right of the editor,
-         * which causes this click("right") to fail.
          * Alternative approach with pressing End key for moving the caret to the end made
          * repro for (metabase#49882-2, metabase#15892) fail in CI every time.
          * Hence force: true.
@@ -47,6 +45,11 @@ export function codeMirrorHelpers<T extends object>(testId: string, extra: T) {
     ) {
       if (focus) {
         helpers.focus();
+      } else {
+        // The editor can be a lazily loaded chunk, so it may still be mounting.
+        // Wait for it to hold focus before typing, or the first keystroke goes
+        // nowhere. Do not click it: that would move the caret.
+        helpers.get().get(".cm-editor").should("have.class", "cm-focused");
       }
 
       if (allowFastSet) {
@@ -150,27 +153,25 @@ export function codeMirrorHelpers<T extends object>(testId: string, extra: T) {
       return helpers.get().get("[role='textbox']");
     },
     value() {
-      // Get the multiline text content of the editor
+      // `invoke` chains are queries, so a chained assertion re-reads the text on every retry
       return helpers
-        .textbox()
-        .get(".cm-line")
-        .then((lines) => {
-          const text: string[] = [];
-          lines.each((_, line) => {
-            const placeholder = line.querySelector(".cm-placeholder");
-            if (placeholder) {
-              return;
-            }
-            text.push(line.textContent ?? "");
-          });
-          return text.join("\n");
-        });
+        .get()
+        .invoke("find", ".cm-line")
+        .invoke("toArray")
+        .invoke("filter", (line) => !line.querySelector(".cm-placeholder"))
+        .invoke("map", (line) => line.textContent ?? "")
+        .invoke("join", "\n");
     },
     completions() {
       return cy.get(".cm-tooltip-autocomplete").should("be.visible");
     },
     completion(label: string) {
       return cy.get(".cm-completionLabel").contains(label).parent();
+    },
+    completionLabels(label: string) {
+      return cy
+        .get(".cm-completionLabel")
+        .filter((_, element) => element.textContent === label);
     },
     acceptCompletion(key: "enter" | "tab" = "enter") {
       helpers.completions().should("be.visible");

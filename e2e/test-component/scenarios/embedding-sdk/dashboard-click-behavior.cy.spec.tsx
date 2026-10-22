@@ -139,7 +139,7 @@ describe("scenarios > embedding-sdk > dashboard-click-behavior", () => {
   });
 
   it("should allow external URL click behaviors in the SDK (EMB-878)", () => {
-    // External click behaviour use the open() function in metabase/lib/dom creates temporary anchors and calls .click()
+    // External click behaviour use the open() function in metabase/utils/dom creates temporary anchors and calls .click()
     // To check that we call it, we stub the anchor element click
     stubAnchorClick();
 
@@ -424,6 +424,7 @@ const expectClickBehaviorForUrl = (url: string) => {
     expect(spy.callCount).to.be.greaterThan(0);
     const last = spy.getCalls().at(-1);
     expect(last?.thisValue.target).to.eq("_blank");
+    // Unjustified type cast. FIXME
     const href = (last?.thisValue as HTMLAnchorElement).href;
     const u = new URL(href);
     expect(`${u.origin}${u.pathname}`).to.eq(url);

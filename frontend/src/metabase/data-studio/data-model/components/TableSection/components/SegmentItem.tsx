@@ -1,7 +1,5 @@
-import { Link } from "react-router";
-
-import { Ellipsified } from "metabase/common/components/Ellipsified";
-import { Card, Flex, Icon, Stack, Text } from "metabase/ui";
+import { Link } from "metabase/common/components/Link";
+import { Card, Ellipsified, Flex, Icon, Stack, Text } from "metabase/ui";
 import type { Segment } from "metabase-types/api";
 
 import S from "./SegmentItem.module.css";
@@ -19,13 +17,13 @@ export function SegmentItem({ segment, href }: SegmentItemProps) {
       to={href}
       aria-label={segment.name}
       role="listitem"
-      px="md"
+      px="lg"
       py="0.75rem"
       withBorder
     >
-      <Stack gap="xs">
+      <Stack gap="xxs">
         <Flex align="center" gap="sm">
-          <Icon name="segment2" c="brand" />
+          <Icon name="segment" c="core-brand" />
           <Ellipsified lines={1} tooltip={segment.name}>
             <Text fw="bold">{segment.name}</Text>
           </Ellipsified>
