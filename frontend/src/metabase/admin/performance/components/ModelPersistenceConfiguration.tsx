@@ -92,7 +92,7 @@ export const ModelPersistenceConfiguration = () => {
     try {
       loadingToastId = await showLoadingToast();
       await Promise.all(promises);
-      sendToast({ message: "Salvo" });
+      sendToast({ message: "Saved" });
     } catch (e) {
       sendToast({
         icon: "warning",

@@ -5,7 +5,6 @@ import { useSelector } from "metabase/redux";
 
 export const NativeQueryLabel = () => {
   const hasNativeWrite = useSelector(canUserCreateNativeQueries);
-  return hasNativeWrite
-    ? t`Search the contents of native queries`
-    : t`Search the contents of SQL queries`;
+  const filterLabel = hasNativeWrite ? t`native` : `SQL`;
+  return `Search the contents of ${filterLabel} queries`;
 };

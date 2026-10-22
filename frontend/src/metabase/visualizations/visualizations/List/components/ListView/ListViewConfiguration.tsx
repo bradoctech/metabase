@@ -262,7 +262,7 @@ export const ListViewConfiguration = ({
                       />
                     ) : (
                       <Icon
-                        tooltip={t`Entity icon`}
+                        tooltip="Entity icon"
                         name={
                           iconConfig.entityIconEnabled &&
                           iconConfig.selectedEntityIcon

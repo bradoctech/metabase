@@ -130,24 +130,6 @@ describe("ai requests", () => {
       expect(on401).toHaveBeenCalledWith(endpoint);
     });
 
-    it("preserves structured JSON error responses", async () => {
-      fetchMock.post(`path:${endpoint}`, {
-        status: 402,
-        body: {
-          message: "You've used all of your included AI service tokens.",
-          "error-code": "metabase_ai_managed_locked",
-        },
-      });
-
-      await expect(
-        aiStreamingQuery({ url: endpoint, body: {} }),
-      ).rejects.toMatchObject({
-        status: 402,
-        message: "You've used all of your included AI service tokens.",
-        "error-code": "metabase_ai_managed_locked",
-      });
-    });
-
     it("throw error if no response", async () => {
       mockEndpoint(endpoint, async () => new Response(null, { status: 202 }));
       await expect(

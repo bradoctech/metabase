@@ -208,7 +208,4 @@ export const GridMapPdfExport = {
   parameters: {
     loki: { skip: true },
   },
-  parameters: {
-    loki: { skip: true },
-  },
 };

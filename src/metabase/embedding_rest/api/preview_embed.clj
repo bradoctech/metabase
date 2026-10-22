@@ -82,7 +82,7 @@
   "Embedded version of api.card filter values endpoint."
   [{:keys [token param-key]} :- [:map {:closed true}
                                  [:token     string?]
-                                 [:param-key ms/NonBlankString]]]
+                                 [:param-key string?]]]
   (let [unsigned-token (check-and-unsign token)
         card           (preview-card-for-param-values unsigned-token)]
     (api.embed.common/card-param-values {:unsigned-token unsigned-token

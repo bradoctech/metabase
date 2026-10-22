@@ -2,6 +2,7 @@ import { match } from "ts-pattern";
 import { jt, t } from "ttag";
 
 import { ExternalLink } from "metabase/common/components/ExternalLink";
+import { UpsellMetabaseBanner } from "metabase/common/components/upsells/UpsellMetabaseBanner";
 import { useDocsUrl } from "metabase/common/hooks";
 import type {
   DisplayTheme,
@@ -201,6 +202,14 @@ export const LookAndFeelSettings = ({
         </Stack>
       </StaticEmbedSetupPaneSettingsContentSection>
 
+      {!canWhitelabel && (
+        <>
+          <Divider my="2rem" />
+          <div aria-label={t`Removing the banner`}>
+            <UpsellMetabaseBanner />
+          </div>
+        </>
+      )}
     </>
   );
 };

@@ -148,18 +148,6 @@
         (conj (vec input-messages)
               (update most-recent-message :content (partial prompts/inject-context enriched-context)))))))
 
-(defn- messages-with-injected-context
-  "Returns messages from memory and injects context into the most recent one."
-  [context memory]
-  (let [all-messages (memory/get-input-messages memory)
-        [input-messages [most-recent-message]] (split-at (dec (count all-messages))  all-messages)]
-    (if-not (and (= :user (-> most-recent-message :role))
-                 (< 0 (count all-messages)))
-      all-messages
-      (let [enriched-context (user-context/enrich-context-for-template context)]
-        (conj (vec input-messages)
-              (update most-recent-message :content (partial prompts/inject-context enriched-context)))))))
-
 (defn build-message-history
   "Build the conversation history as a flat sequence of AISDK parts.
 

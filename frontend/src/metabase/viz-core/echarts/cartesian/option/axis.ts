@@ -23,7 +23,12 @@ import type {
 } from "../model/types";
 
 import { getTicksOptions } from "./ticks";
-import { getPaddedAxisLabel } from "./utils";
+import {
+  getPaddedAxisLabel,
+  registerAxisLabel,
+  toTitleCase,
+  truncateAxisLabel,
+} from "./utils";
 
 const NORMALIZED_RANGE = { min: 0, max: 1 };
 
@@ -259,7 +264,11 @@ export const buildNumericDimensionAxis = (
         if (isPadded && (rawValue < min || rawValue > max)) {
           return "";
         }
-        return getPaddedAxisLabel(formatter(fromEChartsAxisValue(rawValue)));
+        const fullText = String(formatter(fromEChartsAxisValue(rawValue)));
+        const titleCased = toTitleCase(fullText);
+        const truncated = truncateAxisLabel(titleCased);
+        registerAxisLabel(truncated, fullText);
+        return getPaddedAxisLabel(truncated);
       },
     },
     ...(isPadded
@@ -294,9 +303,13 @@ export const buildTimeSeriesDimensionAxis = (
       formatter: (rawValue: number) => {
         const value = xAxisModel.fromEChartsAxisValue(rawValue);
         if (canRender(value)) {
-          return getPaddedAxisLabel(
+          const fullText = String(
             formatter(value.format("YYYY-MM-DDTHH:mm:ss[Z]")),
           );
+          const titleCased = toTitleCase(fullText);
+          const truncated = truncateAxisLabel(titleCased);
+          registerAxisLabel(truncated, fullText);
+          return getPaddedAxisLabel(truncated);
         }
         return "";
       },
@@ -341,11 +354,15 @@ export const buildCategoricalDimensionAxis = (
       interval: () => true,
       formatter: (value: string) => {
         const numberValue = parseNumberValue(value);
-        if (column && isNumericBaseType(column) && numberValue !== null) {
-          return getPaddedAxisLabel(formatter(numberValue));
-        }
-
-        return getPaddedAxisLabel(formatter(value));
+        const fullText = String(
+          column && isNumericBaseType(column) && numberValue !== null
+            ? formatter(numberValue)
+            : formatter(value),
+        );
+        const titleCased = toTitleCase(fullText);
+        const truncated = truncateAxisLabel(titleCased);
+        registerAxisLabel(truncated, fullText);
+        return getPaddedAxisLabel(truncated);
       },
       ...(chartLayout.ticksDimensions.xTickWidthCap < Infinity
         ? {

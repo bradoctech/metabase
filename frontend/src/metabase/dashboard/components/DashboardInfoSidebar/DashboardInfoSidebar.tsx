@@ -42,6 +42,7 @@ import { DashboardEntityIdCard } from "./DashboardEntityIdCard";
 enum Tab {
   Overview = "overview",
   History = "history",
+  Insights = "insights",
 }
 
 export function DashboardInfoSidebar() {
@@ -147,6 +148,7 @@ export function DashboardInfoSidebarInner({
               {!isIADashboard && (
                 <Tabs.Tab value={Tab.History}>{t`History`}</Tabs.Tab>
               )}
+              <InsightsTabOrLink dashboard={dashboard} />
             </Tabs.List>
             <SidesheetTabPanelContainer>
               <Tabs.Panel value={Tab.Overview}>
@@ -167,6 +169,9 @@ export function DashboardInfoSidebarInner({
                   currentUser={currentUser}
                   moderationReviews={dashboard.moderation_reviews}
                 />
+              </Tabs.Panel>
+              <Tabs.Panel value={Tab.Insights}>
+                <InsightsUpsellTab model="dashboard" />
               </Tabs.Panel>
             </SidesheetTabPanelContainer>
           </Tabs>

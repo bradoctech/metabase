@@ -27,8 +27,6 @@ export type {
 export { createQuestionAndAddToDashboard } from "./createQuestionAndAddToDashboard";
 export { createQuestionAndDashboard } from "./createQuestionAndDashboard";
 export { createReaction } from "./createReaction";
-export { seedSecurityAdvisories } from "./seedSecurityAdvisories";
-export type { SecurityAdvisorySpec } from "./seedSecurityAdvisories";
 export { createSnippet } from "./createSnippet";
 export { createSnippetFolder } from "./createSnippetFolder";
 export { createTestNativeQuery, createTestQuery } from "./createTestQuery";

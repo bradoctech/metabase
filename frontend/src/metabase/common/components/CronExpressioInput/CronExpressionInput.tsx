@@ -59,7 +59,7 @@ export function CronExpressionInput({
   return (
     <Flex direction="column" gap="xxs" {...flexProps}>
       <TextInput
-        placeholder="Por exemplo 5   0   *   Ago   ?"
+        placeholder="For example 5   0   *   Aug   ?"
         size="md"
         fw={600}
         error={error}
