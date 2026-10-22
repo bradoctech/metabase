@@ -1,3 +1,4 @@
+import { UpsellWhitelabel } from "metabase/admin/upsells";
 import { useHasTokenFeature } from "metabase/common/hooks";
 import { PLUGIN_WHITELABEL } from "metabase/plugins";
 
@@ -16,5 +17,5 @@ export function AppearanceSettingsPage({
     );
   }
 
-  return null;
+  return <UpsellWhitelabel source="settings-appearance" />;
 }
