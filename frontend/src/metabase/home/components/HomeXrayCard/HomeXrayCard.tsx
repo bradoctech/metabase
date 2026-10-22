@@ -1,7 +1,7 @@
-import { Ellipsified, Icon, Text } from "metabase/ui";
+import { Link } from "metabase/common/components/Link";
+import { Icon } from "metabase/ui";
 
-import { HomeCard } from "../HomeCard";
-
+import S from "./HomeXrayCard.module.css";
 import { trackHomeXRayClicked } from "./analytics";
 
 interface HomeXrayCardProps {
@@ -16,22 +16,12 @@ export const HomeXrayCard = ({
   message,
 }: HomeXrayCardProps): JSX.Element => {
   return (
-    <HomeCard url={url} onClick={trackHomeXRayClicked}>
-      <Icon
-        name="bolt_filled"
-        c="accent4"
-        display="block"
-        flex="0 0 auto"
-        size={20}
-      />
-      <Ellipsified fz="md" fw="bold" ml="sm" pr="xxs">
-        <Text component="span" c="text-secondary">
-          {message}
-        </Text>{" "}
-        <Text component="span" c="text-primary">
-          {title}
-        </Text>
-      </Ellipsified>
-    </HomeCard>
+    <Link className={S.root} to={url} onClick={trackHomeXRayClicked}>
+      <span className={S.badge}>{title}</span>
+      <div className={S.iconWrapper}>
+        <Icon name="bolt_filled" c="core-brand" size={24} />
+      </div>
+      <div className={S.title}>{message}</div>
+    </Link>
   );
 };

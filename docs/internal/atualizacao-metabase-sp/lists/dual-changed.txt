@@ -3,6 +3,8 @@
 
 .gitignore
 frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
+frontend/src/metabase/auth/components/AuthButton/AuthButton.module.css
+frontend/src/metabase/auth/components/AuthButton/AuthButton.tsx
 frontend/src/metabase/auth/components/AuthLayout/AuthLayout.styled.tsx
 frontend/src/metabase/auth/components/AuthLayout/AuthLayout.tsx
 frontend/src/metabase/auth/components/Login/Login.tsx
@@ -22,6 +24,7 @@ frontend/src/metabase/home/components/HomeGreeting/HomeGreeting.module.css
 frontend/src/metabase/home/components/HomeGreeting/HomeGreeting.tsx
 frontend/src/metabase/home/components/HomeHelpCard/HomeHelpCard.tsx
 frontend/src/metabase/home/components/HomeLayout/HomeLayout.tsx
+frontend/src/metabase/home/components/HomeModelCard/HomeModelCard.module.css
 frontend/src/metabase/home/components/HomeModelCard/HomeModelCard.tsx
 frontend/src/metabase/home/components/HomeXrayCard/HomeXrayCard.tsx
 frontend/src/metabase/nav/components/search/SearchButton/SearchButton.module.css

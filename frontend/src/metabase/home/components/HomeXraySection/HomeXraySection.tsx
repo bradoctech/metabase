@@ -30,6 +30,8 @@ import { HomeCaption } from "../HomeCaption";
 import { HomeHelpCard } from "../HomeHelpCard";
 import { HomeXrayCard } from "../HomeXrayCard";
 
+import S from "./HomeXraySection.module.css";
+
 export const HomeXraySection = () => {
   const {
     data: databasesData,
@@ -96,7 +98,7 @@ const HomeXrayView = ({ database, candidates = [] }: HomeXrayViewProps) => {
           <DatabaseInfo database={database} />
         </HomeCaption>
       ) : null}
-      <Flex gap="xl" wrap="wrap">
+      <div className={S.sectionBody}>
         {candidate?.tables.map((table, index) => (
           <HomeXrayCard
             key={table.url}
@@ -106,7 +108,7 @@ const HomeXrayView = ({ database, candidates = [] }: HomeXrayViewProps) => {
           />
         ))}
         <HomeHelpCard />
-      </Flex>
+      </div>
     </Box>
   );
 };

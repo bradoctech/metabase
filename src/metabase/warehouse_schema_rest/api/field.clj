@@ -298,21 +298,26 @@
   (let [field (api/query-check (warehouse-schema-rest.db/field id))]
     (parameters.field/field->values field)))
 
+(def ^:private FieldValuesOptions
+  "Optional filter options on a cascade constraint (keywordized from JSON)."
+  [:map {:closed true}
+   [:case-sensitive {:optional true} [:maybe :boolean]]])
+
 (def ^:private FieldValuesConstraint
   "A single chain-filter constraint supplied by the Query Builder when cascading filter value pickers.
   Request body uses snake_case keys to match the REST JSON convention."
-  [:map
+  [:map {:closed true}
    [:field_id ms/PositiveInt]
    [:op       [:or :keyword ms/NonBlankString]]
-   [:value    :any]
-   [:options  {:optional true} [:maybe :map]]])
+   [:value    [:or ms/FieldValue [:sequential ms/FieldValue] [:set ms/FieldValue]]]
+   [:options  {:optional true} [:maybe FieldValuesOptions]]])
 
 (def ^:private filtered-values-result-limit
   "Same default as dashboard chain-filter value pickers."
   1000)
 
 (mu/defn- normalize-field-values-constraints :- ::chain-filter/constraints
-  [constraints]
+  [constraints :- [:sequential FieldValuesConstraint]]
   (mapv (fn [{:keys [field_id op value options]}]
           (cond-> {:field-id field_id
                    :op       (keyword op)
@@ -328,11 +333,11 @@
   "Return possible values for a Field, optionally restricted by other Field constraints. Powers cascading filter
   value pickers in the Query Builder and column filter drills. When `query` is provided, searches values (same as
   chain-filter search). Constraints use snake_case keys (`field_id`, `op`, `value`, optional `options`)."
-  [{:keys [id]} :- [:map
+  [{:keys [id]} :- [:map {:closed true}
                     [:id ms/PositiveInt]]
    _query-params
    {:keys [constraints query limit]
-    :or   {constraints []}} :- [:map
+    :or   {constraints []}} :- [:map {:closed true}
                                 [:constraints {:optional true} [:maybe [:sequential FieldValuesConstraint]]]
                                 [:query       {:optional true} [:maybe ms/NonBlankString]]
                                 [:limit       {:optional true} [:maybe ms/PositiveInt]]]]

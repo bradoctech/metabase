@@ -84,6 +84,7 @@ export const LoginForm = ({
           variant="filled"
           w="100%"
           radius="100px"
+          style={{ border: "none", boxShadow: "none" }}
         />
         <FormErrorMessage mt="1rem" />
       </Form>

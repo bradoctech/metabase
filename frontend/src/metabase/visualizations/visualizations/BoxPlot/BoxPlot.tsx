@@ -1,5 +1,12 @@
 import type { EChartsType } from "echarts/core";
-import { type MouseEvent, useCallback, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useSet } from "react-use";
 
 import { isReducedMotionPreferred } from "metabase/utils/dom";
@@ -24,6 +31,7 @@ import {
   getChartLayout,
   getDashboardAdjustedSettings,
   getLegendItems,
+  getOriginalAxisLabel,
   useClickedStateTooltipSync,
   useCloseTooltipOnScroll,
 } from "metabase/viz-core";
@@ -178,12 +186,61 @@ function BoxPlotInner({
     onChangeCardAndRun,
   });
 
+  const [axisLabelTooltip, setAxisLabelTooltip] = useState<{
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
   // The popover subscribes to the instance in an effect, and a ref mutation
   // would not re-run it, so the instance is held in state as well.
   const handleInit = useCallback((chart: EChartsType) => {
     chartRef.current = chart;
     setChartInstance(chart);
   }, []);
+
+  useEffect(() => {
+    const el = chartInstance?.getDom();
+    if (!el) {
+      return;
+    }
+
+    const handleMouseMove = (e: globalThis.MouseEvent) => {
+      const target = e.target;
+      if (!(target instanceof Element)) {
+        setAxisLabelTooltip(null);
+        return;
+      }
+      const textEl =
+        target instanceof SVGTextElement ? target : target.closest("text");
+      if (!textEl) {
+        setAxisLabelTooltip(null);
+        return;
+      }
+      const content = textEl.textContent?.trim() ?? "";
+      const fullText = getOriginalAxisLabel(content);
+      if (fullText) {
+        const containerRect = el.getBoundingClientRect();
+        setAxisLabelTooltip({
+          text: fullText,
+          x: e.clientX - containerRect.left,
+          y: e.clientY - containerRect.top,
+        });
+      } else {
+        setAxisLabelTooltip(null);
+      }
+    };
+
+    const handleMouseLeave = () => setAxisLabelTooltip(null);
+
+    el.addEventListener("mousemove", handleMouseMove);
+    el.addEventListener("mouseleave", handleMouseLeave);
+
+    return () => {
+      el.removeEventListener("mousemove", handleMouseMove);
+      el.removeEventListener("mouseleave", handleMouseLeave);
+    };
+  }, [chartInstance]);
 
   const handleResize = useCallback((width: number, height: number) => {
     setChartSize({ width, height });
@@ -240,6 +297,29 @@ function BoxPlotInner({
             isVisualizer={isVisualizer}
             chartInstance={chartInstance}
           />
+          {axisLabelTooltip && (
+            <div
+              style={{
+                position: "absolute",
+                left: axisLabelTooltip.x,
+                top: axisLabelTooltip.y - 36,
+                transform: "translateX(-50%)",
+                background: "var(--mb-color-tooltip-background)",
+                color: "var(--mb-color-tooltip-text)",
+                padding: "4px 8px",
+                borderRadius: "4px",
+                fontSize: "12px",
+                pointerEvents: "none",
+                whiteSpace: "nowrap",
+                zIndex: 100,
+                maxWidth: "300px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {axisLabelTooltip.text}
+            </div>
+          )}
         </ResponsiveEChartsRenderer>
       </CartesianChartLegendLayout>
     </CartesianChartRoot>

@@ -55,15 +55,8 @@
     }
   }
 
-  &[data-variant="filled"] {
-    color: var(--mb-color-text-primary-inverse);
-
-    &:hover {
-      border-color: alpha(var(--button-bg), 0.88);
-      background-color: alpha(var(--button-bg), 0.88);
-    }
-  }
-
+  /* SP DS: filled CTAs use button-primary (black), not Metabase brand red */
+  &[data-variant="filled"],
   &[data-variant="primary"] {
     color: #fff;
     background-color: var(--mb-color-button-primary);

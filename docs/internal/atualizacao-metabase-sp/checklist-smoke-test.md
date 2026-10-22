@@ -1,10 +1,31 @@
 # Checklist de smoke test — Metabase SP fork
 
-**Uso:** rodar após qualquer merge de major (`EDD-1355`) e antes de fechar a etapa. Marcar **OK/FAIL** por item. Se algo regredir, anote o sintoma (console, Network, print) para localizar o path na próxima leva.
+**Uso:** rodar após qualquer merge de major e antes de fechar a etapa. Marcar **OK/FAIL** por item. Se algo regredir, anote o sintoma (console, Network, print) para localizar o path na próxima leva.
 
-Esta checklist cobre os comportamentos SP reais (EDD-…), não só “a tela abre”. Substitui checklists genéricas de login/home/admin.
+Esta checklist cobre os comportamentos SP reais (EDD-…), não só “a tela abre”.
 
-**Validada em:** 63.x (primeira rodada completa). Diário: [notas-etapa-62-63.md](./notas-etapa-62-63.md).
+**Validada em:** 63.x (primeira rodada completa). Salto **60→64** (`metabasev64`): em andamento — ver status abaixo. Diário: [notas-etapa-60-64.md](./notas-etapa-60-64.md) · PoC 63: [notas-etapa-62-63.md](./notas-etapa-62-63.md).
+
+---
+
+## Status 60→64 (`metabasev64`) — smoke
+
+| Item | Status |
+| ---- | ------ |
+| Pré-check BE/FE | OK |
+| Login SP + Entrar preto + hover “Esqueci minha senha” | OK |
+| Logo brasão (login + AppBar) | OK |
+| SpLogo oculto em headers | OK |
+| NewItemButton (+ Novo) bg preto | OK |
+| Home Recent / Popular (HomeModelCard + badges) | OK |
+| Home Xray (card alto SP + bolt brand) | OK |
+| RowChart 969 + pin/hover datagrid | OK |
+| Eixos 969 (amostra bar/line/…) | OK (amostra) — cobertura de modelos abaixo |
+| Dashcards DS | OK |
+| Filtros cascata QB | OK |
+| Paleta 1092 / charts + Visualizer | OK |
+| i18n LDAP / strings novas 64 | parcial → caso à parte |
+| Typo “Adicionr” no e-mail | OK (`Adicionar…`) |
 
 ---
 
@@ -15,23 +36,50 @@ Esta checklist cobre os comportamentos SP reais (EDD-…), não só “a tela ab
 
 ## UI / marca
 
-- [ ] **Login SP** — painel esquerdo + DS (EDD-577) — `auth/components/Login*`, `AuthLayout*`
+- [ ] **Login SP** — painel esquerdo + DS (EDD-577); botão **Entrar** preto (`button-primary`); link **Esqueci minha senha** texto escuro + hover vermelho — `AuthLayout*`, `LoginForm`, `AuthButton`
 - [ ] **LogoIcon** = brasão no login e no AppBar (não diamante Metabase) — `common/components/LogoIcon/LogoIcon.tsx`
-- [ ] **SpLogo oculto** nos headers de painel/dashboard (EDD-791) — logo-gov não aparece — `css/core/layout.module.css` (`.SpLogo`)
-- [ ] **Home** — cards/badges SP; `XrayCard` sem crash — `HomeXrayCard.tsx` + styled; badges em `home/utils.ts` (`getItemBadge`)
+- [ ] **SpLogo oculto** nos headers de painel/dashboard (EDD-791) — `css/core/layout.module.css` (`.SpLogo`)
+- [ ] **NewItemButton** (+ Novo) bg preto / texto branco (EDD-578) — `nav/components/NewItemButton` + `Button.module.css` (`filled`/`primary` → `button-primary`)
+- [ ] **New question** (e demais triggers “novo” no DS) — mesmo preto SP, não brand Metabase
+- [ ] **Metabot ausente na home** / margem da greeting (EDD-580) — `HomeGreeting` sem MetabotLogo; `show-metabot` respeitado
+- [ ] **Tokens de tema** (EDD-793 / 1362) — brand vermelho SP, `button-primary` preto, `background-home`, etc. (`sp-theme.ts` injetado)
+
+### Home — todos os modelos de card SP
+
+A home só mostra **uma** seção (Popular → Recent → Xray). Validar o visual SP em cada modelo:
+
+- [ ] **Recent** — `HomeModelCard` 215×315 + badge (`getItemBadge`) — seção “Continue de onde parou”
+- [ ] **Popular** — mesmo `HomeModelCard` + badge
+- [ ] **Xray** — card alto SP 215×315 (badge + bolt `core-brand` vermelho, não `accent4` verde / `HomeCard` horizontal 64) — `HomeXrayCard`
+- [ ] **Help** (“tips”) — presente junto das seções quando aplicável; não quebra o layout dos cards altos
+
+Como forçar Xray: ver [Como ver a seção Xray](#como-ver-a-seção-xray) abaixo.
 
 ## Dashboard / charts / grid
 
 - [ ] **Dashcards DS** — shadow/legenda/padding (EDD-792) — `DashCard.*`, `LegendCaption`, `padding.ts`, `series.ts`, `Progress`
-- [ ] **Filtros cascata no QB** — criar filtro em uma question, abrir dropdown de valores de um 2º filtro, checar `POST /api/field/:id/filtered-values` com `constraints` — `querying/filters/utils/chain-filter-constraints.ts`
-- [ ] **Eixos 969** — TitleCase + truncate nos cartesianos **e** tooltip de hover com o label completo — `echarts/cartesian/option/axis.ts` (+ `utils.ts`) **e** `CartesianChart.tsx` (`axisLabelTooltip`). RowChart isolado não basta — testar bar/line/combo também
-- [ ] **Paleta 1092** nos charts — inclusive no **Visualizer** (ação “Visualizar de outra maneira”) — `accent-colors.ts` (`DEFAULT_ACCENT_COLORS` + `SP_PALETTE_COLORS`), `ChartSettingColorPicker.tsx`
-- [ ] **Datagrid** — pin (EDD-944) + hover de linha (EDD-564; cuidado: clique ≠ hover) — testar **via “ver registros” de uma question** (não só dashboard/QB direto) — `DataGrid.module.css`, `css/admin.module.css`
+- [ ] **Filtros cascata no QB** — criar filtro em uma question, abrir dropdown de valores de um 2º filtro, checar `POST /api/field/:id/filtered-values` com `constraints`
+- [ ] **Eixos 969** — TitleCase + truncate (**max 10 chars**) + tooltip de hover com label completo
+  - Cobertura no código 64 (`viz-core`):
+    - **Cartesianos** (compartilham `axis.ts` + tooltip em `CartesianChart.tsx`): **bar, line, area, combo, scatter, waterfall**
+    - **RowChart**: `RowChartView.tsx` (TitleCase/truncate/tooltip)
+    - **BoxPlot**: TitleCase/truncate via `buildCategoricalDimensionAxis`; tooltip de eixo no `BoxPlot.tsx` (mesmo padrão do CartesianChart)
+  - Não basta RowChart sozinho — amostrar bar/line/combo no mínimo
+- [ ] **Paleta 1092** nos charts — inclusive no **Visualizer** (“Visualizar de outra maneira”) — `accent-colors.ts`, `ChartSettingColorPicker.tsx`
+- [ ] **Datagrid** — pin (EDD-944) + hover de linha (EDD-564; clique ≠ hover) — testar via **“ver registros”** — `DataGrid.module.css`, `css/admin.module.css`
+- [ ] **Valores `null`** nas tabelas/formatters (EDD-999) — display coerente (`getNullDisplayValue` / empty placeholder)
 
 ## i18n (amostra)
 
-- [ ] **Admin LDAP** com títulos em pt-BR (usar `` t` ` ``, não string crua) — `admin/settings/components/SettingsLdapForm.tsx`
-- [ ] **E-mail** sem typo “Adicionr” — `locales/pt-BR.po`
+- [ ] **Admin LDAP** com títulos em pt-BR (`` t` ` ``, não string crua) — `SettingsLdapForm.tsx`
+- [ ] **E-mail** sem typo “Adicionr” — Admin → Settings → Email → rótulo **“Add Recipients as CC or BCC”** (`locales/pt-BR.po` ainda tem `msgstr "Adicionr destinatários…"` até corrigir)
+- [ ] **Strings novas da 64** — amostra pontual; backlog à parte se faltar tradução
+- [ ] **pt-BR ampliado** (EDD-1240) — amostra além de LDAP/e-mail
+
+## Conteúdo demo (se existir no H2 / serdes)
+
+- [ ] **Abono de Permanência** (EDD-1243) — dashboard/conteúdo, não só chrome
+- [ ] **Detalhamentos por Situação** (EDD-1110) — aba, se o conteúdo demo estiver carregado
 
 ---
 
@@ -41,7 +89,7 @@ Não bloqueia o fechamento da etapa, mas pega regressões que a lista curta não
 
 | EDD / PR              | O que olhar                                                              |
 | --------------------- | ------------------------------------------------------------------------ |
-| EDD-578 (#53)         | Home, sidebar, **NewItemButton** no DS SP                                |
+| EDD-578 (#53)         | Home, sidebar, **NewItemButton** / New question no DS SP                 |
 | EDD-580 (#52, #48)    | MetabotGreeting ausente / margem da Home; `getSubpathSafeUrl` em img src |
 | EDD-793 (#62)         | Tokens de tema alinhados ao DS (não só charts)                           |
 | EDD-999 (#69)         | Valores `null` nas tabelas/formatters                                    |
@@ -51,20 +99,36 @@ Não bloqueia o fechamento da etapa, mas pega regressões que a lista curta não
 
 ---
 
+## Como ver a seção Xray
+
+A home escolhe **só uma** seção, nesta ordem: Popular → Recent → Xray (`HomeContent.tsx`).
+
+Com Recent preenchido, Xray **não** aparece. Opções práticas:
+
+1. **Conta / dados:** usar um usuário sem views recentes (ou limpar atividade), com X-rays ligados e DB sincronizado; **ou**
+2. **Admin → Settings → General** — garantir **Enable X-ray** ligado; Recent ainda tem prioridade se `has_question_and_dashboard` e houver itens em `/api/activity/recents`.
+3. **Dev rápido:** temporariamente esvaziar recentes (novo user installer sem histórico, ou filtrar recentes) até `isRecentSection` ser falso — aí cai em Xray se houver DB sync + xrays on.
+
+Não há toggle admin “mostrar Xray em vez de Recent”; a prioridade é código.
+
+---
+
 ## Onde costuma quebrar
 
 | Item                         | Onde costuma quebrar                                                                                                                                                                     | Como confirmar                                                                                              |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Login SP                     | Restore de stuck files sobrescreve `AuthLayout*` / `Login.tsx` com upstream                                                                                                              | Layout de um painel + farol Metabase em vez de dois painéis “Dashboards SP”                                 |
-| Home badges                  | `home/utils.ts` restaurado do upstream perde `getItemBadge`; `HomePopularSection` / `HomeRecentSection` param de passar `badge=`                                                         | Cards Popular/Recent sem chip de collection/database                                                        |
-| Eixos 969                    | `CartesianChart.tsx` perde o efeito de tooltip (`axisLabelTooltip` + `getOriginalAxisLabel`) quando o upstream refatora o state do chart (`chartDom` → `chartInstance` na 63)            | `git diff` vs último commit SP do EDD-969; se o bloco sumiu, reaplicar adaptando ao novo state              |
-| LDAP i18n                    | `SettingsLdapForm.tsx` volta a `title={"Server settings"}` (string crua) quando o upstream redesenha LDAP e o restore pega a versão inteira                                              | Reaplicar `` t` ` `` nos 4 títulos; as msgstr já existem no `.po`                                           |
-| Paleta 1092 no Visualizer    | `DEFAULT_ACCENT_COLORS` continua a paleta Metabase (`#509EE3`…). Cards antigos têm `series_settings.colors` gravado (parecem SP); o Visualizer abre com settings vazios e cai no default | Comparar `accent0` no DevTools dentro do Visualizer vs. um card normal; `DEFAULT_ACCENT_COLORS` deve ser SP |
-| Filtro cascata QB            | Código de `chain-filter-constraints.ts` / `FilterValuePicker.tsx` pode estar OK e o erro ser 400/500 no endpoint ou crash JS no picker                                                   | Reproduzir e capturar o erro exato (console + Network) antes de investigar                                  |
-| Datagrid via “ver registros” | Pin/hover testados no QB/Dashboard direto; “ver registros” pode renderizar outro container sem o CSS de hover                                                                            | Confirmar se o container aplica `DataGrid.module.css`                                                       |
+| Home badges / cards          | `home/utils.ts` sem `getItemBadge`; Recent/Popular sem `badge=`; Xray ainda no `HomeCard` 64                                                                                             | Cards sem chip; Xray horizontal em vez de 215×315                                                           |
+| Eixos 969                    | `CartesianChart.tsx` perde tooltip; `axis.ts` sem TitleCase/truncate; BoxPlot fora do path compartilh ado                                                                                | Hover no tick truncado sem tooltip; BoxPlot sem TitleCase                                                   |
+| LDAP i18n                    | `SettingsLdapForm.tsx` volta a string crua                                                                                                                                               | Títulos em inglês                                                                                           |
+| Paleta 1092 no Visualizer    | `DEFAULT_ACCENT_COLORS` Metabase; cards antigos mascaram com `series_settings.colors`                                                                                                    | Visualizer com azul `#509EE3`                                                                               |
+| Filtro cascata QB            | 400/500 no endpoint ou crash no picker                                                                                                                                                   | Network + console                                                                                            |
+| Datagrid via “ver registros” | Outro container sem CSS de hover/pin                                                                                                                                                     | Hover/pin só no QB direto                                                                                   |
+| filled vs primary            | `Button.module.css`: `filled` cai no brand vermelho                                                                                                                                      | + Novo / Entrar vermelhos                                                                                   |
 
 ## Como validar localmente
 
 - **Filtros cascata:** [filtros-cascata-datagrid.md](../filtros-cascata-datagrid.md) — Sample Database → People.
 - **Datagrid pin/hover:** paths em `lists/behavior-manual.txt`.
-- **Eixos 969 / Paleta 1092:** testar bar, line, combo, row, boxplot — e o Visualizer.
+- **Eixos 969 / Paleta 1092:** bar, line, area, combo, scatter, waterfall, row, boxplot — e o Visualizer.
+- **Typo Adicionr:** Admin → Settings → **Email** → campo/título “Add Recipients as CC or BCC” (deve ler “Adicionar…”, não “Adicionr…”).
