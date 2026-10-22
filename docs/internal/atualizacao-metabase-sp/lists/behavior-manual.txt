@@ -35,6 +35,7 @@ frontend/src/metabase/visualizations/visualizations/Scalar/Scalar.unit.spec.tsx
 frontend/src/metabase/visualizations/visualizations/SmartScalar/SmartScalar.tsx
 frontend/src/metabase/viz-core/echarts/cartesian/option/axis.ts
 frontend/src/metabase/viz-core/echarts/cartesian/option/utils.ts
+frontend/src/metabase/viz-core/index.ts
 frontend/src/metabase/viz-core/shared/components/RowChart/RowChart.unit.spec.tsx
 frontend/src/metabase/viz-core/shared/components/RowChart/theme.ts
 frontend/src/metabase/viz-core/shared/components/RowChart/utils/layout.ts
