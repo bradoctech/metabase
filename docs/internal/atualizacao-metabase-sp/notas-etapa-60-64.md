@@ -15,8 +15,8 @@
 | Bootstrap (docs + script + lists da 1359) | commit na branch |
 | `snapshot` + `merge` 60→64 + `restore` + resolução dos 43 unmerged | merge commit |
 | `scan` | stale=9 · missing=0 · orphan=34 · hybrid=71 · protegidos=193 |
-| `scan --apply` | stale/orphan aplicados; **re-scan: stale=0 orphan=0 hybrid=71** |
-| Híbridos | **pendente** (revisão um a um) |
+| `scan --apply` | stale/orphan aplicados; re-scan: stale=0 orphan=0 hybrid=71 |
+| Híbridos | **feito** — 53 restaurados ao upstream; SP mantidos + porte EDD-969; **re-scan: hybrid=0** protected=215 |
 | `verify` / `build-check` / smoke | **pendente** |
 
 ---
@@ -142,28 +142,37 @@ Atualizar para os equivalentes em `viz-core/` **depois** de portar o comportamen
 
 ---
 
-## Híbridos restantes (71) — próximo passo
+## Híbridos — resolução
 
-Não foram tocados pelo `--apply`. Incluem ruído local (`mage/bot/*`, `proxy_test.clj`), UI/embed/home, **static-viz**, **viz-core** (candidatos SP 969/RowChart), `TreeNode.styled.tsx`, `AppBanner`/`Banner`, etc.
+Classificação por sinais SP no diff vs `upstream/release-x.64.x` (Rawline, AXIS_LABEL/*, São Paulo, etc.):
 
-Regra: se for SP → manter e **adicionar/atualizar lista**; senão → `git checkout upstream/release-x.64.x -- <path>`.
+| Ação | Qtde | Exemplos |
+| ---- | ---- | -------- |
+| Restaurar do upstream | ~53 | mage/bot, AppBanner stuck, e2e, Progress, SmartScalar compute, … |
+| Manter SP (Rawline / logo / TreeNode) | ~15 | static-viz/*, `AutomaticDashboardApp.tsx`, `TreeNode.styled.tsx`, `png_test.clj`, … |
+| Porte EDD-969 | 3 paths + util já híbrido | ver abaixo |
 
-`APPLY_HYBRID=1` só se a decisão for restaurar **todos** do upstream (não recomendado enquanto 969/RowChart/tema não estiverem classificados).
+### Porte EDD-969 (feito nesta leva)
+
+| Path 64 | O que foi feito |
+| ------- | --------------- |
+| `viz-core/.../option/utils.ts` | Já tinha helpers SP (híbrido); mantido + lista |
+| `viz-core/.../option/axis.ts` | Formatters passam a `toTitleCase` + `truncateAxisLabel` + `registerAxisLabel` |
+| `viz-core/.../RowChartView/RowChartView.tsx` | TitleCase/truncate + tooltip hover (ex-RowChartView 63) |
+| `visualizations/.../CartesianChart/CartesianChart.tsx` | Tooltip de eixo via `getOriginalAxisLabel` |
+
+Listas `behavior-manual` / `dual-changed` atualizadas (paths mortos 60/63 removidos; `viz-core` + Rawline adicionados). `sp-theme*` permanece em `restore-ours`.
 
 ---
 
 ## Próximos comandos
 
 ```bash
-# após revisar híbridos (e portar 969/RowChart se necessário)
-bash bin/merge-upstream-preserve-sp.sh scan    # hybrid↓
 bash bin/merge-upstream-preserve-sp.sh verify
 # BE/FE parados:
 bash bin/merge-upstream-preserve-sp.sh build-check
 # smoke: checklist-smoke-test.md (eixos 969 + row + home + login)
 ```
-
-Commit sugerido para o resultado do `--apply` (quando o usuário pedir): stale restore + orphan deletes + este doc.
 
 ---
 
