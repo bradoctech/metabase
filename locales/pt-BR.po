@@ -19435,8 +19435,12 @@ msgstr "Renda"
 msgid "Numeric"
 msgstr "Numérico"
 
-#: frontend/src/metabase/common/utils/fields.ts
 #: frontend/src/metabase/embedding/components/SharingMenu/SharingMenu.tsx
+msgctxt "Sharing action"
+msgid "Share"
+msgstr "Compartilhar"
+
+#: frontend/src/metabase/common/utils/fields.ts
 msgid "Share"
 msgstr "Percentagem"
 

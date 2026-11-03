@@ -1,4 +1,5 @@
 import { createMockState } from "__support__/state";
+import { PLUGIN_MONITOR } from "metabase/plugins";
 import { createMockUser } from "metabase-types/api/mocks";
 
 import {
@@ -7,6 +8,7 @@ import {
   canAccessMonitor,
   canAccessMonitorDiagnostics,
   canAccessMonitoringTools,
+  getMonitorInitialSection,
 } from "./selectors";
 
 jest.mock("metabase/utils/iframe", () => ({
@@ -41,7 +43,7 @@ describe("canAccessMonitor", () => {
     expect(canAccessMonitor(state)).toBe(true);
   });
 
-  it("returns true when user is analyst", () => {
+  it("hides Monitor when an analyst only has access to an unavailable premium section", () => {
     const state = createMockState({
       currentUser: createMockUser({
         is_superuser: false,
@@ -49,7 +51,32 @@ describe("canAccessMonitor", () => {
       }),
     });
 
-    expect(canAccessMonitor(state)).toBe(true);
+    expect(canAccessMonitor(state)).toBe(false);
+    expect(getMonitorInitialSection(state)).toBeNull();
+  });
+
+  it("opens tasks for admins instead of landing on a hidden diagnostics upsell", () => {
+    const state = createMockState({
+      currentUser: createMockUser({ is_superuser: true }),
+    });
+    expect(getMonitorInitialSection(state)).toBe("tasks");
+  });
+
+  it("keeps Monitor visible for analysts when diagnostics are available", () => {
+    const original = PLUGIN_MONITOR.isDependencyDiagnosticsEnabled;
+    PLUGIN_MONITOR.isDependencyDiagnosticsEnabled = true;
+    const state = createMockState({
+      currentUser: createMockUser({
+        is_superuser: false,
+        is_data_analyst: true,
+      }),
+    });
+    try {
+      expect(canAccessMonitor(state)).toBe(true);
+      expect(getMonitorInitialSection(state)).toBe("diagnostics");
+    } finally {
+      PLUGIN_MONITOR.isDependencyDiagnosticsEnabled = original;
+    }
   });
 
   it("returns true for a monitoring-only user (tools access)", () => {

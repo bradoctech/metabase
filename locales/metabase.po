@@ -13687,6 +13687,11 @@ msgstr ""
 msgid "Share"
 msgstr ""
 
+#: frontend/src/metabase/embedding/components/SharingMenu/SharingMenu.tsx
+msgctxt "Sharing action"
+msgid "Share"
+msgstr ""
+
 #: frontend/src/metabase/lib/core.ts:263
 msgid "Percentage"
 msgstr ""

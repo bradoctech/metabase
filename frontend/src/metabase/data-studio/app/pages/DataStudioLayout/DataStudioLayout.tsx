@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { t } from "ttag";
 
-import DataStudioLogo from "assets/img/data-studio-logo.svg";
+import { LogoIcon } from "metabase/common/components/LogoIcon";
 import { useHasTokenFeature } from "metabase/common/hooks";
 import {
   canAccessDataModel as canAccessDataModelSelector,
@@ -182,15 +182,7 @@ export function DataStudioLayout() {
 
   return (
     <AreaLayout
-      logo={
-        <img
-          alt={t`Data Studio Logo`}
-          src={DataStudioLogo}
-          width={32}
-          height={32}
-          style={{ display: "block" }}
-        />
-      }
+      logo={<LogoIcon width={32} height={32} />}
       testId="data-studio-nav"
       isLoading={isLoadingNavbarKey}
       isNavbarOpened={isNavbarOpened}

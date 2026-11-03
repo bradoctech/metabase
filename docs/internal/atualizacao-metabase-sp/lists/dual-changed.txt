@@ -134,3 +134,16 @@ frontend/src/metabase/nav/containers/MainNavbar/MainNavbarContainer/AddDataModal
 frontend/src/metabase/nav/containers/MainNavbar/MainNavbarContainer/AddDataModal/Panels/AddDataModalEmptyStates.tsx
 frontend/src/metabase/transforms/pages/TransformListPage/CreateTransformMenu/CreateTransformMenu.tsx
 frontend/src/metabase/transforms/pages/TransformListPage/TransformListPage.tsx
+
+# EDD-1523 — ajustes pós-smoke: Monitor funcional, brasão SP e grupos vazios.
+frontend/src/metabase/embedding/components/SharingMenu/SharingMenu.tsx
+frontend/src/metabase/embedding/components/SharingMenu/SharingMenu.unit.spec.tsx
+frontend/src/metabase/common/monitor/selectors.ts
+frontend/src/metabase/common/monitor/selectors.unit.spec.ts
+frontend/src/metabase/data-studio/app/pages/DataStudioLayout/DataStudioLayout.tsx
+frontend/src/metabase/data-studio/app/pages/DataStudioLayout/tests/common.unit.spec.tsx
+frontend/src/metabase/monitor/route-guards.unit.spec.tsx
+frontend/src/metabase/monitor/routes.tsx
+frontend/src/metabase/nav/components/AppSwitcher/AppSwitcher.unit.spec.tsx
+frontend/src/metabase/nav/components/AreaLayout/AreaTabGroup.tsx
+frontend/src/metabase/nav/components/AreaLayout/AreaTabGroup.unit.spec.tsx

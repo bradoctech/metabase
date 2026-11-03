@@ -63,7 +63,7 @@ describe("monitor route-guards", () => {
       expect(router?.location.search).toBe("");
     });
 
-    it("renders for analysts", () => {
+    it("does not expose Monitor when an analyst has no non-commercial section", async () => {
       setup({
         currentUser: createMockUser({
           is_data_analyst: true,
@@ -71,7 +71,7 @@ describe("monitor route-guards", () => {
         }),
       });
 
-      expect(screen.getByText("monitor page")).toBeInTheDocument();
+      expect(await screen.findByText("unauthorized")).toBeInTheDocument();
     });
   });
 

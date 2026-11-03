@@ -3,7 +3,7 @@
 **Issue / branch:** `EDD-1523`  
 **Status:** em andamento  
 **Início do registro:** 30/10/2026  
-**Última atualização:** 02/11/2026
+**Última atualização:** 03/11/2026
 
 ## Objetivo e referências
 
@@ -15,6 +15,12 @@ Referências: [instruções do agente](./INSTRUCOES-AGENTE.md), [estratégia do 
 
 **Revalidação mais recente do usuário:** traduções de `/admin` corretas até onde verificadas, com exceção dos dois textos de mapas registrados em AUD-017. `/data-studio/` e a aplicação principal também foram revalidados sem novas ocorrências de tradução relatadas. Esse retorno se refere a traduções; não encerra os pontos de cores, menus, upsells ou estados sem dados do levantamento prévio. Os itens específicos abaixo mantêm suas evidências próprias.
 
+**Smoke posterior da política comercial:** o usuário percorreu as telas do admin e não encontrou resquícios de upsell. Na aplicação principal, validou somente o menu de troca de áreas e a entrada no Data Studio. Foram encontrados o retorno de Monitor à home, o logo upstream no Data Studio e a categoria Ferramentas vazia; os ajustes estão em AUD-019/AUD-020/AUD-021. Os demais fluxos comerciais da aplicação principal ainda não foram validados nesse smoke.
+
+**Retorno após os ajustes:** usuário confirmou Monitor e Data Studio funcionais, brasão SP correto no Data Studio e redirecionamento do item 6 para o Guia. CSV, detalhes/Insights, incorporação e transformações continuam pendentes de execução; os roteiros de reprodução estão abaixo.
+
+**Retorno seguinte do smoke:** CSV aprovado visualmente, com upload completo não exercitado porque a tela informa ausência de banco compatível. Detalhes de perguntas/dashboards e incorporação aprovados sem upsell na amostra testada. Transformações exibiram o estado de banco incompatível, sem acesso à lista/menu. A imagem do Data Studio também confirma o brasão SP e a ausência da categoria Ferramentas vazia. Novo achado: tooltip de compartilhamento “Percentagem”, registrado em AUD-022.
+
 | ID | Área / rota | Ponto identificado | Situação |
 | --- | --- | --- | --- |
 | AUD-001 | `/admin/settings/general` | Textos em inglês mesmo com pt-BR ativo | Usuário confirmou resolução após regenerar recursos e reiniciar o backend, até onde testou |
@@ -23,7 +29,11 @@ Referências: [instruções do agente](./INSTRUCOES-AGENTE.md), [estratégia do 
 | AUD-004 | `/admin/databases/create` | Rótulo “Connection string (optional)” sem tradução | Marcação e tradução aplicadas; validação visual pendente |
 | AUD-005 | `/admin/databases/create` → “A ajuda está aqui” → PostgreSQL | Corpo do painel de ajuda em inglês | Markdown pt-BR e seleção por idioma implementados; testes passaram; validação visual pendente |
 | AUD-017 | `/admin/settings/maps` | Título e descrição da URL pública do servidor de mapas em inglês | Entradas adicionadas ao catálogo pt-BR e ao template; revalidação visual pendente |
-| AUD-018 | Admin, Data Studio, Monitor e fluxos comerciais da aplicação | CTAs e links de upsell | Política SP implementada sem montar as ofertas; validação automatizada concluída; smoke visual pendente |
+| AUD-018 | Admin, Data Studio, Monitor e fluxos comerciais da aplicação | CTAs e links de upsell | Admin aprovado pelo usuário no smoke; aplicação principal parcialmente validada; demais fluxos pendentes |
+| AUD-019 | Menu de troca de áreas → Monitor | Entrada em Monitor seguida de retorno à home | Funcionamento confirmado pelo usuário no perfil testado; ocultação para perfil sem seção disponível coberta pelos testes |
+| AUD-020 | Cabeçalho do Data Studio | Logo Metabase em vez do brasão SP | Brasão SP confirmado pelo usuário |
+| AUD-021 | Sidebar do Data Studio → Ferramentas | Categoria sem itens após bloqueio das ofertas | Ausência da categoria vazia confirmada pela imagem posterior do usuário |
+| AUD-022 | Botão de compartilhar pergunta/dashboard | Tooltip “Percentagem” em vez de “Compartilhar” | Resolvido; usuário confirmou “Compartilhar” na interface com imagem |
 
 “Aplicado” indica alteração no diretório de trabalho. Não implica commit, publicação ou aceite visual. A confirmação geral do usuário em AUD-001 não é tratada como aceite individual dos demais ajustes.
 
@@ -299,9 +309,127 @@ Os redirecionamentos se aplicam aos ramos comerciais. As páginas de features di
 - **ESLint:** passou nos arquivos da implementação e testes, incluindo o registro de módulo.
 - **TypeScript:** `tsc --noEmit --pretty false` passou sem erros com heap de 5120 MiB. A tentativa inicial com 3072 MiB esgotou o heap; não foi tratada como aprovação. Build de produção e suíte completa não foram executados nesta leva.
 - **Integridade:** `git diff --check` passou; os 68 paths de implementação/testes/registro de módulo estão explicitamente cobertos pelas listas canônicas (3 SP-owned e 65 adapters).
-- Smoke visual pendente: admin, Data Studio, Monitor, Insights, incorporação e CSV; conferir espaços vazios, separadores e as funções disponíveis na instância.
-- O experimento de cor em `UpsellCta.module.css` foi removido a pedido do usuário: restaurado `background-color: var(--mb-color-core-metabase_brand)`, sem cores de teste.
+- Smoke visual do admin aprovado pelo usuário. Data Studio e Monitor tiveram pendências identificadas e corrigidas na rodada abaixo. Insights, incorporação e CSV ainda precisam de smoke.
+- O usuário retomou temporariamente o fundo verde em `UpsellCta.module.css` para o smoke e informou que restaurará a cor padrão antes de commitar. O experimento não foi alterado nesta rodada pós-smoke.
 - Novos componentes upstream que não usem os pontos de integração existentes ainda exigem revisão no próximo upgrade. As listas protegem as adaptações atuais; não detectam automaticamente novas ofertas.
+
+## Ajustes após o smoke — Monitor, marca e grupos vazios
+
+### AUD-019 — Monitor retornava à home
+
+**Causa:** `/monitor` priorizava o diagnóstico de dependências para administradores e analistas, mesmo sem o plugin desse recurso disponível. Esse ramo abria uma página de upsell, redirecionada pela política SP para `/`, causando o efeito de entrada e retorno descrito pelo usuário.
+
+**Constatação:** Monitor não é composto somente por ofertas premium. Administradores e usuários com permissão de monitoramento têm acesso a ferramentas como tarefas, agendamentos e logs; administradores também têm gerenciamento de alertas. Essas funções foram preservadas.
+
+**Ajuste:** `getMonitorInitialSection`, em `common/monitor/selectors.ts`, passa a determinar tanto a presença do item no menu quanto a seção inicial. Prioriza diagnósticos quando o plugin está disponível (ou quando ofertas forem permitidas pela política); caso contrário, seleciona tarefas ou alertas conforme a permissão. Quando nenhuma seção estiver disponível, o item Monitor deixa de aparecer. `monitor/routes.tsx` usa a mesma decisão para a entrada na área.
+
+**Revalidar:** para o administrador sem diagnóstico premium, o menu deve abrir `/monitor/tasks` e permanecer na área; tarefas, logs, agendamentos e alertas disponíveis devem continuar acessíveis. Para um analista sem plugin de diagnóstico e sem permissão de monitoramento, Monitor não deve aparecer.
+
+### AUD-020 — Brasão SP no Data Studio
+
+**Causa:** `DataStudioLayout.tsx` importava diretamente `assets/img/data-studio-logo.svg`, sem passar pelo componente de marca já adaptado pelo fork.
+
+**Ajuste:** reutilizar `LogoIcon`, que carrega o brasão SP e respeita a integração de marca existente. Não foi duplicado o asset nem criado outro mecanismo de tema.
+
+**Revalidar:** brasão na sidebar expandida e recolhida; controles de abrir/fechar a sidebar continuam funcionais.
+
+### AUD-021 — Categoria Ferramentas vazia
+
+**Causa:** `AreaTab` já omitia os links promocionais, mas o componente pai `AreaTabGroup` continuava renderizando o título e a seção.
+
+**Ajuste:** o grupo filtra os filhos `AreaTab` indisponíveis pela política SP e deixa de renderizar sua seção quando não restar nenhum filho visível. A filtragem trata fragments e mantém grupos mistos com links funcionais. Com um recurso disponível, Ferramentas e seu respectivo link continuam aparecendo.
+
+**Revalidar:** Ferramentas não deve aparecer no cenário da imagem; Biblioteca deve continuar visível com Glossário. Confirmar o comportamento também com a sidebar recolhida.
+
+### Verificação desta rodada
+
+- **66 testes distintos passaram em 6 suítes** de seletores/guards/rotas de Monitor, menu de troca de áreas, grupos de navegação e layout do Data Studio. O teste adicional de ocultação de Monitor no menu foi validado na reexecução da suíte de AppSwitcher.
+- **ESLint passou** nos 9 arquivos de código e testes desta rodada; `git diff --check` passou.
+- **TypeScript passou** sem erros (`tsc --noEmit --pretty false`, heap de 5120 MiB).
+- Conferência do brasão SP, ausência de categoria vazia, preservação dos links disponíveis e ausência de Monitor quando só haveria oferta.
+- Novos paths de integração e testes registrados em `lists/dual-changed.txt`.
+- Esta rodada não altera o experimento verde nem executa commits.
+
+## Checklist visual restante da política comercial
+
+| Área / fluxo | Conferir | Estado |
+| --- | --- | --- |
+| Telas do admin percorridas pelo usuário | Ausência de resquícios de upsell | **OK informado pelo usuário** |
+| Menu da aplicação → Monitor | Abrir seção disponível sem voltar à home; omitir entrada quando não houver função disponível | **OK de funcionamento informado pelo usuário**; outro perfil sem seção disponível não foi relatado |
+| Data Studio | Brasão SP, sidebar expandida/recolhida, ausência de Ferramentas vazia e preservação de Glossário/Dados conectados | **OK de funcionamento e brasão informado pelo usuário**; imagem confirma ausência de Ferramentas vazia; sidebar recolhida não foi detalhada |
+| Adicione seus dados → CSV | Ausência de compra de armazenamento e de textos promocionais; manter configuração de uploads e upload funcional quando disponível | **Visual OK informado pelo usuário**; upload completo não exercitado por ausência de banco compatível |
+| Pergunta e dashboard → detalhes/Insights | Nenhuma aba de oferta, CTA ou área comercial vazia; detalhes comuns continuam funcionando | **OK informado pelo usuário** |
+| Compartilhar/incorporar pergunta ou dashboard | Sem ofertas de planos para fontes, temas ou remoção de marca; preservar opções permitidas e o banner de marca efetivamente usado no embed | **Sem upsell: OK informado pelo usuário** na amostra testada; tooltip incorreto tratado em AUD-022 |
+| Home específica de incorporação | Ausência do card comercial e de espaço reservado vazio | Pendente, somente se essa home for usada |
+| Data Studio → Transformação de dados | Ausência de opções/biblioteca Python que apenas abririam oferta; preservar funções liberadas | Estado de banco incompatível observado sem oferta comercial; lista/menu/editor não exercitados |
+| URLs diretas de páginas promocionais | Por exemplo, `/data-studio/dependencies` sem a feature deve levar ao Guia; sem loop ou tela comercial vazia | **OK informado pelo usuário para o exemplo do item 6** |
+
+### Roteiros para os itens 2 a 5 do smoke
+
+Executar com o usuário administrador usado no smoke anterior e com uma pergunta/dashboard salvos para os fluxos de detalhes e incorporação.
+
+**2 — Adicionar dados por CSV**
+
+1. Voltar à aplicação principal, por exemplo `/`.
+2. Na barra lateral esquerda, localizar o grupo **Dados** e clicar no **+** à direita do título, com tooltip **Adicionar dados**. Se houver o atalho **Adicione seus dados**, ele abre o mesmo modal.
+3. No modal, selecionar a aba **CSV**.
+4. Conferir ausência de oferta de compra de armazenamento, upgrade e espaços vazios. Se uploads estiverem desabilitados, o botão de habilitação deve continuar disponível para quem tem permissão, levando a `/admin/settings/uploads`.
+5. Para testar o upload completo, configurar nessa página um banco/esquema elegível disponibilizado pela interface e voltar à aba CSV. Selecionar um CSV de teste pequeno, concluir o upload e conferir a tabela criada. Caso não exista banco elegível configurado, registrar a verificação visual e deixar o upload completo como não exercitado.
+
+Exemplo de conteúdo de CSV local:
+
+```csv
+categoria,valor
+Teste A,10
+Teste B,20
+```
+
+**3 — Detalhes de pergunta e dashboard / Insights**
+
+1. Abrir uma pergunta salva. Para criar uma amostra, usar **+ Novo → Pergunta**, escolher uma tabela do Sample Database e salvar a pergunta.
+2. No cabeçalho, clicar no ícone de informação **ⓘ**, com tooltip **Mais informações**.
+3. Conferir que o painel lateral carrega as informações e as abas disponíveis, como **Visão global** e **Histórico**, sem card de upgrade ou área comercial vazia. Sem `audit_app`, a aba promocional **Insights** deve estar ausente.
+4. Repetir em um dashboard salvo, fora do modo de edição, usando o ícone **ⓘ / Mais informações** do cabeçalho. As abas disponíveis variam com o conteúdo e as permissões.
+
+**4 — Compartilhar/incorporar**
+
+1. Abrir a pergunta salva ou um dashboard salvo e clicar no ícone **Compartilhar** no cabeçalho.
+2. No menu aberto, escolher **Incorporar**.
+3. Na v64, essa ação pode abrir o assistente de incorporação. Percorrer as opções disponíveis até **Aparência/Comportamento**, conferindo ausência de cards e links de upgrade. Se o fluxo apresentar o modal clássico **Incorporação estática**, conferir a aba **Aparência**.
+4. Verificar opções de tema, fonte, borda e título conforme disponíveis. Não deve haver oferta de plano para fontes/temas nem card comercial para remover a marca. O banner de marca efetivamente usado na prévia continua seguindo as regras existentes.
+5. Basta inspecionar a configuração e a prévia; publicar o conteúdo não é necessário para essa verificação. Se o acesso à etapa depender de incorporação desativada ou de configuração ausente, registrar o estado e marcar a parte não acessada como não exercitada.
+6. Repetir no outro tipo de conteúdo, pergunta/dashboard, se ambos estiverem disponíveis.
+
+**5 — Transformação de dados**
+
+1. Abrir **Estúdio de dados → Transformação de dados**, ou `/data-studio/transforms`.
+2. Se a lista estiver disponível, abrir o menu **Novo**.
+3. Sem a feature Python, conferir ausência da opção **Python script / Script Python** e da linha **Python library / Biblioteca Python** que levariam somente à oferta.
+4. Conferir as opções disponíveis, como construtor de consultas ou SQL; abrir uma delas e verificar o editor, sem precisar executar ou salvar uma transformação para este smoke.
+5. Pedidos de habilitação de transformações e avisos de ausência de banco compatível são estados funcionais. Caso impeçam acessar a lista/menu, registrar esse estado e deixar essa parte do fluxo como não exercitada.
+
+### Limitações de ambiente confirmadas no smoke
+
+- **Uploads:** a imagem mostra o seletor de banco sem opção elegível e o botão de habilitação desabilitado. `UploadSettingsForm.tsx` solicita a lista de bancos com `include_only_uploadable: true`. Registrar como ausência de conexão elegível informada pela tela, sem atribuir a causa à política comercial nem declarar o upload completo aprovado.
+- **Transformações:** a imagem mostra “Nenhuma conexão de banco de dados compatível”. `useTransformSupportedDbs` filtra os bancos por `validateDatabase`, que exclui explicitamente Sample Database, banco de Usage Analytics, bancos com roteamento e conexões sem `transforms/table`. O screenshot confirma o estado sem conexão compatível; não identifica sozinho qual requisito cada conexão deixou de atender.
+
+Esses dois fluxos funcionais poderão ser completados quando houver uma conexão elegível configurada. A inspeção visual realizada permanece registrada como evidência própria.
+
+### AUD-022 — Tooltip “Percentagem” no compartilhamento
+
+**Evidência:** imagem do botão de compartilhamento com tooltip “Percentagem”; usuário confirmou que a ação abre o fluxo de compartilhamento/incorporação.
+
+**Origem:** `Share` é uma chave usada tanto em `common/utils/fields.ts`, como nome do tipo semântico numérico `TYPE.Share`, quanto em `embedding/components/SharingMenu/SharingMenu.tsx`, como ação. O catálogo pt-BR tinha uma única tradução sem contexto: `Share` → “Percentagem”. Por isso o botão herdava o significado numérico.
+
+**Correção:** usar `c("Sharing action").t\`Share\`` nos quatro rótulos de ação do componente (tooltip e nome acessível do menu e do botão). Adicionar `msgctxt "Sharing action"`, `msgid "Share"`, `msgstr "Compartilhar"` a `locales/pt-BR.po` e a chave contextual ao template. A tradução numérica sem contexto continua “Percentagem”. Componente e testes registrados em `lists/dual-changed.txt`.
+
+**Validação:** 3 testes passaram em 2 suítes direcionadas (SharingMenu e CopyLinkButton); ESLint e `git diff --check` passaram. Os testes verificam tooltip/nome acessível “Compartilhar”, preservação de “Percentagem” no significado numérico e o nome acessível quando o tooltip é um elemento React. Os catálogos foram conferidos para garantir as duas entradas distintas.
+
+**Revalidar na interface:** executar `./bin/i18n/build-translation-resources`, reiniciar o backend e recarregar a aplicação com o frontend recompilado. O tooltip e o nome acessível do botão devem passar a “Compartilhar”.
+
+**Resultado visual:** usuário confirmou a resolução e enviou imagem do tooltip “Compartilhar”. AUD-022 validada na interface; nome acessível coberto pelos testes automatizados.
+
+O smoke comercial não encerra automaticamente os demais pontos do levantamento inicial: cores da lixeira e dos ícones, avaliação dos links de Ajuda/Sobre e conexão, contraste do menu administrativo e estado sem dados de Atualizações continuam dependentes de sua própria validação ou definição de escopo.
 
 ## Pendências de acompanhamento
 
@@ -309,7 +437,11 @@ Os redirecionamentos se aplicam aos ramos comerciais. As páginas de features di
 - [ ] Confirmar o rótulo “String de conexão (opcional)” na criação de banco (AUD-004).
 - [ ] Confirmar a ajuda completa de PostgreSQL em pt-BR (AUD-005).
 - [ ] Confirmar título, descrição e link da URL pública do servidor de mapas (AUD-017).
-- [ ] Smoke visual da política comercial (AUD-018), incluindo preservação das funções disponíveis, menus e redirecionamentos.
+- [x] Smoke visual dos CTAs no admin, conforme retorno do usuário (AUD-018).
+- [x] Smoke de detalhes/Insights e ausência de upsell na incorporação, na amostra relatada pelo usuário.
+- [ ] Concluir o smoke comercial da aplicação principal conforme a tabela acima, incluindo AUD-019/AUD-020/AUD-021.
+- [x] Revalidar “Compartilhar” no tooltip após gerar os recursos atualizados (AUD-022), confirmado pelo usuário com imagem.
+- [ ] Exercitar upload completo e lista/menu de transformações quando existir banco elegível.
 - [ ] Conferir o estado atual dos itens AUD-006 a AUD-016 antes de implementar, distinguindo os que já foram corrigidos.
 - [ ] Registrar novas ocorrências informadas pelo usuário, com rota, texto, causa, correção e evidência de validação.
 

@@ -50,6 +50,7 @@ const adminNavItem = {
 
 async function setup({
   isAdmin = false,
+  isAnalyst = false,
   isHosted = false,
   isPaidPlan = true,
   helpLinkSetting = "metabase",
@@ -57,6 +58,7 @@ async function setup({
   instanceCreationDate = dayjs().toISOString(),
 }: {
   isAdmin?: boolean;
+  isAnalyst?: boolean;
   isHosted?: boolean;
   isPaidPlan?: boolean;
   helpLinkSetting?: HelpLinkSetting;
@@ -92,7 +94,11 @@ async function setup({
       storeInitialState: {
         admin,
         settings,
-        currentUser: { ...USER, is_superuser: isAdmin },
+        currentUser: {
+          ...USER,
+          is_superuser: isAdmin,
+          is_data_analyst: isAnalyst,
+        },
       },
     },
   );
@@ -201,6 +207,13 @@ describe("ProfileLink", () => {
   });
 
   describe("with areas", () => {
+    it("does not advertise Monitor when the analyst only has a diagnostics upsell", async () => {
+      await setup({ isAnalyst: true });
+      expect(
+        screen.queryByRole("menuitem", { name: "Monitor" }),
+      ).not.toBeInTheDocument();
+    });
+
     it("should show data studio and monitor apps when appropriate", async () => {
       await setup({ isAdmin: true });
 
