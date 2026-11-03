@@ -17865,6 +17865,15 @@ msgid ""
 msgstr ""
 
 #: frontend/src/metabase/admin/settings/components/SettingsPages/MapsSettingsPage.tsx:17
+msgid "Map tile server public URL"
+msgstr ""
+
+#: frontend/src/metabase/admin/settings/components/SettingsPages/MapsSettingsPage.tsx
+#, javascript-format
+msgid "Public URL of the tile server to use when rendering maps. Defaults to OpenStreetMaps, but you can set a custom URL. This URL is visible to clients, so do not include private keys. {0}"
+msgstr ""
+
+#: frontend/src/metabase/admin/settings/components/SettingsPages/MapsSettingsPage.tsx
 msgid "Map tile server URL"
 msgstr ""
 

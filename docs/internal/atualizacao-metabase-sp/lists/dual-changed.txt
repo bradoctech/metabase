@@ -2,6 +2,8 @@
 
 
 .gitignore
+frontend/src/metabase/admin/databases/components/DatabaseHelpSidePanel/EmbeddedEngineDocContent/useEngineDocMarkdownContent.tsx
+frontend/src/metabase/admin/databases/components/DatabaseHelpSidePanel/EmbeddedEngineDocContent/useEngineDocMarkdownContent.unit.spec.tsx
 frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
 frontend/src/metabase/auth/components/AuthButton/AuthButton.module.css
 frontend/src/metabase/auth/components/AuthButton/AuthButton.tsx
@@ -59,6 +61,7 @@ frontend/src/metabase/visualizations/components/settings/ChartSettingsTableForma
 frontend/src/metabase/visualizations/lib/exports-branding-utils.tsx
 frontend/src/metabase/visualizations/lib/save-dashboard-pdf.ts
 frontend/src/metabase/visualizations/visualizations/RowChart/utils/theme.ts
+frontend/src/metabase/databases/components/DatabaseConnectionUri/DatabaseConnectionStringField.tsx
 locales/pt-BR.po
 src/metabase/config/core.clj
 src/metabase/core/core.clj

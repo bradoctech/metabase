@@ -1,5 +1,6 @@
 # SP-owned — restore from SP_REF during merge (EDD-1356). Source: manifesto EDD-1361.
 
+docs/databases/connections/postgresql.pt-BR.md
 docs/internal/abono-demo/README.md
 docs/internal/abono-demo/build_sqlite.py
 docs/internal/abono-demo/dash_10_backup_20260821_083836.json

@@ -15623,7 +15623,7 @@ msgstr "Nome do remetente"
 
 #: frontend/src/metabase/admin/settings/components/SettingsPages/EmailSettingsPage.tsx
 msgid "Add Recipients as CC or BCC"
-msgstr "Adicionr destinatários como CC ou BCC"
+msgstr "Adicionar destinatários como CC ou BCC"
 
 #: frontend/src/metabase/admin/settings/components/SettingsPages/EmailSettingsPage.tsx
 msgid "BCC - Hide recipients"
@@ -15667,7 +15667,7 @@ msgstr "Endereço de e-mail para solicitações de ajuda"
 
 #: frontend/src/metabase/admin/settings/components/SettingsPages/GeneralSettingsPage.tsx
 msgid "Tables and X-Rays"
-msgstr "Tabelas e X-Rays"
+msgstr "Tabelas e raios-X"
 
 #: frontend/src/metabase/admin/settings/components/SettingsPages/GeneralSettingsPage.tsx
 msgid "Friendly table and field names"
@@ -15753,6 +15753,15 @@ msgstr "Sexta"
 #: frontend/src/metabase/utils/date-time.ts
 msgid "Saturday"
 msgstr "Sábado"
+
+#: frontend/src/metabase/admin/settings/components/SettingsPages/MapsSettingsPage.tsx
+msgid "Map tile server public URL"
+msgstr "URL pública do servidor de blocos de mapas"
+
+#: frontend/src/metabase/admin/settings/components/SettingsPages/MapsSettingsPage.tsx
+#, javascript-format
+msgid "Public URL of the tile server to use when rendering maps. Defaults to OpenStreetMaps, but you can set a custom URL. This URL is visible to clients, so do not include private keys. {0}"
+msgstr "URL pública do servidor de blocos usado para renderizar mapas. Por padrão, usa o OpenStreetMaps, mas você pode definir uma URL personalizada. Esta URL fica visível para os clientes, portanto, não inclua chaves privadas. {0}"
 
 #: frontend/src/metabase/admin/settings/components/SettingsPages/MapsSettingsPage.tsx
 msgid "Map tile server URL"
@@ -22123,6 +22132,10 @@ msgstr "Preencha host, porta e nome do banco de dados"
 #: frontend/src/metabase/databases/components/DatabaseConnectionSectionField/DatabaseConnectionSectionField.tsx
 msgid "Use a connection string"
 msgstr "Usar uma string de conexão"
+
+#: frontend/src/metabase/databases/components/DatabaseConnectionUri/DatabaseConnectionStringField.tsx
+msgid "Connection string (optional)"
+msgstr "String de conexão (opcional)"
 
 #: frontend/src/metabase/databases/components/DatabaseConnectionUri/DatabaseConnectionStringField.tsx
 #, javascript-format
@@ -35428,7 +35441,7 @@ msgstr "Identificador único a ser usado em análises do Snowplow para identific
 
 #: metabase/analytics/settings.clj
 msgid "Enable the collection of anonymous usage data in order to help Metabase improve.."
-msgstr "Habilite a coleta de dados de uso anônimos para ajudar o Metabase a melhorar.."
+msgstr "Habilite a coleta de dados de uso anônimos para ajudar o Metabase a melhorar."
 
 #: metabase/analytics/settings.clj
 msgid "Boolean indicating whether a Snowplow collector is available to receive analytics events. Should be set via environment variable in Cypress tests or during local development."
