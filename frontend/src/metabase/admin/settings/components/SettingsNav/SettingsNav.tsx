@@ -11,6 +11,7 @@ import {
 } from "metabase/plugins";
 import { useSelector } from "metabase/redux";
 import { getPlan, isProPlan, useSetting } from "metabase/settings";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Box, Divider, Flex } from "metabase/ui";
 
 import { CustomVisualizationsNav } from "./CustomVisualizationsNav";
@@ -63,6 +64,7 @@ export function SettingsNav() {
       ) : !isPro ? (
         <SettingsNavItem
           path="remote-sync"
+          isUpsell
           label={
             <Flex gap="sm" align="center">
               <span>{t`Remote sync`}</span>
@@ -91,6 +93,7 @@ export function SettingsNav() {
       <SettingsNavItem path="maps" label={t`Maps`} icon="map" />
       <SettingsNavItem
         path={!hasWhitelabel ? "whitelabel" : undefined}
+        isUpsell={!hasWhitelabel}
         folderPattern="whitelabel"
         label={
           <Flex gap="sm" align="center">
@@ -130,9 +133,12 @@ export function SettingsNav() {
         icon="share"
       />
       <NavDivider />
-      <SettingsNavItem path="license" label={t`License`} icon="store" />
+      {SP_COMMERCIAL_POLICY.showLicenseMenu && (
+        <SettingsNavItem path="license" label={t`License`} icon="store" />
+      )}
       <SettingsNavItem
         path="cloud"
+        isUpsell={!hasHosting}
         label={
           <Flex gap="sm" align="center">
             <span>{t`Cloud`}</span>

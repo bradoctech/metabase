@@ -4,8 +4,10 @@ import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { UpsellBigCard } from "metabase/common/components/upsells/components";
 import S from "metabase/common/components/upsells/components/Upsells.module.css";
 import { useHasTokenFeature } from "metabase/common/hooks";
+import { redirect } from "metabase/router";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 
-export const UpsellCloud = ({
+const UpsellCloudUpstream = ({
   source,
   onOpenModal,
 }: {
@@ -40,3 +42,8 @@ export const UpsellCloud = ({
     </UpsellBigCard>
   );
 };
+
+export const UpsellCloud = withSpCommercialPolicy(
+  UpsellCloudUpstream,
+  redirect("/admin/settings/general"),
+);

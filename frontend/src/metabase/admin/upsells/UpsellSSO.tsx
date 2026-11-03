@@ -5,9 +5,10 @@ import { UPGRADE_URL } from "metabase/common/components/upsells/constants";
 import { PLUGIN_ADMIN_SETTINGS } from "metabase/plugins";
 import { useSelector } from "metabase/redux";
 import { getSetting, hasAnySsoFeature } from "metabase/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Box, List } from "metabase/ui";
 
-export const UpsellSSO = ({ location }: { location: string }) => {
+const UpsellSSOUpstream = ({ location }: { location: string }) => {
   const campaign = "sso";
   const { triggerUpsellFlow } = PLUGIN_ADMIN_SETTINGS.useUpsellFlow({
     campaign,
@@ -45,3 +46,5 @@ export const UpsellSSO = ({ location }: { location: string }) => {
     </UpsellCard>
   );
 };
+
+export const UpsellSSO = withSpCommercialPolicy(UpsellSSOUpstream);

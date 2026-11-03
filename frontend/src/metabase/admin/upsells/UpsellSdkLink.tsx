@@ -7,9 +7,10 @@ import linkStyles from "metabase/css/core/link.module.css";
 import { PLUGIN_ADMIN_SETTINGS } from "metabase/plugins";
 import { useSelector } from "metabase/redux";
 import { getUpgradeUrl } from "metabase/selectors/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { UnstyledButton } from "metabase/ui";
 
-export function UpsellSdkLink() {
+function UpsellSdkLinkUpstream() {
   const campaign = "embedding-sdk";
   const location = "embedding-sdk-admin";
   const upgradeUrl = useSelector((state) =>
@@ -48,3 +49,5 @@ export function UpsellSdkLink() {
     </ExternalLink>
   );
 }
+
+export const UpsellSdkLink = withSpCommercialPolicy(UpsellSdkLinkUpstream);

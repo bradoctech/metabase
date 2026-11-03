@@ -1,11 +1,12 @@
 import { t } from "ttag";
 
 import { PLUGIN_ADMIN_SETTINGS } from "metabase/plugins";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 
 import { UpsellCard } from "./UpsellCard";
 import { UPGRADE_URL } from "./constants";
 
-export function UpsellMetabaseBanner() {
+function UpsellMetabaseBannerUpstream() {
   const campaign = "remove-mb-branding";
   const location = "static-embed-settings-look-and-feel";
   const { triggerUpsellFlow } = PLUGIN_ADMIN_SETTINGS.useUpsellFlow({
@@ -27,3 +28,7 @@ export function UpsellMetabaseBanner() {
     </UpsellCard>
   );
 }
+
+export const UpsellMetabaseBanner = withSpCommercialPolicy(
+  UpsellMetabaseBannerUpstream,
+);

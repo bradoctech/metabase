@@ -3,7 +3,7 @@
 **Issue / branch:** `EDD-1523`  
 **Status:** em andamento  
 **Início do registro:** 30/10/2026  
-**Última atualização:** 30/10/2026
+**Última atualização:** 02/11/2026
 
 ## Objetivo e referências
 
@@ -23,6 +23,7 @@ Referências: [instruções do agente](./INSTRUCOES-AGENTE.md), [estratégia do 
 | AUD-004 | `/admin/databases/create` | Rótulo “Connection string (optional)” sem tradução | Marcação e tradução aplicadas; validação visual pendente |
 | AUD-005 | `/admin/databases/create` → “A ajuda está aqui” → PostgreSQL | Corpo do painel de ajuda em inglês | Markdown pt-BR e seleção por idioma implementados; testes passaram; validação visual pendente |
 | AUD-017 | `/admin/settings/maps` | Título e descrição da URL pública do servidor de mapas em inglês | Entradas adicionadas ao catálogo pt-BR e ao template; revalidação visual pendente |
+| AUD-018 | Admin, Data Studio, Monitor e fluxos comerciais da aplicação | CTAs e links de upsell | Política SP implementada sem montar as ofertas; validação automatizada concluída; smoke visual pendente |
 
 “Aplicado” indica alteração no diretório de trabalho. Não implica commit, publicação ou aceite visual. A confirmação geral do usuário em AUD-001 não é tratada como aceite individual dos demais ajustes.
 
@@ -123,9 +124,9 @@ Recebido em 30/10/2026 para alinhamento de contexto. O usuário informou que alg
 | AUD-009 | Lixeira | Aviso “Este collection está no lixo”: conferir o vermelho do fundo e localizar outros usos do mesmo tom para adequação à paleta SP | A verificar; registrar também o texto misto como candidato à revisão de tradução |
 | AUD-010 | `/browse/metrics` e hover de coleção | Ícones com vermelho aparentemente fora da paleta; no hover de uma coleção, cor diferente da de “Nome” | A verificar com referência visual e tokens SP |
 | AUD-011 | Navegação administrativa | Texto do item ativo claro sobre fundo claro, prejudicando a leitura; ajuste proposto para preto | A verificar |
-| AUD-012 | `/admin/settings/uploads` | Ocultar chamadas “Atualize para o Metabase Pro”; revisar textos em inglês no hover de informação | A verificar; referência visual informada: `UpsellCta-module__UpsellCTALink___aBdyE` |
-| AUD-013 | Área administrativa | Revisar traduções e ocultar chamadas para planos Pro | A verificar por tela; consolidar ocorrências específicas sem duplicar correções |
-| AUD-014 | Menus administrativos | Ocultar “Sincronização remota”, itens com diamante que levam ao Pro e “Licença” | A verificar; identificar componentes e condições de exibição |
+| AUD-012 | `/admin/settings/uploads` | Ocultar chamadas “Atualize para o Metabase Pro”; revisar textos em inglês no hover de informação | CTA e contêiner lateral bloqueados pela política SP; validar a tela e eventuais hovers remanescentes |
+| AUD-013 | Área administrativa | Revisar traduções e ocultar chamadas para planos Pro | Traduções revalidadas pelo usuário até onde testado; política de ofertas aplicada; smoke visual pendente |
+| AUD-014 | Menus administrativos | Ocultar “Sincronização remota”, itens com diamante que levam ao Pro e “Licença” | Entradas promocionais não renderizadas e menu Licença oculto; recursos disponíveis preservados; smoke visual pendente |
 | AUD-015 | `/admin/databases/create` | Ocultar o link “Precisa de ajuda para conectar?” que leva ao Metabase | A verificar; identificar o link exato antes de alterar o painel de ajuda |
 | AUD-016 | `/admin/settings/updates` | Tratar falta de dados | A verificar; reproduzir o estado e definir o comportamento esperado |
 
@@ -250,7 +251,57 @@ Ocultar por CSS mantém os componentes montados: hooks, consultas e eventos de v
 - A configuração do tema SP não depende de liberar `whitelabel` upstream. Inativar o menu promocional de Aparência não deve remover os tokens e adapters SP existentes.
 - O levantamento não confirma o estado da instalação PRODESP nem quais recursos pagos estão contratados/ativos nela.
 
-**Próximo passo:** alinhar a política para menus (desabilitar ou ocultar por item), o destino de URLs diretas de páginas promocionais e o alcance inicial da primeira leva. Só então aplicar os fixes.
+**Decisão posterior (02/11/2026):** aprovada a opção de não renderizar por uma condição SP, preservando o código upstream. A implementação abaixo substitui a proposta inicial de ocultação via CSS. As tabelas acima mantêm o registro do levantamento.
+
+## Política SP de ofertas comerciais — implementação de 02/11/2026
+
+**Situação:** implementada no frontend; validação automatizada concluída e smoke visual pendente. Registro AUD-018, relacionado a AUD-012/AUD-013/AUD-014.
+
+### Organização para os próximos upgrades
+
+- `frontend/src/metabase/sp/commercial-policy.ts`: decisão central de apresentação (`showUpsells: false`, `showLicenseMenu: false`). Não altera licença, token nem disponibilidade das features upstream.
+- `frontend/src/metabase/sp/with-commercial-policy.tsx`: envolve os componentes comerciais antes de montar suas implementações. As implementações upstream permanecem no arquivo e recebem o sufixo `Upstream`. Com a política SP ativa, seus hooks e efeitos não são executados.
+- Módulo `sp` registrado na camada `lib` de `frontend/lint/module-boundaries.mjs`, sem dependência do router no módulo SP.
+- Módulo e testes SP em `lists/restore-ours.txt`; integrações com componentes, navegação, testes e registro de módulo em `lists/dual-changed.txt`. Não foi criado outro processo de transporte.
+
+### Cobertura aplicada
+
+- Cards, banners, pills, conteúdo de cards, CTA e modal de upgrade compartilhados; wrapper dispensável bloqueado antes de montar `UserHasSeen`.
+- Entradas comerciais específicas do admin (`admin/upsells`), antes dos hooks de oferta; Loja, oferta do Metabot incorporado e compra de armazenamento.
+- Contêineres laterais de Uploads e Autenticação e bloco com margens em Permissões, para evitar áreas comerciais vazias.
+- Links promocionais de Aparência, Sincronização remota, visualizações personalizadas, Cloud, temas de incorporação, tenants e controles premium de IA. Entradas exclusivamente promocionais deixam de ser renderizadas; as versões funcionais continuam seguindo as condições upstream.
+- Menu Licença oculto pela política própria. A gestão real de licença EE continua disponível por URL direta; sua seção comercial foi condicionada à política SP.
+- Preservados os avisos técnicos de versão e segurança, incluindo o card de configuração de alertas do Security Center quando o recurso está disponível. Esse card não oferece upgrade de plano.
+- Tabs `AreaTab` e `PillTabNavigation` com `isGated` deixam de aparecer. Isso cobre os links promocionais de Data Studio e Monitor sem remover tabs funcionais.
+- Aba de Insights promocional, ofertas de home e de incorporação; mensagem inline de upgrade do SDK e aviso de plano pago para fontes.
+- Transformações: página de oferta, modal Python, inspector, opção Python sem feature e linha de biblioteca Python que levaria a upsell. As funções Python disponíveis permanecem condicionadas à feature original.
+- CSV: botão e texto de compra de armazenamento bloqueados; busca inicial de add-ons do provider fica desabilitada pela política. Uploads e estados de armazenamento existente não foram removidos.
+
+### Acessos diretos às páginas comerciais
+
+| Destino comercial sem feature disponível | Comportamento SP |
+| --- | --- |
+| Aparência, Sincronização remota, visualizações personalizadas e Cloud no admin | Redirecionar para `/admin/settings/general` |
+| Licença na implementação OSS | Redirecionar para `/admin/settings/general` |
+| Oferta de tenants | Redirecionar para `/admin/people` |
+| Oferta de temas de incorporação | Redirecionar para `/admin/embedding` |
+| Páginas de oferta do Data Studio | Redirecionar para `/data-studio/guide` |
+| Ofertas de controles de IA | Redirecionar para `/admin/metabot` |
+| Ofertas de Monitor, transformações e inspector | Redirecionar para `/` |
+
+Os redirecionamentos se aplicam aos ramos comerciais. As páginas de features disponíveis continuam usando os plugins e verificações upstream. Modais de oferta deixam de ser montados.
+
+### Validação e limites
+
+- Testes direcionados verificam ausência de montagem/efeitos comerciais, preservação do componente upstream quando permitido, ausência de links gated e preservação dos menus comuns.
+- Testes de rotas SP cobrem acesso direto a Aparência, Sincronização remota, visualizações personalizadas e Cloud sem features.
+- **Jest:** 6 suítes direcionadas, **35 testes passaram**. Incluem os casos SP e a preservação dos ramos upstream quando a política permite ofertas.
+- **ESLint:** passou nos arquivos da implementação e testes, incluindo o registro de módulo.
+- **TypeScript:** `tsc --noEmit --pretty false` passou sem erros com heap de 5120 MiB. A tentativa inicial com 3072 MiB esgotou o heap; não foi tratada como aprovação. Build de produção e suíte completa não foram executados nesta leva.
+- **Integridade:** `git diff --check` passou; os 68 paths de implementação/testes/registro de módulo estão explicitamente cobertos pelas listas canônicas (3 SP-owned e 65 adapters).
+- Smoke visual pendente: admin, Data Studio, Monitor, Insights, incorporação e CSV; conferir espaços vazios, separadores e as funções disponíveis na instância.
+- O experimento de cor em `UpsellCta.module.css` foi removido a pedido do usuário: restaurado `background-color: var(--mb-color-core-metabase_brand)`, sem cores de teste.
+- Novos componentes upstream que não usem os pontos de integração existentes ainda exigem revisão no próximo upgrade. As listas protegem as adaptações atuais; não detectam automaticamente novas ofertas.
 
 ## Pendências de acompanhamento
 
@@ -258,6 +309,7 @@ Ocultar por CSS mantém os componentes montados: hooks, consultas e eventos de v
 - [ ] Confirmar o rótulo “String de conexão (opcional)” na criação de banco (AUD-004).
 - [ ] Confirmar a ajuda completa de PostgreSQL em pt-BR (AUD-005).
 - [ ] Confirmar título, descrição e link da URL pública do servidor de mapas (AUD-017).
+- [ ] Smoke visual da política comercial (AUD-018), incluindo preservação das funções disponíveis, menus e redirecionamentos.
 - [ ] Conferir o estado atual dos itens AUD-006 a AUD-016 antes de implementar, distinguindo os que já foram corrigidos.
 - [ ] Registrar novas ocorrências informadas pelo usuário, com rota, texto, causa, correção e evidência de validação.
 

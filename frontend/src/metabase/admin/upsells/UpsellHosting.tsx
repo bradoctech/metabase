@@ -2,8 +2,9 @@ import { jt, t } from "ttag";
 
 import { UpsellBanner } from "metabase/common/components/upsells/components";
 import { getPlan, isProPlan, useSetting } from "metabase/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 
-export const UpsellHostingBanner = ({ location }: { location: string }) => {
+const UpsellHostingBannerUpstream = ({ location }: { location: string }) => {
   const isHosted = useSetting("is-hosted?");
   const features = useSetting("token-features");
 
@@ -28,3 +29,7 @@ export const UpsellHostingBanner = ({ location }: { location: string }) => {
     </UpsellBanner>
   );
 };
+
+export const UpsellHostingBanner = withSpCommercialPolicy(
+  UpsellHostingBannerUpstream,
+);

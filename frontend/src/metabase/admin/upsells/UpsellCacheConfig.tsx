@@ -4,9 +4,10 @@ import { UpsellCard } from "metabase/common/components/upsells/UpsellCard";
 import { UPGRADE_URL } from "metabase/common/components/upsells/constants";
 import { useHasTokenFeature } from "metabase/common/hooks/use-has-token-feature";
 import { PLUGIN_ADMIN_SETTINGS } from "metabase/plugins";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Box } from "metabase/ui";
 
-export const UpsellCacheConfig = ({ location }: { location: string }) => {
+const UpsellCacheConfigUpstream = ({ location }: { location: string }) => {
   const campaign = "cache-granular-controls";
   const { triggerUpsellFlow } = PLUGIN_ADMIN_SETTINGS.useUpsellFlow({
     campaign,
@@ -35,3 +36,7 @@ export const UpsellCacheConfig = ({ location }: { location: string }) => {
     </Box>
   );
 };
+
+export const UpsellCacheConfig = withSpCommercialPolicy(
+  UpsellCacheConfigUpstream,
+);

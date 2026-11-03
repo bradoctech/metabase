@@ -4,8 +4,9 @@ import { UpsellBanner } from "metabase/common/components/upsells/components";
 import { UPGRADE_URL } from "metabase/common/components/upsells/constants";
 import { useHasTokenFeature } from "metabase/common/hooks";
 import { PLUGIN_ADMIN_SETTINGS } from "metabase/plugins";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 
-export const UpsellPermissions = ({ location }: { location: string }) => {
+const UpsellPermissionsUpstream = ({ location }: { location: string }) => {
   const campaign = "advanced-permissions";
   const { triggerUpsellFlow } = PLUGIN_ADMIN_SETTINGS.useUpsellFlow({
     campaign,
@@ -31,3 +32,7 @@ export const UpsellPermissions = ({ location }: { location: string }) => {
     </UpsellBanner>
   );
 };
+
+export const UpsellPermissions = withSpCommercialPolicy(
+  UpsellPermissionsUpstream,
+);

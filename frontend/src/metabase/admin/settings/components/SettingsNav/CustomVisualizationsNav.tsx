@@ -23,6 +23,7 @@ export const CustomVisualizationsNav = () => {
 
   return (
     <SettingsNavItem
+      isUpsell={!hasCustomVizAvailable}
       active={isManageVisualizationsActive && !hasSubNav ? true : undefined}
       path={hasSubNav ? undefined : "custom-visualizations"}
       folderPattern="custom-visualizations"

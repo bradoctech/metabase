@@ -12,6 +12,7 @@ export const DataAppsNav = () => {
 
   return (
     <SettingsNavItem
+      isUpsell={!hasDataApps}
       path={Urls.DATA_APP_URL_SEGMENT}
       icon="app"
       label={

@@ -1,5 +1,6 @@
 import { UpsellPermissions } from "metabase/admin/upsells";
 import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Box } from "metabase/ui";
 
 import S from "./PermissionsEditor.module.css";
@@ -22,9 +23,11 @@ export const PermissionsEditor = ({
     <div className={S.PermissionsEditorRoot}>
       <LoadingAndErrorWrapper loading={isLoading} error={error} noWrapper>
         <>
-          <Box mx="xxl" mb="lg">
-            <UpsellPermissions location="settings-permissions" />
-          </Box>
+          {SP_COMMERCIAL_POLICY.showUpsells && (
+            <Box mx="xxl" mb="lg">
+              <UpsellPermissions location="settings-permissions" />
+            </Box>
+          )}
           <PermissionsEditorContent {...contentProps} />
         </>
       </LoadingAndErrorWrapper>

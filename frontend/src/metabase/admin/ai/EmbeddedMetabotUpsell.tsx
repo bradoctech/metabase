@@ -5,9 +5,10 @@ import { UpsellCard } from "metabase/common/components/upsells/UpsellCard";
 import { PLUGIN_ADMIN_SETTINGS } from "metabase/plugins";
 import { useSelector } from "metabase/redux/hooks";
 import { getUpgradeUrl } from "metabase/selectors/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Text } from "metabase/ui";
 
-export function EmbeddedMetabotUpsell() {
+function EmbeddedMetabotUpsellUpstream() {
   const campaign = "embedded-metabot";
   const location = "metabot-settings";
   const upgradeUrl = useSelector((state) =>
@@ -36,3 +37,7 @@ export function EmbeddedMetabotUpsell() {
     </UpsellCard>
   );
 }
+
+export const EmbeddedMetabotUpsell = withSpCommercialPolicy(
+  EmbeddedMetabotUpsellUpstream,
+);

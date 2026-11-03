@@ -6,6 +6,7 @@ import { Link } from "metabase/common/components/Link";
 import { StoragePurchaseButton } from "metabase/common/components/upsells/StoragePurchaseModal";
 import { useSelector } from "metabase/redux";
 import { getSetting } from "metabase/settings";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import {
   Alert,
   Box,
@@ -208,7 +209,8 @@ export const CSVPanelEmptyState = ({
       contactAdminReason: ContactReason;
       canOfferStorage?: never;
     }) => {
-  const ctaSubtitle = canOfferStorage
+  const showStorageOffer = canOfferStorage && SP_COMMERCIAL_POLICY.showUpsells;
+  const ctaSubtitle = showStorageOffer
     ? // eslint-disable-next-line metabase/no-literal-metabase-strings -- Upsell for Metabase Storage, only visible to admins
       t`To work with CSVs, either enable file uploads in your database, or add Metabase Storage.`
     : t`To work with CSVs, enable file uploads in your database.`;
@@ -225,7 +227,7 @@ export const CSVPanelEmptyState = ({
       contactAdminReason={contactAdminReason}
       ctaLink={ctaLink}
       secondaryAction={
-        canOfferStorage ? (
+        showStorageOffer ? (
           <StoragePurchaseButton location="add-data-modal-csv" />
         ) : undefined
       }

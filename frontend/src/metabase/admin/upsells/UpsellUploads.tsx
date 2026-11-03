@@ -5,8 +5,9 @@ import { UPGRADE_URL } from "metabase/common/components/upsells/constants";
 import { PLUGIN_ADMIN_SETTINGS } from "metabase/plugins";
 import { useSelector } from "metabase/redux";
 import { getPlan, getSetting } from "metabase/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 
-export const UpsellUploads = ({ location }: { location: string }) => {
+const UpsellUploadsUpstream = ({ location }: { location: string }) => {
   const campaign = "manage-uploads";
   const { triggerUpsellFlow } = PLUGIN_ADMIN_SETTINGS.useUpsellFlow({
     campaign,
@@ -42,3 +43,5 @@ export const UpsellUploads = ({ location }: { location: string }) => {
     </UpsellCard>
   );
 };
+
+export const UpsellUploads = withSpCommercialPolicy(UpsellUploadsUpstream);

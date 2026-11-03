@@ -55,6 +55,7 @@ export function EmbeddingNav() {
 
         <EmbeddingNavItem
           path="/admin/embedding/themes"
+          isUpsell={!hasSimpleEmbedding}
           label={
             <Flex gap="sm" align="center">
               <span>{t`Themes`}</span>

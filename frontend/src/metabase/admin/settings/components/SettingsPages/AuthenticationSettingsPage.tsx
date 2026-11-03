@@ -8,6 +8,7 @@ import {
 } from "metabase/plugins";
 import { hasAnySsoFeature, useGetSettingsQuery } from "metabase/settings";
 import { SettingsPageWrapper } from "metabase/settings-components";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Box, Flex, Stack } from "metabase/ui";
 
 import { ApiKeysAuthCard } from "../../auth/components/ApiKeysAuthCard";
@@ -39,9 +40,11 @@ export function AuthenticationSettingsPage({
           <ApiKeysAuthCard />
           <PLUGIN_MULTI_FACTOR_AUTH.AdminAuthCard />
         </Stack>
-        <Box style={{ flexShrink: 0 }}>
-          <UpsellSSO location="authentication-sidebar" />
-        </Box>
+        {SP_COMMERCIAL_POLICY.showUpsells && (
+          <Box style={{ flexShrink: 0 }}>
+            <UpsellSSO location="authentication-sidebar" />
+          </Box>
+        )}
       </Flex>
     </SettingsPageWrapper>
   );

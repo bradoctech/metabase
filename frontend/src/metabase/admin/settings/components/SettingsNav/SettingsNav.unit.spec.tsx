@@ -60,7 +60,7 @@ describe("SettingsNav", () => {
     expect(await screen.findByText("Authentication")).toBeInTheDocument();
   });
 
-  it("should show Remote sync upsell nav item for non-pro plans", async () => {
+  it("should hide commercial navigation while preserving available settings", async () => {
     await setup({
       initialRoute: "/admin/settings/general",
       tokenFeatures: {
@@ -69,7 +69,18 @@ describe("SettingsNav", () => {
       },
     });
 
-    expect(await screen.findByText("Remote sync")).toBeInTheDocument();
+    expect(await screen.findByText("General")).toBeInTheDocument();
+    for (const label of [
+      "Remote sync",
+      "Appearance",
+      "Cloud",
+      "License",
+      "Custom visualizations",
+    ]) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
+    }
+    expect(screen.getByText("Uploads")).toBeInTheDocument();
+    expect(screen.getByText("Maps")).toBeInTheDocument();
   });
 
   it("should hide Remote sync upsell nav item for pro plans", async () => {

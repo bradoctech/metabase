@@ -26,3 +26,8 @@ frontend/src/metabase/ui/colors/types/sp-color-keys.ts
 resources/frontend_client/app/assets/img/logo-sp-gov.png
 resources/frontend_client/app/assets/img/logo-sp-gov.svg
 resources/frontend_client/app/assets/img/logo-sp.svg
+
+# EDD-1523 — política SP de ofertas comerciais (não renderizar; preservar upstream).
+frontend/src/metabase/sp/commercial-policy.ts
+frontend/src/metabase/sp/with-commercial-policy.tsx
+frontend/src/metabase/sp/with-commercial-policy.unit.spec.tsx

@@ -13,6 +13,7 @@ import { useSelector } from "metabase/redux";
 import { getUpgradeUrl } from "metabase/selectors/settings";
 import { getCanWhitelabel } from "metabase/selectors/whitelabel";
 import { getSetting } from "metabase/settings";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import {
   Divider,
   SegmentedControl,
@@ -118,14 +119,14 @@ export const LookAndFeelSettings = ({
                 });
               }}
             />
-          ) : (
+          ) : SP_COMMERCIAL_POLICY.showUpsells ? (
             <Text>{jt`You can change the font with ${(
               <ExternalLink
                 key="fontPlan"
                 href={upgradePageUrl}
               >{t`a paid plan`}</ExternalLink>
             )}.`}</Text>
-          )}
+          ) : null}
 
           <DisplayOptionSection title={t`Theme`}>
             <SegmentedControl
@@ -202,7 +203,7 @@ export const LookAndFeelSettings = ({
         </Stack>
       </StaticEmbedSetupPaneSettingsContentSection>
 
-      {!canWhitelabel && (
+      {!canWhitelabel && SP_COMMERCIAL_POLICY.showUpsells && (
         <>
           <Divider my="2rem" />
           <div aria-label={t`Removing the banner`}>

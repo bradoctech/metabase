@@ -8,6 +8,7 @@ import { getUserIsAdmin } from "metabase/current-user";
 import { useSelector } from "metabase/redux";
 import { getStoreUsers } from "metabase/selectors/store-users";
 import { useSetting } from "metabase/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import {
   Button,
   Center,
@@ -28,7 +29,7 @@ type PythonTransformsUpsellModalProps = {
   onClose: VoidFunction;
 };
 
-export function PythonTransformsUpsell({
+function PythonTransformsUpsellUpstream({
   shouldShowLeftColumn,
   onClose,
   onSuccess,
@@ -140,7 +141,7 @@ export function PythonTransformsUpsell({
   );
 }
 
-export function PythonTransformsUpsellModal({
+function PythonTransformsUpsellModalUpstream({
   onClose,
 }: PythonTransformsUpsellModalProps) {
   const isHosted = useSetting("is-hosted?");
@@ -181,3 +182,10 @@ function SelfHostedStorePurchaseLink() {
     </Button>
   );
 }
+
+export const PythonTransformsUpsell = withSpCommercialPolicy(
+  PythonTransformsUpsellUpstream,
+);
+export const PythonTransformsUpsellModal = withSpCommercialPolicy(
+  PythonTransformsUpsellModalUpstream,
+);

@@ -4,8 +4,9 @@ import { UpsellBigCard } from "metabase/common/components/upsells/components";
 import { UPGRADE_URL } from "metabase/common/components/upsells/constants";
 import { useHasTokenFeature } from "metabase/common/hooks";
 import { PLUGIN_ADMIN_SETTINGS } from "metabase/plugins";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 
-export const UpsellDataApps = ({ source }: { source: string }) => {
+const UpsellDataAppsUpstream = ({ source }: { source: string }) => {
   const hasDataApps = useHasTokenFeature("data-apps");
   const campaign = "data-apps";
   const { triggerUpsellFlow } = PLUGIN_ADMIN_SETTINGS.useUpsellFlow({
@@ -33,3 +34,5 @@ export const UpsellDataApps = ({ source }: { source: string }) => {
     </UpsellBigCard>
   );
 };
+
+export const UpsellDataApps = withSpCommercialPolicy(UpsellDataAppsUpstream);

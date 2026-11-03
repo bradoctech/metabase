@@ -7,6 +7,7 @@ import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { useDocsUrl, useUrlWithUtm } from "metabase/common/hooks";
 import CS from "metabase/css/core/index.css";
 import { PLUGIN_EMBEDDING_SDK, PLUGIN_IS_EE_BUILD } from "metabase/plugins";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 
 import { EmbeddingSettingsCard } from "../EmbeddingSettingsCard";
 
@@ -49,13 +50,13 @@ export const EmbeddingSdkSettings = () => {
     needsToUpgrade: !isReactSdkFeatureAvailable,
     needsToImplementJwt: isReactSdkFeatureAvailable,
   })
-    .with(
-      { needsToUpgrade: true },
-      () =>
-        c(
-          "{0} is the link to upsell the SDK. {1} is the link to implement JWT or SAML authentication.",
-        )
-          .jt`You can test Embedded analytics SDK on localhost quickly by using API keys. To use the SDK on other sites, ${<UpsellSdkLink key="upsell-sdk-link" />} and ${ImplementJwtLink}.`,
+    .with({ needsToUpgrade: true }, () =>
+      SP_COMMERCIAL_POLICY.showUpsells
+        ? c(
+            "{0} is the link to upsell the SDK. {1} is the link to implement JWT or SAML authentication.",
+          )
+            .jt`You can test Embedded analytics SDK on localhost quickly by using API keys. To use the SDK on other sites, ${<UpsellSdkLink key="upsell-sdk-link" />} and ${ImplementJwtLink}.`
+        : null,
     )
     .with(
       { needsToImplementJwt: true },

@@ -78,18 +78,21 @@ function AiControlsUpsellNavItems() {
         label={t`Usage controls`}
         path="/admin/metabot/usage-controls/ai-feature-access"
         rightSection={<UpsellGem.New size={14} />}
+        isUpsell
       />
       <AdminNavItem
         icon="palette"
         label={t`Customization`}
         path="/admin/metabot/customization"
         rightSection={<UpsellGem.New size={14} />}
+        isUpsell
       />
       <AdminNavItem
         icon="document"
         label={t`System prompts`}
         path="/admin/metabot/system-prompts/metabot-chat"
         rightSection={<UpsellGem.New size={14} />}
+        isUpsell
       />
     </>
   );

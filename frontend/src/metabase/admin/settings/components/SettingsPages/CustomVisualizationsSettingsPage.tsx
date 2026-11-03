@@ -4,9 +4,10 @@ import { UpsellCustomViz } from "metabase/admin/upsells";
 import { Link } from "metabase/common/components/Link";
 import { useHasTokenFeature, useMetadataToasts } from "metabase/common/hooks";
 import { PLUGIN_CUSTOM_VIZ } from "metabase/plugins";
-import { useParams } from "metabase/router";
+import { redirect, useParams } from "metabase/router";
 import { useAdminSetting } from "metabase/settings";
 import { SettingsPageWrapper } from "metabase/settings-components";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import {
   Alert,
   Button,
@@ -24,6 +25,10 @@ import type { IconName } from "metabase-types/api";
 export function CustomVisualizationsManagePage() {
   const customVizLoaded = useHasTokenFeature("custom-viz");
   const customVizAvailable = useHasTokenFeature("custom-viz-available");
+
+  if (!customVizAvailable && !SP_COMMERCIAL_POLICY.showUpsells) {
+    return redirect("/admin/settings/general");
+  }
 
   if (!customVizAvailable) {
     return (
@@ -45,6 +50,10 @@ export function CustomVisualizationsFormPage() {
   const customVizFeatureLoaded = useHasTokenFeature("custom-viz");
   const hasCustomVizAvailable = useHasTokenFeature("custom-viz-available");
 
+  if (!hasCustomVizAvailable && !SP_COMMERCIAL_POLICY.showUpsells) {
+    return redirect("/admin/settings/general");
+  }
+
   if (!hasCustomVizAvailable) {
     return (
       <SettingsPageWrapper title={t`Custom visualizations`}>
@@ -63,6 +72,10 @@ export function CustomVisualizationsFormPage() {
 export function CustomVisualizationsDevelopmentPage() {
   const hasCustomVizAvailable = useHasTokenFeature("custom-viz-available");
   const customVizFeatureLoaded = useHasTokenFeature("custom-viz");
+
+  if (!hasCustomVizAvailable && !SP_COMMERCIAL_POLICY.showUpsells) {
+    return redirect("/admin/settings/general");
+  }
 
   if (!hasCustomVizAvailable) {
     return (

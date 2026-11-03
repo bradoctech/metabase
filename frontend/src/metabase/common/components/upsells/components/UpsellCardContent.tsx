@@ -12,6 +12,7 @@ import { getUserIsAdmin } from "metabase/current-user";
 import { useSelector } from "metabase/redux";
 import { getStoreUsers } from "metabase/selectors/store-users";
 import { useSetting } from "metabase/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import {
   Box,
   Card,
@@ -33,7 +34,7 @@ export type UpsellCardContentProps = UpsellCardLeftColumnContentProps & {
   variant?: "image-full-height" | "image-card";
 };
 
-export const UpsellCardContent = ({
+const UpsellCardContentUpstream = ({
   campaign,
   location,
   title,
@@ -200,3 +201,7 @@ const UpsellCardLeftColumnContent = ({
     </Stack>
   );
 };
+
+export const UpsellCardContent = withSpCommercialPolicy(
+  UpsellCardContentUpstream,
+);

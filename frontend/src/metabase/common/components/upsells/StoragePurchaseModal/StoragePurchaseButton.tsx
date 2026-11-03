@@ -4,6 +4,7 @@ import { t } from "ttag";
 
 import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { useStoreUrl } from "metabase/common/hooks";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Button } from "metabase/ui";
 
 import { UpsellGem } from "../components/UpsellGem";
@@ -14,7 +15,7 @@ import { useStorageSetup } from "./storage-setup-context";
 
 const CAMPAIGN = "storage";
 
-export const StoragePurchaseButton = ({ location }: { location: string }) => {
+const StoragePurchaseButtonUpstream = ({ location }: { location: string }) => {
   const { canPurchaseStorage, openPurchaseModal, storageAddOn } =
     useStorageSetup();
   const storeUrl = useUpsellLink({
@@ -59,3 +60,7 @@ export const StoragePurchaseButton = ({ location }: { location: string }) => {
     </Button>
   );
 };
+
+export const StoragePurchaseButton = withSpCommercialPolicy(
+  StoragePurchaseButtonUpstream,
+);

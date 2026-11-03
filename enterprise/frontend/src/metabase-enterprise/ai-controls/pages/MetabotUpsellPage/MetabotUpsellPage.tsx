@@ -3,9 +3,11 @@ import { LineDecorator } from "metabase/common/components/upsells/components/Lin
 import { useUpgradeAction } from "metabase/common/components/upsells/components/UpgradeModal";
 import { UpsellCardContent } from "metabase/common/components/upsells/components/UpsellCardContent";
 import { UPGRADE_URL } from "metabase/common/components/upsells/constants";
+import { redirect } from "metabase/router";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Stack } from "metabase/ui";
 
-export function MetabotUpsellPage({
+function MetabotUpsellPageUpstream({
   campaign,
   location,
   title,
@@ -42,3 +44,8 @@ export function MetabotUpsellPage({
     </DottedBackground>
   );
 }
+
+export const MetabotUpsellPage = withSpCommercialPolicy(
+  MetabotUpsellPageUpstream,
+  redirect("/admin/metabot"),
+);

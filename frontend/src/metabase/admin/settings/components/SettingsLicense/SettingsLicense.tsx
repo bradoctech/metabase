@@ -3,13 +3,15 @@ import { t } from "ttag";
 import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { useSelector } from "metabase/redux";
 import type { State } from "metabase/redux/store";
+import { redirect } from "metabase/router";
 import { getUpgradeUrl } from "metabase/selectors/settings";
 import { SettingHeader, SettingsSection } from "metabase/settings-components";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Box, Button, Divider, Flex, Text } from "metabase/ui";
 
 import { ExplorePlansIllustration } from "./ExplorePlansIllustration";
 
-export const SettingsLicense = () => {
+const SettingsLicenseUpstream = () => {
   const upgradeUrl = useSelector((state: State) =>
     getUpgradeUrl(state, { utm_content: "license" }),
   );
@@ -34,3 +36,8 @@ export const SettingsLicense = () => {
     </SettingsSection>
   );
 };
+
+export const SettingsLicense = withSpCommercialPolicy(
+  SettingsLicenseUpstream,
+  redirect("/admin/settings/general"),
+);

@@ -16,6 +16,7 @@ import {
   SettingsPageWrapper,
   SettingsSection,
 } from "metabase/settings-components";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Box, Divider, Flex, Stack } from "metabase/ui";
 import { useGetBillingInfoQuery } from "metabase-enterprise/api";
 import { useLicense } from "metabase-enterprise/settings/hooks/use-license";
@@ -156,7 +157,9 @@ export const LicenseAndBillingSettings = () => {
             </Box>
           )}
 
-          {tokenStatus?.valid && shouldUpsell && <UpsellSection />}
+          {SP_COMMERCIAL_POLICY.showUpsells &&
+            tokenStatus?.valid &&
+            shouldUpsell && <UpsellSection />}
         </Stack>
       </SettingsSection>
     </SettingsPageWrapper>

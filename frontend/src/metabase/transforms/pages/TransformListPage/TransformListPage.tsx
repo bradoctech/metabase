@@ -20,6 +20,7 @@ import { PLUGIN_REPLACEMENT, PLUGIN_TRANSFORMS_PYTHON } from "metabase/plugins";
 import { useSelector } from "metabase/redux";
 import { Outlet, useLocation } from "metabase/router";
 import { useSetting } from "metabase/settings";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { LockedTransformsBanner } from "metabase/transforms/components/LockedTransformsBanner/LockedTransformsBanner";
 import { TransformsHeader } from "metabase/transforms/components/TransformsHeader";
 import { useTransformPermissions } from "metabase/transforms/hooks/use-transform-permissions";
@@ -163,7 +164,8 @@ export const TransformListPage = () => {
 
     // It will trigger the upsell modal if the feature isn't enabled.
     const shouldShowPythonLibraryRow =
-      hasPythonTransformsFeature || shouldShowPythonTransformsUpsell;
+      hasPythonTransformsFeature ||
+      (SP_COMMERCIAL_POLICY.showUpsells && shouldShowPythonTransformsUpsell);
 
     if (shouldShowPythonLibraryRow) {
       data.push({

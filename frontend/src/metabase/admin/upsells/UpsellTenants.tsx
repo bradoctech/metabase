@@ -6,9 +6,11 @@ import { useUpgradeAction } from "metabase/common/components/upsells/components/
 import { UpsellCardContent } from "metabase/common/components/upsells/components/UpsellCardContent";
 import { UPGRADE_URL } from "metabase/common/components/upsells/constants";
 import { useHasTokenFeature } from "metabase/common/hooks";
+import { redirect } from "metabase/router";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Stack } from "metabase/ui";
 
-export const UpsellTenants = () => {
+const UpsellTenantsUpstream = () => {
   const hasTenants = useHasTokenFeature("tenants");
   const campaign = "tenants";
   const location = "people-tenants";
@@ -40,3 +42,8 @@ export const UpsellTenants = () => {
     </DottedBackground>
   );
 };
+
+export const UpsellTenants = withSpCommercialPolicy(
+  UpsellTenantsUpstream,
+  redirect("/admin/people"),
+);

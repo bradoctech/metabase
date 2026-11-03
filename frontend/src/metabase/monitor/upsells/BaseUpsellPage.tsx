@@ -3,6 +3,8 @@ import { LineDecorator } from "metabase/common/components/upsells/components/Lin
 import { useUpgradeAction } from "metabase/common/components/upsells/components/UpgradeModal";
 import { UpsellCardContent } from "metabase/common/components/upsells/components/UpsellCardContent";
 import { MONITOR_UPGRADE_URL } from "metabase/common/components/upsells/constants";
+import { redirect } from "metabase/router";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Stack } from "metabase/ui";
 
 import { MonitorHeaderTitle } from "../components/MonitorHeaderTitle";
@@ -20,7 +22,7 @@ export type BaseUpsellPageProps = {
   variant?: "image-full-height" | "image-card";
 };
 
-export function BaseUpsellPage({
+function BaseUpsellPageUpstream({
   campaign,
   location,
   header,
@@ -57,3 +59,8 @@ export function BaseUpsellPage({
     </DottedBackground>
   );
 }
+
+export const BaseUpsellPage = withSpCommercialPolicy(
+  BaseUpsellPageUpstream,
+  redirect("/"),
+);
