@@ -136,6 +136,9 @@ frontend/src/metabase/transforms/pages/TransformListPage/CreateTransformMenu/Cre
 frontend/src/metabase/transforms/pages/TransformListPage/TransformListPage.tsx
 
 # EDD-1523 — ajustes pós-smoke: Monitor funcional, brasão SP e grupos vazios.
+frontend/src/metabase/archive/components/ArchivedEntityBanner/ArchivedEntityBanner.tsx
+frontend/src/metabase/archive/components/ArchivedEntityBanner/ArchivedEntityBanner.module.css
+frontend/src/metabase/archive/components/ArchivedEntityBanner/BannerButton.tsx
 frontend/src/metabase/embedding/components/SharingMenu/SharingMenu.tsx
 frontend/src/metabase/embedding/components/SharingMenu/SharingMenu.unit.spec.tsx
 frontend/src/metabase/common/monitor/selectors.ts

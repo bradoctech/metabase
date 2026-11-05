@@ -3,7 +3,7 @@
 **Issue / branch:** `EDD-1523`  
 **Status:** em andamento  
 **Início do registro:** 30/10/2026  
-**Última atualização:** 03/11/2026
+**Última atualização:** 04/11/2026
 
 ## Objetivo e referências
 
@@ -130,13 +130,13 @@ Recebido em 30/10/2026 para alinhamento de contexto. O usuário informou que alg
 | --- | --- | --- | --- |
 | AUD-006 | Toggle do Metabot | Textos em inglês | A verificar |
 | AUD-007 | Menu do usuário, no topo direito | Remover Ajuda → “Obter ajuda”; avaliar também “Sobre Metabase”; verificar se os itens existem na PRODESP | A verificar; remoção de “Sobre Metabase” ainda é uma possibilidade, não decisão fechada |
-| AUD-008 | Adicione seus dados → CSV | Texto sem tradução | A verificar; identificar trecho exato |
-| AUD-009 | Lixeira | Aviso “Este collection está no lixo”: conferir o vermelho do fundo e localizar outros usos do mesmo tom para adequação à paleta SP | A verificar; registrar também o texto misto como candidato à revisão de tradução |
-| AUD-010 | `/browse/metrics` e hover de coleção | Ícones com vermelho aparentemente fora da paleta; no hover de uma coleção, cor diferente da de “Nome” | A verificar com referência visual e tokens SP |
+| AUD-008 | Adicione seus dados → CSV | Texto sem tradução | Visual aprovado pelo usuário no smoke; upload completo não exercitado por ausência de banco compatível |
+| AUD-009 | Lixeira | Aviso “Este collection está no lixo”: conferir o vermelho do fundo e localizar outros usos do mesmo tom para adequação à paleta SP | Cores e contraste validados pelo usuário nos temas claro e escuro. Texto misto permanece pendente |
+| AUD-010 | `/browse/metrics` e hover de coleção | Ícones com vermelho aparentemente fora da paleta; no hover de uma coleção, cor diferente da de “Nome” | `icon-brand` alinhado ao vermelho principal SP nos dois temas, igual ao nome no hover; validado pelo usuário nos temas claro e escuro |
 | AUD-011 | Navegação administrativa | Texto do item ativo claro sobre fundo claro, prejudicando a leitura; ajuste proposto para preto | A verificar |
-| AUD-012 | `/admin/settings/uploads` | Ocultar chamadas “Atualize para o Metabase Pro”; revisar textos em inglês no hover de informação | CTA e contêiner lateral bloqueados pela política SP; validar a tela e eventuais hovers remanescentes |
-| AUD-013 | Área administrativa | Revisar traduções e ocultar chamadas para planos Pro | Traduções revalidadas pelo usuário até onde testado; política de ofertas aplicada; smoke visual pendente |
-| AUD-014 | Menus administrativos | Ocultar “Sincronização remota”, itens com diamante que levam ao Pro e “Licença” | Entradas promocionais não renderizadas e menu Licença oculto; recursos disponíveis preservados; smoke visual pendente |
+| AUD-012 | `/admin/settings/uploads` | Ocultar chamadas “Atualize para o Metabase Pro”; revisar textos em inglês no hover de informação | CTA e contêiner lateral bloqueados pela política SP; admin aprovado no smoke geral, sem resquícios de upsell relatados |
+| AUD-013 | Área administrativa | Revisar traduções e ocultar chamadas para planos Pro | Traduções revalidadas até onde testado; política de ofertas aplicada e admin aprovado no smoke do usuário |
+| AUD-014 | Menus administrativos | Ocultar “Sincronização remota”, itens com diamante que levam ao Pro e “Licença” | Entradas promocionais não renderizadas e menu Licença oculto; recursos disponíveis preservados; admin aprovado no smoke do usuário |
 | AUD-015 | `/admin/databases/create` | Ocultar o link “Precisa de ajuda para conectar?” que leva ao Metabase | A verificar; identificar o link exato antes de alterar o painel de ajuda |
 | AUD-016 | `/admin/settings/updates` | Tratar falta de dados | A verificar; reproduzir o estado e definir o comportamento esperado |
 
@@ -429,7 +429,103 @@ Esses dois fluxos funcionais poderão ser completados quando houver uma conexão
 
 **Resultado visual:** usuário confirmou a resolução e enviou imagem do tooltip “Compartilhar”. AUD-022 validada na interface; nome acessível coberto pelos testes automatizados.
 
-O smoke comercial não encerra automaticamente os demais pontos do levantamento inicial: cores da lixeira e dos ícones, avaliação dos links de Ajuda/Sobre e conexão, contraste do menu administrativo e estado sem dados de Atualizações continuam dependentes de sua própria validação ou definição de escopo.
+O smoke comercial não encerra automaticamente os demais pontos do levantamento inicial. As cores da lixeira e dos ícones foram posteriormente validadas nos temas claro e escuro, conforme registro abaixo; avaliação dos links de Ajuda/Sobre e conexão, contraste do menu administrativo e estado sem dados de Atualizações continuam dependentes de sua própria validação ou definição de escopo.
+
+## AUD-009/AUD-010 — Origem dos vermelhos e alinhamento à paleta SP
+
+**Solicitação:** verificar se os vermelhos apontados são da paleta SP ou do upstream e substituir os que forem externos à paleta SP.
+
+### Diagnóstico
+
+| Uso | Origem encontrada | Ajuste aplicado |
+| --- | --- | --- |
+| Fundo do aviso da lixeira | `ArchivedEntityBanner` usa `feedback-negative`, herdado de `baseColors.lobster[50]` nos temas upstream | Mapear `feedback-negative` ao vermelho de erro SP `spColors.status.error.base` (`#E52207`) no módulo central |
+| Variação forte do feedback negativo | `feedback-negative-strong` herdava `lobster[60]` no claro e `lobster[30]` no escuro | Usar `spColors.redDark.base` (`#842519`) no claro e `spColors.red[20]` (`#FFB9BC`) no escuro |
+| Alias legado `error` | Claro já usava erro SP; escuro ainda herdava lobster | Definir o vermelho de erro SP compartilhado entre claro e escuro |
+| Ícone de `/browse/metrics` e hover de links de coleção | `icon-brand`: no claro já era SP `red[30]` (`#FF686D`); no escuro era derivado da marca SP. Não eram cores fixas de outra marca, mas havia diferença de tom em relação ao nome, que usa `core-brand` | Alinhar `icon-brand` ao vermelho principal SP `red[40]` (`#FF161F`) em ambos os temas |
+
+Os tons de marca e de erro são cores distintas já existentes na paleta SP e mantêm seus papéis semânticos. Nenhuma nova cor foi inventada.
+
+### Implementação e alcance
+
+- Definições concentradas em `frontend/src/metabase/ui/colors/constants/sp-theme.ts`, já classificado como SP-owned em `lists/restore-ours.txt`. Os arquivos de tema upstream e as views de métricas/coleções não precisaram de patches para esses tokens.
+- A alteração dos tokens semânticos também alcança outros consumidores de `feedback-negative`, `feedback-negative-strong`, `error` e `icon-brand` na aplicação. Não é uma troca isolada do fundo da lixeira.
+- Texto, ícone e botões do aviso da lixeira passam a usar `core-white_constant`, mantendo branco nos dois temas. `text-primary-inverse` muda conforme o tema e não garantia o mesmo contraste sobre o novo fundo saturado.
+- Os três arquivos de integração da lixeira foram adicionados a `lists/dual-changed.txt`.
+- A parte textual “Este collection…” de AUD-009 permanece pendente desta auditoria; esta rodada trata de cores.
+
+### Validação
+
+- **8 testes passaram em 2 suítes existentes:** derivação de tema e cores de formatação.
+- **ESLint e `git diff --check` passaram.**
+- Contraste calculado entre branco e o fundo de erro SP `#E52207`: **4,60:1**.
+- **Smoke visual aprovado pelo usuário em 04/11/2026:** cores da lixeira, métricas e hover de coleções conferidas nos temas claro e escuro, sem problemas relatados. O nome e o hover do link de coleção usam o vermelho principal SP; o aviso de erro usa o vermelho semântico de erro SP.
+
+### Revisão complementar — vermelhos da v64
+
+**Retorno do usuário:** as cores conferidas ficaram adequadas à identidade SP, incluindo o hover nos cards de KPI. Em 04/11/2026, após receber o roteiro de smoke, o usuário confirmou que os testes ficaram OK tanto no tema claro quanto no escuro.
+
+**Esclarecimento sobre `error`:** a linha `error: spColors.status.error.base` foi movida do bloco claro para `SP_SHARED_COLORS`. O alias continua necessário para consumidores existentes e agora atende os dois temas. Foi acrescentado comentário no código para explicitar essa intenção.
+
+A busca por usos de `lobster`, literais vermelhos e consumidores dos tokens no frontend comum e enterprise encontrou os seguintes pontos adicionais:
+
+| Token | Uso encontrado | Ajuste central SP |
+| --- | --- | --- |
+| `core-red-saturated` | Realce de sintaxe e cores ANSI nos logs | Vermelho principal `red[40]`, `#FF161F`, nos dois temas |
+| `saturated-red` | Alias legado do vermelho saturado | Mesmo vermelho principal nos dois temas, alinhado ao token novo |
+| `background_surface-error` | Hover de ações de excluir/arquivar, erros de expressões e resultados de Python, indicadores de complexidade e inspeção de transformações | `red[10]` no claro e `red[90]` no escuro |
+| `background_surface-error-subtle` | Alertas de erro, erros do SDK e aviso de envio forçado de sincronização | `red[5]` no claro e `red[100]` no escuro |
+| `danger` no tema escuro | Alias legado de ações destrutivas | Vermelho principal SP; o claro já usava vermelho escuro SP |
+| `background-error` e `background-error-secondary` no tema escuro | Fundos legados de erro | `red[90]` e `red[100]`; no claro já eram SP |
+
+Os tokens de erro/feedback previamente alinhados à paleta SP continuam com suas funções semânticas. A preferência pelo vermelho principal foi aplicada aos tokens saturados e ao alias destrutivo escuro que ainda herdavam o upstream. Fundos usam variantes suaves/escuras para manter a hierarquia visual.
+
+**Limites da busca:** foram preservados gradientes do seletor de cores, a cor de dados do mapa de calor, exemplos, histórias de componentes, mensagens do console e ferramentas de desenvolvimento. Não são substituições de cor das telas comuns. Cores salvas em perguntas, dashboards e configurações de embedding também não foram migradas. Esta inspeção de código não equivale a uma validação visual de todas as telas.
+
+**Preservação nos upgrades:** todos os novos ajustes estão em `sp-theme.ts`, já protegido por `lists/restore-ours.txt`; nenhuma nova view precisou ser alterada.
+
+**Validação automatizada:** 8 testes passaram nas suítes existentes de derivação de tema e cores de formatação; ESLint do módulo passou. `git diff --check` passou.
+
+**Smoke visual aprovado em 04/11/2026:** o usuário confirmou os testes do roteiro nos temas claro e escuro, sem problemas relatados. O roteiro cobre métricas/coleções, hover de excluir/arquivar, aviso da lixeira, erro no editor de expressão e realce de código SQL. Transformações Python e logs ANSI dependentes de recursos/saídas indisponíveis permanecem não exercitados; a aprovação não amplia a cobertura para esses fluxos.
+
+## Recorte do PR e saldo da auditoria — 04/11/2026
+
+**Decisão do usuário:** a validação específica de transformações Python e logs ANSI fica para uma próxima leva e não integra o foco deste PR. Os tokens centrais SP já aplicados continuam atendendo esses consumidores; o adiamento é da validação desses fluxos, sem reversão das cores.
+
+### Próxima leva — fora do foco deste PR
+
+- [ ] Validar cores dos resultados/erros de transformações Python quando houver ambiente compatível.
+- [ ] Validar trechos vermelhos em logs ANSI quando houver saída colorida disponível.
+
+Esses dois itens não bloqueiam o encerramento do PR atual por decisão expressa do usuário. Continuam registrados como não exercitados.
+
+### Itens ainda sem correção ou conclusão específica
+
+| Item | Saldo |
+| --- | --- |
+| AUD-006 — Metabot | Revalidar o toggle e identificar eventual texto que ainda esteja em inglês; não há confirmação específica de defeito atual |
+| AUD-007 — Ajuda/Sobre | “Obter ajuda” continua presente no menu; ocultação ainda não aplicada. Remover “Sobre Metabase” e comparar com PRODESP continuam dependentes de definição |
+| AUD-009 — texto da lixeira | Cores aprovadas; falta tratar a expressão mista “Este collection…” |
+| AUD-011 — item ativo do admin | Falta confirmação específica do contraste; nenhuma correção específica deste item foi registrada |
+| AUD-015 — ajuda de conexão | Link externo “Precisa de ajuda para conectar?” continua presente no formulário; ocultação ainda não aplicada. É distinto do painel de ajuda PostgreSQL traduzido |
+| AUD-016 — Atualizações | Falta reproduzir/tratar o estado sem dados em `/admin/settings/updates` |
+
+### Correções aplicadas com confirmação específica ainda pendente
+
+- AUD-002/AUD-003: qualidade dos textos de General e rótulo de destinatários em E-mail.
+- AUD-004/AUD-005: rótulo da string de conexão e corpo completo da ajuda PostgreSQL.
+- AUD-017: título/descrição da URL pública do servidor de mapas.
+
+A revalidação geral de traduções do admin é evidência favorável, mas o documento ainda não contém aceite individual desses pontos. Não são classificados como defeitos novos confirmados.
+
+### Cobertura adicional ainda não relatada
+
+- Monitor com outro perfil que não possua seção disponível.
+- Data Studio com a sidebar recolhida.
+- Home específica de incorporação, se usada no ambiente.
+- Upload completo e lista/menu de transformações, limitados pela ausência de conexão elegível.
+
+Essas lacunas de cobertura não demonstram falha. Somente Python e logs ANSI foram explicitamente adiados pelo usuário nesta decisão; o enquadramento dos demais itens pode ser definido separadamente.
 
 ## Pendências de acompanhamento
 
@@ -442,7 +538,9 @@ O smoke comercial não encerra automaticamente os demais pontos do levantamento 
 - [ ] Concluir o smoke comercial da aplicação principal conforme a tabela acima, incluindo AUD-019/AUD-020/AUD-021.
 - [x] Revalidar “Compartilhar” no tooltip após gerar os recursos atualizados (AUD-022), confirmado pelo usuário com imagem.
 - [ ] Exercitar upload completo e lista/menu de transformações quando existir banco elegível.
-- [ ] Conferir o estado atual dos itens AUD-006 a AUD-016 antes de implementar, distinguindo os que já foram corrigidos.
+- [x] Revalidar as cores SP da lixeira, métricas e hover de coleções nos temas claro e escuro (AUD-009/AUD-010), confirmado pelo usuário em 04/11/2026.
+- [x] Smoke complementar dos vermelhos da v64 nos temas claro e escuro: hover de excluir/arquivar, erro de expressão e realce de código, conforme retorno do usuário em 04/11/2026.
+- [ ] Resolver ou definir o encaminhamento dos itens remanescentes AUD-006/AUD-007, texto de AUD-009, AUD-011/AUD-015/AUD-016, conforme saldo acima.
 - [ ] Registrar novas ocorrências informadas pelo usuário, com rota, texto, causa, correção e evidência de validação.
 
 Ao acrescentar correções SP, atualizar também a lista canônica correspondente no mesmo conjunto de alterações. Não marcar itens como validados apenas por estarem implementados ou por testes automatizados terem passado.
