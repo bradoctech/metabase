@@ -6,6 +6,7 @@ import {
   FormTextInput,
   FormTextarea,
 } from "metabase/forms";
+import { localizeConnectionField } from "metabase/sp/connection-field-i18n";
 import { Icon, type SwitchProps, Tooltip } from "metabase/ui";
 import type {
   Engine,
@@ -30,11 +31,12 @@ export interface DatabaseDetailFieldProps {
 }
 
 export const DatabaseDetailField = ({
-  field,
+  field: sourceField,
   autoFocus,
   engineKey,
   engine,
 }: DatabaseDetailFieldProps): JSX.Element | null => {
+  const field = localizeConnectionField(sourceField);
   const override = FIELD_OVERRIDES[field.name];
   const type = getFieldType(field, override);
   const props = {

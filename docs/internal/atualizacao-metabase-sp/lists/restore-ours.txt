@@ -31,3 +31,7 @@ resources/frontend_client/app/assets/img/logo-sp.svg
 frontend/src/metabase/sp/commercial-policy.ts
 frontend/src/metabase/sp/with-commercial-policy.tsx
 frontend/src/metabase/sp/with-commercial-policy.unit.spec.tsx
+
+# EDD-1523 / AUD-024 — tradução central dos metadados de conexão dos drivers.
+frontend/src/metabase/sp/connection-field-i18n.ts
+frontend/src/metabase/sp/connection-field-i18n.unit.spec.ts

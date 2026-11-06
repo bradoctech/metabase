@@ -45860,3 +45860,479 @@ msgstr "Total [[GenericTable]]"
 msgctxt "{0} is a collection in the trash"
 msgid "This {0} is in the trash."
 msgstr "Esta {0} está no lixo."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Access key"
+msgstr "Chave de acesso"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Account name"
+msgstr "Nome da conta"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Additional Athena connection string options"
+msgstr "Opções adicionais da string de conexão do Athena"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Additional JDBC options"
+msgstr "Opções adicionais de JDBC"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Additional connection string options (optional)"
+msgstr "Opções adicionais da string de conexão (opcional)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Authenticate with Kerberos"
+msgstr "Autenticar com Kerberos"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Authenticate with user and password"
+msgstr "Autenticar com usuário e senha"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Authentication database (optional)"
+msgstr "Banco de dados de autenticação (opcional)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Basic authentication password."
+msgstr "Senha de autenticação básica."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Basic authentication username."
+msgstr "Nome de usuário de autenticação básica."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Catalog"
+msgstr "Catálogo"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Catalogs and Schemas"
+msgstr "Catálogos e esquemas"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "ClickHouse settings (comma-separated)"
+msgstr "Configurações do ClickHouse (separadas por vírgulas)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Client SSL certificate chain (PEM)"
+msgstr "Cadeia de certificados SSL do cliente (PEM)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Client SSL private key (PEM)"
+msgstr "Chave privada SSL do cliente (PEM)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Database instance name"
+msgstr "Nome da instância do banco de dados"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Database name (case sensitive)"
+msgstr "Nome do banco de dados (diferencia maiúsculas de minúsculas)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Default Catalog"
+msgstr "Catálogo padrão"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Default database"
+msgstr "Banco de dados padrão"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Default impersonation user (required for impersonation if the connection's user cannot be impersonated)"
+msgstr "Usuário padrão para representação (obrigatório quando não for possível representar o usuário da conexão)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Disable system wide proxy settings"
+msgstr "Desativar as configurações de proxy do sistema"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Enable multiple catalogs"
+msgstr "Habilitar múltiplos catálogos"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Enable multiple databases"
+msgstr "Habilitar múltiplos bancos de dados"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Enable syncing and scanning tables from multiple ClickHouse databases except the system ones."
+msgstr "Habilita a sincronização e a varredura de tabelas de múltiplos bancos de dados do ClickHouse, exceto os do sistema."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Enter your Account ID with the region that your Snowflake cluster is running on e.g. \"xxxxxxxx.us-east-2.aws\". Some regions don't have this suffix."
+msgstr "Informe o ID da sua conta com a região em que o cluster Snowflake está em execução, por exemplo, \"xxxxxxxx.us-east-2.aws\". Algumas regiões não têm esse sufixo."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "For M2M OAuth authentication, corresponds to the service principal's Client ID."
+msgstr "Na autenticação OAuth M2M, corresponde ao ID do cliente da entidade de serviço."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Found in SQL Warehouses > Connection details"
+msgstr "Disponível em SQL Warehouses > Connection details"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Full hostname"
+msgstr "Nome completo do host"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "HTTP Path"
+msgstr "Caminho HTTP"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "If your user doesn't have a default warehouse, enter the warehouse to connect to."
+msgstr "Se o usuário não tiver um armazém de dados padrão, informe o armazém de dados ao qual deseja se conectar."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Kerberos configuration file"
+msgstr "Arquivo de configuração do Kerberos"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Kerberos coordinator service"
+msgstr "Serviço do coordenador Kerberos"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Kerberos credential cache file"
+msgstr "Arquivo de cache de credenciais do Kerberos"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Kerberos keytab file"
+msgstr "Arquivo keytab do Kerberos"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Kerberos principal"
+msgstr "Principal do Kerberos"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Keystore"
+msgstr "Repositório de chaves"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Keystore (PKCS12 or JKS)"
+msgstr "Repositório de chaves (PKCS12 ou JKS)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Keystore password"
+msgstr "Senha do repositório de chaves"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Leave empty to use Dynamic Ports, or input specific port. Standard port is 1433."
+msgstr "Deixe em branco para usar portas dinâmicas ou informe uma porta específica. A porta padrão é 1433."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Leave this empty to authorize using AWS Credentials Provider Chain (Instance Profiles or IAM Roles for Tasks)"
+msgstr "Deixe em branco para autorizar usando a cadeia de provedores de credenciais da AWS (perfis de instância ou funções IAM para tarefas)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Max open HTTP connections in the JDBC driver (default: 100)"
+msgstr "Máximo de conexões HTTP abertas no driver JDBC (padrão: 100)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "OAuth Secret for M2M OAuth authentication."
+msgstr "Segredo OAuth para autenticação OAuth M2M."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Only add tables to Metabase that come from a specific schema."
+msgstr "Adicione ao Metabase apenas tabelas de um esquema específico."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Optimized prepared statements"
+msgstr "Instruções preparadas otimizadas"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Optionally filter which databases are visible."
+msgstr "Opcionalmente, filtre quais bancos de dados ficam visíveis."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Optionally filter which schemas are visible."
+msgstr "Opcionalmente, filtre quais esquemas ficam visíveis."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Paste your connection string"
+msgstr "Cole sua string de conexão"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Personal Access Token"
+msgstr "Token de acesso pessoal"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Personal Access Token for authentication. Not required if using OAuth M2M."
+msgstr "Token de acesso pessoal para autenticação. Não é necessário ao usar OAuth M2M."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Presto Catalogs contain schemas and reference data sources via a connector."
+msgstr "Os catálogos do Presto contêm esquemas e referenciam fontes de dados por meio de um conector."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Presto coordinator Kerberos service principal pattern"
+msgstr "Padrão do principal de serviço Kerberos do coordenador Presto"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "RSA private key (PKCS#8/.p8)"
+msgstr "Chave privada RSA (PKCS#8/.p8)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Requires Starburst Galaxy, Starburst Enterprise (version 420-e or higher), or Trino (version 418 or higher)"
+msgstr "Requer Starburst Galaxy, Starburst Enterprise (versão 420-e ou superior) ou Trino (versão 418 ou superior)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Role (optional)"
+msgstr "Função (opcional)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Router node port"
+msgstr "Porta do nó de roteamento"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "S3 staging directory"
+msgstr "Diretório temporário do S3"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Schema (optional)"
+msgstr "Esquema (opcional)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Schemas"
+msgstr "Esquemas"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Secret key"
+msgstr "Chave secreta"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Server SSL certificate chain (PEM)"
+msgstr "Cadeia de certificados SSL do servidor (PEM)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Service Principal Client ID"
+msgstr "ID do cliente da entidade de serviço"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Service Principal OAuth Secret"
+msgstr "Segredo OAuth da entidade de serviço"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Snowflake will soon block password authentication."
+msgstr "O Snowflake bloqueará em breve a autenticação por senha."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Specific database"
+msgstr "Banco de dados específico"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Specify a role to override the database user's default role."
+msgstr "Especifique uma função para substituir a função padrão do usuário do banco de dados."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Specify a role to override the database user’s default role."
+msgstr "Especifique uma função para substituir a função padrão do usuário do banco de dados."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Specify a single database to enable features like DB routing"
+msgstr "Especifique um único banco de dados para habilitar recursos como o roteamento de bancos de dados"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Specify the default catalog to connect to."
+msgstr "Especifique o catálogo padrão ao qual deseja se conectar."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Specify the default database to connect to"
+msgstr "Especifique o banco de dados padrão ao qual deseja se conectar"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Starburst Catalogs contain schemas and reference data sources via a connector."
+msgstr "Os catálogos do Starburst contêm esquemas e referenciam fontes de dados por meio de um conector."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "The Databricks host URL. Could also be adb-xxxxx.azuredatabricks.net"
+msgstr "A URL do host do Databricks. Também pode ser adb-xxxxx.azuredatabricks.net"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "This S3 staging directory must be in the same region you specify above. Leave it empty if you use managed query results."
+msgstr "Este diretório temporário do S3 deve estar na mesma região especificada acima. Deixe em branco se você usar resultados de consultas gerenciados."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "This enables the connection with basic authentication."
+msgstr "Isso habilita a conexão com autenticação básica."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "This enables unfolding JSON columns into their component fields."
+msgstr "Isso permite desdobrar colunas JSON em seus campos componentes."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "This is useful when Metabase is deployed on a VPC or AWS Secret Cloud."
+msgstr "Isso é útil quando o Metabase está implantado em uma VPC ou na AWS Secret Cloud."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Truststore"
+msgstr "Repositório de certificados confiáveis"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Truststore (PKCS12 or JKS)"
+msgstr "Repositório de certificados confiáveis (PKCS12 ou JKS)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Truststore password"
+msgstr "Senha do repositório de certificados confiáveis"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Use Machine to Machine (M2M) authentication"
+msgstr "Usar autenticação máquina a máquina (M2M)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Use Personal Access Token for authentication."
+msgstr "Usar token de acesso pessoal para autenticação."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Use SSL server certificate?"
+msgstr "Usar certificado SSL do servidor?"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Use SSL truststore?"
+msgstr "Usar repositório de certificados confiáveis SSL?"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Use a different data catalog (if you have federated queries, for example)"
+msgstr "Use outro catálogo de dados (por exemplo, se você tiver consultas federadas)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Use canonical hostname"
+msgstr "Usar o nome canônico do host"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "User used to run system queries, required if the connection's user cannot be impersonated, such as the 'sa' user."
+msgstr "Usuário usado para executar consultas do sistema, obrigatório quando não for possível representar o usuário da conexão, como o usuário 'sa'."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Warehouse"
+msgstr "Armazém de dados"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Workgroup"
+msgstr "Grupo de trabalho"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Your database's IP address (e.g. 98.137.149.56) or its domain name (e.g. esc.mydatabase.com)."
+msgstr "O endereço IP do banco de dados (por exemplo, 98.137.149.56) ou seu nome de domínio (por exemplo, esc.mydatabase.com)."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "A file readable by the Metabase server (e.g. a Kubernetes projected token). Preferred over a pasted JWT because the driver re-reads it per connection."
+msgstr "Um arquivo que o servidor Metabase pode ler (por exemplo, um token projetado do Kubernetes). É preferível a colar um JWT, pois o driver relê o arquivo a cada conexão."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "AWS"
+msgstr "AWS"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Azure"
+msgstr "Azure"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Azure AD - Managed identity"
+msgstr "Azure AD - Identidade gerenciada"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Azure AD - Service principal"
+msgstr "Azure AD - Entidade de serviço"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Azure AD - Service principal (certificate)"
+msgstr "Azure AD - Entidade de serviço (certificado)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Certificate password"
+msgstr "Senha do certificado"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Client certificate"
+msgstr "Certificado do cliente"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Client key"
+msgstr "Chave do cliente"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Client key password"
+msgstr "Senha da chave do cliente"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Client secret"
+msgstr "Segredo do cliente"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Google Cloud"
+msgstr "Google Cloud"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "If the certificate needs a password, provide it here."
+msgstr "Se o certificado exigir uma senha, informe-a aqui."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Managed identity client ID"
+msgstr "ID do cliente da identidade gerenciada"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "OIDC token"
+msgstr "Token OIDC"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "OIDC token file path"
+msgstr "Caminho do arquivo do token OIDC"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Only needed if the private key is in a separate file from the certificate."
+msgstr "Necessário apenas se a chave privada estiver em um arquivo separado do certificado."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Only needed if the separate private key file is encrypted."
+msgstr "Necessário apenas se o arquivo separado da chave privada estiver criptografado."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Only needed if your private key is encrypted."
+msgstr "Necessário apenas se sua chave privada estiver criptografada."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "OpenID Connect (JWT)"
+msgstr "OpenID Connect (JWT)"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Optional. Fill in for a user-assigned managed identity; leave blank to use the default identity attached to the Metabase host."
+msgstr "Opcional. Preencha para usar uma identidade gerenciada atribuída pelo usuário; deixe em branco para usar a identidade padrão associada ao host do Metabase."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Paste a JWT for a one-off test. Metabase does not refresh tokens."
+msgstr "Cole um JWT para um teste pontual. O Metabase não renova os tokens."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Private key passphrase"
+msgstr "Senha da chave privada"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "RSA key pair"
+msgstr "Par de chaves RSA"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "SQL Server login"
+msgstr "Login do SQL Server"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Snowflake blocks password authentication for service users by October 2026."
+msgstr "O Snowflake bloqueia a autenticação por senha para usuários de serviço até outubro de 2026."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "The Entra application (client) ID of the service principal."
+msgstr "O ID do aplicativo (cliente) da entidade de serviço no Entra."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "The Microsoft Entra service principal certificate."
+msgstr "O certificado da entidade de serviço do Microsoft Entra."
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Username & password"
+msgstr "Usuário e senha"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Workload Identity Federation"
+msgstr "Federação de identidades de carga de trabalho"
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Workload identity provider"
+msgstr "Provedor de identidade de carga de trabalho"

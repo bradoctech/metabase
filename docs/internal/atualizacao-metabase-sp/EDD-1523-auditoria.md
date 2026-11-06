@@ -1,7 +1,7 @@
 # EDD-1523 — Auditoria pós-update do Metabase v64
 
 **Issue / branch:** `EDD-1523`  
-**Status:** em andamento  
+**Status:** auditoria e smoke locais concluídos; testes adiados para homologação/próxima leva registrados abaixo
 **Início do registro:** 30/10/2026  
 **Última atualização:** 06/11/2026
 
@@ -12,6 +12,10 @@ Registrar os problemas encontrados na auditoria pós-update para a v64, os ajust
 Referências: [instruções do agente](./INSTRUCOES-AGENTE.md), [estratégia do salto 60→64](./estrategia-salto-60-64.md), [notas da etapa](./notas-etapa-60-64.md), [manifesto de customizações](./manifesto-customizacoes.md), [runbook](./runbook-atualizacao.md), [listas canônicas](./lists/README.md) e [checklist de smoke](./checklist-smoke-test.md).
 
 ## Resumo do levantamento
+
+**Fechamento local:** todos os ajustes locais e suas validações previstas foram aprovados pelo usuário. A sequência abaixo preserva o histórico dos retornos; pendências de etapas anteriores foram resolvidas nos aceites posteriores. Somente upload completo de CSV, menu/editor de transformações e validações de Python/logs ANSI seguem adiados conforme suas decisões.
+
+**Aceite específico das traduções em 06/11/2026:** o usuário validou e aprovou individualmente General (AUD-002), E-mail (AUD-003), string de conexão (AUD-004), ajuda completa de PostgreSQL (AUD-005) e servidor de mapas (AUD-017). As pendências específicas desses cinco itens estão encerradas.
 
 **Revalidação mais recente do usuário:** traduções de `/admin` corretas até onde verificadas, com exceção dos dois textos de mapas registrados em AUD-017. `/data-studio/` e a aplicação principal também foram revalidados sem novas ocorrências de tradução relatadas. Esse retorno se refere a traduções; não encerra os pontos de cores, menus, upsells ou estados sem dados do levantamento prévio. Os itens específicos abaixo mantêm suas evidências próprias.
 
@@ -24,17 +28,18 @@ Referências: [instruções do agente](./INSTRUCOES-AGENTE.md), [estratégia do 
 | ID | Área / rota | Ponto identificado | Situação |
 | --- | --- | --- | --- |
 | AUD-001 | `/admin/settings/general` | Textos em inglês mesmo com pt-BR ativo | Usuário confirmou resolução após regenerar recursos e reiniciar o backend, até onde testou |
-| AUD-002 | `/admin/settings/general` | “Tabelas e X-Rays” e pontuação duplicada na descrição de rastreamento | Ajustes aplicados ao `.po`; revalidação específica pendente |
-| AUD-003 | `/admin/settings/email` | Erro de digitação “Adicionr destinatários…” identificado no catálogo | Correção aplicada ao `.po`; revalidação específica pendente |
-| AUD-004 | `/admin/databases/create` | Rótulo “Connection string (optional)” sem tradução | Marcação e tradução aplicadas; validação visual pendente |
-| AUD-005 | `/admin/databases/create` → “A ajuda está aqui” → PostgreSQL | Corpo do painel de ajuda em inglês | Markdown pt-BR e seleção por idioma implementados; testes passaram; validação visual pendente |
-| AUD-017 | `/admin/settings/maps` | Título e descrição da URL pública do servidor de mapas em inglês | Entradas adicionadas ao catálogo pt-BR e ao template; revalidação visual pendente |
-| AUD-018 | Admin, Data Studio, Monitor e fluxos comerciais da aplicação | CTAs e links de upsell | Admin aprovado pelo usuário no smoke; aplicação principal parcialmente validada; demais fluxos pendentes |
-| AUD-019 | Menu de troca de áreas → Monitor | Entrada em Monitor seguida de retorno à home | Funcionamento confirmado pelo usuário no perfil testado; ocultação para perfil sem seção disponível coberta pelos testes |
+| AUD-002 | `/admin/settings/general` | “Tabelas e X-Rays” e pontuação duplicada na descrição de rastreamento | Validado e aprovado pelo usuário em 06/11/2026 |
+| AUD-003 | `/admin/settings/email` | Erro de digitação “Adicionr destinatários…” identificado no catálogo | Validado e aprovado pelo usuário em 06/11/2026 |
+| AUD-004 | `/admin/databases/create` | Rótulo “Connection string (optional)” sem tradução | Validado e aprovado pelo usuário em 06/11/2026 |
+| AUD-005 | `/admin/databases/create` → “A ajuda está aqui” → PostgreSQL | Corpo do painel de ajuda em inglês | Implementado e testado; validação visual aprovada pelo usuário em 06/11/2026 |
+| AUD-017 | `/admin/settings/maps` | Título e descrição da URL pública do servidor de mapas em inglês | Validado e aprovado pelo usuário em 06/11/2026 |
+| AUD-018 | Admin, Data Studio, Monitor e fluxos comerciais da aplicação | CTAs e links de upsell | Smoke local aprovado nos cenários relatados; upload completo e menu/editor de transformações adiados para homologação |
+| AUD-019 | Menu de troca de áreas → Monitor | Entrada em Monitor seguida de retorno à home | Funcionamento administrativo aprovado; usuário comum validado sem entrada no menu e com redirecionamento de `/monitor` e `/monitor/tasks` para `/unauthorized` |
 | AUD-020 | Cabeçalho do Data Studio | Logo Metabase em vez do brasão SP | Brasão SP confirmado pelo usuário |
 | AUD-021 | Sidebar do Data Studio → Ferramentas | Categoria sem itens após bloqueio das ofertas | Ausência da categoria vazia confirmada pela imagem posterior do usuário |
 | AUD-022 | Botão de compartilhar pergunta/dashboard | Tooltip “Percentagem” em vez de “Compartilhar” | Resolvido; usuário confirmou “Compartilhar” na interface com imagem |
-| AUD-023 | Cabeçalho do Monitor | Ícone do Monitor ocupava o lugar do brasão SP | Brasão adicionado; ícone de pulso mantido ao lado na sidebar expandida; aguardando smoke |
+| AUD-023 | Cabeçalho do Monitor | Ícone do Monitor ocupava o lugar do brasão SP | Validado pelo usuário: brasão junto ao ícone e recolhimento/expansão da sidebar funcionando |
+| AUD-024 | `/admin/databases/create` → diferentes drivers | Rótulos, descrições e tooltips de conexão em inglês | Concluído: usuário validou todos os tipos de banco e campos em `/admin/databases/create`, incluindo Druid, sem strings em inglês |
 
 “Aplicado” indica alteração no diretório de trabalho. Não implica commit, publicação ou aceite visual. A confirmação geral do usuário em AUD-001 não é tratada como aceite individual dos demais ajustes.
 
@@ -69,7 +74,7 @@ Trechos informados pelo usuário:
 
 As chaves em inglês foram preservadas. Somente as traduções foram ajustadas.
 
-**Validação:** `git diff --check` passou. Falta confirmar visualmente as duas entradas após gerar e carregar os recursos atualizados.
+**Validação:** `git diff --check` passou. O usuário validou e aprovou as duas entradas de General em 06/11/2026 (item 1 do roteiro).
 
 ## AUD-003 — Erro de digitação na configuração de e-mail
 
@@ -78,7 +83,7 @@ As chaves em inglês foram preservadas. Somente as traduções foram ajustadas.
 
 **Correção aplicada:** “Adicionr destinatários como CC ou BCC” → “Adicionar destinatários como CC ou BCC”. O erro foi confirmado no catálogo durante a leitura das pendências históricas.
 
-**Validação:** `git diff --check` passou. Falta revalidar especificamente o rótulo em `/admin/settings/email` com os recursos atualizados.
+**Validação:** `git diff --check` passou. O usuário validou e aprovou o rótulo de E-mail em 06/11/2026 (item 2 do roteiro).
 
 ## AUD-004 — Rótulo da string de conexão
 
@@ -95,7 +100,7 @@ As chaves em inglês foram preservadas. Somente as traduções foram ajustadas.
 
 A chave já estava no template `locales/metabase.po` e não precisou ser acrescentada novamente.
 
-**Validação:** `git diff --check` passou. Falta gerar os recursos, reiniciar o backend, incorporar a alteração no frontend e confirmar o rótulo na tela.
+**Validação:** `git diff --check` passou. O usuário confirmou o rótulo traduzido e aprovou em 06/11/2026 (item 3 do roteiro).
 
 ## AUD-005 — Ajuda de PostgreSQL no painel lateral
 
@@ -121,7 +126,7 @@ A chave já estava no template `locales/metabase.po` e não precisou ser acresce
 - Comparação com o Markdown original: links e blocos de código preservados; ambos possuem 37 títulos.
 - `git diff --check` passou.
 
-**Validação visual pendente:** após recompilar o frontend, reabrir o painel e conferir o conteúdo completo, a rolagem e os links. A tradução deste Markdown não depende de regenerar os `.po`.
+**Validação visual aprovada:** o usuário validou a ajuda PostgreSQL em 06/11/2026 (item 4 do roteiro, incluindo conteúdo completo, rolagem e links). A tradução deste Markdown não depende de regenerar os `.po`.
 
 ## Levantamento prévio do usuário — a conferir
 
@@ -131,19 +136,19 @@ Recebido em 30/10/2026 para alinhamento de contexto. O usuário informou que alg
 | --- | --- | --- | --- |
 | AUD-006 | Toggle do Metabot | Textos em inglês | Textos conferidos e aprovados pelo usuário em 04/11/2026 |
 | AUD-007 | Menu do usuário, no topo direito | Remover Ajuda → “Obter ajuda”; Sobre Metabase mantido por decisão do usuário; comparação com PRODESP sem validação específica | “Obter ajuda” não renderizado pela política SP; Sobre Metabase mantido por decisão do usuário; blocos externos de `/getting-started` também ocultados |
-| AUD-008 | Adicione seus dados → CSV | Texto sem tradução | Visual aprovado pelo usuário no smoke; upload completo não exercitado por ausência de banco compatível |
+| AUD-008 | Adicione seus dados → CSV | Texto sem tradução | Visual aprovado pelo usuário no smoke; upload completo adiado pelo usuário para o ambiente publicado de testes |
 | AUD-009 | Lixeira | Aviso “Este collection está no lixo”: conferir o vermelho do fundo e localizar outros usos do mesmo tom para adequação à paleta SP | Cores e contraste validados nos dois temas; “Esta collection…” aprovado pelo usuário em 06/11/2026 |
 | AUD-010 | `/browse/metrics` e hover de coleção | Ícones com vermelho aparentemente fora da paleta; no hover de uma coleção, cor diferente da de “Nome” | `icon-brand` alinhado ao vermelho principal SP nos dois temas, igual ao nome no hover; validado pelo usuário nos temas claro e escuro |
 | AUD-011 | Navegação administrativa | Texto do item ativo claro sobre fundo claro, prejudicando a leitura; ajuste proposto para preto | Aba superior ativa e hover das abas inativas com preto SP sobre branco, aprovados pelo usuário em 06/11/2026 |
 | AUD-012 | `/admin/settings/uploads` | Ocultar chamadas “Atualize para o Metabase Pro”; revisar textos em inglês no hover de informação | CTA e contêiner lateral bloqueados pela política SP; admin aprovado no smoke geral, sem resquícios de upsell relatados |
 | AUD-013 | Área administrativa | Revisar traduções e ocultar chamadas para planos Pro | Traduções revalidadas até onde testado; política de ofertas aplicada e admin aprovado no smoke do usuário |
 | AUD-014 | Menus administrativos | Ocultar “Sincronização remota”, itens com diamante que levam ao Pro e “Licença” | Entradas promocionais não renderizadas e menu Licença oculto; recursos disponíveis preservados; admin aprovado no smoke do usuário |
-| AUD-015 | `/admin/databases/create` | Ocultar o link “Precisa de ajuda para conectar?” que leva ao Metabase | Link do rodapé do formulário não renderizado pela política SP; painel de ajuda PostgreSQL preservado; aguardando smoke |
+| AUD-015 | `/admin/databases/create` | Ocultar o link “Precisa de ajuda para conectar?” que leva ao Metabase | Validado pelo usuário: link do rodapé não renderizado pela política SP; painel de ajuda PostgreSQL preservado |
 | AUD-016 | `/admin/settings/updates` | Tratar falta de dados | Usuário confirmou que a tela voltou a renderizar corretamente em 04/11/2026; concluído sem novo ajuste de código |
 
 ### Cruzamento com os ajustes desta conversa
 
-- **Textos em inglês em `/admin/databases/create`:** já há duas ocorrências tratadas, AUD-004 (rótulo da string de conexão) e AUD-005 (documentação de PostgreSQL). A validação visual continua pendente; isso não encerra a auditoria de todos os textos da rota.
+- **Textos em inglês em `/admin/databases/create`:** já há duas ocorrências tratadas, AUD-004 (rótulo da string de conexão) e AUD-005 (documentação de PostgreSQL). Ambas foram validadas e aprovadas pelo usuário em 06/11/2026; isso não amplia a cobertura para todos os textos da rota.
 - **Ajuda de conexão:** AUD-005 trata da tradução do corpo do painel “A ajuda está aqui”. AUD-015 registra uma proposta de ocultação de link externo. Não presumir que ambos sejam o mesmo elemento nem remover a tradução já implementada com base nesse relato.
 - **Textos do admin:** General teve resolução confirmada pelo usuário em AUD-001. As demais telas e os pontos do levantamento prévio precisam de confirmação própria.
 - **Preservação em próximos updates:** manter o contrato das listas canônicas. As alterações de código e documentação de AUD-004/AUD-005 já foram incluídas nas listas correspondentes; `locales/pt-BR.po` já era adapter. Ao implementar os demais pontos, registrar sua proteção no mesmo conjunto de alterações e validar pelo processo existente, sem criar outro fluxo de transporte.
@@ -163,7 +168,7 @@ Recebido em 30/10/2026 para alinhamento de contexto. O usuário informou que alg
 - Preservar `{0}` para o link “Saiba mais” ao final da descrição e manter as chaves anteriores para compatibilidade.
 - Atualizar o template com as duas novas chaves. Ambos os catálogos já estão cobertos pelas listas canônicas existentes.
 
-**Validação:** conferir as novas entradas e a preservação do placeholder; `git diff --check`. Falta regenerar os recursos com `./bin/i18n/build-translation-resources`, reiniciar o backend e confirmar título, descrição e link na tela.
+**Validação:** entradas e placeholder conferidos; `git diff --check` passou. O usuário validou e aprovou título, descrição e link na interface em 06/11/2026 (item 5 do roteiro).
 
 ## Levantamento de CTAs de upsell e navegação premium
 
@@ -266,7 +271,7 @@ Ocultar por CSS mantém os componentes montados: hooks, consultas e eventos de v
 
 ## Política SP de ofertas comerciais — implementação de 02/11/2026
 
-**Situação:** implementada no frontend; validação automatizada concluída e smoke visual pendente. Registro AUD-018, relacionado a AUD-012/AUD-013/AUD-014.
+**Situação atual:** implementada no frontend, com validação automatizada e smoke local aprovados nos cenários registrados; upload completo e menu/editor de transformações adiados por decisão do usuário. Registro AUD-018, relacionado a AUD-012/AUD-013/AUD-014.
 
 ### Organização para os próximos upgrades
 
@@ -356,12 +361,12 @@ Os redirecionamentos se aplicam aos ramos comerciais. As páginas de features di
 | Área / fluxo | Conferir | Estado |
 | --- | --- | --- |
 | Telas do admin percorridas pelo usuário | Ausência de resquícios de upsell | **OK informado pelo usuário** |
-| Menu da aplicação → Monitor | Abrir seção disponível sem voltar à home; omitir entrada quando não houver função disponível | **OK de funcionamento informado pelo usuário**; outro perfil sem seção disponível não foi relatado |
+| Menu da aplicação → Monitor | Abrir seção disponível sem voltar à home; omitir entrada quando não houver função disponível | **OK informado pelo usuário nos dois perfis:** administrador com acesso funcional; usuário comum sem entrada no menu e com acesso direto negado em `/monitor` e `/monitor/tasks` |
 | Data Studio | Brasão SP, sidebar expandida/recolhida, ausência de Ferramentas vazia e preservação de Glossário/Dados conectados | **OK de funcionamento e brasão informado pelo usuário**; imagem confirma ausência de Ferramentas vazia; sidebar recolhida também aprovada pelo usuário em 06/11/2026 |
-| Adicione seus dados → CSV | Ausência de compra de armazenamento e de textos promocionais; manter configuração de uploads e upload funcional quando disponível | **Visual OK informado pelo usuário**; upload completo não exercitado por ausência de banco compatível |
+| Adicione seus dados → CSV | Ausência de compra de armazenamento e de textos promocionais; manter configuração de uploads e upload funcional quando disponível | **Visual OK informado pelo usuário**; upload completo adiado para o ambiente publicado de testes |
 | Pergunta e dashboard → detalhes/Insights | Nenhuma aba de oferta, CTA ou área comercial vazia; detalhes comuns continuam funcionando | **OK informado pelo usuário** |
 | Compartilhar/incorporar pergunta ou dashboard | Sem ofertas de planos para fontes, temas ou remoção de marca; preservar opções permitidas e o banner de marca efetivamente usado no embed | **Sem upsell: OK informado pelo usuário** na amostra testada; tooltip incorreto tratado em AUD-022 |
-| Home específica de incorporação | Ausência do card comercial e de espaço reservado vazio | Pendente, somente se essa home for usada |
+| Home específica de incorporação | Ausência do card comercial e de espaço reservado vazio | Não aplicável ao cenário testado: a home padrão mostra “Continue de onde parou”; a variante de incorporação não foi exibida nem exercitada |
 | Data Studio → Transformação de dados | Ausência de opções/biblioteca Python que apenas abririam oferta; preservar funções liberadas | Estado de banco incompatível observado sem oferta comercial; lista/menu/editor não exercitados |
 | URLs diretas de páginas promocionais | Por exemplo, `/data-studio/dependencies` sem a feature deve levar ao Guia; sem loop ou tela comercial vazia | **OK informado pelo usuário para o exemplo do item 6** |
 
@@ -430,7 +435,7 @@ Esses dois fluxos funcionais poderão ser completados quando houver uma conexão
 
 **Resultado visual:** usuário confirmou a resolução e enviou imagem do tooltip “Compartilhar”. AUD-022 validada na interface; nome acessível coberto pelos testes automatizados.
 
-O smoke comercial não encerra automaticamente os demais pontos do levantamento inicial. As cores da lixeira e dos ícones foram posteriormente validadas nos temas claro e escuro, conforme registro abaixo; avaliação dos links de Ajuda/Sobre e conexão, contraste do menu administrativo e estado sem dados de Atualizações continuam dependentes de sua própria validação ou definição de escopo.
+O smoke comercial não encerra automaticamente outros pontos do levantamento inicial. Cores, links de Ajuda e conexão, contraste administrativo e Atualizações receberam seus próprios aceites posteriores, conforme os registros abaixo. Sobre Metabase foi mantido por decisão do usuário.
 
 ## AUD-009/AUD-010 — Origem dos vermelhos e alinhamento à paleta SP
 
@@ -505,26 +510,26 @@ Esses dois itens não bloqueiam o encerramento do PR atual por decisão expressa
 | Item | Saldo |
 | --- | --- |
 | AUD-006 — Metabot | Textos conferidos e aprovados pelo usuário em 04/11/2026 |
-| AUD-007 — Ajuda/Sobre | “Obter ajuda” ausente no menu e Sobre presente, aprovados em 06/11/2026; blocos de `/getting-started` aguardam confirmação específica; links de `/admin/help` tratados na rodada complementar abaixo |
+| AUD-007 — Ajuda/Sobre | “Obter ajuda” ausente no menu e Sobre presente, aprovados em 06/11/2026; blocos externos de `/getting-started` aprovados como ausentes, com checklist preservada; links de `/admin/help` tratados na rodada complementar abaixo |
 | AUD-009 — texto da lixeira | “Esta collection…” aprovado pelo usuário em 06/11/2026 |
 | AUD-011 — item ativo do admin | Item ativo e hover das abas inativas aprovados pelo usuário em 06/11/2026 |
-| AUD-015 — ajuda de conexão | Link externo do formulário sob política SP, sem renderização; painel de ajuda PostgreSQL preservado; aguardando smoke |
+| AUD-015 — ajuda de conexão | Ausência do link externo do formulário aprovada pelo usuário; painel de ajuda PostgreSQL preservado |
 | AUD-016 — Atualizações | Concluído: usuário confirmou renderização correta em 04/11/2026; sem novo ajuste de código |
 
-### Correções aplicadas com confirmação específica ainda pendente
+### Correções de tradução com confirmação específica concluída — 06/11/2026
 
 - AUD-002/AUD-003: qualidade dos textos de General e rótulo de destinatários em E-mail.
 - AUD-004/AUD-005: rótulo da string de conexão e corpo completo da ajuda PostgreSQL.
 - AUD-017: título/descrição da URL pública do servidor de mapas.
 
-A revalidação geral de traduções do admin é evidência favorável, mas o documento ainda não contém aceite individual desses pontos. Não são classificados como defeitos novos confirmados.
+O usuário retornou explicitamente “Validado e ok” para cada um dos cinco itens do roteiro em 06/11/2026. AUD-002, AUD-003, AUD-004, AUD-005 e AUD-017 ficam encerrados quanto às correções e validações de tradução descritas neste documento.
 
 ### Cobertura adicional ainda não relatada
 
-- Monitor com outro perfil que não possua seção disponível.
+- Monitor com usuário comum sem seções disponíveis: aprovado; menu oculto e rotas diretas redirecionam para `/unauthorized`.
 - Data Studio com a sidebar recolhida: aprovado pelo usuário em 06/11/2026.
-- Home específica de incorporação, se usada no ambiente.
-- Upload completo e lista/menu de transformações, limitados pela ausência de conexão elegível.
+- Home específica de incorporação: não exibida no cenário testado; não aplicável a esse cenário, sem validação visual da variante.
+- Upload completo adiado pelo usuário para o ambiente publicado de testes. Lista/menu/editor de transformações também adiados pelo usuário para o ambiente publicado de testes, por ausência de conexão elegível local.
 
 Essas lacunas de cobertura não demonstram falha. Somente Python e logs ANSI foram explicitamente adiados pelo usuário nesta decisão; o enquadramento dos demais itens pode ser definido separadamente.
 
@@ -560,9 +565,9 @@ Essas lacunas de cobertura não demonstram falha. Somente Python e logs ANSI for
 
 A pedido do usuário, retomar somente após estes ajustes e seu smoke:
 
-1. Confirmação específica dos textos de General/E-mail (AUD-002/AUD-003), string de conexão (AUD-004), ajuda PostgreSQL (AUD-005) e URL do servidor de mapas (AUD-017).
-2. Monitor com outro perfil e home específica de incorporação, se usada. Data Studio com sidebar recolhida foi aprovado pelo usuário em 06/11/2026.
-3. Upload completo e lista/menu/editor de transformações quando houver banco elegível, mantendo registrada a limitação atual.
+1. **Concluído em 06/11/2026:** confirmação específica dos textos de General/E-mail (AUD-002/AUD-003), string de conexão (AUD-004), ajuda PostgreSQL (AUD-005) e URL do servidor de mapas (AUD-017), todos aprovados pelo usuário.
+2. **Concluído:** Monitor com usuário comum aprovado conforme registro abaixo. Data Studio com sidebar recolhida também aprovado; home específica de incorporação não se aplica ao cenário relatado.
+3. Upload completo no ambiente publicado de testes, conforme adiamento do usuário. Lista/menu/editor de transformações também adiados para o ambiente publicado de testes por decisão do usuário.
 
 Python e logs ANSI continuam destinados à próxima leva, fora do foco deste PR. Sobre Metabase permanece disponível por decisão confirmada do usuário em 06/11/2026; a avaliação de remoção deixou de ser uma pendência deste PR.
 
@@ -582,7 +587,7 @@ Python e logs ANSI continuam destinados à próxima leva, fora do foco deste PR.
 
 **Smoke aprovado pelo usuário em 06/11/2026:** em `/admin/help`, “Obter ajuda” e “Relatar um problema” não renderizam; diagnósticos e detalhes avançados permanecem disponíveis. O hover das abas administrativas, inclusive inativas, foi conferido e aprovado com texto preto SP sobre branco. Nenhuma nova ocorrência foi relatada nesses dois pontos.
 
-A confirmação “OK no menu” foi registrada para o submenu Ajuda. Não foi estendida automaticamente ao rodapé de criação de banco ou aos blocos de `/getting-started`, que continuam aguardando confirmação específica. As próximas etapas anteriormente solicitadas permanecem registradas acima.
+A confirmação inicial “OK no menu” foi registrada somente para o submenu Ajuda. No aceite final, o usuário também confirmou especificamente o rodapé de criação de banco e os blocos externos de `/getting-started`; as respectivas pendências estão encerradas.
 
 ## AUD-023 — Brasão SP no Monitor
 
@@ -594,29 +599,130 @@ A confirmação “OK no menu” foi registrada para o submenu Ajuda. Não foi e
 
 **Validação automatizada:** 47 testes da suíte MonitorLayout passaram, incluindo presença do brasão/ícone na sidebar expandida e brasão na recolhida sob política SP. Os cenários upstream de gating passaram a habilitar explicitamente ofertas no setup de teste, preservando a cobertura dos ramos originais. ESLint e `git diff --check` passaram.
 
-**Smoke pendente:** abrir `/monitor/tasks` ou outra seção disponível do Monitor, conferir brasão junto ao ícone de pulso na sidebar expandida; recolher/expandir a sidebar e conferir brasão, controles e navegação. Conferir os temas claro e escuro.
+**Smoke aprovado pelo usuário:** brasão junto ao ícone do Monitor e comportamento ao recolher/expandir a sidebar conferidos e aprovados no item 3 do aceite final. AUD-023 encerrado no escopo visual testado.
+
+## Home e configurações de incorporação — retorno do usuário
+
+**Validação de `/admin/embedding`:** usuário confirmou ausência de upgrade/upsell na tela administrativa de incorporação. Este aceite é específico dessa rota e complementa o smoke anterior do fluxo Compartilhar → Incorporar.
+
+**Home com painel configurado:** ao selecionar Painel em `/admin/settings/general`, a home abriu o dashboard “E-commerce Insights”, conforme relato e imagem do usuário.
+
+**Home padrão:** ao voltar para Página inicial padrão do Metabase, a tela exibiu “Olá, Felipe” e “Continue de onde parou”, com cards de conteúdos acessados. Essa é a seção de itens recentes (`HomeRecentSection`), mesmo sem o título literal “Recentes”. O comportamento observado está correto para a home comum.
+
+**Home alternativa de incorporação:** `EmbedHomepage` não apareceu nesse acesso. É uma variante condicionada a `embedding-homepage === "visible"` e usuário administrador, distinta da seleção entre home padrão e dashboard e distinta de `/admin/embedding`. Registrar como **não aplicável ao cenário testado**, sem declarar o card comercial dessa variante validado visualmente e sem alterar configurações para forçar sua exibição.
+
+## AUD-019 — Smoke do Monitor com usuário comum
+
+**Resultado confirmado pelo usuário em 06/11/2026:** após definir a senha pelo fluxo de redefinição e entrar com a conta comum de teste, os três pontos foram aprovados:
+
+1. Monitor ausente no menu de áreas.
+2. Acesso direto a `/monitor` negado, com redirecionamento para `http://localhost:3002/unauthorized`.
+3. Acesso direto a `/monitor/tasks` negado, com o mesmo redirecionamento para `/unauthorized`.
+
+A validação cobre ocultação da entrada e os guards de navegação para o perfil comum testado. Não implica uma auditoria adicional das permissões das APIs. A entrega de e-mail não foi necessária para este smoke; a conta foi acessada pelo link de redefinição obtido pelo administrador.
+
+## AUD-024 — Traduções dos formulários de conexão por driver
+
+**Novo retorno do usuário:** percorreu os tipos de banco e não encontrou CTAs de upsell, mas identificou textos em inglês nos campos, descrições e tooltips. O print recebido mostra o formulário de conexão PostgreSQL com opções avançadas, sem CTA na área exibida. O aceite de ausência de CTA nos demais tipos baseia-se no relato do usuário.
+
+**Distinção de cobertura:** a tela é `/admin/databases/create`, não o menu/editor de transformações de `/data-studio/transforms`. Esta evidência amplia o smoke dos formulários de conexão; não encerra o teste dos editores de transformações.
+
+### Trechos e drivers informados
+
+| Driver | Ocorrências relatadas |
+| --- | --- |
+| Amazon Athena | Region; Workgroup; S3 staging directory; Catalog; Access key; Secret key; Full hostname; Specific database; Additional Athena connection string options; tooltips dos ícones de informação em inglês |
+| ClickHouse | Enable multiple databases; Enable syncing and scanning tables from multiple ClickHouse databases except the system ones.; Databases; Disable system wide proxy settings; ClickHouse settings (comma-separated); Max open HTTP connections in the JDBC driver (default: 100) |
+| Databricks | Relato inicial de campos em inglês; corrigidos e aprovados na revisão banco a banco |
+| Druid | Relato inicial de campos em inglês; corrigidos e aprovados na revisão banco a banco |
+| Druid JDBC | Relato inicial de campos em inglês; corrigidos e aprovados na revisão banco a banco |
+| MongoDB | Relato inicial de campos em inglês; corrigidos e aprovados na revisão banco a banco |
+| MySQL | Relato inicial de campos em inglês; corrigidos e aprovados na revisão banco a banco |
+| Oracle | Relato inicial de campos em inglês; corrigidos e aprovados na revisão banco a banco |
+| Presto | Relato inicial de campos em inglês; corrigidos e aprovados na revisão banco a banco |
+| Snowflake | Relato inicial de campos em inglês; corrigidos e aprovados na revisão banco a banco |
+| SQL Server | Relato inicial de campos em inglês; corrigidos e aprovados na revisão banco a banco |
+| SQLite | Relato inicial de campos em inglês; corrigidos e aprovados na revisão banco a banco |
+| Starburst (Trino) | Relato inicial de campos em inglês; corrigidos e aprovados na revisão banco a banco |
+
+### Diagnóstico inicial e próximo tratamento
+
+Os trechos de Athena e ClickHouse foram localizados em `modules/drivers/athena/resources/metabase/athena/metabase-plugin.yaml` e `modules/drivers/clickhouse/resources/metabase/clickhouse/metabase-plugin.yaml`, em propriedades como `display-name` e `helper-text`. Os metadados são processados pelo carregamento de plugins/driver antes de chegar ao formulário.
+
+Várias chaves específicas relatadas não foram encontradas no catálogo pt-BR. “Region” já possui tradução “Região” em outro contexto de uso do catálogo, portanto não se deve atribuir todas as ocorrências apenas a ausência de tradução: é necessário conferir também a aplicação da tradução aos metadados dos drivers. A revisão central e o aceite visual posterior dos demais tipos de banco estão registrados abaixo.
+
+**Estado atualizado:** correção aplicada e validação visual concluída. O usuário percorreu cada tipo de banco em `/admin/databases/create` e confirmou todos os campos traduzidos, incluindo Druid, sem strings em inglês. AUD-024 encerrado no escopo visual dos formulários de conexão. AUD-004/AUD-005 permanecem encerrados.
+
+### Correção central e inventário
+
+- `frontend/src/metabase/sp/connection-field-i18n.ts`: registro de **168 mensagens** com chamadas literais `t`, avaliadas ao renderizar para acompanhar mudanças de idioma. As chaves ficam visíveis à extração estática, evitando perdê-las ao regenerar o template.
+- `DatabaseDetailField.tsx`: adapter único chama `localizeConnectionField` antes de montar os campos. Localiza `display-name`, `description`, `helper-text`, nomes das opções e o placeholder genérico “Optional”. Não altera `name`, `default`, valores das opções, condições de visibilidade, credenciais ou placeholders técnicos. Textos desconhecidos e rótulos já traduzidos são mantidos.
+- **119 novas entradas pt-BR** e **130 entradas no template**, sem substituir traduções preexistentes. A diferença de contagem decorre de chaves já traduzidas no pt-BR que não estavam no template atual.
+- Inventário cobre **129 textos distintos dos manifestos-fonte atuais** de Athena, ClickHouse, Databricks, Druid JDBC, MongoDB, Oracle, Presto JDBC, Snowflake, SQL Server, Starburst e Hive-like, incluindo grupos e opções aninhadas. Inclui também textos compartilhados de conexão de MySQL/SQLite e variantes presentes nos artefatos locais de drivers, para compatibilidade com o ambiente de smoke.
+- Nomes de produtos e protocolos como AWS, Azure, Google Cloud e OpenID Connect (JWT) permanecem técnicos. Navegação externa do Databricks “SQL Warehouses > Connection details” foi preservada como nome das opções do produto de destino.
+- O driver Druid clássico não possui manifesto-fonte nesta árvore; recebe as traduções compartilhadas pelo mesmo adapter. O usuário conferiu esse tipo de banco na interface e confirmou ausência de strings em inglês, encerrando a lacuna de validação visual desse driver.
+- Módulo SP e teste registrados em `lists/restore-ours.txt`; adapter e teste de integração em `lists/dual-changed.txt`. Nenhum manifesto upstream foi reescrito.
+
+### Validação automatizada de AUD-024
+
+- **22 testes distintos passaram em 4 suítes direcionadas:** localização de metadados, integração de campo/tooltip, formulário de banco e mudança de engine. O teste de integração também confirmou que o valor digitado continua sendo enviado em `details.region`, sem traduzir identificadores nem valores.
+- Testes cobrem troca de idioma, preservação de defaults/condições/valores de opções, ausência de mutação dos metadados originais e manutenção de textos desconhecidos ou já traduzidos.
+- **ESLint e `git diff --check` passaram.**
+- Catálogos analisados com Babel: as **168 mensagens registradas** existem no template e têm tradução pt-BR. Conferência dos manifestos-fonte confirmou cobertura dos **129 textos distintos** coletados das propriedades de conexão.
+- Smoke visual dos drivers aprovado posteriormente pelo usuário, banco a banco, incluindo Druid. O aceite cobre os campos exibidos no formulário; não implica teste de conexão ou execução em cada banco. Nenhum commit foi realizado pelo agente e o staging existente foi preservado.
+
+### Roteiro de revalidação — concluído pelo usuário
+
+Executar `./bin/i18n/build-translation-resources`, reiniciar o backend e recarregar o frontend recompilado. Abrir `/admin/databases/create`, selecionar os drivers relatados, expandir opções avançadas e passar o mouse nos ícones de informação. Conferir também seletores de autenticação e seus campos condicionais. Não é necessário preencher credenciais, salvar ou conectar para esse smoke visual.
+
+### Upload CSV — adiamento confirmado
+
+O usuário decidiu deixar o upload completo para o ambiente publicado de testes. Manter o resultado visual anterior aprovado e o fluxo completo como não exercitado, destinado a essa próxima etapa. Não é necessário configurar um banco local apenas para fechar esse teste nesta rodada.
+
+## Transformações — adiamento confirmado pelo usuário
+
+Assim como o upload completo de CSV, o menu/editor de transformações fica para o ambiente publicado de testes. O ambiente local continua sem conexão de banco compatível. Ambos permanecem não exercitados funcionalmente, com adiamento autorizado; não exigem configurar conexão local nesta leva. Python e logs ANSI seguem fora do foco deste PR conforme decisão anterior.
+
+## Consolidação para fechamento — aceite dos drivers
+
+**Feedback final de AUD-024:** o usuário validou banco a banco em Database Create e confirmou que todos os campos de todos os tipos estavam corretos. Destacou que Druid também não apresentou nenhuma string em inglês. As traduções dos formulários ficam aprovadas e encerradas no escopo testado.
+
+**Saldo local registrado:** não há outra correção confirmada por implementar neste levantamento. Os três últimos pontos receberam aceite explícito do usuário:
+
+1. **OK — `/getting-started`:** ausência dos blocos externos de aprendizado e suporte, mantendo a checklist. Usuário enviou print como evidência.
+2. **OK — `/admin/databases/create`:** ausência específica do link de rodapé “Precisa de ajuda para conectar?” (AUD-015), distinto do painel “A ajuda está aqui”.
+3. **OK — Monitor:** brasão junto ao ícone de pulso na sidebar expandida e funcionamento ao recolher/expandir (AUD-023). O acesso do usuário comum já está aprovado em AUD-019.
+
+**Adiados por decisão do usuário:** upload completo de CSV e menu/editor de transformações para o ambiente publicado de testes; Python e logs ANSI para próxima leva, fora do foco deste PR. A home alternativa de incorporação não é aplicável ao cenário testado. Esses adiamentos não foram convertidos em testes aprovados.
+
+**Fechamento:** auditoria e smoke locais concluídos no escopo descrito, após os aceites explícitos dos três pontos acima. Restam somente os testes adiados para homologação/próxima leva. O aceite não altera a cobertura dos testes de conexão, upload ou execução de transformações e não implica publicação ou commit.
 
 ## Pendências de acompanhamento
 
-- [ ] Confirmar visualmente os ajustes AUD-002 e AUD-003.
-- [ ] Confirmar o rótulo “String de conexão (opcional)” na criação de banco (AUD-004).
-- [ ] Confirmar a ajuda completa de PostgreSQL em pt-BR (AUD-005).
-- [ ] Confirmar título, descrição e link da URL pública do servidor de mapas (AUD-017).
+- [x] Confirmar visualmente os ajustes AUD-002 e AUD-003. Aprovado pelo usuário em 06/11/2026.
+- [x] Confirmar o rótulo “String de conexão (opcional)” na criação de banco (AUD-004). Aprovado pelo usuário em 06/11/2026.
+- [x] Confirmar a ajuda completa de PostgreSQL em pt-BR (AUD-005). Aprovado pelo usuário em 06/11/2026.
+- [x] Confirmar título, descrição e link da URL pública do servidor de mapas (AUD-017). Aprovado pelo usuário em 06/11/2026.
 - [x] Smoke visual dos CTAs no admin, conforme retorno do usuário (AUD-018).
+- [x] Smoke do Monitor com usuário comum (AUD-019): menu oculto e `/monitor` e `/monitor/tasks` redirecionando para `/unauthorized`, confirmado em 06/11/2026.
 - [x] Smoke de detalhes/Insights e ausência de upsell na incorporação, na amostra relatada pelo usuário.
-- [ ] Concluir o smoke comercial da aplicação principal conforme a tabela acima, incluindo AUD-019/AUD-020/AUD-021.
+- [x] Confirmar ausência de upsell em `/admin/embedding`, conforme retorno específico do usuário.
+- [x] Conferir alternância entre dashboard como home e home padrão com “Continue de onde parou”; home alternativa de incorporação não aplicável ao cenário testado.
+- [x] Smoke relatado de Monitor, Data Studio, detalhes/Insights e incorporação consolidado; AUD-019/AUD-020/AUD-021 aprovados nos cenários testados. Itens adicionais não confirmados explicitamente permanecem separados abaixo.
 - [x] Revalidar “Compartilhar” no tooltip após gerar os recursos atualizados (AUD-022), confirmado pelo usuário com imagem.
-- [ ] Exercitar upload completo e lista/menu de transformações quando existir banco elegível.
+- [ ] Próxima etapa no ambiente publicado de testes: exercitar upload completo de CSV, adiado pelo usuário.
+- [ ] Próxima etapa no ambiente publicado de testes: exercitar lista/menu/editor de transformações, adiados pelo usuário por ausência de conexão elegível local.
 - [x] Revalidar as cores SP da lixeira, métricas e hover de coleções nos temas claro e escuro (AUD-009/AUD-010), confirmado pelo usuário em 04/11/2026.
 - [x] Smoke complementar dos vermelhos da v64 nos temas claro e escuro: hover de excluir/arquivar, erro de expressão e realce de código, conforme retorno do usuário em 04/11/2026.
 - [x] Confirmar os textos do Metabot (AUD-006) e a renderização de Atualizações (AUD-016), conforme retorno do usuário.
 - [x] Validar o texto “Esta collection…” e a manutenção de Sobre Metabase, confirmados pelo usuário em 06/11/2026.
 - [x] Validar ausência de “Obter ajuda” no menu e contraste da aba administrativa ativa, confirmados em 06/11/2026.
 - [x] Validar links ocultados em `/admin/help`, preservação dos diagnósticos/detalhes avançados e contraste do hover das abas administrativas, aprovados pelo usuário em 06/11/2026.
-- [ ] Confirmar especificamente os blocos de `/getting-started` e o link de ajuda da conexão (AUD-015).
-- [ ] Retomar as próximas etapas solicitadas pelo usuário após o smoke desta rodada, conforme lista abaixo.
+- [x] Confirmar especificamente os blocos de `/getting-started` (com print enviado) e o link de ajuda da conexão (AUD-015), aprovados no aceite final do usuário.
+- [x] Retomar as próximas etapas solicitadas pelo usuário e consolidar seus retornos, conforme registros de tradução, home, Data Studio e acesso ao Monitor.
 - [x] Validar sidebar recolhida do Data Studio e confirmar manutenção de Sobre Metabase, conforme retorno do usuário em 06/11/2026.
-- [ ] Validar brasão SP junto ao ícone do Monitor e comportamento ao recolher/expandir a sidebar (AUD-023).
-- [ ] Registrar novas ocorrências informadas pelo usuário, com rota, texto, causa, correção e evidência de validação.
+- [x] Validar brasão SP junto ao ícone do Monitor e comportamento ao recolher/expandir a sidebar (AUD-023), aprovados no aceite final do usuário.
+- [x] AUD-024: validação visual dos campos de todos os tipos de banco em `/admin/databases/create`, incluindo Druid, aprovada pelo usuário; nenhuma string em inglês relatada.
+Acompanhamento contínuo: registrar novas ocorrências informadas pelo usuário com rota, texto, causa, correção e evidência de validação; não constitui uma pendência específica de fechamento.
 
 Ao acrescentar correções SP, atualizar também a lista canônica correspondente no mesmo conjunto de alterações. Não marcar itens como validados apenas por estarem implementados ou por testes automatizados terem passado.

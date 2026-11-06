@@ -168,3 +168,7 @@ frontend/src/metabase/admin/help/Help.unit.spec.tsx
 # EDD-1523 — brasão SP junto ao ícone da área Monitor.
 frontend/src/metabase/monitor/components/MonitorLayout/MonitorLayout.tsx
 frontend/src/metabase/monitor/components/MonitorLayout/MonitorLayout.unit.spec.tsx
+
+# EDD-1523 / AUD-024 — tradução central dos metadados de conexão dos drivers.
+frontend/src/metabase/databases/components/DatabaseDetailField.tsx
+frontend/src/metabase/databases/components/DatabaseForm/tests/driver-i18n.unit.spec.tsx
