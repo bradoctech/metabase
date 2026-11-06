@@ -1,0 +1,64 @@
+name: Publish Metabase for internal validation
+permissions:
+  contents: read
+concurrency:
+  group: metabase-internal-publish-f16e521357
+  cancel-in-progress: false
+env:
+  DEPOT_IMAGE: registry.depot.dev/9q8jcs5cd0
+  SOURCE_SHA: f16e521357d1fc935aa0abc9584c9207650d1b32
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+        ref: f16e521357d1fc935aa0abc9584c9207650d1b32
+    - uses: docker/setup-buildx-action@v3
+    - name: Build image
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        platforms: linux/amd64
+        build-args: MB_EDITION=oss
+        load: true
+        tags: ${{ env.DEPOT_IMAGE }}:metabase-${{ env.SOURCE_SHA }}
+        cache-from: type=gha,scope=metabase-oss
+        cache-to: type=gha,mode=max,scope=metabase-oss
+    - name: Smoke-test image
+      env:
+        IMAGE_TAG: ${{ env.DEPOT_IMAGE }}:metabase-${{ env.SOURCE_SHA }}
+      run: "set -euo pipefail\ntrap 'docker logs metabase-smoke; docker rm -f metabase-smoke'\
+        \ EXIT\ndocker run --detach --name metabase-smoke \\\n  --user 10001:0 --memory\
+        \ 2g \\\n  --publish 127.0.0.1:3000:3000 \\\n  --env MB_DB_FILE=/tmp/metabase.db\
+        \ \\\n  --env JAVA_OPTS=-Xmx1g \\\n  \"$IMAGE_TAG\"\nfor attempt in $(seq\
+        \ 1 120); do\n  if curl --fail --silent http://127.0.0.1:3000/api/health |\
+        \ jq -e '.status == \"ok\"'; then\n    exit 0\n  fi\n  if [ \"$(docker inspect\
+        \ --format '{{.State.Running}}' metabase-smoke)\" != true ]; then\n    exit\
+        \ 1\n  fi\n  sleep 5\ndone\necho 'Metabase did not become healthy within 600\
+        \ seconds' >&2\nexit 1\n"
+    - name: Log in to Depot
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: registry.depot.dev
+        username: x-token
+        password: ${{ secrets.DEPOT_TOKEN }}
+    - name: Publish immutable validation image
+      if: github.event_name != 'pull_request'
+      env:
+        IMAGE_SHA: ${{ env.SOURCE_SHA }}
+      run: 'set -euo pipefail
+
+        docker push "$DEPOT_IMAGE:metabase-$IMAGE_SHA"
+
+        '
+'on':
+  push:
+    branches:
+    - 20261106-metabase-internal-publish
+    paths:
+    - .github/workflows/publish-internal-validation.yml
