@@ -35,6 +35,20 @@ describe("Onboarding", () => {
     jest.clearAllMocks();
   });
 
+  it("hides the external learning and support footer in SP while preserving the checklist", () => {
+    setup({ showExternalHelpLinks: false });
+
+    expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("learning-section")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("help-section")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Set things up" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Explore your data" }),
+    ).toBeInTheDocument();
+  });
+
   it("should have three sections by default for admins", () => {
     setup();
 

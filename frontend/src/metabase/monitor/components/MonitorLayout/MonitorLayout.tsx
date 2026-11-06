@@ -1,6 +1,7 @@
 import { P, match } from "ts-pattern";
 import { t } from "ttag";
 
+import { LogoIcon } from "metabase/common/components/LogoIcon";
 import { useHasTokenFeature } from "metabase/common/hooks";
 import {
   type MonitorSection,
@@ -219,7 +220,8 @@ export function MonitorLayout() {
 
   return (
     <AreaLayout
-      logo={
+      logo={<LogoIcon width={32} height={32} />}
+      headerControls={
         <Flex
           bdrs="50%"
           bg="background_surface-brand-subtle"

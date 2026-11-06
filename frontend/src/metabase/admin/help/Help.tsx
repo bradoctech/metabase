@@ -18,6 +18,7 @@ import {
   SettingsPageWrapper,
   SettingsSection,
 } from "metabase/settings-components";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Box, Code, Group } from "metabase/ui";
 import { getBasename } from "metabase/utils/basename";
 
@@ -117,22 +118,24 @@ export const Help = () => {
   return (
     <AdminSettingsLayout maw="50rem">
       <SettingsPageWrapper title={t`Help`}>
-        <Group grow>
-          <HelpLink
-            title={t`Get help`}
-            description={t`Resources and support`}
-            link={
-              isPaidPlan
-                ? `https://www.metabase.com/help-premium?utm_source=in-product&utm_medium=troubleshooting&utm_campaign=help&instance_version=${tag}&diag=${compactDetailStringForUrl}`
-                : `https://www.metabase.com/help?utm_source=in-product&utm_medium=troubleshooting&utm_campaign=help&instance_version=${tag}`
-            }
-          />
-          <HelpLink
-            title={t`Report an issue`}
-            description={t`Create a GitHub issue (includes the diagnostic info below)`}
-            link={githubIssueLink(detailString)}
-          />
-        </Group>
+        {SP_COMMERCIAL_POLICY.showExternalHelpLinks && (
+          <Group grow>
+            <HelpLink
+              title={t`Get help`}
+              description={t`Resources and support`}
+              link={
+                isPaidPlan
+                  ? `https://www.metabase.com/help-premium?utm_source=in-product&utm_medium=troubleshooting&utm_campaign=help&instance_version=${tag}&diag=${compactDetailStringForUrl}`
+                  : `https://www.metabase.com/help?utm_source=in-product&utm_medium=troubleshooting&utm_campaign=help&instance_version=${tag}`
+              }
+            />
+            <HelpLink
+              title={t`Report an issue`}
+              description={t`Create a GitHub issue (includes the diagnostic info below)`}
+              link={githubIssueLink(detailString)}
+            />
+          </Group>
+        )}
 
         <UpsellBetterSupport location="settings-troubleshooting" />
 

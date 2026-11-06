@@ -24,15 +24,15 @@
   padding: 0.5rem 1rem;
   transition: all 200ms;
   border-radius: 4px;
-  /* Color inherits from .AdminNavbarRoot — i.e. white in both themes via the
-     --mb-color-text-primary-inverse override. Selection is signified by the
-     hover/selected background pill, not by text color. */
+  /* Inactive links inherit white from .AdminNavbarRoot. */
 
   @media screen and (--breakpoint-max-lg) {
     padding-inline: 0.85rem;
   }
 
-  &:hover {
-    background-color: var(--mb-color-navbar-admin-inverse);
+  &:hover,
+  &[data-selected] {
+    color: var(--mb-color-sp-black);
+    background-color: var(--mb-color-core-white_constant);
   }
 }

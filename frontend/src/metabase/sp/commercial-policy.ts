@@ -2,4 +2,5 @@
 export const SP_COMMERCIAL_POLICY = {
   showUpsells: false,
   showLicenseMenu: false,
+  showExternalHelpLinks: false,
 };

@@ -54,9 +54,12 @@ export const ArchivedEntityBanner = ({
               <Icon className={Styles.iconStyle} name="trash_filled" />
             </Box>
             <Text color="core-white_constant" size="md" lh="1rem">
-              {c(
-                "{0} is the entity in the trash, e.g. collection, dashboard, etc.",
-              ).t`This ${entityType} is in the trash.`}
+              {entityType === "collection"
+                ? c("{0} is a collection in the trash")
+                    .t`This ${entityType} is in the trash.`
+                : c(
+                    "{0} is the entity in the trash, e.g. collection, dashboard, etc.",
+                  ).t`This ${entityType} is in the trash.`}
             </Text>
           </Flex>
           {hasAction && (

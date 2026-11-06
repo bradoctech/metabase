@@ -23,7 +23,7 @@ export const AdminNavLink = ({
     to={to}
     className={S.AdminNavLink}
     data-selected={isSelected || undefined}
-    bg={isSelected ? "navbar-admin-inverse" : undefined}
+    bg={isSelected ? "core-white_constant" : undefined}
     style={{ overflow: isInMobileNav ? "visible" : "hidden" }}
   >
     {children}

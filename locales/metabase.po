@@ -40954,3 +40954,9 @@ msgstr ""
 #: frontend/src/metabase/embedding/embedding-iframe-sdk/components/SdkIframeError.tsx
 msgid "Using the existing user's session in production is not allowed."
 msgstr ""
+
+#: frontend/src/metabase/archive/components/ArchivedEntityBanner/ArchivedEntityBanner.tsx
+#, javascript-format
+msgctxt "{0} is a collection in the trash"
+msgid "This {0} is in the trash."
+msgstr ""

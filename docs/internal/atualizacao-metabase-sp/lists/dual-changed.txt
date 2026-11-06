@@ -150,3 +150,21 @@ frontend/src/metabase/monitor/routes.tsx
 frontend/src/metabase/nav/components/AppSwitcher/AppSwitcher.unit.spec.tsx
 frontend/src/metabase/nav/components/AreaLayout/AreaTabGroup.tsx
 frontend/src/metabase/nav/components/AreaLayout/AreaTabGroup.unit.spec.tsx
+
+# EDD-1523 — ajuda externa sob política SP e contraste da aba administrativa ativa.
+frontend/src/metabase/databases/components/DatabaseForm/DatabaseFormFooter.tsx
+frontend/src/metabase/databases/components/DatabaseForm/tests/common.unit.spec.tsx
+frontend/src/metabase/home/components/Onboarding/Onboarding.tsx
+frontend/src/metabase/home/components/Onboarding/tests/setup.tsx
+frontend/src/metabase/home/components/Onboarding/tests/common.unit.spec.tsx
+frontend/src/metabase/nav/components/AppSwitcher/AppSwitcher.tsx
+frontend/src/metabase/nav/components/AdminNavbar/AdminNavLink.tsx
+frontend/src/metabase/nav/components/AdminNavbar/AdminNavbar.module.css
+
+# EDD-1523 — links externos da ajuda administrativa sob política SP.
+frontend/src/metabase/admin/help/Help.tsx
+frontend/src/metabase/admin/help/Help.unit.spec.tsx
+
+# EDD-1523 — brasão SP junto ao ícone da área Monitor.
+frontend/src/metabase/monitor/components/MonitorLayout/MonitorLayout.tsx
+frontend/src/metabase/monitor/components/MonitorLayout/MonitorLayout.unit.spec.tsx

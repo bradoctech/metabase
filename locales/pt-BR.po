@@ -45854,3 +45854,9 @@ msgstr "Exemplo detalhado"
 msgid "Total [[GenericTable]]"
 msgstr "Total [[GenericTable]]"
 
+
+#: frontend/src/metabase/archive/components/ArchivedEntityBanner/ArchivedEntityBanner.tsx
+#, javascript-format
+msgctxt "{0} is a collection in the trash"
+msgid "This {0} is in the trash."
+msgstr "Esta {0} está no lixo."

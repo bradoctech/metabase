@@ -22,6 +22,7 @@ import {
   getIsNewInstance,
 } from "metabase/selectors/onboarding";
 import { getApplicationName } from "metabase/selectors/whitelabel";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import {
   ActionIcon,
   Avatar,
@@ -238,11 +239,12 @@ export const AppSwitcher = ({ className }: { className?: string }) => {
                 <Menu.Sub.Item>{t`Help`}</Menu.Sub.Item>
               </Menu.Sub.Target>
               <Menu.Sub.Dropdown data-testid="help-submenu">
-                {helpLink.visible && (
-                  <Menu.Item component={ExternalLink} href={helpLink.href}>
-                    {t`Get help`}
-                  </Menu.Item>
-                )}
+                {SP_COMMERCIAL_POLICY.showExternalHelpLinks &&
+                  helpLink.visible && (
+                    <Menu.Item component={ExternalLink} href={helpLink.href}>
+                      {t`Get help`}
+                    </Menu.Item>
+                  )}
                 {showOnboardingLink && (
                   <Menu.Item component={ForwardRefLink} to="/getting-started">
                     {/* eslint-disable-next-line metabase/no-literal-metabase-strings -- This string only shows for non-whitelabeled instances */}

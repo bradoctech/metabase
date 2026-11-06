@@ -9,6 +9,7 @@ import {
 import { renderWithProviders, screen, waitFor, within } from "__support__/ui";
 import { dayjs } from "metabase/dayjs";
 import { Route } from "metabase/router";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import type { HelpLinkSetting } from "metabase-types/api";
 import {
   createMockMetabaseInfo,
@@ -53,6 +54,7 @@ async function setup({
   isAnalyst = false,
   isHosted = false,
   isPaidPlan = true,
+  showExternalHelpLinks = true,
   helpLinkSetting = "metabase",
   helpLinkCustomDestinationSetting = "https://custom-destination.com/help",
   instanceCreationDate = dayjs().toISOString(),
@@ -61,10 +63,17 @@ async function setup({
   isAnalyst?: boolean;
   isHosted?: boolean;
   isPaidPlan?: boolean;
+  showExternalHelpLinks?: boolean;
   helpLinkSetting?: HelpLinkSetting;
   helpLinkCustomDestinationSetting?: string;
   instanceCreationDate?: string;
 } = {}) {
+  // Existing tests cover the preserved upstream behavior when links are enabled.
+  jest.replaceProperty(
+    SP_COMMERCIAL_POLICY,
+    "showExternalHelpLinks",
+    showExternalHelpLinks,
+  );
   setupBugReportingDetailsEndpoint();
 
   const settings = mockSettings({
@@ -233,6 +242,21 @@ describe("ProfileLink", () => {
   });
 
   describe("help submenu", () => {
+    it("hides external help in SP while preserving About and keyboard shortcuts", async () => {
+      await setup({ showExternalHelpLinks: false });
+      await openHelpSubmenu();
+
+      expect(
+        screen.queryByRole("menuitem", { name: /get help/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("menuitem", { name: /About Metabase/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("menuitem", { name: "Keyboard shortcuts" }),
+      ).toBeInTheDocument();
+    });
+
     describe("'How to use Metabase' link", () => {
       it("should render if the instance was created more than 30 days ago", async () => {
         await setup({

@@ -2,6 +2,7 @@ import { within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { screen, waitFor } from "__support__/ui";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import type { Engine } from "metabase-types/api";
 
 import * as utils from "../utils";
@@ -9,6 +10,26 @@ import * as utils from "../utils";
 import { TEST_ENGINES, setup } from "./setup";
 
 describe("DatabaseForm", () => {
+  it.each([false, true])(
+    "renders connection help only when external links are enabled (%s)",
+    (showExternalHelpLinks) => {
+      jest.replaceProperty(
+        SP_COMMERCIAL_POLICY,
+        "showExternalHelpLinks",
+        showExternalHelpLinks,
+      );
+      setup();
+
+      expect(
+        screen.queryAllByRole("link", { name: "Need help connecting?" }),
+      ).toHaveLength(showExternalHelpLinks ? 1 : 0);
+      expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Cancel" }),
+      ).toBeInTheDocument();
+    },
+  );
+
   it("should submit default values", async () => {
     const { onSubmit } = setup();
     const expectedDatabaseName = "My H2 Database";

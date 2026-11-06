@@ -3,7 +3,7 @@
 **Issue / branch:** `EDD-1523`  
 **Status:** em andamento  
 **Início do registro:** 30/10/2026  
-**Última atualização:** 04/11/2026
+**Última atualização:** 06/11/2026
 
 ## Objetivo e referências
 
@@ -34,6 +34,7 @@ Referências: [instruções do agente](./INSTRUCOES-AGENTE.md), [estratégia do 
 | AUD-020 | Cabeçalho do Data Studio | Logo Metabase em vez do brasão SP | Brasão SP confirmado pelo usuário |
 | AUD-021 | Sidebar do Data Studio → Ferramentas | Categoria sem itens após bloqueio das ofertas | Ausência da categoria vazia confirmada pela imagem posterior do usuário |
 | AUD-022 | Botão de compartilhar pergunta/dashboard | Tooltip “Percentagem” em vez de “Compartilhar” | Resolvido; usuário confirmou “Compartilhar” na interface com imagem |
+| AUD-023 | Cabeçalho do Monitor | Ícone do Monitor ocupava o lugar do brasão SP | Brasão adicionado; ícone de pulso mantido ao lado na sidebar expandida; aguardando smoke |
 
 “Aplicado” indica alteração no diretório de trabalho. Não implica commit, publicação ou aceite visual. A confirmação geral do usuário em AUD-001 não é tratada como aceite individual dos demais ajustes.
 
@@ -128,17 +129,17 @@ Recebido em 30/10/2026 para alinhamento de contexto. O usuário informou que alg
 
 | ID | Área / rota | Ponto informado / ajuste proposto | Situação |
 | --- | --- | --- | --- |
-| AUD-006 | Toggle do Metabot | Textos em inglês | A verificar |
-| AUD-007 | Menu do usuário, no topo direito | Remover Ajuda → “Obter ajuda”; avaliar também “Sobre Metabase”; verificar se os itens existem na PRODESP | A verificar; remoção de “Sobre Metabase” ainda é uma possibilidade, não decisão fechada |
+| AUD-006 | Toggle do Metabot | Textos em inglês | Textos conferidos e aprovados pelo usuário em 04/11/2026 |
+| AUD-007 | Menu do usuário, no topo direito | Remover Ajuda → “Obter ajuda”; Sobre Metabase mantido por decisão do usuário; comparação com PRODESP sem validação específica | “Obter ajuda” não renderizado pela política SP; Sobre Metabase mantido por decisão do usuário; blocos externos de `/getting-started` também ocultados |
 | AUD-008 | Adicione seus dados → CSV | Texto sem tradução | Visual aprovado pelo usuário no smoke; upload completo não exercitado por ausência de banco compatível |
-| AUD-009 | Lixeira | Aviso “Este collection está no lixo”: conferir o vermelho do fundo e localizar outros usos do mesmo tom para adequação à paleta SP | Cores e contraste validados pelo usuário nos temas claro e escuro. Texto misto permanece pendente |
+| AUD-009 | Lixeira | Aviso “Este collection está no lixo”: conferir o vermelho do fundo e localizar outros usos do mesmo tom para adequação à paleta SP | Cores e contraste validados nos dois temas; “Esta collection…” aprovado pelo usuário em 06/11/2026 |
 | AUD-010 | `/browse/metrics` e hover de coleção | Ícones com vermelho aparentemente fora da paleta; no hover de uma coleção, cor diferente da de “Nome” | `icon-brand` alinhado ao vermelho principal SP nos dois temas, igual ao nome no hover; validado pelo usuário nos temas claro e escuro |
-| AUD-011 | Navegação administrativa | Texto do item ativo claro sobre fundo claro, prejudicando a leitura; ajuste proposto para preto | A verificar |
+| AUD-011 | Navegação administrativa | Texto do item ativo claro sobre fundo claro, prejudicando a leitura; ajuste proposto para preto | Aba superior ativa e hover das abas inativas com preto SP sobre branco, aprovados pelo usuário em 06/11/2026 |
 | AUD-012 | `/admin/settings/uploads` | Ocultar chamadas “Atualize para o Metabase Pro”; revisar textos em inglês no hover de informação | CTA e contêiner lateral bloqueados pela política SP; admin aprovado no smoke geral, sem resquícios de upsell relatados |
 | AUD-013 | Área administrativa | Revisar traduções e ocultar chamadas para planos Pro | Traduções revalidadas até onde testado; política de ofertas aplicada e admin aprovado no smoke do usuário |
 | AUD-014 | Menus administrativos | Ocultar “Sincronização remota”, itens com diamante que levam ao Pro e “Licença” | Entradas promocionais não renderizadas e menu Licença oculto; recursos disponíveis preservados; admin aprovado no smoke do usuário |
-| AUD-015 | `/admin/databases/create` | Ocultar o link “Precisa de ajuda para conectar?” que leva ao Metabase | A verificar; identificar o link exato antes de alterar o painel de ajuda |
-| AUD-016 | `/admin/settings/updates` | Tratar falta de dados | A verificar; reproduzir o estado e definir o comportamento esperado |
+| AUD-015 | `/admin/databases/create` | Ocultar o link “Precisa de ajuda para conectar?” que leva ao Metabase | Link do rodapé do formulário não renderizado pela política SP; painel de ajuda PostgreSQL preservado; aguardando smoke |
+| AUD-016 | `/admin/settings/updates` | Tratar falta de dados | Usuário confirmou que a tela voltou a renderizar corretamente em 04/11/2026; concluído sem novo ajuste de código |
 
 ### Cruzamento com os ajustes desta conversa
 
@@ -356,7 +357,7 @@ Os redirecionamentos se aplicam aos ramos comerciais. As páginas de features di
 | --- | --- | --- |
 | Telas do admin percorridas pelo usuário | Ausência de resquícios de upsell | **OK informado pelo usuário** |
 | Menu da aplicação → Monitor | Abrir seção disponível sem voltar à home; omitir entrada quando não houver função disponível | **OK de funcionamento informado pelo usuário**; outro perfil sem seção disponível não foi relatado |
-| Data Studio | Brasão SP, sidebar expandida/recolhida, ausência de Ferramentas vazia e preservação de Glossário/Dados conectados | **OK de funcionamento e brasão informado pelo usuário**; imagem confirma ausência de Ferramentas vazia; sidebar recolhida não foi detalhada |
+| Data Studio | Brasão SP, sidebar expandida/recolhida, ausência de Ferramentas vazia e preservação de Glossário/Dados conectados | **OK de funcionamento e brasão informado pelo usuário**; imagem confirma ausência de Ferramentas vazia; sidebar recolhida também aprovada pelo usuário em 06/11/2026 |
 | Adicione seus dados → CSV | Ausência de compra de armazenamento e de textos promocionais; manter configuração de uploads e upload funcional quando disponível | **Visual OK informado pelo usuário**; upload completo não exercitado por ausência de banco compatível |
 | Pergunta e dashboard → detalhes/Insights | Nenhuma aba de oferta, CTA ou área comercial vazia; detalhes comuns continuam funcionando | **OK informado pelo usuário** |
 | Compartilhar/incorporar pergunta ou dashboard | Sem ofertas de planos para fontes, temas ou remoção de marca; preservar opções permitidas e o banner de marca efetivamente usado no embed | **Sem upsell: OK informado pelo usuário** na amostra testada; tooltip incorreto tratado em AUD-022 |
@@ -452,7 +453,7 @@ Os tons de marca e de erro são cores distintas já existentes na paleta SP e ma
 - A alteração dos tokens semânticos também alcança outros consumidores de `feedback-negative`, `feedback-negative-strong`, `error` e `icon-brand` na aplicação. Não é uma troca isolada do fundo da lixeira.
 - Texto, ícone e botões do aviso da lixeira passam a usar `core-white_constant`, mantendo branco nos dois temas. `text-primary-inverse` muda conforme o tema e não garantia o mesmo contraste sobre o novo fundo saturado.
 - Os três arquivos de integração da lixeira foram adicionados a `lists/dual-changed.txt`.
-- A parte textual “Este collection…” de AUD-009 permanece pendente desta auditoria; esta rodada trata de cores.
+- A parte textual de AUD-009 foi tratada em rodada posterior com a tradução contextual “Esta collection…”, conforme registro abaixo.
 
 ### Validação
 
@@ -503,12 +504,12 @@ Esses dois itens não bloqueiam o encerramento do PR atual por decisão expressa
 
 | Item | Saldo |
 | --- | --- |
-| AUD-006 — Metabot | Revalidar o toggle e identificar eventual texto que ainda esteja em inglês; não há confirmação específica de defeito atual |
-| AUD-007 — Ajuda/Sobre | “Obter ajuda” continua presente no menu; ocultação ainda não aplicada. Remover “Sobre Metabase” e comparar com PRODESP continuam dependentes de definição |
-| AUD-009 — texto da lixeira | Cores aprovadas; falta tratar a expressão mista “Este collection…” |
-| AUD-011 — item ativo do admin | Falta confirmação específica do contraste; nenhuma correção específica deste item foi registrada |
-| AUD-015 — ajuda de conexão | Link externo “Precisa de ajuda para conectar?” continua presente no formulário; ocultação ainda não aplicada. É distinto do painel de ajuda PostgreSQL traduzido |
-| AUD-016 — Atualizações | Falta reproduzir/tratar o estado sem dados em `/admin/settings/updates` |
+| AUD-006 — Metabot | Textos conferidos e aprovados pelo usuário em 04/11/2026 |
+| AUD-007 — Ajuda/Sobre | “Obter ajuda” ausente no menu e Sobre presente, aprovados em 06/11/2026; blocos de `/getting-started` aguardam confirmação específica; links de `/admin/help` tratados na rodada complementar abaixo |
+| AUD-009 — texto da lixeira | “Esta collection…” aprovado pelo usuário em 06/11/2026 |
+| AUD-011 — item ativo do admin | Item ativo e hover das abas inativas aprovados pelo usuário em 06/11/2026 |
+| AUD-015 — ajuda de conexão | Link externo do formulário sob política SP, sem renderização; painel de ajuda PostgreSQL preservado; aguardando smoke |
+| AUD-016 — Atualizações | Concluído: usuário confirmou renderização correta em 04/11/2026; sem novo ajuste de código |
 
 ### Correções aplicadas com confirmação específica ainda pendente
 
@@ -521,11 +522,79 @@ A revalidação geral de traduções do admin é evidência favorável, mas o do
 ### Cobertura adicional ainda não relatada
 
 - Monitor com outro perfil que não possua seção disponível.
-- Data Studio com a sidebar recolhida.
+- Data Studio com a sidebar recolhida: aprovado pelo usuário em 06/11/2026.
 - Home específica de incorporação, se usada no ambiente.
 - Upload completo e lista/menu de transformações, limitados pela ausência de conexão elegível.
 
 Essas lacunas de cobertura não demonstram falha. Somente Python e logs ANSI foram explicitamente adiados pelo usuário nesta decisão; o enquadramento dos demais itens pode ser definido separadamente.
+
+## Rodada seguinte — texto da lixeira, ajuda externa e contraste administrativo
+
+**Decisões do usuário em 04/11/2026:** corrigir o artigo para “Esta collection”; não renderizar o link externo de ajuda da conexão, “Obter ajuda” no submenu Ajuda e os blocos externos ao final de `/getting-started`; manter Sobre Metabase; usar preto SP no item ativo do admin. Metabot e Atualizações foram aprovados pelo usuário.
+
+### Implementação
+
+- **AUD-009:** novo contexto de tradução exclusivo de `entityType === "collection"`, com “Esta {0} está no lixo.” em pt-BR. A palavra `collection` foi mantida conforme pedido. A tradução genérica dos demais tipos permanece “Este {0}…”. Requer regenerar os recursos i18n e reiniciar o backend para a nova entrada do catálogo.
+- **AUD-007/AUD-015:** acrescentado `showExternalHelpLinks: false` a `SP_COMMERCIAL_POLICY`, separado de `showUpsells`. A condição preserva os ramos upstream e impede renderização do link do rodapé de `DatabaseForm`, do item “Obter ajuda” no submenu Ajuda de `AppSwitcher` e do footer de aprendizado/suporte em `Onboarding` (`/getting-started`). A checklist de primeiros passos, Sobre Metabase, atalhos e ajuda PostgreSQL traduzida continuam disponíveis. Não foi feita uma remoção global de links externos.
+- **AUD-011:** aba superior selecionada do admin passa a texto `sp-black` sobre `core-white_constant`, inclusive em hover, nos dois temas. A alteração é restrita à aba ativa.
+- **AUD-006/AUD-016:** concluídos pelo retorno do usuário; nenhuma nova alteração de código para esses dois itens.
+- Os novos adapters e testes foram registrados em `lists/dual-changed.txt`; política SP e catálogos já têm proteção no fluxo existente.
+
+### Validação automatizada desta rodada
+
+- **65 testes passaram em 5 suítes:** AppSwitcher, formulário de banco e Onboarding comum/enterprise/premium. Incluem ausência dos links sob política SP, preservação de Sobre/atalhos/checklist e cobertura dos ramos upstream quando a política permite links.
+- **ESLint passou** nos módulos TypeScript/TSX alterados.
+- Catálogos pt-BR e template analisados com Babel; novo contexto feminino de coleção e tradução genérica masculina conferidos.
+- `git diff --check` passou. O contraste da aba administrativa ainda depende do smoke visual; a tradução nova depende da regeneração dos recursos.
+- Nenhum commit ou alteração do staging foi realizado pelo agente nesta rodada.
+
+### Smoke desta rodada
+
+- Abrir uma coleção na lixeira e conferir “Esta collection está no lixo.” com os recursos atualizados.
+- Abrir Menu de configurações → Ajuda: “Obter ajuda” ausente, Sobre Metabase e atalhos presentes.
+- Abrir `/getting-started`: checklist presente, blocos “Aproveite Metabase ao máximo” e “Precisa conversar com alguém?” ausentes.
+- Abrir `/admin/databases/create`: link “Precisa de ajuda para conectar?” ausente no rodapé; controles de salvar/cancelar e painel de ajuda preservados.
+- Alternar as abas superiores do admin e conferir texto preto legível no item selecionado, inclusive no hover, nos temas claro e escuro.
+
+### Próximas etapas — lembrar após esta rodada
+
+A pedido do usuário, retomar somente após estes ajustes e seu smoke:
+
+1. Confirmação específica dos textos de General/E-mail (AUD-002/AUD-003), string de conexão (AUD-004), ajuda PostgreSQL (AUD-005) e URL do servidor de mapas (AUD-017).
+2. Monitor com outro perfil e home específica de incorporação, se usada. Data Studio com sidebar recolhida foi aprovado pelo usuário em 06/11/2026.
+3. Upload completo e lista/menu/editor de transformações quando houver banco elegível, mantendo registrada a limitação atual.
+
+Python e logs ANSI continuam destinados à próxima leva, fora do foco deste PR. Sobre Metabase permanece disponível por decisão confirmada do usuário em 06/11/2026; a avaliação de remoção deixou de ser uma pendência deste PR.
+
+## Retorno do smoke e complemento — 06/11/2026
+
+**Aprovados pelo usuário:** “Esta collection…” (AUD-009); ausência de “Obter ajuda” no submenu Ajuda; manutenção de Sobre Metabase; contraste da aba administrativa ativa (AUD-011); Metabot e Atualizações seguem aprovados.
+
+**Ocorrências restantes informadas:** `/admin/help` ainda exibia “Obter ajuda” e “Relatar um problema”; abas administrativas inativas ficavam sem contraste ao receber hover.
+
+**Ajustes complementares:**
+
+- `admin/help/Help.tsx`: o grupo dos dois links externos passa a depender de `SP_COMMERCIAL_POLICY.showExternalHelpLinks`, sem renderização no SP. O contêiner também é omitido para não reservar espaço vazio. Os dados de diagnóstico e o download local de detalhes das conexões continuam disponíveis.
+- `AdminNavbar.module.css`: hover e seleção compartilham texto `sp-black` e fundo `core-white_constant`, incluindo abas que não estão selecionadas.
+- Componente e teste da ajuda administrativa registrados em `lists/dual-changed.txt`.
+
+**Validação automatizada:** 2 testes da ajuda administrativa passaram, cobrindo os dois estados da política e preservação dos diagnósticos/download local. ESLint dos módulos alterados e `git diff --check` passaram. O hover foi posteriormente aprovado no smoke visual do usuário.
+
+**Smoke aprovado pelo usuário em 06/11/2026:** em `/admin/help`, “Obter ajuda” e “Relatar um problema” não renderizam; diagnósticos e detalhes avançados permanecem disponíveis. O hover das abas administrativas, inclusive inativas, foi conferido e aprovado com texto preto SP sobre branco. Nenhuma nova ocorrência foi relatada nesses dois pontos.
+
+A confirmação “OK no menu” foi registrada para o submenu Ajuda. Não foi estendida automaticamente ao rodapé de criação de banco ou aos blocos de `/getting-started`, que continuam aguardando confirmação específica. As próximas etapas anteriormente solicitadas permanecem registradas acima.
+
+## AUD-023 — Brasão SP no Monitor
+
+**Retorno do usuário em 06/11/2026:** sidebar recolhida do Data Studio testada e aprovada; decisão de manter Sobre Metabase confirmada. No Monitor, foi identificada ausência do brasão, substituído pelo ícone de pulso da área.
+
+**Correção:** `MonitorLayout` utiliza `LogoIcon` (mesmo brasão SP da aplicação e do Data Studio) no slot `logo` e mantém o ícone original de pulso em `headerControls`. Na sidebar expandida, os dois aparecem lado a lado. Na recolhida, o layout compartilhado mostra somente o brasão e mantém o controle de expansão existente. O slot de logo mede 32 × 32 px; separar os dois elementos evita inserir ambos nessa largura fixa.
+
+**Preservação:** componente e teste adicionados a `lists/dual-changed.txt`; nenhuma alteração no layout compartilhado ou nos assets.
+
+**Validação automatizada:** 47 testes da suíte MonitorLayout passaram, incluindo presença do brasão/ícone na sidebar expandida e brasão na recolhida sob política SP. Os cenários upstream de gating passaram a habilitar explicitamente ofertas no setup de teste, preservando a cobertura dos ramos originais. ESLint e `git diff --check` passaram.
+
+**Smoke pendente:** abrir `/monitor/tasks` ou outra seção disponível do Monitor, conferir brasão junto ao ícone de pulso na sidebar expandida; recolher/expandir a sidebar e conferir brasão, controles e navegação. Conferir os temas claro e escuro.
 
 ## Pendências de acompanhamento
 
@@ -540,7 +609,14 @@ Essas lacunas de cobertura não demonstram falha. Somente Python e logs ANSI for
 - [ ] Exercitar upload completo e lista/menu de transformações quando existir banco elegível.
 - [x] Revalidar as cores SP da lixeira, métricas e hover de coleções nos temas claro e escuro (AUD-009/AUD-010), confirmado pelo usuário em 04/11/2026.
 - [x] Smoke complementar dos vermelhos da v64 nos temas claro e escuro: hover de excluir/arquivar, erro de expressão e realce de código, conforme retorno do usuário em 04/11/2026.
-- [ ] Resolver ou definir o encaminhamento dos itens remanescentes AUD-006/AUD-007, texto de AUD-009, AUD-011/AUD-015/AUD-016, conforme saldo acima.
+- [x] Confirmar os textos do Metabot (AUD-006) e a renderização de Atualizações (AUD-016), conforme retorno do usuário.
+- [x] Validar o texto “Esta collection…” e a manutenção de Sobre Metabase, confirmados pelo usuário em 06/11/2026.
+- [x] Validar ausência de “Obter ajuda” no menu e contraste da aba administrativa ativa, confirmados em 06/11/2026.
+- [x] Validar links ocultados em `/admin/help`, preservação dos diagnósticos/detalhes avançados e contraste do hover das abas administrativas, aprovados pelo usuário em 06/11/2026.
+- [ ] Confirmar especificamente os blocos de `/getting-started` e o link de ajuda da conexão (AUD-015).
+- [ ] Retomar as próximas etapas solicitadas pelo usuário após o smoke desta rodada, conforme lista abaixo.
+- [x] Validar sidebar recolhida do Data Studio e confirmar manutenção de Sobre Metabase, conforme retorno do usuário em 06/11/2026.
+- [ ] Validar brasão SP junto ao ícone do Monitor e comportamento ao recolher/expandir a sidebar (AUD-023).
 - [ ] Registrar novas ocorrências informadas pelo usuário, com rota, texto, causa, correção e evidência de validação.
 
 Ao acrescentar correções SP, atualizar também a lista canônica correspondente no mesmo conjunto de alterações. Não marcar itens como validados apenas por estarem implementados ou por testes automatizados terem passado.
