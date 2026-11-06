@@ -9,7 +9,7 @@ ARG VERSION
 
 WORKDIR /home/node
 
-RUN apt-get update && apt-get upgrade -y && apt-get install wget apt-transport-https gpg curl git python3 -y \
+RUN apt-get update && apt-get install wget apt-transport-https gpg curl git python3 -y \
     && wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor | tee /etc/apt/trusted.gpg.d/adoptium.gpg > /dev/null \
     && echo "deb https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" | tee /etc/apt/sources.list.d/adoptium.list \
     && apt-get update \
@@ -33,7 +33,11 @@ RUN npm install -g bun
 # install frontend dependencies
 RUN bun install --frozen-lockfile
 
-RUN INTERACTIVE=false CI=true MB_EDITION=$MB_EDITION bin/build.sh :version ${VERSION}
+RUN if [ -n "$VERSION" ]; then \
+        INTERACTIVE=false CI=true MB_EDITION=$MB_EDITION bin/build.sh :version "\"$VERSION\""; \
+    else \
+        INTERACTIVE=false CI=true MB_EDITION=$MB_EDITION bin/build.sh; \
+    fi
 
 # ###################
 # # STAGE 2: runner
