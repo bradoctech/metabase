@@ -1,0 +1,85 @@
+name: Build and Push to Depot
+
+on:
+  pull_request:
+    branches: [saopaulo]
+  push:
+    branches: [saopaulo]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: depot-image-${{ github.event_name == 'pull_request' && github.event.pull_request.number || 'release' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DEPOT_IMAGE: registry.depot.dev/9q8jcs5cd0
+
+jobs:
+  build:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/saopaulo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          build-args: MB_EDITION=oss
+          load: true
+          tags: ${{ env.DEPOT_IMAGE }}:metabase-${{ github.sha }}
+          cache-from: type=gha,scope=metabase-oss
+          cache-to: type=gha,mode=max,scope=metabase-oss
+      - name: Smoke-test image
+        env:
+          IMAGE_TAG: ${{ env.DEPOT_IMAGE }}:metabase-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          trap 'docker logs metabase-smoke; docker rm -f metabase-smoke' EXIT
+          docker run --detach --name metabase-smoke \
+            --user 10001:0 --memory 2g \
+            --publish 127.0.0.1:3000:3000 \
+            --env MB_DB_FILE=/tmp/metabase.db \
+            --env JAVA_OPTS=-Xmx1g \
+            "$IMAGE_TAG"
+          for attempt in $(seq 1 120); do
+            if curl --fail --silent http://127.0.0.1:3000/api/health | jq -e '.status == "ok"'; then
+              exit 0
+            fi
+            if [ "$(docker inspect --format '{{.State.Running}}' metabase-smoke)" != true ]; then
+              exit 1
+            fi
+            sleep 5
+          done
+          echo 'Metabase did not become healthy within 600 seconds' >&2
+          exit 1
+      - name: Log in to Depot
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: registry.depot.dev
+          username: x-token
+          password: ${{ secrets.DEPOT_TOKEN }}
+      - name: Publish image
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker push "$DEPOT_IMAGE:metabase-$IMAGE_SHA"
+          head_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/saopaulo" --jq .sha)
+          if [ "$head_sha" != "$IMAGE_SHA" ]; then
+            echo 'Deployment branch advanced; leaving metabase-main unchanged.'
+            exit 0
+          fi
+          docker tag "$DEPOT_IMAGE:metabase-$IMAGE_SHA" "$DEPOT_IMAGE:metabase-main"
+          docker push "$DEPOT_IMAGE:metabase-main"
