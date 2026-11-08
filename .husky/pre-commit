@@ -1,4 +1,11 @@
-bun run precommit
+# GUI Git clients may not inherit the shell's mise activation.
+if command -v mise >/dev/null 2>&1; then
+  mise exec -- bun run precommit
+elif [ -x "$HOME/.local/bin/mise" ]; then
+  "$HOME/.local/bin/mise" exec -- bun run precommit
+else
+  bun run precommit
+fi
 
 # Run the formatter
 # Note that this is stubbed in for now until we can gobally resolve some formatting issues such as what is described

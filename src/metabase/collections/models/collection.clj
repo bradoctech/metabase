@@ -409,7 +409,8 @@
   select or hydrate different subsets."
   [:map {:closed true}
    [:id                    {:optional true} ms/PositiveInt]
-   [:name                  {:optional true} :string]
+   ;; System collections carry a deferred name translated for the current user.
+   [:name                  {:optional true} [:or :string ms/LocalizedString]]
    [:description           {:optional true} [:maybe :string]]
    [:archived              {:optional true} :boolean]
    [:archived_directly     {:optional true} [:maybe :boolean]]
