@@ -44,6 +44,8 @@ A correção não muda o banco nem as permissões. Validar funções de coleçã
 - `git diff --check`: aprovado para os arquivos já versionados alterados.
 - `bash -n bin/merge-upstream-preserve-sp.sh`: aprovado; script recuperado apenas como referência, sem executar merge/restore/scan.
 - `.merge-sp/`: confirmado como ignorado pelo Git.
+- Hook do VS Code: corrigida a falha `bun: not found` usando `mise exec` quando disponível, incluindo a instalação em `$HOME/.local/bin/mise`. O fallback continua sendo Bun no PATH. Todas as verificações do hook foram preservadas.
+- Hook completo executado com `PATH=/usr/bin:/bin`: **aprovado**, incluindo lint-staged e a checagem de marcadores de bloqueio de commit. Nenhum commit foi criado pelo teste.
 - Smoke visual da sidebar: **aprovado pelo usuário em 08/11/2026**, com captura da aplicação carregada e dos itens de navegação, incluindo Lixeira, sem a mensagem de erro anterior. A evidência confirma a recuperação da sidebar; não inclui navegação para a lixeira nem operações de arquivar/restaurar/excluir.
 - Build de produção e smoke completo: **pendentes para a entrega do transporte SP**; as etapas 2–6 ainda não foram executadas.
 
