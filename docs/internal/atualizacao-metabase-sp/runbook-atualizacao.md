@@ -161,7 +161,7 @@ Script: `bin/merge-upstream-preserve-sp.sh` (rodar com `bash bin/merge-upstream-
 | **report**   | Sim         | Lista o que falta resolver à mão                              |
 | **scan**     | Sim (v2)    | Compara o WT com o upstream e classifica o que não é SP protegido: **stale** (igual ao pré-merge ou a um `saopaulo-pre-*`), **missing**, **orphan**, **hybrid**. `scan --apply` corrige stale/missing/orphan; hybrid é revisão manual |
 | **verify**   | Sim         | restore-ours intacto + zero unmerged + `scan` sem stale/missing/orphan |
-| **build-check** | Sim (v2, ~15–20 min) | Carrega namespaces (src, EE, drivers) com `-M:drivers:ee`, compila static-viz, roda `tsc --noEmit` e o bundle FE de produção (EE). Falha em `FAIL` / `error TS` / `ERROR in`. Isolar: `BUILD_CHECK_STEPS=tsc` |
+| **build-check** | Sim (v2, ~15–20 min) | Carrega namespaces (src, EE, drivers) com `-M:drivers:ee`, compila static-viz, roda `bun run type-check-pure` (compilador definido no package.json) e o bundle FE de produção (EE). Falha em `FAIL` / `error TS` / `ERROR in`. Isolar: `BUILD_CHECK_STEPS=tsc` |
 
 **SP protegido** = `restore-ours` + `dual-changed` + `behavior-manual` + `lists/sp-extra.txt` (globs: infra do fork, assets de marca, código SP que ainda só está no manifesto). Nada mais é tratado como SP.
 

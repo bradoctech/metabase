@@ -567,7 +567,7 @@ cmd_build_check() {
         # Catches SP/type regressions that production rspack does not (lição pós-1362).
         echo "==> build-check tsc: TypeScript --noEmit → $log"
         if NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=5120}" \
-           bunx tsc --noEmit > "$log" 2>&1; then
+           bun run type-check-pure > "$log" 2>&1; then
           echo "    OK (0 errors)"
         else
           failed=1

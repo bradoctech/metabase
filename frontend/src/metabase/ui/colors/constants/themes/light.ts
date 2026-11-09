@@ -1,6 +1,7 @@
 import type { MetabaseThemeV2 } from "../../types";
 import { LIGHT_THEME_ACCENT_COLORS } from "../accent-colors";
 import { getBaseColorsForThemeDefinitionOnly } from "../base-colors";
+import { SP_LIGHT_THEME_COLORS } from "../sp-theme";
 
 const baseColors = getBaseColorsForThemeDefinitionOnly();
 
@@ -205,5 +206,6 @@ export const METABASE_LIGHT_THEME: MetabaseThemeV2 = {
   colors: {
     ...deprecatedColors,
     ...actualColors,
+    ...SP_LIGHT_THEME_COLORS,
   },
 };

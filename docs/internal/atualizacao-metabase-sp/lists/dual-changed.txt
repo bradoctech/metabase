@@ -178,3 +178,19 @@ src/metabase/collections/models/collection.clj
 
 # saopaulov64 — regression fix for localized system collection names.
 test/metabase/collections/models/collection_name_test.clj
+
+# saopaulov64 — Rawline integration and server-rendered theme compatibility.
+frontend/src/metabase/styled-components/containers/GlobalStyles/GlobalStyles.tsx
+
+
+# saopaulov64 — font registration and branding regression coverage.
+frontend/src/metabase-types/api/fonts.ts
+
+# saopaulov64 — font registration and branding regression coverage.
+frontend/src/metabase/utils/fonts.ts
+
+# saopaulov64 — font registration and branding regression coverage.
+frontend/src/metabase/utils/fonts.unit.spec.ts
+
+# saopaulov64 — font registration and branding regression coverage.
+frontend/src/metabase/auth/components/Login/tests/common.unit.spec.tsx

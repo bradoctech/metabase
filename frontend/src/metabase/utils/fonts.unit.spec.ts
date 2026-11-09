@@ -4,6 +4,7 @@ describe("getFontFamilyValue", () => {
   describe("single font name", () => {
     it.each([
       ["Lato", '"Lato", Arial, sans-serif'],
+      ["Rawline", '"Rawline", sans-serif'],
       ["Merriweather", '"Merriweather", "Lora", serif'],
       ["Roboto Mono", '"Roboto Mono", monospace'],
     ])("appends the fallback chain for %s", (font, expected) => {

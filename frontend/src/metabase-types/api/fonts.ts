@@ -3,6 +3,7 @@ export type MetabaseFontFamily =
   | "Merriweather"
   | "Open Sans"
   | "Lato"
+  | "Rawline"
   | "Inter"
   | "Noto Sans"
   | "Roboto Slab"

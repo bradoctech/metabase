@@ -4,6 +4,22 @@ import { screen } from "__support__/ui";
 import { setup } from "./setup";
 
 describe("Login", () => {
+  it("should render the SP coat of arms and login illustration", () => {
+    setup({ isPasswordLoginEnabled: true });
+
+    expect(screen.getByTestId("main-logo")).toHaveAttribute(
+      "src",
+      expect.stringContaining("app/assets/img/logo.svg"),
+    );
+    expect(
+      screen.getByRole("img", { name: "Dashboard preview" }),
+    ).toHaveAttribute(
+      "src",
+      expect.stringContaining("app/img/login_dashboard.png"),
+    );
+    expect(screen.getByText("Dashboards SP")).toBeInTheDocument();
+  });
+
   it("should render a list of auth providers", () => {
     setup({ isPasswordLoginEnabled: true, isGoogleAuthEnabled: true });
 

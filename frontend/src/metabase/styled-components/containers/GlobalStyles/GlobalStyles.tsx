@@ -3,6 +3,7 @@ import { Global, css } from "@emotion/react";
 import { useMemo } from "react";
 
 import { baseStyle, rootStyle } from "metabase/css/core/base.styled";
+import { saoPauloFontFiles } from "metabase/css/core/fonts.saopaulo.styled";
 import { defaultFontFiles } from "metabase/css/core/fonts.styled";
 import {
   isPublicEmbedding,
@@ -41,6 +42,7 @@ export const GlobalStyles = (): JSX.Element => {
       }
 
       ${defaultFontFiles({ baseUrl: sitePath })}
+      ${saoPauloFontFiles({ baseUrl: sitePath })}
       ${fontFiles?.map(
         (file) => css`
           @font-face {

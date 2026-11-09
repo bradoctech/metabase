@@ -17,7 +17,11 @@ docs/internal/*
 # Marca: fontes, imagens, favicons
 resources/frontend_client/app/fonts/Rawline/*
 resources/frontend_client/app/assets/img/*
-resources/frontend_client/app/img/*
+# Only SP login assets: generic illustrations stay in upstream colors.
+resources/frontend_client/app/img/login_dashboard.png
+resources/frontend_client/app/img/login_framebottom.png
+resources/frontend_client/app/img/login_frametop.png
+resources/frontend_client/app/img/login_leftbg_only.png
 
 # Tradução SP
 locales/metabase.po

@@ -3,6 +3,8 @@
 
 import type { ALL_ACCENT_COLOR_NAMES } from "../constants/accents";
 
+import type { SpColorKey } from "./sp-color-keys";
+
 /**
  * All color keys available in Metabase themes.
  *
@@ -19,6 +21,7 @@ import type { ALL_ACCENT_COLOR_NAMES } from "../constants/accents";
 export type MetabaseColorKey =
   | MetabaseAccentColorKey
   | ProtectedColorKey
+  | SpColorKey
   // Legacy colors. Prefer using new ones. See GDGT-2517 for details
   | "background-brand"
   | "background-filter"

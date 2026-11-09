@@ -65,7 +65,7 @@ export const LoginForm = ({
             isLdapEnabled ? t`Username or email address` : t`Email address`
           }
           type={isLdapEnabled ? "input" : "email"}
-          placeholder="nicetoseeyou@email.com"
+          placeholder="seuemail@sp.gov.br"
           autoFocus
           mb="1.25rem"
         />
@@ -73,13 +73,19 @@ export const LoginForm = ({
           name="password"
           label={t`Password`}
           type="password"
-          placeholder="Shhh..."
+          placeholder="Sua senha"
           mb="1.25rem"
         />
         {!hasSessionCookies && (
           <FormCheckbox name="remember" label={t`Remember me`} mb="1.25rem" />
         )}
-        <FormSubmitButton label={t`Sign in`} variant="filled" w="100%" />
+        <FormSubmitButton
+          label={t`Sign in`}
+          variant="filled"
+          w="100%"
+          radius="100px"
+          style={{ border: "none", boxShadow: "none" }}
+        />
         <FormErrorMessage mt="1rem" />
       </Form>
     </FormProvider>

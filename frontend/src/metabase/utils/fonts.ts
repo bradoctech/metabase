@@ -23,6 +23,7 @@ export const PREDEFINED_FONT_FAMILIES_FALLBACK_MAP: Record<
   Merriweather: '"Lora", serif',
   "Open Sans": '"Lato", sans-serif',
   Lato: "Arial, sans-serif",
+  Rawline: "sans-serif",
   Inter: "sans-serif",
   "Noto Sans": "sans-serif",
   "Roboto Slab": "serif",
