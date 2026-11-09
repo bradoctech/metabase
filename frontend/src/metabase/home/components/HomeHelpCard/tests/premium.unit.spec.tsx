@@ -12,6 +12,10 @@ function setup(opts: SetupOpts = {}) {
 }
 
 describe("HomeHelpCard (EE with token)", () => {
+  it("should hide the tips card under the SP policy even with whitelabel enabled", () => {
+    setup({ showExternalHelpLinks: false, showMetabaseLinks: true });
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
   it("should show the customized application name", () => {
     setup({ applicationName: "My app analytics" });
     expect(screen.getByText("My app analytics tips")).toBeInTheDocument();

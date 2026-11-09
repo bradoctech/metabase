@@ -8,6 +8,10 @@ function setup(opts: SetupOpts = {}) {
 }
 
 describe("HomeHelpCard (EE without token)", () => {
+  it("should hide the tips card under the SP policy", () => {
+    setup({ showExternalHelpLinks: false, showMetabaseLinks: true });
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
   it("should show Metabase despite customizing the application name", () => {
     setup({ applicationName: "My app analytics" });
     expect(screen.getByText("Metabase tips")).toBeInTheDocument();

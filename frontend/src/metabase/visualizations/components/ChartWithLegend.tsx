@@ -21,6 +21,7 @@ import type { LegendHover, LegendTitle } from "./types";
 
 const GRID_ASPECT_RATIO = 4 / 3;
 const PADDING = 14;
+const DASHBOARD_PADDING = 8;
 
 const DEFAULT_GRID_SIZE = 100;
 export const HIDE_HORIZONTAL_LEGEND_THRESHOLD = 180;
@@ -86,6 +87,7 @@ const ChartWithLegendInner = ({
 }: ChartWithLegendProps) => {
   const [stableWidth, setStableWidth] = useState(width);
   const [stableHeight, setStableHeight] = useState(height);
+  const padding = isDashboard ? DASHBOARD_PADDING : PADDING;
 
   useEffect(() => {
     // Use last valid dimensions to prevent flickering
@@ -106,8 +108,9 @@ const ChartWithLegendInner = ({
         gridSize,
         aspectRatio,
         legendTitles,
+        padding,
       }),
-    [stableWidth, stableHeight, gridSize, aspectRatio, legendTitles],
+    [stableWidth, stableHeight, gridSize, aspectRatio, legendTitles, padding],
   );
 
   const legend =
@@ -134,9 +137,9 @@ const ChartWithLegendInner = ({
       )}
       style={{
         ...style,
-        paddingBottom: PADDING,
-        paddingLeft: PADDING,
-        paddingRight: PADDING,
+        paddingBottom: padding,
+        paddingLeft: padding,
+        paddingRight: padding,
       }}
       data-testid="chart-with-legend"
       data-legend-position={layout.type}
@@ -193,15 +196,17 @@ export function getChartLayout({
   gridSize,
   aspectRatio,
   legendTitles,
+  padding = PADDING,
 }: {
   width: number;
   height: number;
   gridSize: GridSize | undefined;
   aspectRatio: number;
   legendTitles: LegendTitle[];
+  padding?: number;
 }): ChartLayout {
-  const adjustedWidth = width - PADDING * 2;
-  const adjustedHeight = height - PADDING;
+  const adjustedWidth = width - padding * 2;
+  const adjustedHeight = height - padding;
   const hasDimensions = adjustedWidth > 0 && adjustedHeight > 0;
 
   const calculatedGridSize = gridSize || {

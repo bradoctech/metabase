@@ -40,6 +40,7 @@ describe("HomePopularSection", () => {
     });
 
     expect(screen.getByText(/popular dashboards/)).toBeInTheDocument();
+    expect(screen.queryByText("Metabase tips")).not.toBeInTheDocument();
   });
 
   it("should render a list of items of different types", async () => {

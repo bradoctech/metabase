@@ -194,3 +194,26 @@ frontend/src/metabase/utils/fonts.unit.spec.ts
 
 # saopaulov64 — font registration and branding regression coverage.
 frontend/src/metabase/auth/components/Login/tests/common.unit.spec.tsx
+
+# saopaulov64 — home cards, Xray and dashboard legend adapters.
+frontend/src/metabase/home/components/HomeHelpCard/HomeHelpCard.module.css
+frontend/src/metabase/home/components/HomeXrayCard/HomeXrayCard.module.css
+frontend/src/metabase/home/components/HomeXraySection/HomeXraySection.module.css
+frontend/src/metabase/home/components/HomeXraySection/HomeXraySection.tsx
+
+# saopaulov64 — home badge and greeting regression coverage.
+frontend/src/metabase/home/components/HomeGreeting/HomeGreeting.unit.spec.tsx
+frontend/src/metabase/home/components/HomeModelCard/HomeModelCard.unit.spec.tsx
+frontend/src/metabase/home/utils.unit.spec.ts
+
+# saopaulov64 — compact dashboard chart layout regression coverage.
+frontend/src/metabase/visualizations/components/ChartWithLegend.unit.spec.tsx
+
+# saopaulov64 — SP home tips policy and regression coverage.
+frontend/src/metabase/home/components/HomeHelpCard/tests/common.unit.spec.tsx
+frontend/src/metabase/home/components/HomeHelpCard/tests/enterprise.unit.spec.tsx
+frontend/src/metabase/home/components/HomeHelpCard/tests/premium.unit.spec.tsx
+frontend/src/metabase/home/components/HomeHelpCard/tests/setup.tsx
+frontend/src/metabase/home/components/HomePopularSection/HomePopularSection.unit.spec.tsx
+frontend/src/metabase/home/components/HomeRecentSection/HomeRecentSection.unit.spec.tsx
+frontend/src/metabase/home/components/HomeXraySection/HomeXraySection.unit.spec.tsx

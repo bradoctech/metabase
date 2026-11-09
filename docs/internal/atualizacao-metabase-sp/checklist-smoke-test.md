@@ -1,5 +1,7 @@
 # Checklist de smoke test — Metabase SP fork
 
+> **Rodada vigente da `saopaulov64`:** registrar resultados em [smoke-saopaulov64.md](./smoke-saopaulov64.md). A tabela de `metabasev64` abaixo é histórica e não transfere seus OK para a nova branch.
+
 **Uso:** rodar após qualquer merge de major e antes de fechar a etapa. Marcar **OK/FAIL** por item. Se algo regredir, anote o sintoma (console, Network, print) para localizar o path na próxima leva.
 
 Esta checklist cobre os comportamentos SP reais (EDD-…), não só “a tela abre”.

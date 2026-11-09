@@ -28,6 +28,7 @@ import {
 import { useDispatch, useSelector } from "metabase/redux";
 import { FullWidthContainer } from "metabase/styled-components/layout/FullWidthContainer";
 import { Box, Flex } from "metabase/ui";
+import { getSubpathSafeUrl } from "metabase/urls";
 import type { Collection, Dashboard as IDashboard } from "metabase-types/api";
 
 import { FixedWidthContainer } from "../Dashboard/DashboardComponents";
@@ -141,6 +142,11 @@ export function DashboardHeaderView({
                   })}
                 >
                   <Flex className={S.HeaderCaptionContainer} gap={2}>
+                    <img
+                      src={getSubpathSafeUrl("app/assets/img/logo-sp-gov.svg")}
+                      alt="São Paulo"
+                      className={CS.SpLogo}
+                    />
                     <DashboardTitle className={S.HeaderCaption} />
 
                     <Flex

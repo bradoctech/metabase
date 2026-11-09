@@ -51,6 +51,7 @@ const elements = [
     pattern: "frontend/src/metabase-types/*/**",
   }),
   createElement({ type: "lib", name: "utils" }),
+  createElement({ type: "lib", name: "sp" }),
 
   // mlv1 (basic) and mlv2 (lib) must stay in this order: mlv1's pattern is a
   // subset of mlv2's, and the first matching element wins. This precedence

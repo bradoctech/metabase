@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { t } from "ttag";
 
-import { LighthouseIllustration } from "metabase/common/components/LighthouseIllustration";
 import { useHasTokenFeature } from "metabase/common/hooks";
 import { getUser, getUserIsAdmin } from "metabase/current-user";
 import { useSelector } from "metabase/redux";
@@ -46,12 +45,10 @@ export const HomeLayout = ({ children }: HomeLayoutProps): ReactNode => {
         xl: "10rem 15rem 4rem",
       }}
       mih="100%"
-      bg="background_page-secondary"
+      bg="background-home"
     >
       {landingPageIllustration &&
-        (landingPageIllustration.isDefault ? (
-          <LighthouseIllustration />
-        ) : (
+        (landingPageIllustration.isDefault ? null : (
           <Box
             data-testid="landing-page-illustration"
             pos="absolute"
@@ -79,14 +76,7 @@ export const HomeLayout = ({ children }: HomeLayoutProps): ReactNode => {
           </Button>
         </Tooltip>
       )}
-      <Box
-        pos="relative"
-        mt={{
-          base: "2.5rem",
-          md: "4rem",
-          lg: "6rem",
-        }}
-      >
+      <Box pos="relative" mt="0.5rem">
         {children}
       </Box>
       <CustomHomePageModal

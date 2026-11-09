@@ -1,5 +1,7 @@
+import { ROOT_COLLECTION } from "metabase/common/collections/constants";
 import { dayjs } from "metabase/dayjs";
 import { parseTimestamp } from "metabase/utils/time-dayjs";
+import { type RecentItem, isRecentTableItem } from "metabase-types/api";
 
 export const isWithinWeeks = (
   timestamp: string,
@@ -8,4 +10,21 @@ export const isWithinWeeks = (
   const date = parseTimestamp(timestamp);
   const weeksAgo = dayjs().subtract(weekCount, "week");
   return date.isAfter(weeksAgo);
+};
+
+/** Where the item lives: its database, dashboard or collection. */
+export const getItemBadge = (item: RecentItem): string | undefined => {
+  if (isRecentTableItem(item)) {
+    return item.database.name;
+  }
+
+  if (item.dashboard) {
+    return item.dashboard.name;
+  }
+
+  if (item.parent_collection?.id == null) {
+    return ROOT_COLLECTION.name;
+  }
+
+  return item.parent_collection.name;
 };

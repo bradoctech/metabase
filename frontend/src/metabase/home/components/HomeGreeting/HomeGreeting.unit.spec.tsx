@@ -22,14 +22,15 @@ const setup = ({ currentUser, showLogo }: SetupOpts) => {
 };
 
 describe("HomeGreeting", () => {
-  it("should render with logo", () => {
+  it("should render the SP greeting without the Metabot logo", () => {
     setup({
       currentUser: createMockUser({ first_name: "John" }),
       showLogo: true,
     });
 
     expect(screen.getByText(/John/)).toBeInTheDocument();
-    expect(screen.getAllByRole("img")).toHaveLength(2);
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(screen.getByText("John").tagName).toBe("SPAN");
   });
 
   it("should render nothing when the welcome message is turned off", () => {

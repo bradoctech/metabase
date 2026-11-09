@@ -113,6 +113,12 @@ describe("getChartLayout", () => {
     legendTitles: ["Series 1", "Series 2"],
   };
 
+  it("should fit the legend in a compact SP dashboard card without changing standard charts", () => {
+    const input = { ...defaultInput, width: 200, height: 100 };
+    expect(getChartLayout(input).type).toBe("small");
+    expect(getChartLayout({ ...input, padding: 8 }).type).toBe("horizontal");
+  });
+
   it("should lay out a wide chart horizontally with a fixed chart size", () => {
     const layout = getChartLayout(defaultInput);
 

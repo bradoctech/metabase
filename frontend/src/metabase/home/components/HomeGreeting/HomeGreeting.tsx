@@ -17,6 +17,22 @@ export const HomeGreeting = (): JSX.Element | null => {
   const showGreeting = useSetting("show-metabot");
   const name = user?.first_name;
   const message = useMemo(() => getMessage(name), [name]);
+  const parts = useMemo(() => {
+    if (!name) {
+      return [message];
+    }
+    const idx = message.indexOf(name);
+    if (idx === -1) {
+      return [message];
+    }
+    return [
+      message.slice(0, idx),
+      <span key="greeting-name" className={S.greetingName}>
+        {name}
+      </span>,
+      message.slice(idx + name.length),
+    ];
+  }, [message, name]);
 
   if (!showGreeting) {
     return null;
@@ -24,9 +40,11 @@ export const HomeGreeting = (): JSX.Element | null => {
 
   return (
     <Flex align="center">
-      <MetabotGreeting />
-      <span data-testid="greeting-message" className={S.greetingMessage}>
-        {message}
+      <span
+        data-testid="greeting-message"
+        className={cx(S.greetingMessage, S.withoutLogo)}
+      >
+        {parts}
       </span>
     </Flex>
   );

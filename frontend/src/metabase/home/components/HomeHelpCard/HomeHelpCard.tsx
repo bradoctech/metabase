@@ -10,14 +10,17 @@ import {
   getApplicationName,
   getShowMetabaseLinks,
 } from "metabase/selectors/whitelabel";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Card, Flex, Icon, Text } from "metabase/ui";
+
+import S from "./HomeHelpCard.module.css";
 
 export const HomeHelpCard = (): JSX.Element | null => {
   const cardTitleId = useUniqueId();
   const applicationName = useSelector(getApplicationName);
   const showMetabaseLinks = useSelector(getShowMetabaseLinks);
 
-  if (!showMetabaseLinks) {
+  if (!SP_COMMERCIAL_POLICY.showExternalHelpLinks || !showMetabaseLinks) {
     return null;
   }
 
@@ -31,12 +34,7 @@ export const HomeHelpCard = (): JSX.Element | null => {
       py="lg"
       px="xl"
       classNames={{
-        root: cx(
-          CS.bgBrandHover,
-          CS.hoverParent,
-          CS.hoverDisplay,
-          CS.textBrandHover,
-        ),
+        root: cx(S.root, CS.hoverParent, CS.hoverDisplay, CS.textBrandHover),
       }}
     >
       <Flex align="center" h="100%" gap="lg">

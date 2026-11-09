@@ -5,6 +5,7 @@ import {
   waitForLoaderToBeRemoved,
 } from "__support__/ui";
 import { dayjs } from "metabase/dayjs";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import type { User } from "metabase-types/api";
 import {
   createMockRecentTableItem,
@@ -37,7 +38,7 @@ const setup = async ({ user = createMockUser() }: SetupOpts = {}) => {
 
 describe("HomeRecentSection", () => {
   describe("new installers", () => {
-    it("should show a help link for new installers", async () => {
+    it("should hide the help link for new installers under the SP policy", async () => {
       await setup({
         user: createMockUser({
           is_installer: true,
@@ -45,7 +46,22 @@ describe("HomeRecentSection", () => {
         }),
       });
 
-      expect(screen.getByText("Metabase tips")).toBeInTheDocument();
+      expect(screen.queryByText("Metabase tips")).not.toBeInTheDocument();
+    });
+
+    it("should retain the upstream help card when the client policy permits it", async () => {
+      jest.replaceProperty(SP_COMMERCIAL_POLICY, "showExternalHelpLinks", true);
+      try {
+        await setup({
+          user: createMockUser({
+            is_installer: true,
+            first_login: dayjs().add(1, "hour").toISOString(),
+          }),
+        });
+        expect(screen.getByText("Metabase tips")).toBeInTheDocument();
+      } finally {
+        jest.restoreAllMocks();
+      }
     });
 
     it("should not show a help link for regular users", async () => {

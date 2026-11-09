@@ -49,6 +49,7 @@ describe("HomeXraySection", () => {
     expect(screen.getByText(/Try out these sample x-rays/)).toBeInTheDocument();
     expect(screen.getByText("Orders")).toBeInTheDocument();
     expect(screen.getByText("People")).toBeInTheDocument();
+    expect(screen.queryByText("Metabase tips")).not.toBeInTheDocument();
   });
 
   it("should show x-rays for a user database", async () => {
