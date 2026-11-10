@@ -15,6 +15,13 @@ import {
 } from "metabase/data-grid";
 
 import { DataGrid } from "./DataGrid";
+import S from "./DataGrid.module.css";
+
+// The shared Jest CSS mock is empty; retain the state classes for split-row assertions.
+jest.mock("./DataGrid.module.css", () => ({
+  activeRow: "activeRow",
+  hoveredRow: "hoveredRow",
+}));
 
 const sampleData = [
   { id: 1, name: "Item 1", category: "Electronics", price: 99.9 },
@@ -167,6 +174,117 @@ describe("DataGrid", () => {
 
   afterEach(() => {
     jest.useRealTimers();
+    mockGetBoundingClientRect();
+  });
+
+  it("freezes through the chosen column and unfreezes data columns while retaining the utility column", () => {
+    mockGetBoundingClientRect({ width: 1000 });
+    const onHeaderCellClick = jest.fn();
+    renderWithProviders(
+      <TestDataGrid enableRowId onHeaderCellClick={onHeaderCellClick} />,
+    );
+    act(() => jest.runAllTimers());
+
+    const pinButton = within(
+      screen.getByTestId("header-center-quadrant"),
+    ).getAllByRole("button", { name: "Freeze up to this column" })[1];
+    fireEvent.mouseDown(pinButton);
+    fireEvent.mouseUp(pinButton);
+    fireEvent.click(pinButton);
+
+    const pinned = screen.getByTestId("header-pinned-quadrant");
+    expect(within(pinned).getAllByRole("columnheader")).toHaveLength(3);
+    expect(within(pinned).getByText("ID")).toBeInTheDocument();
+    expect(within(pinned).getByText("Name")).toBeInTheDocument();
+    expect(onHeaderCellClick).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      within(pinned).getAllByRole("button", { name: "Unfreeze columns" })[0],
+    );
+    expect(within(pinned).getAllByRole("columnheader")).toHaveLength(1);
+    expect(
+      within(screen.getByTestId("header-center-quadrant")).getByText("Name"),
+    ).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByText("Price"));
+    fireEvent.mouseUp(screen.getByText("Price"));
+    expect(onHeaderCellClick).toHaveBeenCalledWith(expect.anything(), "price");
+  });
+
+  it("freezes columns in their displayed order", () => {
+    mockGetBoundingClientRect({ width: 1000 });
+    renderWithProviders(
+      <TestDataGrid initialColumnOrder={["category", "price", "id", "name"]} />,
+    );
+    act(() => jest.runAllTimers());
+    fireEvent.click(
+      within(screen.getByTestId("header-center-quadrant")).getAllByRole(
+        "button",
+        { name: "Freeze up to this column" },
+      )[1],
+    );
+    const pinned = screen.getByTestId("header-pinned-quadrant");
+    expect(within(pinned).getByText("Category")).toBeInTheDocument();
+    expect(within(pinned).getByText("Price")).toBeInTheDocument();
+    expect(within(pinned).queryByText("ID")).not.toBeInTheDocument();
+  });
+
+  it("highlights both parts of a hovered row without selecting it or firing cell clicks", () => {
+    const onBodyCellClick = jest.fn();
+    renderWithProviders(
+      <TestDataGrid
+        pinnedTopRowsCount={1}
+        pinnedLeftColumnsCount={1}
+        onBodyCellClick={onBodyCellClick}
+      />,
+    );
+    act(() => jest.runAllTimers());
+    const leftRow = within(
+      screen.getByTestId("pinned-pinned-quadrant"),
+    ).getByRole("row");
+    const centerRow = within(
+      screen.getByTestId("pinned-center-quadrant"),
+    ).getByRole("row");
+
+    fireEvent.mouseEnter(leftRow);
+    expect(leftRow).toHaveClass(S.hoveredRow);
+    expect(centerRow).toHaveClass(S.hoveredRow);
+    expect(leftRow).not.toHaveClass(S.activeRow);
+    expect(onBodyCellClick).not.toHaveBeenCalled();
+
+    fireEvent.mouseLeave(leftRow);
+    expect(leftRow).not.toHaveClass(S.hoveredRow);
+    expect(centerRow).not.toHaveClass(S.hoveredRow);
+
+    fireEvent.mouseEnter(centerRow);
+    expect(leftRow).toHaveClass(S.hoveredRow);
+    expect(centerRow).toHaveClass(S.hoveredRow);
+    fireEvent.mouseLeave(centerRow);
+  });
+
+  it("toggles the marked row across pinned sections and preserves cell click callbacks", () => {
+    const onBodyCellClick = jest.fn();
+    renderWithProviders(
+      <TestDataGrid
+        pinnedLeftColumnsCount={1}
+        pinnedTopRowsCount={1}
+        onBodyCellClick={onBodyCellClick}
+      />,
+    );
+    act(() => jest.runAllTimers());
+    const leftRow = within(
+      screen.getByTestId("pinned-pinned-quadrant"),
+    ).getByRole("row");
+    const centerRow = within(
+      screen.getByTestId("pinned-center-quadrant"),
+    ).getByRole("row");
+    fireEvent.click(within(centerRow).getAllByRole("gridcell")[0]);
+    expect(leftRow).toHaveClass(S.activeRow);
+    expect(centerRow).toHaveClass(S.activeRow);
+    fireEvent.click(within(leftRow).getByRole("gridcell"));
+    expect(leftRow).not.toHaveClass(S.activeRow);
+    expect(centerRow).not.toHaveClass(S.activeRow);
+    expect(onBodyCellClick).toHaveBeenCalledTimes(2);
   });
 
   it("renders the grid with expected structure", () => {

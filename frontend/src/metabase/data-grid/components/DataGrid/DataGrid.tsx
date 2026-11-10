@@ -6,7 +6,7 @@ import {
 import type { HeaderGroup } from "@tanstack/react-table";
 import cx from "classnames";
 import type React from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import _ from "underscore";
 
 import { getScrollBarSize } from "metabase/utils/dom";
@@ -75,8 +75,13 @@ export const DataGrid = function DataGrid<TData>({
   onAddColumnClick,
   onHeaderCellClick,
   isColumnReorderingDisabled,
+  setPinnedLeftColumnsCount,
 }: DataGridProps<TData>) {
   const { columnVirtualizer, virtualIndexAttributeName } = virtualGrid;
+
+  const [hoveredRowIndex, setHoveredRowIndex] = useState<number | null>(null);
+  const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
+  const activeRowIndexRef = useRef<number | null>(null);
 
   const [headerHeight, setHeaderHeight] = useState(HEADER_HEIGHT);
   const headerRef = useCallback((node: HTMLDivElement | null) => {
@@ -114,6 +119,30 @@ export const DataGrid = function DataGrid<TData>({
     lastPinnedColumn?.origin.columnDef.meta?.isUtilityColumn === true;
   const hasSeparator = lastPinnedColumn != null && !isLastPinnedColumnSpecial;
 
+  const handlePinColumn = useCallback(
+    (columnId: string) => {
+      if (!setPinnedLeftColumnsCount) {
+        return;
+      }
+      const targetColumn = table.getColumn(columnId);
+      const isPinned = targetColumn?.getIsPinned() === "left";
+      if (isPinned) {
+        setPinnedLeftColumnsCount(0);
+        return;
+      }
+      const dataColumnOrder = table
+        .getState()
+        .columnOrder.filter(
+          (id) => table.getColumn(id)?.columnDef.meta?.isUtilityColumn !== true,
+        );
+      const colDataIndex = dataColumnOrder.indexOf(columnId);
+      if (colDataIndex !== -1) {
+        setPinnedLeftColumnsCount(colDataIndex + 1);
+      }
+    },
+    [table, setPinnedLeftColumnsCount],
+  );
+
   const dndContextProps = useDataGridColumnsReordering(
     columnsReordering,
     pinnedColumns,
@@ -131,6 +160,20 @@ export const DataGrid = function DataGrid<TData>({
       ? getScrollBarSize()
       : 0;
 
+  const handleBodyCellClickWithRowHighlight = useCallback(
+    (
+      event: React.MouseEvent<HTMLDivElement>,
+      rowIndex: number,
+      columnId: string,
+    ) => {
+      const next = activeRowIndexRef.current === rowIndex ? null : rowIndex;
+      activeRowIndexRef.current = next;
+      setActiveRowIndex(next);
+      onBodyCellClick?.(event, rowIndex, columnId);
+    },
+    [onBodyCellClick],
+  );
+
   const renderRow = (
     row: DataGridRowType<TData>,
     columns: DataGridColumnType<TData>[],
@@ -145,8 +188,11 @@ export const DataGrid = function DataGrid<TData>({
       datasetIndexAttributeName={datasetIndexAttributeName}
       virtualIndexAttributeName={virtualIndexAttributeName}
       zoomedRowIndex={zoomedRowIndex}
+      activeRowIndex={activeRowIndex}
+      hoveredRowIndex={hoveredRowIndex}
+      onRowHover={setHoveredRowIndex}
       selection={selection}
-      onBodyCellClick={onBodyCellClick}
+      onBodyCellClick={handleBodyCellClickWithRowHighlight}
       classNames={classNames}
       styles={styles}
     />
@@ -162,6 +208,7 @@ export const DataGrid = function DataGrid<TData>({
       backgroundColor={backgroundColor}
       onHeaderCellClick={onHeaderCellClick}
       isColumnReorderingDisabled={isColumnReorderingDisabled}
+      onPinColumn={setPinnedLeftColumnsCount ? handlePinColumn : undefined}
       styles={styles}
     />
   );

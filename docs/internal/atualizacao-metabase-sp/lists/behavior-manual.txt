@@ -48,3 +48,6 @@ src/metabase/channel/render/preview.clj
 src/metabase/channel/render/style.clj
 src/metabase/warehouse_schema_rest/api/field.clj
 test/metabase/warehouse_schema_rest/api/field_test.clj
+
+# saopaulov64 — pin and synchronized row highlight regression coverage.
+frontend/src/metabase/data-grid/components/DataGrid/DataGrid.unit.spec.tsx

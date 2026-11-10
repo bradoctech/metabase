@@ -1,0 +1,12 @@
+# Paths applied in the SP datagrid stage.
+frontend/src/metabase/data-grid/components/DataGrid/DataGrid.module.css
+frontend/src/metabase/data-grid/components/DataGrid/DataGrid.tsx
+frontend/src/metabase/data-grid/components/DataGrid/DataGrid.unit.spec.tsx
+frontend/src/metabase/data-grid/components/DataGridHeader/DataGridHeader.tsx
+frontend/src/metabase/data-grid/components/DataGridRow/DataGridRow.tsx
+frontend/src/metabase/data-grid/components/SortableHeader/SortableHeader.tsx
+frontend/src/metabase/data-grid/constants.ts
+frontend/src/metabase/data-grid/docs/datagrid-custom-features.md
+frontend/src/metabase/data-grid/hooks/use-data-grid-instance.tsx
+frontend/src/metabase/data-grid/types.ts
+locales/pt-BR.po

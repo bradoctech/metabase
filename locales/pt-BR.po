@@ -45837,3 +45837,11 @@ msgstr "Exemplo detalhado"
 msgid "Total [[GenericTable]]"
 msgstr "Total [[GenericTable]]"
 
+
+#: frontend/src/metabase/data-grid/components/DataGridHeader/DataGridHeader.tsx
+msgid "Unfreeze columns"
+msgstr "Descongelar colunas"
+
+#: frontend/src/metabase/data-grid/components/DataGridHeader/DataGridHeader.tsx
+msgid "Freeze up to this column"
+msgstr "Congelar até esta coluna"

@@ -28,7 +28,7 @@ O [inventário TSV](./inventario-saopaulov64.tsv) cruza as listas com o diff ent
 1. **Fundação — aplicada, teste de regressão e smoke visual aprovados:** documentação e script históricos recuperados, `.merge-sp/` ignorado, correção pontual do schema de nomes localizados de coleções. Nenhum commit ou push automático.
 2. **Marca e tema — aplicada; perfil SP validado pelo usuário:** tokens, Rawline, assets, LogoIcon/brasão, ocultamento de SpLogo, login e adapters de tema claros/escuros.
 3. **Home e dashboard — aplicada, testes/tipos/lint e smoke local relatado aprovados; HD-05/12 adiados para homologação:** badges/cards, dashcards DS, layout e componentes associados.
-4. **Comportamentos — pendente:** pin/hover do datagrid, cascata de filtros, nulls, eixos/title case/tooltips e paletas, incluindo Visualizer.
+4. **Comportamentos — datagrid reaplicado com testes/tipos/lint e smoke DG-01 a DG-08 aprovados; filtros/nulls/gráficos pendentes:** pin/hover do datagrid, cascata de filtros, nulls, eixos/title case/tooltips e paletas, incluindo Visualizer.
 5. **Traduções e política SP — pendente:** catálogo pt-BR, ajuda de drivers, links/upsells, Data Studio e Monitor, conforme EDD-1523. Preservar verificações reais de permissões/licença.
 6. **Entrega — pendente:** produção (backend/drivers, static-viz, tsc, FE), smoke canônico e auditoria. Não declarar o transporte concluído antes dessas validações.
 
@@ -47,7 +47,7 @@ A correção não muda o banco nem as permissões. Validar funções de coleçã
 - Hook do VS Code: corrigida a falha `bun: not found` usando `mise exec` quando disponível, incluindo a instalação em `$HOME/.local/bin/mise`. O fallback continua sendo Bun no PATH. Todas as verificações do hook foram preservadas.
 - Hook completo executado com `PATH=/usr/bin:/bin`: **aprovado**, incluindo lint-staged e a checagem de marcadores de bloqueio de commit. Nenhum commit foi criado pelo teste.
 - Smoke visual da sidebar: **aprovado pelo usuário em 08/11/2026**, com captura da aplicação carregada e dos itens de navegação, incluindo Lixeira, sem a mensagem de erro anterior. A evidência confirma a recuperação da sidebar; não inclui navegação para a lixeira nem operações de arquivar/restaurar/excluir.
-- Build de produção e smoke completo: **pendentes para a entrega do transporte SP**; a etapa 2 foi aplicada e a etapa 3 está aplicada com smoke pendente e as etapas 4–6 ainda não foram executadas.
+- Build de produção e smoke completo: **pendentes para a entrega do transporte SP**; marca/tema, home/dashboard e datagrid já foram aplicados e validados no escopo relatado; filtros cascata, nulls, gráficos e as demais etapas continuam pendentes, assim como os cenários adiados para homologação.
 
 Comando do teste isolado (sem aliases de inicialização de servidor):
 
@@ -179,3 +179,26 @@ Validação do ajuste de dicas: **21 suítes da home, 100 testes aprovados**; `b
 Usuário confirmou que o card Metabase dicas desapareceu. Também reproduziu a home Xray, clicou em um card e abriu a exploração correspondente. As duas capturas mostram os cards SP de exploração e o dashboard automático de Accounts. **HD-04 e HD-06 aprovados** para os fluxos relatados.
 
 O smoke local de home/dashboard relatado está aprovado, com **HD-05 adiado para homologação** (banco não sample com múltiplos schemas elegíveis) e **HD-12 adiado para homologação se aplicável** (instância em subdiretório). Os subcenários de ações/embedding de HD-10 não têm evidência específica; o card de texto sem fundo foi aprovado. Não inferir validação de salvar exploração, de todos os filtros ou de todas as tabelas a partir dos prints. O build de produção e as etapas restantes do transporte SP continuam pendentes.
+
+
+## Datagrid — leva de 09/11/2026
+
+**Referência:** alterações SP de `EDD-1523` nos arquivos do datagrid, comparadas com o ancestral oficial `0d0fbd1edd9`. Nenhum desses arquivos tinha alterações oficiais adicionais até o tip atual antes desta leva. Não foi necessário substituir `TableInteractive`: ele já repassa o retorno de `useDataGridInstance` ao grid compartilhado.
+
+**Aplicado:** botões para congelar até uma coluna/descongelar, seguindo a ordem atual; hover sincronizado entre partes fixadas/roláveis da mesma linha; marcação persistente por clique com toggle; footer de 50 px da referência SP.
+
+**Adaptações:**
+
+- O hover está no DataGrid, sem depender de `css/admin.module.css`; não foram copiadas as reversões de tokens antigos presentes no CSS administrativo da referência.
+- Mantido intacto o hook oficial `useColumnPinningByCount`, incluindo limite de 90% da largura. A contagem dinâmica de dados foi localizada no hook de instância e soma separadamente as colunas auxiliares, sem congelá-las/descongelá-las por engano.
+- Mantidos callbacks de células, seleção/cópia, reordenação, resize e zoom. Os handlers de pin não propagam os eventos para o cabeçalho.
+- Botões acessíveis por teclado, visíveis em foco e em dispositivos sem hover, com `aria-pressed`, `type="button"` e duas mensagens traduzíveis adicionadas a `locales/pt-BR.po`.
+- Catálogo frontend pt-BR regenerado com os builders oficiais de tradução para essa locale; artefato local `resources/frontend_client/app/locales/pt_BR.json` não é versionado. As duas traduções novas foram verificadas no JSON.
+- O padding horizontal zero da referência não foi copiado: já equivalia ao comportamento oficial. Nenhuma configuração de usuário ou banco foi alterada, e o pin não é persistido em perguntas salvas.
+
+**Validações:** 11 suítes com 72 testes aprovados (datagrid e helpers/células de TableInteractive), incluindo pin dinâmico, ordem, colunas auxiliares, limite de largura, hover entre quadrantes, toggle por clique e callbacks; ESLint, Stylelint e formatação aprovados. A primeira checagem de tipos foi encerrada com SIGKILL (137); a repetição com `mise exec -- env GOMEMLIMIT=2GiB GOGC=50 GOMAXPROCS=2 bun run type-check-pure` foi **aprovada, código 0**, sem alterar a configuração do projeto. As duas traduções novas foram verificadas no JSON local e `git diff --check` passou. [Paths desta leva](./datagrid-saopaulov64.txt). O roteiro visual está em [smoke-saopaulov64.md](./smoke-saopaulov64.md), DG-01 a DG-08. DG-01 a DG-08 foram aprovados explicitamente pelo usuário em 09/11/2026, incluindo “ver registros”. A observação de DG-06 sobre redução das colunas efetivamente fixadas ao diminuir a largura foi aceita, coerente com o limite oficial de 90% do grid. O subcenário de toque não foi discriminado no retorno. Build de produção completo permanece pendente para fechamento do transporte.
+
+
+### Aceite do datagrid — 09/11/2026
+
+Usuário aprovou os oito cenários DG-01 a DG-08. Em DG-06, observou que a última coluna efetivamente fixada pode passar da terceira para a segunda ao reduzir a largura; comportamento aceito e documentado como consequência do limite oficial de largura, sem mudança adicional de código. Datagrid aprovado no smoke relatado; próxima frente de comportamentos: filtros cascata. Build de produção e demais pendências globais permanecem em aberto.

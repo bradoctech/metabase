@@ -127,7 +127,8 @@ A home escolhe uma seção por vez. Popular depende de conteúdo elegível (perg
 | --- | --- |
 | Backend/FE e marca/login | Aceite anterior geral; detalhar cenários ainda não exercitados antes do fechamento |
 | Home e dashboard | HD-01/02/03/04/06/07/08/09/11 e texto sem fundo de HD-10 aprovados; HD-05/12 adiados conforme usuário; ações/embedding sem evidência específica |
-| Datagrid pin/hover, filtros cascata, nulls | Transporte e smoke pendentes |
+| Datagrid pin/hover | Reaplicados; DG-01 a DG-08 aprovados pelo usuário, com observação de largura em DG-06 |
+| Filtros cascata e nulls | Transporte e smoke pendentes |
 | Eixos/tooltip e paletas nos charts/Visualizer | Transporte e smoke pendentes |
 | i18n, ajuda de drivers e política comercial | Transporte e smoke pendentes |
 | Data Studio e Monitor, inclusive usuário comum | Transporte e smoke pendentes |
@@ -135,3 +136,32 @@ A home escolhe uma seção por vez. Popular depende de conteúdo elegível (perg
 | Build de produção (backend/drivers, static-viz, tipos, FE) | Pendente para fechamento do transporte |
 
 Ao registrar retorno, informar ID, OK/FAIL, cenário/usuário, tema e evidência ou sintoma. Um cenário não executável deve ficar como PENDENTE com o motivo; não marcar como aprovado pelo aceite de outra tela.
+
+
+## Datagrid — leva de 09/11/2026
+
+**Estado:** código reaplicado; 11 suítes, 72 testes aprovados, tipos/lint/formatação aprovados e catálogo pt-BR local regenerado. DG-01 a DG-08 aprovados explicitamente pelo usuário em 09/11/2026. A aprovação decorre desta rodada específica, incluindo “ver registros”, e não do smoke da home/dashboard. Não foi discriminado se houve teste em dispositivo de toque.
+
+Preparação: no Sample Database, abrir uma pergunta em modo tabela com várias colunas, como People ou Orders. Usar largura suficiente para congelar duas colunas sem atingir o limite de 90%; para testar a rolagem, deixar mais colunas que a largura disponível. Os botões ficam no canto direito dos cabeçalhos, visíveis no hover ou foco por teclado. “Congelar até esta coluna” fixa a coluna alvo e as anteriores; “Descongelar colunas” remove o pin das colunas de dados. O pin é local à sessão do componente.
+
+| ID | Passos | Resultado esperado | Estado |
+| --- | --- | --- | --- |
+| DG-01 | Na pergunta em tabela, passar o mouse no header da 2ª/3ª coluna e clicar em Congelar até esta coluna; rolar horizontalmente | A coluna escolhida e as anteriores permanecem à esquerda; demais colunas rolam; não abre menu de ordenação ao clicar no pin | OK — usuário |
+| DG-02 | Clicar em Descongelar colunas num header fixado | Colunas de dados voltam a rolar; índice/seleção auxiliares permanecem conforme o comportamento original | OK — usuário |
+| DG-03 | Sem clicar, passar o mouse por uma linha, cruzando as partes fixada e rolável, e depois sair da tabela | Toda a linha recebe hover neutro; sem seleção por clique/popover; ao sair, o hover desaparece | OK — usuário |
+| DG-04 | Clicar numa célula, depois clicar na mesma linha na outra parte da tabela; repetir noutra linha | Marcação persistente alterna ou muda de linha; menus e ações de célula continuam funcionando | OK — usuário |
+| DG-05 | Abrir uma pergunta agregada, clicar num resultado e escolher Ver registros (ou opção equivalente); repetir pin e hover na tabela aberta | Mesmas ações disponíveis nesse fluxo; nenhum CSS administrativo necessário para o destaque | OK — usuário |
+| DG-06 | Arrastar/reordenar coluna, congelar até a posição resultante e redimensionar uma coluna; selecionar/copiar células | Pin segue a ordem mostrada; redimensionamento, arraste e cópia preservados | OK — usuário; redução das colunas efetivamente fixadas em viewport menor aceita (limite de largura) |
+| DG-07 | Exibir uma tabela em dashboard, conferir footer/paginação, pouco espaço e temas claro/escuro | Footer de 50 px sem cortes; sem barra extra causada por padding; pin respeita limite de largura e texto/ícones legíveis | OK — usuário |
+| DG-08 | Navegar por Tab até um pin e acionar com Enter/Espaço; testar toque se disponível | Botão aparece no foco, congela/descongela sem abrir menu nem submeter formulários; não habilita edição de dados | OK — usuário |
+
+Se o congelamento parar antes da coluna escolhida em viewport estreito, conferir o limite oficial de 90% antes de classificar como falha. O teste visual de DG-05 é obrigatório nesta rodada: aprovar a tabela principal não comprova o fluxo “ver registros”. Traduções novas foram adicionadas ao catálogo pt-BR; reiniciar/recarregar o ambiente se ainda usar os recursos antigos.
+
+
+### Aceite do datagrid — 09/11/2026
+
+Usuário aprovou DG-01 a DG-08, incluindo pin/descongelamento, hover, marcação por clique, “ver registros”, reordenação/resize, tabela em dashboard e navegação por teclado. O subcenário de toque não foi discriminado no retorno.
+
+**Observação DG-06:** ao congelar até a terceira coluna em resolução maior e reduzir a largura até ela não caber por completo, a segunda coluna passou a ser a última efetivamente fixada. Usuário percebeu a mudança, considerou que preserva a possibilidade de descongelar e aprovou o comportamento.
+
+**Correspondência no código:** o hook oficial `useColumnPinningByCount` limita a soma das larguras fixadas a 90% da largura do grid. A quantidade efetivamente fixada pode, portanto, ser menor que a solicitada; a contagem solicitada na sessão não é apagada por esse cálculo. A justificativa de manter o descongelamento acessível foi a interpretação aceita pelo usuário, sem alteração do algoritmo nesta rodada. Em futuras regressões, distinguir esse limite de uma falha de pin/reordenação.
