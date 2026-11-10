@@ -1,0 +1,11 @@
+# Paths applied in the Query Builder cascading filters stage.
+frontend/src/metabase-types/api/field.ts
+frontend/src/metabase/api/field.ts
+frontend/src/metabase/querying/filters/components/FilterPicker/FilterPicker.tsx
+frontend/src/metabase/querying/filters/components/FilterPicker/FilterValuePicker/FilterValuePicker.tsx
+frontend/src/metabase/querying/filters/components/FilterPicker/FilterValuePicker/FilterValuePicker.unit.spec.tsx
+frontend/src/metabase/querying/filters/utils/chain-filter-constraints.ts
+frontend/src/metabase/querying/filters/utils/chain-filter-constraints.unit.spec.ts
+frontend/test/__support__/server-mocks/field.ts
+src/metabase/warehouse_schema_rest/api/field.clj
+test/metabase/warehouse_schema_rest/api/field_test.clj

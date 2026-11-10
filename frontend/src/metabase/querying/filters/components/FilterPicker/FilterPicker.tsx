@@ -75,6 +75,14 @@ export function FilterPicker({
   ] = useDisclosure(isExpressionEditorInitiallyOpen(query, stageIndex, filter));
 
   const isNewFilter = !initialFilter;
+  // A filter being replaced must not constrain the values of an alternative column.
+  const pickerQuery = useMemo(
+    () =>
+      initialFilter
+        ? Lib.removeClause(query, stageIndex, initialFilter)
+        : query,
+    [query, stageIndex, initialFilter],
+  );
 
   useLayoutEffect(() => {
     setFilter(initialFilter);
@@ -167,7 +175,7 @@ export function FilterPicker({
 
   return (
     <FilterPickerBody
-      query={query}
+      query={pickerQuery}
       stageIndex={stageIndex}
       column={column}
       filter={filter}

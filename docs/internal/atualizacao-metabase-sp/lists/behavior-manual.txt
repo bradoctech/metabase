@@ -51,3 +51,6 @@ test/metabase/warehouse_schema_rest/api/field_test.clj
 
 # saopaulov64 — pin and synchronized row highlight regression coverage.
 frontend/src/metabase/data-grid/components/DataGrid/DataGrid.unit.spec.tsx
+
+# saopaulov64 — cascade context excludes the filter being replaced.
+frontend/src/metabase/querying/filters/components/FilterPicker/FilterPicker.tsx

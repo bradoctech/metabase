@@ -128,7 +128,8 @@ A home escolhe uma seção por vez. Popular depende de conteúdo elegível (perg
 | Backend/FE e marca/login | Aceite anterior geral; detalhar cenários ainda não exercitados antes do fechamento |
 | Home e dashboard | HD-01/02/03/04/06/07/08/09/11 e texto sem fundo de HD-10 aprovados; HD-05/12 adiados conforme usuário; ações/embedding sem evidência específica |
 | Datagrid pin/hover | Reaplicados; DG-01 a DG-08 aprovados pelo usuário, com observação de largura em DG-06 |
-| Filtros cascata e nulls | Transporte e smoke pendentes |
+| Filtros cascata QB | Reaplicados; 290 testes frontend, 3 testes HTTP H2 (14 asserções), tipos/lint aprovados; FC-01 a FC-04 aprovados pelo usuário; FC-05 a FC-08 pendentes para homologação com a equipe |
+| Valores null | Transporte e smoke pendentes |
 | Eixos/tooltip e paletas nos charts/Visualizer | Transporte e smoke pendentes |
 | i18n, ajuda de drivers e política comercial | Transporte e smoke pendentes |
 | Data Studio e Monitor, inclusive usuário comum | Transporte e smoke pendentes |
@@ -165,3 +166,33 @@ Usuário aprovou DG-01 a DG-08, incluindo pin/descongelamento, hover, marcação
 **Observação DG-06:** ao congelar até a terceira coluna em resolução maior e reduzir a largura até ela não caber por completo, a segunda coluna passou a ser a última efetivamente fixada. Usuário percebeu a mudança, considerou que preserva a possibilidade de descongelar e aprovou o comportamento.
 
 **Correspondência no código:** o hook oficial `useColumnPinningByCount` limita a soma das larguras fixadas a 90% da largura do grid. A quantidade efetivamente fixada pode, portanto, ser menor que a solicitada; a contagem solicitada na sessão não é apagada por esse cálculo. A justificativa de manter o descongelamento acessível foi a interpretação aceita pelo usuário, sem alteração do algoritmo nesta rodada. Em futuras regressões, distinguir esse limite de uma falha de pin/reordenação.
+
+
+## Filtros em cascata do Query Builder — leva de 09/11/2026
+
+**Estado:** implementação reaplicada com testes/tipos/lint aprovados; FC-01 a FC-04 aprovados pelo usuário em 10/11/2026 com State → City e troca para Address; FC-05 a FC-08 pendentes para homologação com a equipe. Reiniciar o backend para garantir o carregamento da rota nova e recarregar o frontend antes do smoke. A aprovação do datagrid não aprova as opções de valores dos filtros. O Query Builder usa cascata automática de filtros irmãos suportados no mesmo estágio; filtros vinculados de dashboard continuam exigindo configuração explícita e não foram modificados nesta leva.
+
+**Preparação local:** abrir Nova → Pergunta usando o Sample Database, com acesso a consultar os dados. O exemplo clássico é People: State → City, se esses campos existirem. Em outro conjunto de exemplo, escolher campos correlacionados existentes, como Category → Vendor em Products. Para um teste determinístico sem depender dessas colunas, aplicar `ID = um ID existente` numa tabela e abrir as opções de outro campo textual dessa mesma linha; elas devem corresponder ao registro escolhido. A existência de campos e sua configuração de busca/lista dependem do metadata do seu banco.
+
+No DevTools → Network, procurar `POST /api/field/<campo-alvo>/filtered-values`. O corpo contém `constraints` com `field_id`, `op`, `value` e eventualmente `options`; busca digitada também inclui `query` e `limit`. O retorno deve ter `field_id`, `values` e `has_more_values`.
+
+| ID | Passos | Resultado esperado | Estado |
+| --- | --- | --- | --- |
+| FC-01 | Sem filtro aplicado, abrir o seletor de valores de um campo | Comportamento oficial preservado; GET de valores/busca conforme configuração do campo, sem POST de cascata desnecessário | OK — usuário, 10/11/2026 |
+| FC-02 | Aplicar filtro A e abrir valores do campo B no mesmo estágio, com relação confirmada nos dados | POST 200 com A em constraints; opções de B compatíveis com A, não apenas o resultado final da tabela filtrado | OK — usuário, 10/11/2026 |
+| FC-03 | Trocar o valor de A; reabrir B; depois remover A e abrir B novamente | Opções acompanham A; após remover o último filtro irmão suportado, volta ao fluxo sem restrições | OK — usuário, 10/11/2026 |
+| FC-04 | Editar o filtro B existente; usar Voltar para trocar a coluna desse filtro | O filtro sendo editado/substituído não restringe a si nem a nova coluna; demais filtros irmãos continuam como contexto | OK — usuário, Network, 10/11/2026 |
+| FC-05 | Aplicar dois filtros irmãos suportados e abrir um terceiro campo; testar igualdade com múltiplos valores | Constraints contêm os filtros irmãos; array de valores preservado; não aparece erro 400/500 | PENDENTE — homologação com a equipe |
+| FC-06 | Num campo configurado para busca, digitar texto tendo A aplicado; selecionar um valor e limpar a busca | POST preserva constraints e inclui query; só valores compatíveis são sugeridos e podem ser selecionados; sem falha ao limpar | PENDENTE — homologação com a equipe |
+| FC-07 | Na tabela resultante, abrir o drill Filtrar por esta coluna numa coluna diferente de A, quando disponível | Mesmo contexto em cascata no picker do drill; seleção aplica o filtro e a pergunta continua funcionando | PENDENTE — homologação com a equipe |
+| FC-08 | Usar filtro numérico com valor/faixa como A e abrir B; quando houver FK reconhecida, repetir entre campos relacionados | Constraints numéricas preservadas; relação entre tabelas depende do metadata; confirmar opções no dado real | PENDENTE — homologação com a equipe |
+
+**Limitações herdadas da referência SP:** só são convertidos filtros suportados de texto/número/booleano com valores. Filtros vazios, de nulo/sem valor, data/hora, coordenadas e expressões/combinações não suportadas ficam fora da conversão desta versão. O alvo não se restringe por filtros do próprio campo. Não inferir que o endpoint representa toda a query: relações dependem de mesma tabela/FK; joins arbitrários, SQL nativo, modelos e estágios anteriores não têm equivalência garantida. Parâmetros de pergunta e dashboards sem filtros vinculados não ganham cascata por este patch.
+
+Se o dropdown não reduzir o número de opções porque todos os valores de B coexistem com A nos dados, conferir a correspondência dos valores e o corpo da requisição antes de classificar como falha. Nenhum usuário, permissão ou banco de aplicação foi alterado pelo agente para montar esse roteiro.
+
+### Retorno manual — 10/11/2026
+
+Teste local com A = State e B = City. Usuário aprovou FC-01, FC-02 e FC-03. Em FC-03, observou que, com City preenchida, as opções de State ficam restritas pela cidade, comportamento esperado de cascata entre filtros irmãos. Não foi relatada inspeção das requisições no Network; o aceite registra o funcionamento visual informado.
+
+Em FC-04, com State = CO e City = Aguilar, editou City, voltou à escolha de coluna e selecionou Address. Ao digitar `a`, o autocomplete exibiu endereços. Na sequência, o usuário confirmou a validação no Network e aprovou o cenário. A captura adicional mostra o Preview de `filtered-values` com `field_id: 51`, endereços em `values` e `has_more_values: false`; o payload de constraints não está visível nessa captura. Aceite registrado conforme a verificação relatada pelo usuário. FC-05 a FC-08 ficam pendentes por decisão do usuário para teste com a equipe em homologação.

@@ -8,6 +8,7 @@ import type {
   GetFieldTableIdsRequest,
   GetFieldTableIdsResponse,
   GetFieldValuesResponse,
+  GetFilteredFieldValuesRequest,
   GetRemappedFieldValueRequest,
   SearchFieldValuesRequest,
   UpdateFieldRequest,
@@ -54,6 +55,18 @@ export const fieldApi = Api.injectEndpoints({
         url: `/api/field/${fieldId}/values`,
       }),
       providesTags: (_, error, fieldId) => provideFieldValuesTags(fieldId),
+    }),
+    getFilteredFieldValues: builder.query<
+      GetFieldValuesResponse,
+      GetFilteredFieldValuesRequest
+    >({
+      query: ({ fieldId, ...body }) => ({
+        method: "POST",
+        url: `/api/field/${fieldId}/filtered-values`,
+        body,
+      }),
+      providesTags: (_response, _error, { fieldId }) =>
+        provideFieldValuesTags(fieldId),
     }),
     getRemappedFieldValue: builder.query<
       FieldValue,
@@ -186,6 +199,7 @@ export const {
   useLazyGetFieldQuery,
   useGetFieldTableIdsQuery,
   useGetFieldValuesQuery,
+  useGetFilteredFieldValuesQuery,
   useGetRemappedFieldValueQuery,
   useSearchFieldValuesQuery,
   useUpdateFieldMutation,

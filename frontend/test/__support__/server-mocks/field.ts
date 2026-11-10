@@ -38,6 +38,15 @@ export function setupFieldValuesEndpoint(fieldValues: GetFieldValuesResponse) {
   );
 }
 
+export function setupFilteredFieldValuesEndpoint(
+  fieldValues: GetFieldValuesResponse,
+) {
+  fetchMock.post(
+    `path:/api/field/${fieldValues.field_id}/filtered-values`,
+    fieldValues,
+  );
+}
+
 export function setupRemappedFieldValueEndpoint(
   fieldId: FieldId,
   remappedFieldId: FieldId,

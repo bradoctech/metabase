@@ -28,7 +28,7 @@ O [inventário TSV](./inventario-saopaulov64.tsv) cruza as listas com o diff ent
 1. **Fundação — aplicada, teste de regressão e smoke visual aprovados:** documentação e script históricos recuperados, `.merge-sp/` ignorado, correção pontual do schema de nomes localizados de coleções. Nenhum commit ou push automático.
 2. **Marca e tema — aplicada; perfil SP validado pelo usuário:** tokens, Rawline, assets, LogoIcon/brasão, ocultamento de SpLogo, login e adapters de tema claros/escuros.
 3. **Home e dashboard — aplicada, testes/tipos/lint e smoke local relatado aprovados; HD-05/12 adiados para homologação:** badges/cards, dashcards DS, layout e componentes associados.
-4. **Comportamentos — datagrid reaplicado com testes/tipos/lint e smoke DG-01 a DG-08 aprovados; filtros/nulls/gráficos pendentes:** pin/hover do datagrid, cascata de filtros, nulls, eixos/title case/tooltips e paletas, incluindo Visualizer.
+4. **Comportamentos — datagrid reaplicado com testes/tipos/lint e smoke DG-01 a DG-08 aprovados; filtros cascata reaplicados com testes/tipos/lint aprovados e smoke parcial (FC-01 a FC-04 aprovados; FC-05 a FC-08 em homologação); nulls/gráficos pendentes:** pin/hover do datagrid, cascata de filtros, nulls, eixos/title case/tooltips e paletas, incluindo Visualizer.
 5. **Traduções e política SP — pendente:** catálogo pt-BR, ajuda de drivers, links/upsells, Data Studio e Monitor, conforme EDD-1523. Preservar verificações reais de permissões/licença.
 6. **Entrega — pendente:** produção (backend/drivers, static-viz, tsc, FE), smoke canônico e auditoria. Não declarar o transporte concluído antes dessas validações.
 
@@ -202,3 +202,26 @@ O smoke local de home/dashboard relatado está aprovado, com **HD-05 adiado para
 ### Aceite do datagrid — 09/11/2026
 
 Usuário aprovou os oito cenários DG-01 a DG-08. Em DG-06, observou que a última coluna efetivamente fixada pode passar da terceira para a segunda ao reduzir a largura; comportamento aceito e documentado como consequência do limite oficial de largura, sem mudança adicional de código. Datagrid aprovado no smoke relatado; próxima frente de comportamentos: filtros cascata. Build de produção e demais pendências globais permanecem em aberto.
+
+
+## Filtros em cascata do Query Builder — leva de 09/11/2026
+
+[Paths desta leva](./filtros-cascata-saopaulov64.txt). Transportados os patches selecionados da `EDD-1523` para o seletor, helper de constraints, tipos/API RTK, mocks, endpoint backend e testes. Preservadas as mudanças oficiais posteriores no schema de atualização de Field e no upsert de user settings; não houve cópia integral do arquivo backend antigo.
+
+**Fluxo aplicado:** filtros irmãos suportados no mesmo estágio geram constraints; o seletor usa `POST /api/field/:id/filtered-values` para listar/buscar valores restritos. Sem constraints, mantém os GETs oficiais. O backend reutiliza chain-filter/chain-filter-search e suas verificações do processador de consultas. O alvo passa pela mesma checagem de permissão de consulta do endpoint de valores existente. Linked Filters de dashboard, parâmetros de pergunta e critérios de permissão não foram alterados.
+
+**Adaptações além da referência:**
+
+- Schema de resposta explícito no endpoint novo; constraints ausentes ou null normalizadas como lista vazia e busca vazia aceita como listagem.
+- Resolução do campo via helper oficial `warehouse-schema-rest.db/field`.
+- Um teste oficial do FilterPicker detectou que o filtro em edição passava a restringir a nova coluna ao usar Voltar. O contexto do picker agora remove somente o filtro sendo substituído, preservando os irmãos. O teste original passou sem alterar sua expectativa.
+- Testes adicionais conferem o corpo POST e a busca digitada com constraints; testes HTTP H2 cobrem mesma tabela, FK, busca, ausência/null de constraints e negação de acesso.
+
+**Escopo e limites:** texto, número e booleano com valores; filtros do alvo excluídos. Sem conversão completa de data/hora, null-checks, coordenadas ou expressões complexas; relações dependem do metadata de mesma tabela/FK. Não representa a query inteira em todos os modelos/joins. Detalhes: [filtros-cascata-datagrid.md](../filtros-cascata-datagrid.md).
+
+**Validação:** backend: 3 testes HTTP em H2, 14 asserções, 0 falhas/erros. Frontend: **14 suítes, 290 testes distintos aprovados** (283 dos pickers + 7 do helper). Na primeira execução ampliada, 12 suítes passaram e houve uma falha na suíte do FilterPicker ao trocar a coluna; após corrigir o contexto, os 34 testes dessa suíte passaram sem mudar a expectativa do teste original. ESLint e formatação aprovados. Checagem global de tipos após o ajuste final: **aprovada, código 0**, usando `mise exec -- env GOMEMLIMIT=2GiB GOGC=50 GOMAXPROCS=2 bun run type-check-pure`. `git diff --check` aprovado. Formatação Clojure e análise de requires executadas (sem requires não usados; kondo avisou sobre o hook Toucan ausente no ambiente). Smoke manual pendente em FC-01 a FC-08; nenhum commit ou push criado.
+
+
+### Retorno parcial dos filtros em cascata — 10/11/2026
+
+Usuário aprovou FC-01/02/03 no ambiente local com State → City. A restrição das opções de State quando City já está preenchida foi observada e aceita como comportamento esperado da cascata entre irmãos. Em FC-04, trocou City = Aguilar por Address no editor, mantendo State = CO, e forneceu captura do autocomplete com sugestões. Na sequência, confirmou a validação de Address no Network e aprovou FC-04. A captura adicional mostra a resposta de valores; o aceite da conferência no Network segue o relato do usuário. FC-05 a FC-08 permanecem pendentes, por decisão do usuário, para teste com a equipe em homologação. Nenhuma mudança de código nesta atualização de aceite.
