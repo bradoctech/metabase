@@ -27,7 +27,10 @@ const series = (value: number | null = 1.23) =>
   [
     {
       card: createMockCard({ display: "scalar" }),
-      data: { rows: [[value]], cols: [createMockColumn({ name: "count" })] },
+      data: {
+        rows: [[value]],
+        cols: [createMockColumn({ name: "count", base_type: "type/Float" })],
+      },
     },
   ] as Series;
 
@@ -258,7 +261,7 @@ describe("Scalar", () => {
     expect(screen.queryByLabelText("info icon")).not.toBeInTheDocument();
   });
 
-  it("should render null", () => {
+  it("should render zero for a present numeric null", () => {
     render(
       <Scalar
         {...mockedProps}
@@ -270,7 +273,46 @@ describe("Scalar", () => {
         visualizationIsClickable={() => false}
       />,
     );
-    expect(screen.getByText("null")).toBeInTheDocument();
+    expect(screen.getByText("0")).toBeInTheDocument();
+  });
+
+  it("should render zero for an untyped null aggregation without changing the result", () => {
+    const unknownSeries = series(null);
+    unknownSeries[0].data.cols[0] = createMockColumn({
+      name: "count",
+      base_type: "type/*",
+      effective_type: "type/*",
+    });
+    render(
+      <Scalar
+        {...mockedProps}
+        series={unknownSeries}
+        rawSeries={unknownSeries}
+        settings={{
+          ...settings,
+          column: () => ({ column: unknownSeries[0].data.cols[0] }),
+        }}
+        visualizationIsClickable={() => false}
+      />,
+    );
+    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(unknownSeries[0].data.rows).toEqual([[null]]);
+  });
+
+  it("should distinguish an empty result from a numeric null", () => {
+    const emptySeries = series();
+    emptySeries[0].data.rows = [];
+    render(
+      <Scalar
+        {...mockedProps}
+        series={emptySeries}
+        rawSeries={emptySeries}
+        settings={settings}
+        visualizationIsClickable={() => false}
+      />,
+    );
+    expect(screen.getByText("No results")).toBeInTheDocument();
+    expect(screen.queryByText("0")).not.toBeInTheDocument();
   });
 
   describe("values wider than the card", () => {

@@ -49,6 +49,7 @@ import { getScrollBarSize } from "metabase/utils/dom";
 import { normalizeNewLines } from "metabase/utils/formatting";
 import { memoize } from "metabase/utils/memoize";
 import { formatValue } from "metabase/value-formatting";
+import { normalizeNumericNull } from "metabase/visualizations/lib/numeric-null";
 import { createPlainCellFormatter } from "metabase/visualizations/lib/plain-cell-formatter";
 import type {
   ClickActionsMode,
@@ -290,7 +291,7 @@ export const TableInteractiveInner = forwardRef(function TableInteractiveInner(
         (untranslatedValue, rowIndex) => {
           const clicked = getCellClickedObject(columnIndex, rowIndex);
 
-          const value = tc(untranslatedValue);
+          const value = tc(normalizeNumericNull(untranslatedValue, col));
 
           const formattedValue = formatValue(value, {
             ...columnSettings,
@@ -305,12 +306,14 @@ export const TableInteractiveInner = forwardRef(function TableInteractiveInner(
         },
       );
 
+      const plainFormatter = createPlainCellFormatter<RowValue>({
+        columnSettings,
+        translate: tc,
+        getClicked: (rowIndex) => getCellClickedObject(columnIndex, rowIndex),
+      });
       const plain: PlainCellFormatter<RowValue> = memoize(
-        createPlainCellFormatter({
-          columnSettings,
-          translate: tc,
-          getClicked: (rowIndex) => getCellClickedObject(columnIndex, rowIndex),
-        }),
+        (value, rowIndex, columnId) =>
+          plainFormatter(normalizeNumericNull(value, col), rowIndex, columnId),
       );
 
       return {

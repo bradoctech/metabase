@@ -1,0 +1,12 @@
+frontend/src/metabase/visualizations/components/TableInteractive/TableInteractive.tsx
+frontend/src/metabase/visualizations/lib/numeric-null.ts
+frontend/src/metabase/visualizations/lib/numeric-null.unit.spec.ts
+frontend/src/metabase/visualizations/visualizations/Scalar/Scalar.tsx
+frontend/src/metabase/visualizations/visualizations/Scalar/Scalar.unit.spec.tsx
+frontend/src/metabase/visualizations/visualizations/SmartScalar/SmartScalar.tsx
+frontend/src/metabase/visualizations/visualizations/SmartScalar/tests/SmartScalar.unit.spec.tsx
+frontend/src/metabase/visualizations/visualizations/Table/Table.unit.spec.tsx
+src/metabase/driver/sqlite.clj
+src/metabase/query_processor/middleware/annotate.clj
+test/metabase/driver/sqlite_test.clj
+test/metabase/query_processor/middleware/annotate_test.clj

@@ -193,10 +193,7 @@ describe("SmartScalar", () => {
     });
 
     it("should show when data is missing", () => {
-      const rows = [
-        ["2019-10-01T00:00:00", null],
-        ["2019-11-01T00:00:00", 100],
-      ];
+      const rows = [["2019-11-01T00:00:00", 100]];
       const insights = createMockInsights([{ unit: "month", col: "Count" }]);
 
       setup({ series: series({ rows, insights }), width: 400 });
@@ -810,10 +807,7 @@ describe("SmartScalar", () => {
     });
 
     it("should keep the (No data) status when the previous value is missing", () => {
-      const rowsWithMissingValue = [
-        ["2019-10-01T00:00:00", null],
-        ["2019-11-01T00:00:00", 100],
-      ];
+      const rowsWithMissingValue = [["2019-11-01T00:00:00", 100]];
 
       setup({
         series: series({
@@ -946,7 +940,7 @@ describe("SmartScalar", () => {
 
   describe("edge cases", () => {
     describe("comparison: previousValue", () => {
-      it("should skip over rows with null values", () => {
+      it("should compare against a present null as zero", () => {
         const rows = [
           ["2019-09-01T00:00:00", 100],
           ["2019-10-01T00:00:00", null],
@@ -965,14 +959,11 @@ describe("SmartScalar", () => {
 
         expect(screen.getByText("100")).toBeInTheDocument();
         expect(screen.getByText(/Nov 2019/)).toBeInTheDocument();
-        expect(screen.getByText("0.00% vs. Sep")).toBeInTheDocument();
+        expect(screen.getByText("+∞% vs. Oct")).toBeInTheDocument();
       });
 
       it("should handle no previous value to compare to", () => {
-        const rows = [
-          ["2019-10-01T00:00:00", null],
-          ["2019-11-01T00:00:00", 100],
-        ];
+        const rows = [["2019-11-01T00:00:00", 100]];
         const insights = createMockInsights([{ unit: "month", col: "Count" }]);
 
         setup({
@@ -1059,8 +1050,8 @@ describe("SmartScalar", () => {
     });
 
     expect(screen.queryByLabelText("warning icon")).not.toBeInTheDocument();
-    expect(screen.getByText("100")).toBeInTheDocument();
-    expect(screen.getByText(/Nov 2019/)).toBeInTheDocument();
-    expect(screen.getByText("0.00% vs. previous month")).toBeInTheDocument();
+    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.getByText(/Dec 2019/)).toBeInTheDocument();
+    expect(screen.getByText("-100% vs. previous month")).toBeInTheDocument();
   });
 });

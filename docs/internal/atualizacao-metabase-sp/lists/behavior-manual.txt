@@ -54,3 +54,12 @@ frontend/src/metabase/data-grid/components/DataGrid/DataGrid.unit.spec.tsx
 
 # saopaulov64 — cascade context excludes the filter being replaced.
 frontend/src/metabase/querying/filters/components/FilterPicker/FilterPicker.tsx
+
+frontend/src/metabase/visualizations/lib/numeric-null.ts
+frontend/src/metabase/visualizations/lib/numeric-null.unit.spec.ts
+frontend/src/metabase/visualizations/visualizations/SmartScalar/tests/SmartScalar.unit.spec.tsx
+frontend/src/metabase/visualizations/visualizations/Table/Table.unit.spec.tsx
+src/metabase/driver/sqlite.clj
+src/metabase/query_processor/middleware/annotate.clj
+test/metabase/driver/sqlite_test.clj
+test/metabase/query_processor/middleware/annotate_test.clj

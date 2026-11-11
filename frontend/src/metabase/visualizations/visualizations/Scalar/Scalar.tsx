@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { t } from "ttag";
 import _ from "underscore";
 
 import DashboardS from "metabase/css/dashboard.module.css";
@@ -12,6 +13,7 @@ import { ScalarDescription } from "metabase/visualizations/components/ScalarValu
 import { ScalarLabel } from "metabase/visualizations/components/ScalarValue/ScalarLabel";
 import { ScalarValue } from "metabase/visualizations/components/ScalarValue/ScalarValue";
 import { TransformedVisualization } from "metabase/visualizations/components/TransformedVisualization";
+import { normalizeScalarNull } from "metabase/visualizations/lib/numeric-null";
 import {
   compactifyValue,
   getColor,
@@ -92,8 +94,11 @@ function ScalarComponent(
     0,
     cols.findIndex((col) => col.name === settings["scalar.field"]),
   );
-  const value = rows[0] && rows[0][columnIndex];
   const column = cols[columnIndex];
+  const hasNoRows = rows.length === 0;
+  const value = hasNoRows
+    ? null
+    : normalizeScalarNull(rows[0][columnIndex], column);
 
   const formatOptions = {
     ...legacyScalarSettingsToFormatOptions(settings),
@@ -108,12 +113,9 @@ function ScalarComponent(
   const color = getColor(value, segments);
   const tooltipContent = getTooltipContent(segments);
 
-  const { displayValue, fullScalarValue } = compactifyValue(
-    value,
-    availableWidth,
-    tier.valueFontSize,
-    formatOptions,
-  );
+  const { displayValue, fullScalarValue } = hasNoRows
+    ? { displayValue: t`No results`, fullScalarValue: t`No results` }
+    : compactifyValue(value, availableWidth, tier.valueFontSize, formatOptions);
 
   const isClickable = onVisualizationClick != null && !isMetricsViewer;
 

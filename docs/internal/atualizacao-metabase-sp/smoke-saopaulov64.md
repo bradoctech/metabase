@@ -129,7 +129,7 @@ A home escolhe uma seção por vez. Popular depende de conteúdo elegível (perg
 | Home e dashboard | HD-01/02/03/04/06/07/08/09/11 e texto sem fundo de HD-10 aprovados; HD-05/12 adiados conforme usuário; ações/embedding sem evidência específica |
 | Datagrid pin/hover | Reaplicados; DG-01 a DG-08 aprovados pelo usuário, com observação de largura em DG-06 |
 | Filtros cascata QB | Reaplicados; 290 testes frontend, 3 testes HTTP H2 (14 asserções), tipos/lint aprovados; FC-01 a FC-04 aprovados pelo usuário; FC-05 a FC-08 pendentes para homologação com a equipe |
-| Valores null | Transporte e smoke pendentes |
+| Valores null | NU-01/02/03/04 aceitos no escopo relatado; NU-05 confirmado para último valor null; NU-06/07 aprovados em pergunta/dashboard e NU-09 nas consultas; NU-08/10 aprovados após correção (0 no Número, vazio na Tabela); demais cenários/aceites pendentes |
 | Eixos/tooltip e paletas nos charts/Visualizer | Transporte e smoke pendentes |
 | i18n, ajuda de drivers e política comercial | Transporte e smoke pendentes |
 | Data Studio e Monitor, inclusive usuário comum | Transporte e smoke pendentes |
@@ -196,3 +196,148 @@ Se o dropdown não reduzir o número de opções porque todos os valores de B co
 Teste local com A = State e B = City. Usuário aprovou FC-01, FC-02 e FC-03. Em FC-03, observou que, com City preenchida, as opções de State ficam restritas pela cidade, comportamento esperado de cascata entre filtros irmãos. Não foi relatada inspeção das requisições no Network; o aceite registra o funcionamento visual informado.
 
 Em FC-04, com State = CO e City = Aguilar, editou City, voltou à escolha de coluna e selecionou Address. Ao digitar `a`, o autocomplete exibiu endereços. Na sequência, o usuário confirmou a validação no Network e aprovou o cenário. A captura adicional mostra o Preview de `filtered-values` com `field_id: 51`, endereços em `values` e `has_more_values: false`; o payload de constraints não está visível nessa captura. Aceite registrado conforme a verificação relatada pelo usuário. FC-05 a FC-08 ficam pendentes por decisão do usuário para teste com a equipe em homologação.
+
+
+## Valores nulos — EDD-999 — 10/11/2026
+
+**Estado após retorno do usuário:** NU-01 aprovado no cenário relatado (null numérico exibido como 0, texto vazio, controle e API preservados). NU-02 aprovado quanto à cópia relatada, sem zero; menu não discriminado. NU-03 aprovado como Número na pergunta, exibindo 0 para uma linha numérica null; dashboard não confirmado nesse retorno. NU-04 aprovado com zero linhas e “Sem resultados”. NU-05 confirmado na segunda execução: último valor null na API, exibido como 0 no ponto mais recente e −100% contra 70.08. A apresentação +∞% foi posteriormente aceita no retorno de NU-15.
+
+**Critério confirmado para estes cenários:** na tabela de NU-01, null numérico deve ser exibido como 0 e null textual permanece vazio. Em NU-03, uma linha com valor numérico null deve aparecer como 0 no Número. Em NU-04, nenhuma linha deve aparecer como “Sem resultados”. O agente havia alterado essas expectativas por interpretação da descrição da issue sem confirmar com o usuário; este retorno corrige o roteiro. Não tratar NU-01/03 como falha por exibirem 0.
+
+**Decisão adicional do usuário em NU-08/10:** na visualização Número, uma linha agregada com SUM null deve aparecer como 0 tanto sem registros de origem quanto com registros cujos valores são todos null. Uma consulta que devolve zero linhas continua como Sem resultados. Esta orientação explícita resolve esses dois exemplos; não estender automaticamente a outros componentes, a todas as comparações da Tendência ou a tipos conhecidos de texto/booleano. O mapeamento dos demais casos permanece pendente. Testes automatizados aprovados verificam a implementação, sem substituir o aceite de negócio.
+
+**Levantamento obrigatório antes da implementação definitiva:** para cada KPI candidato, registrar ID/URL do card e pergunta, consulta/definição da métrica, driver, filtros/período, existência de registros de origem, quantidade de valores não nulos, resposta da API, significado do null, apresentação esperada e responsável pelo aceite. A lista de KPIs e a condição explícita que autoriza qualquer tratamento especial permanecem pendentes. Ter uma linha agregada no resultado não comprova que havia registros de origem.
+
+NU-01 a NU-04 refletem o retorno explícito do usuário. Os itens seguintes têm o estado detalhado na tabela; não reinterpretar os aceites de NU-01/03 como aprovação geral dos demais casos.
+
+**Preparação local:** o Sample Database atual usa SQLite por padrão. A consulta de tabela abaixo é aceita nele; as expressões nulas exigem a correção de metadata registrada no plano. As consultas com literal `DATE` adiante são exemplos para H2 e precisam de adaptação no SQLite; não marcar falha de sintaxe ou tipo da fixture como falha da Tendência. Em outro driver, adaptar os casts/literais à sintaxe suportada.
+
+Tabela com nulo numérico e textual:
+
+```sql
+SELECT CAST(NULL AS DOUBLE PRECISION) AS valor,
+       CAST(NULL AS VARCHAR) AS rotulo
+UNION ALL
+SELECT 12.5, 'Controle'
+```
+
+Número simples no SQLite: usar uma coluna de tipo numérico declarado para produzir uma linha nula sem perder a informação de tipo. No Sample Database com Products/Price:
+
+```sql
+SELECT p.price AS valor
+FROM (SELECT 1) AS x
+LEFT JOIN products AS p ON 1 = 0
+```
+
+Selecionar Número, campo `valor`. Para resultado sem linhas, acrescentar `WHERE 1 = 0` ao final. Uma expressão `CAST(NULL AS DOUBLE PRECISION)` isolada no SQLite não garante tipo numérico no metadata e não serve como fixture determinística de NU-03.
+
+Tendência: executar a consulta abaixo, selecionar Tendência e usar `valor` como métrica e `mes` como data. Se a opção não estiver disponível, conferir os tipos reconhecidos no resultado e a configuração da visualização.
+
+```sql
+SELECT DATE '2026-09-01' AS mes, CAST(100 AS DOUBLE PRECISION) AS valor
+UNION ALL
+SELECT DATE '2026-10-01', CAST(NULL AS DOUBLE PRECISION)
+UNION ALL
+SELECT DATE '2026-11-01', CAST(100 AS DOUBLE PRECISION)
+```
+
+| ID | Passos | Resultado esperado | Estado |
+| --- | --- | --- | --- |
+| NU-01 | Abrir a tabela de nulos numérico/textual com a linha Controle; conferir tipos na API | Null numérico exibido como 0; texto null vazio; 12.5 e Controle preservados; API mantém null | OK — usuário, cenário local relatado |
+| NU-02 | Selecionar/copiar a célula numérica nula; comparar com a célula 12.5 e conferir ações disponíveis | Registrar o conteúdo de cópia sem presumir que a representação visual e a cópia sejam iguais | OK — cópia aceita pelo usuário: apenas cabeçalho valor para a célula nula, cabeçalho e 12.5 para a preenchida; menu não discriminado |
+| NU-03 | Exibir como Número a linha numérica null produzida pelo LEFT JOIN acima; repetir em dashboard quando possível | Exibe 0 na pergunta, conforme aceite explícito deste exemplo; não exibe null/nulo | OK — pergunta aprovada pelo usuário; dashboard pendente |
+| NU-04 | Exibir como Número uma consulta que retorna zero linhas, acrescentando WHERE 1 = 0 ao exemplo | Exibe Sem resultados, sem inventar zero | OK — usuário, com captura |
+| NU-05 | Na consulta com três pontos, executar CASE WHEN pos = 2 THEN NULL ELSE valor END; depois trocar somente pos = 2 por pos = 1 e reexecutar | Conferir valor atual, data e comparação em cada execução; validar com o usuário se null como 0 e a variação resultante são desejados na Tendência | OK no cenário de último valor null — API preservada, 0 atual na data mais recente e −100% contra 70.08; apresentação +∞% aceita em NU-15 |
+| NU-06 | Remover o ponto intermediário da consulta e conferir Tendência e dashboard | Comparação usa os dois pontos reais, sem criar um zero para o ponto removido | OK — usuário, pergunta e dashboard; 53.41 contra 74.95, −28.74% |
+| NU-07 | Retornar SELECT 0 AS valor e conferir Número e dashboard | Zero explícito exibido como 0 | OK — usuário, pergunta e dashboard |
+| NU-08 | Executar SUM(price) com WHERE 1 = 0, conferindo controles de contagem | Número deve exibir 0 para a linha agregada null, conforme orientação explícita do usuário; tabela pode manter célula vazia; sem linhas continua distinto | OK — reteste do usuário: Número exibe 0 e Tabela mantém célula vazia |
+| NU-09 | Consultar COUNT(*) com WHERE 1 = 0 | Zero calculado aparece como 0 | OK — usuário, consultas relatadas |
+| NU-10 | Agregar duas linhas com todos os valores null, conferindo contagens e SUM | Número deve exibir 0 para a soma null, conforme orientação explícita do usuário; não alterar o resultado da API | OK — reteste do usuário: Número exibe 0 e Tabela mantém célula vazia |
+| NU-11 | Consultar métrica cuja apuração válida resulte em 0 com registros e valores preenchidos; comparar com NU-08/10 | Zero real aparece como 0; API distingue esse zero dos nulls de NU-08/10, ainda que o Número exiba 0 nos três casos aceitos | OK — usuário: API retornou 0.0; Tabela e Número exibiram 0 |
+| NU-12 | Testar valor positivo, negativo e valor pequeno que arredonde visualmente para 0; conferir precisão e tooltip | Valores e formatação preservados; arredondamento não altera dado original nem classifica null como zero | OK — usuário aprovou os cenários de sinal e precisão |
+| NU-13 | Conferir métricas/colunas tipadas como texto e booleano, incluindo null, string "0", string vazia e false | Tipos e significado preservados; não aplicar fallback numérico. Confirmar metadata, pois SQLite pode representar booleanos como inteiros | OK — usuário confirmou também metadata type/Boolean em 11/11/2026 |
+| NU-14 | Repetir pergunta em tabela, cópia, exportação e visualizações além dos cenários já aceitos | Respeitar os aceites específicos de NU-01/02; mapear e validar os demais componentes sem estender automaticamente a regra numérica | OK no escopo mostrado — Tabela, CSV e JSON exportados; demais visualizações não discriminadas |
+| NU-15 | Na Tendência, comparar zero real e null/ausência no período anterior e no atual | Conferir +∞% para anterior realmente zero e −100% para atual realmente zero; comparar com null como 0 nos cenários aceitos de NU-05. Não fabricar linhas ausentes. Validar apresentação de +∞% com o usuário | OK — usuário aprovou o lote, incluindo apresentação +∞% e −100% |
+| NU-16 | No dashboard, alternar filtros entre resultado positivo, zero real e ausência; recarregar e repetir com usuário comum | Estado e apresentação acompanham o resultado atual, sem reter zero/valor anterior quando o novo resultado é ausente; permissões preservadas | OK — todos os valores confirmados; recarga e usuário comum adiados para equipe em homologação com banco real |
+| NU-17 | Confrontar KPIs mapeados com cards não elegíveis e com a condição explícita aprovada | Só os KPIs definidos recebem tratamento especial; nenhum fallback baseado apenas em tipo numérico, presença de linha ou formato de card | PENDENTE — levantamento/escopo com equipe em homologação no banco real |
+| NU-18 | Repetir casos relevantes com a equipe em homologação, nos drivers, métricas e filtros reais do cliente | Evidência por KPI comprova distinção entre zero e ausência; exceções e padrão visual de ausência têm aceite do produto | PENDENTE — homologação |
+
+**Consultas de controle no SQLite do Sample Database:** executar somente leitura. Os counts auxiliares servem para identificar a origem do resultado; não devem virar um critério global de conversão de null no frontend.
+
+NU-07 — zero explícito, sem depender da inferência de um null:
+
+```sql
+SELECT 0 AS valor
+```
+
+NU-08/09 — nenhuma linha de origem, mas uma linha de agregação:
+
+```sql
+SELECT COUNT(*) AS registros,
+       COUNT(price) AS valores_preenchidos,
+       SUM(price) AS soma
+FROM products
+WHERE 1 = 0
+```
+
+Esperado na API: uma linha equivalente a `[0, 0, null]`. Para testar o KPI, usar a métrica `soma` em NU-08 e `registros` em NU-09, ou executar cada agregação em uma pergunta separada.
+
+NU-10 — duas linhas existentes, mas nenhum valor preenchido na métrica de teste:
+
+```sql
+WITH dados AS (
+  SELECT p.price AS valor
+  FROM (SELECT 1 UNION ALL SELECT 2) AS x
+  LEFT JOIN products AS p ON 1 = 0
+)
+SELECT COUNT(*) AS registros,
+       COUNT(valor) AS valores_preenchidos,
+       SUM(valor) AS soma
+FROM dados
+```
+
+Esperado: `[2, 0, null]`. É uma fixture sintética para distinguir presença de linha de presença de valor.
+
+NU-11 — registros com valor preenchido e cálculo realmente zerado:
+
+```sql
+SELECT COUNT(*) AS registros,
+       COUNT(price) AS valores_preenchidos,
+       SUM(price - price) AS valor
+FROM products
+WHERE price IS NOT NULL
+```
+
+Com Products populada, os dois counts são positivos e `valor` é 0. Se não houver dados, a fixture não atende ao cenário; não aprovar NU-11.
+
+**Retorno NU-01 — 10/11/2026:** após correção do metadata SQLite, o usuário confirmou que rotulo passou de 0 para vazio. Aceite restrito ao subcenário textual. A revisão da issue mostrou que o fallback numérico genérico da leva atual não atende ao escopo e à distinção exigidos; NU-01 numérico e demais itens continuam pendentes conforme a tabela. Registrar por cenário: KPI/consulta, usuário, driver, filtros, resposta da API, evidência de registros/valores de origem e apresentação observada. Casos sem definição do produto permanecem pendentes, sem inventar uma regra de conversão.
+
+
+**Retorno posterior do primeiro lote:** usuário confirmou NU-01 com valor numérico 0, rotulo vazio e controle/API OK; NU-02 com cópia sem zero; NU-03 com Número exibindo 0 (aceito explicitamente); NU-04 com “Sem resultados” para zero linhas. Esses aceites substituem as expectativas anteriores conflitantes do agente, sem alterar o código. Em NU-05, o print da consulta com pos = 2 mostra 53.41 no ponto mais recente e +∞% na comparação contra o ponto nulo normalizado para 0. Os outros dois prints são opções de formatação de data e número, não evidência da execução com pos = 1. Para concluir, basta alterar pos = 2 para pos = 1 no CASE, executar e conferir o valor/data e a comparação; não é necessário mexer na formatação. Não há aceite de NU-05 neste retorno.
+
+
+**Retorno da segunda execução de NU-05:** usuário enviou a consulta com `pos = 1` e a resposta de três linhas: 74.94550296436165, 70.07989613071763 e null, em ordem cronológica. A Tendência mostra 0 em 15/04/2028 e −100% contra 70.08 em 11/04/2028. Confirmada a apresentação da última linha nula como zero sem recuar a data, com null preservado na API. A apresentação +∞% da primeira execução continua sem confirmação específica; não considerar essa pendência resolvida pelo aceite da segunda execução. Próximo lote: NU-06 a NU-10.
+
+
+**Retorno NU-06 a NU-10:** NU-06 aprovado em pergunta e dashboard (53.41 contra 74.95, −28.74%); NU-07 aprovado com 0 na pergunta e dashboard; NU-09 aprovado nas consultas relatadas. NU-08 e NU-10 exibiram “nulo” no Número e o usuário definiu explicitamente que ambos devem exibir 0. O metadata desconhecido de uma agregação SQLite composta só de null não acionava a normalização numérica. Correção aplicada somente no Scalar/Número: null de tipo desconhecido passa a 0 quando existe uma linha; texto e booleano com tipo conhecido são preservados. A tabela mantém a regra anterior e a API mantém null. NU-08/10 aguardam reteste após recarregar o frontend; nenhuma mudança adicional de backend é necessária para esta correção.
+
+
+**Reteste NU-08/10:** usuário confirmou ambos como OK após a correção: Número exibe 0 em vez de null e Tabela mantém célula vazia. Aceite desses fluxos, sem confirmação adicional de dashboard ou API nesse retorno. Próximo lote: NU-11 a NU-15; NU-15 também deve colher aceite específico da representação +∞%.
+
+
+**Retorno NU-11 a NU-15:** usuário confirmou NU-11 com 0.0 na API e 0 em Tabela/Número (zero numérico válido), NU-12 conforme o roteiro e NU-15 OK, incluindo a apresentação +∞% solicitada no lote. Em NU-13, considerou os demais passos OK e enviou captura de trial_converted = 0 renderizado como 0; isso é compatível com falso no SQLite, mas não comprova o metadata Boolean, que não está visível. Esse subcenário de tipagem permanece pendente. Em NU-14, CSV mostrou cabeçalho valor,rotulo, primeira linha de dados com os dois campos vazios e segunda com 12.5,Controle; JSON exportado mostrou strings vazias na primeira linha e "12.5"/"Controle" na segunda. São representações de exportação formatada, sem zeros fabricados; não são evidência de que a API substituiu null por string vazia. Aceite de NU-14 restrito à Tabela e exportações mostradas. Restam NU-16 a NU-18 e subcenários não discriminados.
+
+
+**Retorno de 11/11/2026:** usuário confirmou que já havia validado type/Boolean em NU-13; item aprovado no escopo do roteiro. NU-16 permanece pendente de execução: as capturas mostram configuração do filtro de texto, com valor padrão cenario e seleção múltipla. Orientação: usar Caixa de texto, Um único valor, padrão positivo e conectar o filtro à variável cenario no card SQL de teste; o nome da variável não é o valor a enviar. Depois executar os quatro valores positivo/zero/nulo/sem_linhas e voltar a positivo. Não há evidência de falha funcional de NU-16 neste retorno.
+
+
+**Diagnóstico de NU-16 — conexão ausente no payload salvo:** usuário forneceu filtro Cenário id d57fcf3a, pergunta NU-16 card_id 170 e dashcard id 160, aba 14. O dashcard tem parameter_mappings vazio; portanto não há conexão salva de Cenário para a variável cenario. inline_parameters contém bb971ad9, correspondente ao outro filtro Texto, e não ao Cenário. O padrão positivo da pergunta explica o card renderizar 12.5 apesar da conexão ausente. O código oculta filtros sem mapeamento na aba fora da edição. Próximo passo: selecionar Cenário em edição, escolher cenario no seletor dentro do card NU-16 e salvar; se a seleção explícita desaparecer ao salvar, comparar o payload da gravação antes de atribuir a perda ao código. NU-16 permanece pendente, sem alteração de produção.
+
+
+**Retorno após conexão de NU-16 — 11/11/2026:** usuário confirmou funcionamento após selecionar a variável cenario no card e salvar. Captura mostra aba Guia 4 fora da edição, filtro Cenário com positivo e card NU-16 exibindo 12.5. Resolvida a ausência do filtro por falta de mapeamento, sem correção de código. A confirmação não discrimina alternância para zero/nulo/sem_linhas, retorno a positivo, recarga ou usuário comum; esses subcenários seguem pendentes de confirmação.
+
+
+**Aceite dos valores de NU-16 — 11/11/2026:** usuário confirmou todos os valores com resultado esperado: positivo → 12.5, zero → 0, nulo → 0, sem_linhas → Sem resultados, incluindo o fluxo de alternância solicitado. NU-16 aprovado nesse escopo. Recarga e usuário comum não foram discriminados no retorno e permanecem pendentes de confirmação específica. NU-17/18 seguem pendentes de levantamento/homologação.
+
+
+**Encaminhamento para homologação — 11/11/2026:** por decisão do usuário, NU-17/18 e subcenários ainda não discriminados, incluindo recarga e usuário comum de NU-16, ficam para a equipe validar em homologação com o banco/driver real. Permanecem pendentes, sem invalidar os aceites locais registrados e sem representar conclusão de homologação ou do build de produção.

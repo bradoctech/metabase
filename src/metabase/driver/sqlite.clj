@@ -26,7 +26,7 @@
    [metabase.util.performance :refer [mapv some]])
   (:import
    (java.net MalformedURLException URL)
-   (java.sql Connection ResultSet Types)
+   (java.sql Connection ResultSet ResultSetMetaData Types)
    (java.time LocalDate LocalDateTime LocalTime OffsetDateTime OffsetTime ZonedDateTime)
    (java.time.temporal Temporal)))
 
@@ -301,6 +301,19 @@
 (defmethod sql-jdbc.sync/database-type->base-type :sqlite
   [_ database-type]
   (database-type->base-type database-type))
+
+(defmethod sql-jdbc.execute/column-metadata :sqlite
+  [driver ^ResultSetMetaData rsmeta]
+  (mapv (fn [column ^Long i]
+          ;; sqlite-jdbc reports an untyped NULL expression as NUMERIC, even when later rows
+          ;; contain text. Let the QP infer those columns from values; keep declared types.
+          (if (and (= "NUMERIC" (.getColumnTypeName rsmeta i))
+                   (str/blank? (.getTableName rsmeta i))
+                   (= "java.lang.Object" (.getColumnClassName rsmeta i)))
+            (assoc column :base_type :type/*)
+            column))
+        ((get-method sql-jdbc.execute/column-metadata :sql-jdbc) driver rsmeta)
+        (sql-jdbc.execute/column-range rsmeta)))
 
 ;; The normal SELECT * FROM table WHERE 1 <> 1 LIMIT 0 query doesn't return any information for SQLite views -- it
 ;; seems to be the case that the query has to return at least one row

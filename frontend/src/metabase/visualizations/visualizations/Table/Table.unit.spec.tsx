@@ -420,7 +420,7 @@ describe("dashboard client-side sorting", () => {
       <Visualization rawSeries={series} isDashboard width={600} height={400} />,
     );
 
-    const idHeader = screen.getByRole("columnheader", { name: "id" });
+    const idHeader = screen.getByRole("columnheader", { name: /^id\b/ });
     const idClickTarget = within(idHeader).getByTestId("cell-data");
 
     fireEvent.mouseDown(idClickTarget, { clientX: 0, clientY: 0 });
@@ -433,7 +433,7 @@ describe("dashboard client-side sorting", () => {
         .map((row) => within(row).getAllByRole("gridcell")[0].textContent),
     ).toEqual(["8", "7", "6", "5", "4", "3", "2", "1"]);
 
-    const nameHeader = screen.getByRole("columnheader", { name: "name" });
+    const nameHeader = screen.getByRole("columnheader", { name: /^name\b/ });
     const clickTarget = within(nameHeader).getByTestId("cell-data");
 
     fireEvent.mouseDown(clickTarget, { clientX: 0, clientY: 0 });
@@ -636,5 +636,57 @@ describe("text_wrapping", () => {
 
       expect(textWrappingSetting.getDefault?.(stringColumn, {})).toBe(false);
     });
+  });
+});
+
+describe("SP numeric nulls in native results", () => {
+  beforeAll(() => mockGetBoundingClientRect());
+
+  it("renders only the numeric null as zero beside a text null", () => {
+    const data = createMockDatasetData({
+      cols: [
+        createMockColumn({
+          name: "valor",
+          display_name: "valor",
+          base_type: "type/Float",
+          effective_type: "type/Float",
+          source: "native",
+          field_ref: ["field", "valor", { "base-type": "type/Float" }],
+        }),
+        createMockColumn({
+          name: "rotulo",
+          display_name: "rotulo",
+          base_type: "type/Text",
+          effective_type: "type/Text",
+          source: "native",
+          field_ref: ["field", "rotulo", { "base-type": "type/Text" }],
+        }),
+      ],
+      rows: [
+        [null, null],
+        [12.5, "Controle"],
+      ],
+    });
+    const series = [
+      createMockSingleSeries(createMockNativeCard({ display: "table" }), {
+        data,
+      }),
+    ];
+    renderWithProviders(
+      <Visualization rawSeries={series} width={600} height={400} />,
+    );
+    const cells = within(
+      screen.getByTestId("center-center-quadrant"),
+    ).getAllByRole("gridcell");
+    expect(cells.map((cell) => cell.textContent)).toEqual([
+      "0",
+      "",
+      "12.5",
+      "Controle",
+    ]);
+    expect(data.rows).toEqual([
+      [null, null],
+      [12.5, "Controle"],
+    ]);
   });
 });

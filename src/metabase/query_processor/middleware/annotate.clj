@@ -128,11 +128,11 @@
    {initial-cols :cols, :as _initial-metadata} :- ::metadata]
   (and (= (:lib/type (lib/query-stage query 0)) :mbql.stage/native)
        (or (empty? initial-cols)
-           (every? (fn [col]
-                     (let [base-type ((some-fn :base-type :base_type) col)]
-                       (or (nil? base-type)
-                           (= base-type :type/*))))
-                   initial-cols))))
+           (some (fn [col]
+                   (let [base-type ((some-fn :base-type :base_type) col)]
+                     (or (nil? base-type)
+                         (= base-type :type/*))))
+                 initial-cols))))
 
 (mu/defn add-column-info :- ::qp.schema/rff
   "Middleware for adding type information about the columns in the query results (the `:cols` key)."

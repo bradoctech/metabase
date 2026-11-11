@@ -13,6 +13,7 @@ import {
   ScalarWrapper,
 } from "metabase/visualizations/components/ScalarValue/ScalarValue";
 import { useBrowserRenderingContext } from "metabase/visualizations/hooks/use-browser-rendering-context";
+import { normalizeNumericNullSeries } from "metabase/visualizations/lib/numeric-null";
 import {
   compactifyValue,
   estimateScalarValueWidth,
@@ -55,9 +56,13 @@ function SmartScalarComponent(
   const { getColor } = useBrowserRenderingContext({ fontFamily });
 
   const insights = rawSeries?.[0].data?.insights;
+  const normalizedSeries = useMemo(
+    () => normalizeNumericNullSeries(series, settings["scalar.field"]),
+    [series, settings],
+  );
   const { trend, error } = useMemo(
-    () => computeTrend(series, insights, settings, { getColor }),
-    [series, insights, settings, getColor],
+    () => computeTrend(normalizedSeries, insights, settings, { getColor }),
+    [normalizedSeries, insights, settings, getColor],
   );
 
   useEffect(() => {

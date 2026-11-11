@@ -52,6 +52,17 @@
              rf   (rff' metadata)]
          (transduce identity rf rows))))))
 
+(deftest ^:parallel partially-known-native-column-types-test
+  (testing "infer only unknown columns when other columns already have driver types"
+    (qp.store/with-metadata-provider meta/metadata-provider
+      (let [result (add-column-info
+                    (lib/query meta/metadata-provider {:type :native, :native {:query "SELECT 1"}})
+                    {:cols [{:name "known", :base_type :type/Float}
+                            {:name "unknown", :base_type :type/*}]}
+                    [[12.5 nil] [1.5 "Controle"]])]
+        (is (= [:type/Float :type/Text] (mapv :base_type (:cols result))))
+        (is (= [[12.5 nil] [1.5 "Controle"]] (:rows result)))))))
+
 (deftest ^:parallel native-column-info-test
   (testing "native column info"
     (testing "should still infer types even if the initial value(s) are `nil` (#4256, #6924)"

@@ -28,7 +28,7 @@ O [inventário TSV](./inventario-saopaulov64.tsv) cruza as listas com o diff ent
 1. **Fundação — aplicada, teste de regressão e smoke visual aprovados:** documentação e script históricos recuperados, `.merge-sp/` ignorado, correção pontual do schema de nomes localizados de coleções. Nenhum commit ou push automático.
 2. **Marca e tema — aplicada; perfil SP validado pelo usuário:** tokens, Rawline, assets, LogoIcon/brasão, ocultamento de SpLogo, login e adapters de tema claros/escuros.
 3. **Home e dashboard — aplicada, testes/tipos/lint e smoke local relatado aprovados; HD-05/12 adiados para homologação:** badges/cards, dashcards DS, layout e componentes associados.
-4. **Comportamentos — datagrid reaplicado com testes/tipos/lint e smoke DG-01 a DG-08 aprovados; filtros cascata reaplicados com testes/tipos/lint aprovados e smoke parcial (FC-01 a FC-04 aprovados; FC-05 a FC-08 em homologação); nulls/gráficos pendentes:** pin/hover do datagrid, cascata de filtros, nulls, eixos/title case/tooltips e paletas, incluindo Visualizer.
+4. **Comportamentos — datagrid reaplicado com testes/tipos/lint e smoke DG-01 a DG-08 aprovados; filtros cascata reaplicados com testes/tipos/lint aprovados e smoke parcial (FC-01 a FC-04 aprovados; FC-05 a FC-08 em homologação); nulls reaplicados com smoke pendente; gráficos pendentes:** pin/hover do datagrid, cascata de filtros, nulls, eixos/title case/tooltips e paletas, incluindo Visualizer.
 5. **Traduções e política SP — pendente:** catálogo pt-BR, ajuda de drivers, links/upsells, Data Studio e Monitor, conforme EDD-1523. Preservar verificações reais de permissões/licença.
 6. **Entrega — pendente:** produção (backend/drivers, static-viz, tsc, FE), smoke canônico e auditoria. Não declarar o transporte concluído antes dessas validações.
 
@@ -47,7 +47,7 @@ A correção não muda o banco nem as permissões. Validar funções de coleçã
 - Hook do VS Code: corrigida a falha `bun: not found` usando `mise exec` quando disponível, incluindo a instalação em `$HOME/.local/bin/mise`. O fallback continua sendo Bun no PATH. Todas as verificações do hook foram preservadas.
 - Hook completo executado com `PATH=/usr/bin:/bin`: **aprovado**, incluindo lint-staged e a checagem de marcadores de bloqueio de commit. Nenhum commit foi criado pelo teste.
 - Smoke visual da sidebar: **aprovado pelo usuário em 08/11/2026**, com captura da aplicação carregada e dos itens de navegação, incluindo Lixeira, sem a mensagem de erro anterior. A evidência confirma a recuperação da sidebar; não inclui navegação para a lixeira nem operações de arquivar/restaurar/excluir.
-- Build de produção e smoke completo: **pendentes para a entrega do transporte SP**; marca/tema, home/dashboard e datagrid já foram aplicados e validados no escopo relatado; filtros cascata, nulls, gráficos e as demais etapas continuam pendentes, assim como os cenários adiados para homologação.
+- Build de produção e smoke completo: **pendentes para a entrega do transporte SP**; marca/tema, home/dashboard e datagrid já foram aplicados e validados no escopo relatado; o smoke de filtros cascata e nulls permanece parcial/pendente; gráficos e as demais etapas continuam pendentes, assim como os cenários adiados para homologação.
 
 Comando do teste isolado (sem aliases de inicialização de servidor):
 
@@ -225,3 +225,90 @@ Usuário aprovou os oito cenários DG-01 a DG-08. Em DG-06, observou que a últi
 ### Retorno parcial dos filtros em cascata — 10/11/2026
 
 Usuário aprovou FC-01/02/03 no ambiente local com State → City. A restrição das opções de State quando City já está preenchida foi observada e aceita como comportamento esperado da cascata entre irmãos. Em FC-04, trocou City = Aguilar por Address no editor, mantendo State = CO, e forneceu captura do autocomplete com sugestões. Na sequência, confirmou a validação de Address no Network e aprovou FC-04. A captura adicional mostra a resposta de valores; o aceite da conferência no Network segue o relato do usuário. FC-05 a FC-08 permanecem pendentes, por decisão do usuário, para teste com a equipe em homologação. Nenhuma mudança de código nesta atualização de aceite.
+
+
+## Valores nulos — EDD-999 — leva de 10/11/2026
+
+[Paths desta leva](./nulls-saopaulov64.txt). Referência de intenção: commit `3d5ca5061f0` (EDD-999). O diff entre o ancestral oficial e EDD-1523 só preservava a normalização de SmartScalar; os ajustes de tabela e Scalar haviam se perdido nas atualizações. Reaplicados seletivamente nos componentes atuais da 64, preservando o shell de indicadores e o datagrid atuais.
+
+- Helper compartilhado normaliza somente null de coluna numérica. Não converte texto, booleano, string vazia ou valores existentes. Sem linhas continua sem linhas.
+- Tabela interativa aplica a mesma política nos formatters visual e de cópia, sem mudar os dados originais usados pelos drills.
+- Scalar mostra zero para null numérico e distingue ausência de linhas com a mensagem traduzida de nenhum resultado.
+- SmartScalar recebe uma cópia das linhas com a métrica numérica selecionada normalizada; não altera a resposta original. Nulos em outros campos permanecem intactos. A normalização afeta também comparações com períodos existentes nulos, conforme a intenção da EDD-999. Períodos ausentes mantêm a semântica oficial de ausência de dados.
+- Adaptação: removido o try/catch amplo e o cast da referência; tipos atuais e helper explícito. Nos testes de ausência de período, as fixtures passaram a omitir a linha em vez de simular ausência com null, pois são situações distintas na política SP. Testes específicos verificam período nulo como zero e comparação a partir de zero.
+
+Smoke NU-01 a NU-06 preparado em [smoke-saopaulov64.md](./smoke-saopaulov64.md); nenhum aceite manual presumido. Build de produção e eixos/paletas continuam pendentes.
+
+**Validação automatizada:** 3 suítes, 89 testes aprovados (Scalar, SmartScalar e helper de normalização/cópia). ESLint com zero avisos, formatação dos sete arquivos frontend e `git diff --check` aprovados. A execução inicial dos componentes expôs expectativas upstream incompatíveis com a política SP e uma fixture numérica sem tipo; testes foram adaptados para distinguir período ausente de null presente. Uma fixture do helper também foi corrigida para usar o formato atual de mock Dataset. A primeira checagem global de tipos foi encerrada por SIGKILL com testes concorrentes. A repetição com menos memória expôs ajustes de tipagem no formatter e no valor interno do Scalar sem linhas; corrigidos. Checagem global final aprovada, código 0, com `mise exec -- env GOMEMLIMIT=2GiB GOGC=50 GOMAXPROCS=2 bun run type-check-pure`.
+
+
+### NU-01 — classificação de expressões nulas no SQLite — 10/11/2026
+
+Usuário reportou `rotulo` textual renderizado como 0. O payload confirmou `rows = [[null, null], [12.5, "Controle"]]`, mas ambas as colunas vieram como `database_type = NUMERIC`, `base_type/effective_type = type/Float`. Reprodução direta com sqlite-jdbc 3.50.3.0 confirmou o metadata NUMERIC para expressões sem tipo declarado cuja primeira linha é null. O Sample Database atual usa SQLite por padrão (`sample_data/impl.clj`); o roteiro inicial presumiu H2 incorretamente.
+
+Ajuste no driver SQLite: só o metadata de expressão sem tabela de origem, com tipo NUMERIC e classe JDBC Object, passa a base desconhecida para permitir inferência pelo QP. Tipos declarados de tabela permanecem preservados. Ajuste no middleware de anotação permite inferência quando há qualquer coluna desconhecida, mantendo os tipos conhecidos. O valor original null não é convertido pelo backend; a regra de exibição numérica fica no frontend. O `database_type` bruto pode continuar NUMERIC; `base_type` e `effective_type` de `rotulo` devem passar a Text no resultado completo.
+
+Uma expressão nula sem nenhum valor não nulo para amostragem permanece com tipo desconhecido. No SQLite, CAST(NULL AS VARCHAR) ou CAST(NULL AS DOUBLE PRECISION) isolado não fornece metadata suficiente para distinguir esses casos. Para NU-03, usar uma coluna numérica declarada, como no exemplo corrigido do smoke. Nenhum banco de aplicação do usuário foi alterado.
+
+
+**Validação da correção SQLite:** 1 teste integrado com 4 consultas e 16 asserções aprovado; 4 testes de inferência/anotação com 6 asserções aprovados. Suíte completa de Table aprovada: 33 testes, incluindo a nova regressão de nulos numérico/textual lado a lado. O teste de ordenação falhava porque buscava o nome acessível exato do header sem considerar o ícone; os seletores agora aceitam o sufixo, mantendo as asserções de ordenação. ESLint da suíte e formatação Clojure aprovados; `git diff --check` aprovado. A execução inicial dos testes auxiliares de anotação falhou na leitura do arquivo durante a preparação; repetição com os arquivos consolidados aprovada. Reteste manual de NU-01 continua pendente.
+
+Checagem global de tipos após a correção SQLite e a regressão de Table: **aprovada, código 0**, com `GOMEMLIMIT=2GiB GOGC=50 GOMAXPROCS=2 bun run type-check-pure`. Análise de requires não encontrou requires não usados; os avisos de hook Toucan ausente no ambiente persistem, sem representar lint completo aprovado.
+
+
+### Revisão de escopo após descrição da issue — 10/11/2026
+
+A descrição fornecida pelo usuário exige zero real, preservação da ausência de registros e aplicação somente a KPIs mapeados, mediante condição explícita e levantamento prévio dos cenários de null. A implementação transportada e seus testes automatizados ainda representam uma conversão genérica de null numérico, incluindo tabelas e Tendência; não comprovam conformidade com essa regra e precisam ser revistos após o levantamento. Uma linha com SUM = null e COUNT(*) = 0 não deve ser tratada como apuração zerada só porque a resposta tem uma linha.
+
+Usuário confirmou rotulo vazio após a correção SQLite: aceite apenas do subcenário textual de NU-01. O roteiro foi ampliado para NU-01 a NU-18, com expectativas antigas revistas, consultas de controle, mapeamento de KPIs, escopo fora dos KPIs e homologação. Não há aceite geral de nulos; KPIs elegíveis, eventual exceção explícita e apresentação da ausência dependem de definição. Nesta revisão, somente documentação foi alterada; o fallback de produção ainda está pendente de correção.
+
+
+### Aceite específico do primeiro lote NU e correção do roteiro
+
+O usuário esclareceu que NU-01 numérico deve exibir 0 na tabela e NU-03 deve exibir 0 no Número para a linha null apresentada. NU-01 controle/API, NU-02 cópia sem zero e NU-04 sem linhas também foram aceitos. O agente havia mudado esses critérios por interpretação da descrição da issue sem confirmar a expectativa; o roteiro foi corrigido conforme a orientação explícita atual. Dashboard de NU-03 e menu de NU-02 não foram discriminados no retorno. NU-05 tem evidência parcial (53.41 contra ponto nulo normalizado para 0, variação +∞%); opções de formatação não comprovam a segunda execução. Demais casos, em especial SUM sem registros e escopo dos KPIs, permanecem pendentes de conciliação/validação, sem aprovação implícita e sem mudança de código nesta atualização.
+
+
+### Segunda execução de NU-05
+
+Capturas confirmam a consulta com pos = 1, último valor null na API e Tendência exibindo 0 na data mais recente (15/04/2028), com −100% em relação ao anterior 70.08. Cenário confirmado pelo retorno do usuário. A apresentação +∞% da primeira execução não teve aceite específico; demais cenários não são aprovados por esta evidência. Atualização somente documental.
+
+
+### NU-08/10 — Número com agregação nula sem tipo inferível
+
+Usuário aprovou NU-06 na pergunta/dashboard, NU-07 na pergunta/dashboard e NU-09 nas consultas. Definiu que NU-08 (SUM sem registros de origem) e NU-10 (SUM de valores todos null) devem exibir 0 no Número; ambos mostravam “nulo”. Essa orientação explícita substitui a pendência de definição desses exemplos.
+
+Adicionado normalizeScalarNull, separado do formatter numérico compartilhado: somente Número aceita null com tipo desconhecido como 0 quando existe uma linha. Zero linhas continua Sem resultados. Texto/booleano com tipo conhecido e valores não nulos permanecem preservados; metadados/resultados da consulta não são modificados. A regra de tabela e a normalização da Tendência não foram ampliadas nesta correção. Testes adicionados para null desconhecido no componente Scalar, preservação do resultado e do comportamento da tabela, tipos conhecidos e valores preenchidos. NU-08/10 continuam pendentes de reteste manual.
+
+Validação da correção de NU-08/10: 4 suítes frontend, 133 testes aprovados (Scalar, SmartScalar, Table e helpers); ESLint com zero avisos e formatação dos quatro arquivos aprovados; `git diff --check` aprovado.
+
+Checagem global de tipos após a correção de NU-08/10: **aprovada, código 0**, com `GOMEMLIMIT=2GiB GOGC=50 GOMAXPROCS=2 bun run type-check-pure`.
+
+
+### Aceite do reteste de NU-08/10
+
+Usuário aprovou os dois casos após a correção: 0 no Número e célula vazia na Tabela. Não houve relato adicional de dashboard/API nesse retorno. O aceite substitui a pendência de reteste dos registros anteriores; nenhuma alteração de código nesta etapa. Próximo lote de smoke NU-11 a NU-15, incluindo validação específica da apresentação +∞%.
+
+
+### Retorno NU-11 a NU-15
+
+NU-11 aprovado (0.0 na API e 0 na tela), NU-12 aprovado e NU-15 aprovado, incluindo a apresentação +∞% do roteiro. NU-13 tem evidência de falso representado como 0 no SQLite e aceite dos demais passos; metadata Boolean não mostrado, mantendo pendente a confirmação específica de tipagem. NU-14 aprovado para a Tabela e exportações CSV/JSON mostradas: campos vazios preservam ausência sem inventar zero; JSON exportado usa strings vazias e "12.5", sem comprovar mudança no dado da API. Demais visualizações de NU-14 não foram discriminadas. Nenhuma alteração de código nesta atualização. Restam NU-16/17/18 e pendências específicas indicadas no smoke.
+
+
+### NU-13 e preparação de NU-16 — 11/11/2026
+
+Usuário confirmou a validação prévia do tipo Boolean em NU-13, encerrando a pendência de metadata desse cenário. NU-16 ainda não executado: orientada a configuração de filtro Caixa de texto, Um único valor, padrão positivo e ligação à variável cenario do card SQL salvo. As capturas de configuração não indicam falha de execução. Nenhuma mudança de código nesta atualização.
+
+
+### Conexão de NU-16 resolvida — 11/11/2026
+
+Usuário confirmou funcionamento após conectar o filtro à variável cenario no card. Evidência mostra filtro visível fora da edição, positivo selecionado e resultado 12.5 na aba Guia 4. Tratava-se de conexão ausente no dashboard, resolvida por configuração; nenhuma mudança de código. Demais valores, recarga e usuário comum não foram discriminados no retorno e permanecem pendentes no smoke.
+
+
+### Aceite da alternância de NU-16 — 11/11/2026
+
+Usuário confirmou todos os valores com os resultados esperados no dashboard. NU-16 aprovado para alternância positivo/zero/nulo/sem_linhas; recarga e usuário comum não discriminados. Permanecem NU-17/18 e os subcenários específicos não confirmados no smoke. Atualização somente documental.
+
+
+### Encaminhamento final desta leva — 11/11/2026
+
+Usuário autorizou deixar NU-17/18 e os subcenários restantes para a equipe em homologação com o banco real, incluindo recarga e usuário comum de NU-16. Preservados os aceites locais; validação em homologação e build de produção seguem pendentes. Mensagem de commit proposta para a leva de nulos, correção de metadata SQLite, regressões e documentação. Nenhum commit criado pelo agente.

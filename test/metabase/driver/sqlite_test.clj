@@ -730,3 +730,27 @@
         (testing "so its base/effective type stays temporal (Lib's type wins over the storage affinity)"
           (is (isa? (:base_type col) :type/Temporal))
           (is (isa? (:effective_type col) :type/Temporal)))))))
+
+(deftest native-null-expression-types-test
+  (do-with-temp-sqlite-file!
+   (fn [path]
+     (jdbc/execute! {:classname "org.sqlite.JDBC" :subprotocol "sqlite" :subname path}
+                    ["CREATE TABLE declared_types (n NUMERIC, s TEXT)"])
+     (jdbc/execute! {:classname "org.sqlite.JDBC" :subprotocol "sqlite" :subname path}
+                    ["INSERT INTO declared_types VALUES (NULL, NULL)"])
+     (mt/with-temp [:model/Database database {:engine :sqlite :details {:db path}}]
+       (doseq [[sql expected-rows expected-types]
+               [["SELECT CAST(NULL AS DOUBLE PRECISION) AS valor, CAST(NULL AS VARCHAR) AS rotulo UNION ALL SELECT 12.5, 'Controle'"
+                 [[nil nil] [12.5 "Controle"]] [:type/Float :type/Text]]
+                ["SELECT 12.5 AS valor, CAST(NULL AS VARCHAR) AS rotulo UNION ALL SELECT 1.5, 'Controle'"
+                 [[12.5 nil] [1.5 "Controle"]] [:type/Float :type/Text]]
+                ["SELECT CAST(NULL AS VARCHAR) AS rotulo"
+                 [[nil]] [:type/*]]
+                ["SELECT n, s FROM declared_types"
+                 [[nil nil]] [:type/Float :type/Text]]]]
+         (testing sql
+           (let [result (qp/process-query {:database (u/the-id database), :type :native, :native {:query sql}})]
+             (is (= :completed (:status result)))
+             (is (= expected-rows (mt/rows result)))
+             (is (= expected-types (mapv :base_type (get-in result [:data :cols]))))
+             (is (= expected-types (mapv :effective_type (get-in result [:data :cols])))))))))))
