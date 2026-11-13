@@ -130,6 +130,35 @@ describe("ensureRoomForLabels", () => {
     seriesFn.mockReturnValue({ display: "bar" });
   });
 
+  it("wires SP dimension labels and native axis tooltips without changing the data", () => {
+    const rows = [
+      ["departamento norte", 200],
+      ["departamento sul", 300],
+    ];
+    const rawSeries = [{ ...mockSeries, data: { ...mockSeries.data, rows } }];
+    const [axes] = getArgs(rawSeries);
+    const axis = axes.xAxis;
+    if (axis.type !== "category") {
+      throw new Error("Expected a categorical dimension axis");
+    }
+    const formatter = axis.axisLabel?.formatter;
+    if (typeof formatter !== "function") {
+      throw new Error("Expected a dimension label formatter");
+    }
+    expect(formatter("departamento norte", 0, undefined)).toBe(
+      " Departamen... ",
+    );
+    expect(formatter("departamento sul", 1, undefined)).toBe(" Departamen... ");
+    expect(axes.xAxis.tooltip).toMatchObject({
+      show: true,
+      formatter: expect.any(Function),
+    });
+    expect(rawSeries[0].data.rows).toEqual([
+      ["departamento norte", 200],
+      ["departamento sul", 300],
+    ]);
+  });
+
   it("does not alter the axes if there are no negative values", () => {
     const args = getArgs([mockSeries]);
     const [originalAxes] = args;

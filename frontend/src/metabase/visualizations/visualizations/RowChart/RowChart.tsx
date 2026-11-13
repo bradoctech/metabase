@@ -29,6 +29,7 @@ import {
   trimData,
 } from "metabase/viz-core";
 
+import { renderAxisLabelTooltip } from "./AxisLabelTooltip";
 import {
   RowChartContainer,
   RowChartLegendLayout,
@@ -293,6 +294,7 @@ const RowChartVisualization = ({
           hoveredData={hoverData}
           onClick={handleClick}
           onHover={handleHover}
+          renderAxisLabel={renderAxisLabelTooltip}
           xLabel={xLabel}
           yLabel={yLabel}
           xScaleType={settings["graph.y_axis.scale"]}

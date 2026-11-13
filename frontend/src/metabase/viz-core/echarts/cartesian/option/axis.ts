@@ -5,6 +5,7 @@ import { parseNumberValue } from "metabase/utils/number";
 import { isNumericBaseType } from "metabase-lib/v1/types/utils/isa";
 import type { DatasetColumn } from "metabase-types/api";
 
+import { createAxisLabelOptions } from "../../../lib/axis-label";
 import type {
   ComputedVisualizationSettings,
   RenderingContext,
@@ -23,7 +24,6 @@ import type {
 } from "../model/types";
 
 import { getTicksOptions } from "./ticks";
-import { getPaddedAxisLabel } from "./utils";
 
 const NORMALIZED_RANGE = { min: 0, max: 1 };
 
@@ -247,20 +247,22 @@ export const buildNumericDimensionAxis = (
 
   const [min, max] = extent;
   const axisPadding = interval / 2;
+  const labels = createAxisLabelOptions((rawValue: number) => {
+    if (isPadded && (rawValue < min || rawValue > max)) {
+      return "";
+    }
+    return String(formatter(fromEChartsAxisValue(rawValue)));
+  }, false);
 
   return {
     ...getCommonDimensionAxisOptions(chartLayout, settings, renderingContext),
     type: "value",
+    tooltip: labels.tooltip,
     scale: true,
     axisLabel: {
       margin: CHART_STYLE.axisTicksMarginX,
       ...getDimensionTicksDefaultOption(settings, renderingContext),
-      formatter: (rawValue: number) => {
-        if (isPadded && (rawValue < min || rawValue > max)) {
-          return "";
-        }
-        return getPaddedAxisLabel(formatter(fromEChartsAxisValue(rawValue)));
-      },
+      formatter: labels.formatter,
     },
     ...(isPadded
       ? {
@@ -282,24 +284,23 @@ export const buildTimeSeriesDimensionAxis = (
 ): XAXisOption => {
   const { formatter, maxInterval, minInterval, canRender, xDomainPadded } =
     getTicksOptions(xAxisModel, chartLayout);
+  const labels = createAxisLabelOptions((rawValue: number) => {
+    const value = xAxisModel.fromEChartsAxisValue(rawValue);
+    return canRender(value)
+      ? String(formatter(value.format("YYYY-MM-DDTHH:mm:ss[Z]")))
+      : "";
+  }, false);
 
   return {
     ...getCommonDimensionAxisOptions(chartLayout, settings, renderingContext),
     type: "time",
+    tooltip: labels.tooltip,
     axisLabel: {
       margin: hasTimelineEvents
         ? CHART_STYLE.timelineEvents.height
         : CHART_STYLE.axisTicksMarginX,
       ...getDimensionTicksDefaultOption(settings, renderingContext),
-      formatter: (rawValue: number) => {
-        const value = xAxisModel.fromEChartsAxisValue(rawValue);
-        if (canRender(value)) {
-          return getPaddedAxisLabel(
-            formatter(value.format("YYYY-MM-DDTHH:mm:ss[Z]")),
-          );
-        }
-        return "";
-      },
+      formatter: labels.formatter,
     },
     min: xDomainPadded[0],
     max: xDomainPadded[1],
@@ -325,10 +326,22 @@ export const buildCategoricalDimensionAxis = (
     ...originalSettings,
     "graph.x_axis.axis_enabled": autoAxisEnabled,
   };
+  const labels = createAxisLabelOptions(
+    (value: string) => {
+      const numberValue = parseNumberValue(value);
+      return String(
+        column && isNumericBaseType(column) && numberValue !== null
+          ? formatter(numberValue)
+          : formatter(value),
+      );
+    },
+    !(column && isNumericBaseType(column)),
+  );
 
   return {
     ...getCommonDimensionAxisOptions(chartLayout, settings, renderingContext),
     type: "category",
+    tooltip: labels.tooltip,
     axisLabel: {
       margin: CHART_STYLE.axisTicksMarginX,
       ...getDimensionTicksDefaultOption(settings, renderingContext),
@@ -339,14 +352,7 @@ export const buildCategoricalDimensionAxis = (
         renderingContext,
       ),
       interval: () => true,
-      formatter: (value: string) => {
-        const numberValue = parseNumberValue(value);
-        if (column && isNumericBaseType(column) && numberValue !== null) {
-          return getPaddedAxisLabel(formatter(numberValue));
-        }
-
-        return getPaddedAxisLabel(formatter(value));
-      },
+      formatter: labels.formatter,
       ...(chartLayout.ticksDimensions.xTickWidthCap < Infinity
         ? {
             width: chartLayout.ticksDimensions.xTickWidthCap,

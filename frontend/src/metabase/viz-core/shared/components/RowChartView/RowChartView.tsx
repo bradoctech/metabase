@@ -11,6 +11,7 @@ import * as React from "react";
 
 import type { TextWidthMeasurer } from "metabase/utils/measure-text";
 
+import { formatAxisLabel } from "../../../lib/axis-label";
 import { truncateText } from "../../../lib/text";
 import type { SeriesInfo } from "../../types/data";
 import type { HoveredData } from "../../types/events";
@@ -52,6 +53,10 @@ export interface RowChartViewProps<TDatum> {
   style?: React.CSSProperties;
   hoveredData?: HoveredData | null;
   measureTextWidth?: TextWidthMeasurer;
+  renderAxisLabel?: (
+    label: string,
+    target: React.ReactElement,
+  ) => React.ReactNode;
   onHover?: (
     event: React.MouseEvent<Element>,
     bar: BarData<TDatum, SeriesInfo> | null,
@@ -87,6 +92,7 @@ const RowChartView = <TDatum,>({
   measureTextWidth,
   onHover,
   onClick,
+  renderAxisLabel,
 }: RowChartViewProps<TDatum>) => {
   const innerBarScale = isStacked
     ? null
@@ -99,7 +105,7 @@ const RowChartView = <TDatum,>({
 
   const ellipsifiedYTickFormatter = React.useMemo(() => {
     if (!measureTextWidth || !width) {
-      return yTickFormatter;
+      return (value: StringLike) => formatAxisLabel(yTickFormatter(value));
     }
 
     // Calculate the maximum allowed width for y-axis labels (50% of chart width)
@@ -107,7 +113,7 @@ const RowChartView = <TDatum,>({
       margin.left - (yLabel ? theme.axis.label.size * 2 : 0);
 
     return (value: StringLike) => {
-      const originalText = yTickFormatter(value);
+      const originalText = formatAxisLabel(yTickFormatter(value));
       return truncateText(
         originalText,
         maxLabelWidth,
@@ -240,6 +246,21 @@ const RowChartView = <TDatum,>({
           }}
           labelOffset={margin.left - theme.axis.label.size}
           tickFormat={ellipsifiedYTickFormatter}
+          tickComponent={({
+            formattedValue,
+            "aria-label": fullLabel,
+            ...props
+          }) => {
+            const target = (
+              <g role="img" aria-label={fullLabel}>
+                {!renderAxisLabel && <title>{fullLabel}</title>}
+                <Text {...props}>{formattedValue}</Text>
+              </g>
+            );
+            return renderAxisLabel
+              ? renderAxisLabel(String(fullLabel ?? ""), target)
+              : target;
+          }}
           hideAxisLine={!hasYAxis}
           hideTicks
           tickValues={hasYAxis ? undefined : []}
@@ -247,7 +268,8 @@ const RowChartView = <TDatum,>({
           scale={yScale}
           stroke={theme.axis.color}
           tickStroke={theme.axis.color}
-          tickLabelProps={() => ({
+          tickLabelProps={(value) => ({
+            "aria-label": yTickFormatter(value),
             fill: theme.axis.ticks.color,
             fontFamily: theme.dataLabels.family,
             fontSize: theme.axis.ticks.size,

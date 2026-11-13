@@ -60,6 +60,10 @@ export interface RowChartProps<TDatum> {
 
   hoveredData?: HoveredData | null;
   onClick?: (event: React.MouseEvent, bar: BarData<TDatum, SeriesInfo>) => void;
+  renderAxisLabel?: (
+    label: string,
+    target: React.ReactElement,
+  ) => React.ReactNode;
   onHover?: (
     event: React.MouseEvent,
     bar: BarData<TDatum, SeriesInfo> | null,
@@ -103,6 +107,7 @@ export const RowChart = <TDatum,>({
   hoveredData,
   onClick,
   onHover,
+  renderAxisLabel,
 }: RowChartProps<TDatum>) => {
   const isMeasured = typeof width === "number" && typeof height === "number";
 
@@ -279,6 +284,7 @@ export const RowChart = <TDatum,>({
       measureTextWidth={measureTextWidth}
       onClick={onClick}
       onHover={onHover}
+      renderAxisLabel={renderAxisLabel}
     />
   );
 };

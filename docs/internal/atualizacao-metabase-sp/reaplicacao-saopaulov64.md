@@ -28,7 +28,7 @@ O [inventário TSV](./inventario-saopaulov64.tsv) cruza as listas com o diff ent
 1. **Fundação — aplicada, teste de regressão e smoke visual aprovados:** documentação e script históricos recuperados, `.merge-sp/` ignorado, correção pontual do schema de nomes localizados de coleções. Nenhum commit ou push automático.
 2. **Marca e tema — aplicada; perfil SP validado pelo usuário:** tokens, Rawline, assets, LogoIcon/brasão, ocultamento de SpLogo, login e adapters de tema claros/escuros.
 3. **Home e dashboard — aplicada, testes/tipos/lint e smoke local relatado aprovados; HD-05/12 adiados para homologação:** badges/cards, dashcards DS, layout e componentes associados.
-4. **Comportamentos — datagrid reaplicado com testes/tipos/lint e smoke DG-01 a DG-08 aprovados; filtros cascata reaplicados com testes/tipos/lint aprovados e smoke parcial (FC-01 a FC-04 aprovados; FC-05 a FC-08 em homologação); nulls reaplicados com smoke pendente; gráficos pendentes:** pin/hover do datagrid, cascata de filtros, nulls, eixos/title case/tooltips e paletas, incluindo Visualizer.
+4. **Comportamentos — datagrid reaplicado com testes/tipos/lint e smoke DG-01 a DG-08 aprovados; filtros cascata reaplicados com testes/tipos/lint aprovados e smoke parcial (FC-01 a FC-04 aprovados; FC-05 a FC-08 em homologação); nulls reaplicados com aceite local no escopo registrado e pendências em homologação; eixos/tooltips reaplicados com smoke pendente; paletas pendentes:** pin/hover do datagrid, cascata de filtros, nulls, eixos/title case/tooltips e paletas, incluindo Visualizer.
 5. **Traduções e política SP — pendente:** catálogo pt-BR, ajuda de drivers, links/upsells, Data Studio e Monitor, conforme EDD-1523. Preservar verificações reais de permissões/licença.
 6. **Entrega — pendente:** produção (backend/drivers, static-viz, tsc, FE), smoke canônico e auditoria. Não declarar o transporte concluído antes dessas validações.
 
@@ -312,3 +312,37 @@ Usuário confirmou todos os valores com os resultados esperados no dashboard. NU
 ### Encaminhamento final desta leva — 11/11/2026
 
 Usuário autorizou deixar NU-17/18 e os subcenários restantes para a equipe em homologação com o banco real, incluindo recarga e usuário comum de NU-16. Preservados os aceites locais; validação em homologação e build de produção seguem pendentes. Mensagem de commit proposta para a leva de nulos, correção de metadata SQLite, regressões e documentação. Nenhum commit criado pelo agente.
+
+
+## Eixos e tooltips — EDD-969 — leva de 11/11/2026
+
+[Paths desta leva](./eixos-tooltips-saopaulov64.txt). Reaplicada a regra visual da EDD-1523 sobre os componentes atuais da 64: TitleCase em categorias textuais, preservando conectores portugueses, e primeiros 10 caracteres seguidos de `...` quando excedidos. Dados e valores de clique permanecem originais.
+
+- Eixos de dimensão cartesianos: helper de formatter/tooltip conectado a categorias, números e tempo. BoxPlot reutiliza o builder categórico, recebendo a mesma regra sem duplicar o componente.
+- Adaptação de segurança semântica: unidades e datas mantêm o formatter oficial, sem aplicar TitleCase a formatos numéricos ou temporais; rótulos longos ainda podem ser abreviados com o texto completo no tooltip. Eixos métricos preservam seu formatter original.
+- A referência usava Map global indexado pelo texto truncado e listeners de mouse duplicados em CartesianChart/BoxPlot. Substituído por estado local a cada formatter de eixo e tooltip nativo do ECharts, identificado pelo valor original/índice do tick. Não há mapa global de rótulos nem ambiguidade por prefixo compartilhado. HTML do rótulo é escapado; tooltip permite quebra de linha e largura limitada, sem truncar o conteúdo completo.
+- RowChart: TitleCase/truncamento no eixo de categorias, título SVG individual com texto completo e identificação acessível. O limite de largura em pixels continua valendo em espaços pequenos. A medição usa o texto exibido e a família de fonte configurada, substituindo Lato fixo. O componente compartilhado também é usado por static-viz; build de produção ainda pendente.
+- Não transportados ajustes de peso/família de fontes e paleta fora do escopo desta leva. Paletas EDD-1092 permanecem na próxima etapa.
+
+Roteiro AX-01 a AX-10 criado no smoke, sem aceite visual presumido. As duas expectativas antigas de RowChart (foo/y_foo) foram atualizadas para refletir o TitleCase (Foo/Y_foo), mantendo os testes de barras, eventos e formatação numérica. Regressões novas cobrem Unicode, conectores, prefixos iguais, isolamento entre eixos, fallback por índice numérico, escaping e tooltip SVG individual. A primeira checagem de tipos concorrente foi encerrada com SIGKILL (137); a repetição final é executada sem testes concorrentes.
+
+
+**Validação desta leva:** 12 suítes, 117 testes distintos aprovados. A suíte de opções cartesianos foi repetida após ajustar a chamada/narrowing do formatter categórico nos testes: 6/6 aprovados. Checagem global de tipos final **aprovada, código 0**, com `mise exec -- env GOMEMLIMIT=2GiB GOGC=50 GOMAXPROCS=2 bun run type-check-pure`. ESLint com zero avisos e formatação dos sete arquivos frontend aprovados; `git diff --check` aprovado. Hover real no navegador, temas, dashboard/Visualizer e exportação permanecem pendentes em AX-01 a AX-10. Nenhum commit ou push criado pelo agente.
+
+### Refinamento AX-05 — decisão do usuário em 12/11/2026
+
+Usuário solicitou uniformizar o tooltip das categorias no gráfico horizontal (RowChart) com os demais gráficos: sem atraso intencional e acompanhando o mouse. Informou que o tooltip nativo com delay passou despercebido nos smokes originais. A decisão substitui a escolha de título SVG como tooltip interativo registrada acima.
+
+O renderer da aplicação injeta um tooltip flutuante com estilos do tema, conteúdo completo e largura limitada/quebra de linha. viz-core recebe um renderer opcional de rótulo; sem ele, preserva título SVG para static-viz, sem importar overlays da aplicação. O caminho interativo remove o título SVG para evitar dois tooltips simultâneos. Valores e handlers das barras permanecem preservados. Reteste visual AX-05 pendente; parte temporal do AX-07 aprovada pelo usuário. Detalhes e pendências de exportação AX-10 registrados no smoke.
+
+Validação do refinamento: 20 testes do RowChart compartilhado e 1 teste do tooltip flutuante aprovados (entrada/saída e categorias com prefixos iguais). ESLint sem avisos, formatação dos cinco arquivos alterados e `git diff --check` aprovados. A checagem global de tipos não foi concluída nesta revisão: execução inicial e repetição com limite de memória menor encerradas com SIGKILL/código 137, sem diagnóstico de TypeScript emitido. Deve ser repetida com recursos disponíveis; não registrar tipos desta revisão como aprovados.
+
+### Correção de contraste do tooltip horizontal — 12/11/2026
+
+Usuário confirmou acompanhamento do mouse no AX-05, mas relatou falta de fundo/legibilidade. Tooltip.Floating resolve a configuração TooltipFloating, separada dos overrides de Tooltip; por isso não herdava os estilos da aplicação. Aplicados explicitamente tokens de fundo/texto do tooltip, raio, sombra e tipografia, preservando cores por tema e o movimento já validado. Reteste visual pendente. AX-07 aprovado integralmente no roteiro local; AX-10 recebeu evidências válidas de PNG/CSV/JSON além do PDF. O erro NU-16 no PDF era um teste do usuário, desconsiderado. Static-viz/assinaturas, build e AX-08/09 continuam pendentes.
+
+Tooltip flutuante direcionado também ao portal padrão da aplicação. Teste de regressão de hover e tokens de contraste aprovado; lint, formatação e diff aprovados. A checagem global de tipos permanece pendente pela limitação de recursos já registrada, sem nova execução para esta alteração de estilos.
+
+Aceite posterior do usuário em 12/11/2026: AX-05 aprovado após correção de estilos. Build de produção permanece validação final do transporte (incluindo static-viz e tipos), sem aprovação presumida. PDF local usa pipeline static-viz conforme `src/metabase/channel/render/pdf.clj`; exportação de Área já exercitou esse caminho. Complementar com RowChart horizontal, pois o renderer compartilhado foi alterado; assinatura real segue cenário distinto quando disponível.
+
+Retorno de 12/11/2026: AX-08 e AX-09 aprovados pelo usuário. PDF com RowChart horizontal e Área confirma truncamento/layout no caminho static-viz; complemento visual AX-10 validado, além das exportações já registradas. Assinaturas por e-mail e build de produção (incluindo tipos pendentes por recursos) continuam sem execução/aprovação. Próximo grupo de transporte: paletas EDD-1092, mediante continuidade autorizada.

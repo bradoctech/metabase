@@ -130,7 +130,7 @@ A home escolhe uma seção por vez. Popular depende de conteúdo elegível (perg
 | Datagrid pin/hover | Reaplicados; DG-01 a DG-08 aprovados pelo usuário, com observação de largura em DG-06 |
 | Filtros cascata QB | Reaplicados; 290 testes frontend, 3 testes HTTP H2 (14 asserções), tipos/lint aprovados; FC-01 a FC-04 aprovados pelo usuário; FC-05 a FC-08 pendentes para homologação com a equipe |
 | Valores null | NU-01/02/03/04 aceitos no escopo relatado; NU-05 confirmado para último valor null; NU-06/07 aprovados em pergunta/dashboard e NU-09 nas consultas; NU-08/10 aprovados após correção (0 no Número, vazio na Tabela); demais cenários/aceites pendentes |
-| Eixos/tooltip e paletas nos charts/Visualizer | Transporte e smoke pendentes |
+| Eixos/tooltip e paletas nos charts/Visualizer | Eixos/tooltip reaplicados; AX-01 a AX-09 aprovados; AX-10 validado para exportações e PDF/static-viz, com assinaturas/build pendentes. Tipos da revisão do tooltip pendentes por recursos; paletas ainda não transportadas |
 | i18n, ajuda de drivers e política comercial | Transporte e smoke pendentes |
 | Data Studio e Monitor, inclusive usuário comum | Transporte e smoke pendentes |
 | Conteúdo demo Abono/Detalhamentos | Aplicabilidade depende da presença do conteúdo; não validado |
@@ -341,3 +341,49 @@ Com Products populada, os dois counts são positivos e `valor` é 0. Se não hou
 
 
 **Encaminhamento para homologação — 11/11/2026:** por decisão do usuário, NU-17/18 e subcenários ainda não discriminados, incluindo recarga e usuário comum de NU-16, ficam para a equipe validar em homologação com o banco/driver real. Permanecem pendentes, sem invalidar os aceites locais registrados e sem representar conclusão de homologação ou do build de produção.
+
+
+## Eixos e tooltips — EDD-969 — 11/11/2026
+
+**Estado:** implementação reaplicada; 12 suítes/117 testes, tipos, lint e formatação aprovados; smoke visual em andamento: AX-01/02/04/06 aprovados pelo usuário; Linha e Combo aprovados em AX-03, com uniformização do tooltip do RowChart em AX-05 aprovada pelo usuário; AX-07 aprovado; AX-08/09 aprovados pelo usuário; AX-10 validado para PDF (Área e RowChart/static-viz), PNG/CSV/JSON no escopo informado, com assinaturas e build pendentes. Paletas não fazem parte desta leva. Categorias textuais usam TitleCase com conectores portugueses e prefixo de 10 caracteres mais `...`. Tooltip mostra o texto completo original. Datas/unidades numéricas e eixos métricos preservam a formatação oficial, sem mudar o significado dos valores. Em gráficos estreitos, o corte adicional em pixels pode ser menor que 10 caracteres; texto completo deve continuar acessível pelo hover do rótulo. No RowChart interativo, tooltip da aplicação acompanha o mouse sem atraso intencional. O título SVG completo permanece como fallback na renderização estática. A uniformização foi solicitada e aprovada pelo usuário em 12/11/2026 após correção de contraste.
+
+**Preparação local:** executar a consulta abaixo no Sample Database, escolher categoria como dimensão e valor como métrica. A coluna outra permite configurar Combo com uma série em barra e outra em linha. Não modificar dados de origem.
+
+```sql
+SELECT 'departamento regional norte' AS categoria, 10 AS valor, 20 AS outra
+UNION ALL
+SELECT 'departamento regional sul', 20, 10
+UNION ALL
+SELECT 'gestão de dados e educação', 30, 15
+```
+
+As duas primeiras categorias exibem o mesmo prefixo `Departamen...`. Ao passar o mouse, cada uma deve apresentar seu próprio nome completo. Tooltip de ponto/barra e ações de clique devem continuar usando os valores originais.
+
+| ID | Passos | Resultado esperado | Estado |
+| --- | --- | --- | --- |
+| AX-01 | Exibir a consulta em Barras; conferir categorias e depois uma categoria curta, como vendas | TitleCase em texto (Vendas); nomes longos com prefixo de 10 caracteres e ...; números permanecem corretos | OK — usuário |
+| AX-02 | Passar o mouse nos dois rótulos com prefixo Departamen... e depois sair do eixo | Cada tooltip mostra norte/sul corretamente e o texto completo; sem conteúdo do outro rótulo, corte do texto completo ou tooltip preso | OK — usuário |
+| AX-03 | Repetir em Linha e Combo; em Combo configurar outra como segunda série | Mesma regra no eixo; tooltip dos pontos/séries preservado; valores e séries corretos | OK para Linha e Combo — usuário; barras horizontais registradas em AX-05 |
+| AX-04 | Amostrar Área, Dispersão e Cascata nas configurações suportadas por cada visualização | Eixos de dimensão recebem a regra aplicável; eixos numéricos preservam significado/formatação; fluxo sem erros | OK — usuário |
+| AX-05 | Exibir como gráfico de linhas horizontais/RowChart; passar o mouse em cada categoria longa | TitleCase e truncamento; tooltip da aplicação imediato e acompanhando o mouse, com texto completo correto, inclusive com prefixos iguais | OK — usuário confirmou reteste após correção de fundo/contraste |
+| AX-06 | Abrir BoxPlot com distribuição/categorias, usando dados compatíveis e categoria longa | Builder categórico aplica a regra e tooltip completo; tooltip da distribuição e ações preservados. Registrar impedimento se a fixture não suportar BoxPlot | OK — usuário |
+| AX-07 | Usar eixo temporal ou dimensão numérica com unidades, percentuais ou moeda; comparar rótulo e tooltip | Datas e unidades mantêm formatação/capitalização; quando abreviado, tooltip preserva o texto completo. Eixo métrico não muda | OK — usuário confirmou validação temporal e numérica com moeda após configurar a coluna |
+| AX-08 | Adicionar dois gráficos com categorias/prefixos iguais a um dashboard; redimensionar e alternar tema claro/escuro | Sem mistura de textos entre gráficos; tooltip legível e completo, layout sem cortes indevidos; RowChart respeita espaço disponível | OK — usuário |
+| AX-09 | Testar tooltip de dados, clique/drill, seleção/zoom quando disponíveis e Visualizer | Dados/interações oficiais preservados; rótulo abreviado não substitui o valor usado na consulta; regra visual também no Visualizer | OK — usuário |
+| AX-10 | Conferir exportações e static-viz aplicáveis ao ambiente, além do build de produção posterior | Dados exportados permanecem originais; rótulos estáticos coerentes. PNG não exige hover; SVG de RowChart pode conter title completo | PARCIAL — PDF de Área e RowChart (static-viz), PNG de Área e CSV/JSON validados; assinaturas e build de produção pendentes |
+
+Ao retornar, informar ID, visualização, tema, pergunta/dashboard/Visualizer e resultado. Não aprovar uma família de gráficos pela evidência de outra; cenários sem fixture ficam pendentes com motivo.
+
+**Retorno visual — 12/11/2026:** o teste inicial em Tabela não se aplica ao truncamento de eixos; após selecionar Barras, AX-01/02 foram aprovados. O gráfico horizontal corresponde ao RowChart de AX-05, não ao BoxPlot de AX-06. No PDF enviado, o card Área mantém o corte dos rótulos; PDF estático não oferece tooltip de hover. O usuário esclareceu posteriormente que o erro do card NU-16 era um teste próprio; desconsiderar como pendência ou regressão desta etapa.
+
+**Decisão do usuário — 12/11/2026 (AX-05):** uniformizar o tooltip do RowChart com os demais gráficos: exibir sem atraso intencional e acompanhar o mouse. O comportamento nativo anterior passou despercebido nos smokes da issue original; não é uma preferência de produto a preservar. Aplicado tooltip flutuante da aplicação no renderer interativo, mantendo viz-core independente de overlays e título SVG no fallback estático. AX-05 requer reteste em pergunta/dashboard, temas claro/escuro e categorias com prefixos iguais.
+
+**Complemento AX-07:** partes temporal e moeda aprovadas pelo usuário após a orientação de configuração. Para formatar dimensão numérica, abrir engrenagem → Dados → três pontos ao lado de `faixa` → Estilo → Moeda; selecionar moeda/casas decimais conforme as opções disponíveis. A aba Eixos configura escala/título, não o estilo numérico da coluna. Aceite posterior do usuário confirma a configuração e a validação; as capturas anteriores sem moeda não eram a evidência final.
+
+**Pendências específicas AX-10:** CSV/JSON e PNG validados nas evidências posteriores; static-viz/assinaturas e build de produção continuam para fechamento técnico. PDF do card Área em dashboard escuro já validado para o corte dos rótulos; não exige hover nem comprova os demais formatos ou o build.
+
+**Retorno e correção de estilos — 12/11/2026:** AX-07 confirmado como validado corretamente. AX-10: JSON enviado preserva categorias completas e números como strings formatadas ("10", "20", etc.); CSV preserva as mesmas categorias e valores (a abertura em uma coluna no Excel corresponde ao delimitador da importação); PNG de Área preserva corte dos rótulos e layout legível. NU-16 no PDF era teste do usuário e deve ser ignorado. AX-05: acompanhamento do mouse confirmado, mas tooltip sem fundo/contraste. Tooltip.Floating usa configuração de tema separada de Tooltip e não herdou os overrides padrão; foram aplicados explicitamente tokens de fundo/texto, sombra, raio e tipografia da aplicação. Reteste visual de contraste ainda pendente.
+
+**Aceite AX-05 — 12/11/2026:** usuário confirmou OK após a correção dos estilos do tooltip flutuante. AX-08/09 seguem pendentes. Build de produção fica como etapa final do transporte, sem aprovação antecipada e incluindo checagem de tipos pendente por recursos. Ao revisar o fluxo local, confirmado que `metabase.channel.render.pdf` usa static-viz para renderizar os gráficos do dashboard: PDF de Área já fornece evidência desse fluxo, mas não comprova build atualizado de todos os componentes. Complemento visual sugerido: exportar também RowChart horizontal no PDF e conferir corte/layout, sem exigir hover em imagem estática; assinatura por e-mail permanece cenário separado quando houver ambiente configurado.
+
+**Aceite AX-08/09 e complemento AX-10 — 12/11/2026:** usuário confirmou AX-08 e AX-09 como OK após o roteiro detalhado. A captura do PDF mostra RowChart horizontal e Área com categorias abreviadas, títulos/legenda legíveis e barras/séries coerentes com a consulta (valor: 10/20/30; outra: 20/10/15), sem erro nesses cards. Complemento visual do fluxo static-viz aprovado nesse escopo. Assinaturas por e-mail não executadas; build de produção e checagem de tipos da revisão permanecem para fechamento técnico final.

@@ -1,0 +1,12 @@
+frontend/src/metabase/viz-core/lib/axis-label.ts
+frontend/src/metabase/viz-core/lib/axis-label.unit.spec.ts
+frontend/src/metabase/viz-core/echarts/cartesian/option/axis.ts
+frontend/src/metabase/viz-core/echarts/cartesian/option/index.unit.spec.ts
+frontend/src/metabase/viz-core/shared/components/RowChartView/RowChartView.tsx
+frontend/src/metabase/viz-core/shared/components/RowChart/utils/layout.ts
+frontend/src/metabase/viz-core/shared/components/RowChart/RowChart.unit.spec.tsx
+
+frontend/src/metabase/viz-core/shared/components/RowChart/RowChart.tsx
+frontend/src/metabase/visualizations/visualizations/RowChart/RowChart.tsx
+frontend/src/metabase/visualizations/visualizations/RowChart/AxisLabelTooltip.tsx
+frontend/src/metabase/visualizations/visualizations/RowChart/AxisLabelTooltip.unit.spec.tsx

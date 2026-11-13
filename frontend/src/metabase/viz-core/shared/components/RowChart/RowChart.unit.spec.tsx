@@ -95,7 +95,24 @@ describe("RowChart", () => {
     it("should render Y-ticks", () => {
       const { yTicks } = setup({ series: [series1] });
 
-      expect(yTicks).toStrictEqual(["foo", "bar", "baz"]);
+      expect(yTicks).toStrictEqual(["Foo", "Bar", "Baz"]);
+    });
+
+    it("keeps each full label in its own SVG tooltip when prefixes collide", () => {
+      const { yTicks } = setup({
+        series: [series1],
+        data: [
+          { y: "departamento norte", x: 100, x1: 200 },
+          { y: "departamento sul", x: 200, x1: 400 },
+        ],
+      });
+      expect(yTicks).toEqual(["Departamen...", "Departamen..."]);
+      expect(
+        screen.getByRole("img", { name: "departamento norte" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("img", { name: "departamento sul" }),
+      ).toBeInTheDocument();
     });
 
     it("should not render Y-ticks when disabled", () => {
@@ -165,7 +182,7 @@ describe("RowChart", () => {
         "x_250",
         "x_300",
       ]);
-      expect(yTicks).toStrictEqual(["y_foo", "y_bar", "y_baz"]);
+      expect(yTicks).toStrictEqual(["Y_foo", "Y_bar", "Y_baz"]);
     });
 
     it("should render labels when specified", () => {

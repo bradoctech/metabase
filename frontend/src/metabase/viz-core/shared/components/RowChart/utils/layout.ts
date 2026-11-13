@@ -2,6 +2,7 @@ import type { ScaleContinuousNumeric } from "d3-scale";
 
 import type { TextWidthMeasurer } from "metabase/utils/measure-text";
 
+import { formatAxisLabel } from "../../../../lib/axis-label";
 import type { Margin } from "../../../types/layout";
 import type { ChartGoal } from "../../../types/settings";
 import type { ChartFont, GoalStyle } from "../../../types/style";
@@ -19,9 +20,9 @@ export const getMaxWidth = (
 ): number => {
   return Math.max(
     ...formattedYTicks.map((tick) =>
-      measureTextWidth(tick, {
+      measureTextWidth(formatAxisLabel(tick), {
         size: `${ticksFont.size}px`,
-        family: "Lato",
+        family: ticksFont.family,
         weight: String(ticksFont.weight ?? 400),
       }),
     ),
