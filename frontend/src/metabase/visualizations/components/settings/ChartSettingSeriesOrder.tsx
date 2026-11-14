@@ -8,7 +8,7 @@ import { ColorSelector } from "metabase/common/components/ColorSelector";
 import type { DragEndEvent } from "metabase/common/components/Sortable";
 import { Box, Button, Flex, Group, Icon, Select, Text } from "metabase/ui";
 import { color } from "metabase/ui/colors";
-import { getNamedAccentColors } from "metabase/ui/colors/groups";
+import { SP_PALETTE_COLORS } from "metabase/ui/colors/constants/accent-colors";
 import { getNullDisplayValue } from "metabase/utils/constants";
 import { getEventTarget } from "metabase/utils/dom";
 import { isEmpty } from "metabase/utils/validate";
@@ -159,7 +159,7 @@ export const ChartSettingSeriesOrder = ({
             <Group p={4} gap="sm">
               <ColorSelector
                 value={otherColor ?? color("text-disabled")}
-                colors={getNamedAccentColors()}
+                colors={SP_PALETTE_COLORS}
                 onChange={onOtherColorChange}
                 pillSize="small"
               />

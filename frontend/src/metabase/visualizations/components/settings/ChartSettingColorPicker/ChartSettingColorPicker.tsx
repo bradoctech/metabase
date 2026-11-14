@@ -5,7 +5,7 @@ import { ColorSelector } from "metabase/common/components/ColorSelector";
 import CS from "metabase/css/core/index.css";
 import { isEmbeddingSdk } from "metabase/embedding-sdk/config";
 import { Box } from "metabase/ui";
-import { getNamedAccentColors } from "metabase/ui/colors/groups";
+import { SP_PALETTE_COLORS } from "metabase/ui/colors/constants/accent-colors";
 import type { AccentColorOptions } from "metabase/ui/colors/types";
 
 interface ChartSettingColorPickerProps {
@@ -20,6 +20,7 @@ interface ChartSettingColorPickerProps {
    */
   forwardColorName?: boolean;
   onChange?: (hexValue: string, colorName?: string) => void;
+  /** Kept for caller compatibility; SP uses the fixed chart palette. */
   accentColorOptions?: AccentColorOptions;
 }
 
@@ -30,13 +31,6 @@ export const ChartSettingColorPicker = ({
   pillSize,
   forwardColorName,
   onChange,
-  accentColorOptions = {
-    main: true,
-    light: true,
-    dark: true,
-    harmony: false,
-    gray: true,
-  },
 }: ChartSettingColorPickerProps) => {
   // For the SDK the ColorSelector is rendered inside a parent Mantine popover,
   // so as a nested popover it should not be rendered within a portal
@@ -46,7 +40,7 @@ export const ChartSettingColorPicker = ({
     <Box className={cx(CS.flex, CS.alignCenter, className)}>
       <ColorSelector
         value={value}
-        colors={getNamedAccentColors(accentColorOptions)}
+        colors={SP_PALETTE_COLORS}
         withinPortal={withinPortal}
         onChange={(hexValue, colorName) =>
           onChange?.(hexValue, forwardColorName ? colorName : undefined)

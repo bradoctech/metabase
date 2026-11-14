@@ -1,12 +1,10 @@
-import Color from "color";
 import { t } from "ttag";
 import _ from "underscore";
 
 import { ColorSelector } from "metabase/common/components/ColorSelector";
 import CS from "metabase/css/core/index.css";
 import { Box, Button, Icon, NumberInput, Text } from "metabase/ui";
-import { color } from "metabase/ui/colors";
-import { getAccentColors } from "metabase/ui/colors/groups";
+import { SP_PALETTE_COLORS } from "metabase/ui/colors/constants/accent-colors";
 import type { ChartSettingSegmentsEditorProps } from "metabase/viz-core";
 import type { ScalarSegment } from "metabase-types/api";
 
@@ -131,12 +129,7 @@ export const ChartSettingSegmentsEditor = ({
 };
 
 export function getColorPalette() {
-  return [
-    ...getAccentColors(),
-    Color(color("feedback-negative")).hex(),
-    Color(color("feedback-warning")).hex(),
-    Color(color("feedback-positive")).hex(),
-  ];
+  return SP_PALETTE_COLORS;
 }
 
 function newSegment(segments: ScalarSegment[]) {

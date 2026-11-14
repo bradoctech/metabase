@@ -36,6 +36,17 @@ export function mergeSettings(
           getIn(first, [key, nestedKey]) || {},
           getIn(second, [key, nestedKey]) || {},
         );
+        const override = getIn(second, [key, nestedKey]);
+        // A fixed series color replaces its inherited palette reference too.
+        // undefined names disappear during JSON serialization, so merging must
+        // not resurrect the card's name and override the dashcard's chosen hex.
+        if (
+          key === "series_settings" &&
+          typeof override?.color === "string" &&
+          override.color_name == null
+        ) {
+          delete merged[key][nestedKey].color_name;
+        }
       }
     }
   }

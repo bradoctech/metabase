@@ -1,6 +1,7 @@
 import userEvent from "@testing-library/user-event";
 
 import { fireEvent, render, screen, within } from "__support__/ui";
+import { SP_PALETTE_COLORS } from "metabase/ui/colors/constants/accent-colors";
 import type { ChartSettingSegmentsEditorProps } from "metabase/viz-core";
 import type { ScalarSegment } from "metabase-types/api";
 
@@ -144,11 +145,9 @@ it("Should not call onChange when blurring without changing value", async () => 
   expect(onChange).not.toHaveBeenCalled();
 });
 
-it("should list each palette color once", () => {
-  const palette = getColorPalette();
-
-  expect(palette.length).toBeGreaterThan(0);
-  expect(palette).toEqual([...new Set(palette)]);
+it("should offer the fixed SP palette in its canonical order, including repeated shades", () => {
+  expect(getColorPalette()).toEqual(SP_PALETTE_COLORS);
+  expect(getColorPalette()).toHaveLength(30);
 });
 
 it("should show a placeholder if there are no segments", async () => {

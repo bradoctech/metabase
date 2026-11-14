@@ -49,6 +49,45 @@ describe("mergeSettings (metabase#14597)", () => {
     });
   });
 
+  it("keeps a fixed dashcard color after serialization without inheriting the card accent reference", () => {
+    const card = createMockCard({
+      display: "bar",
+      visualization_settings: {
+        series_settings: {
+          valor: { color: "#509EE3", color_name: "accent0", title: "Valor" },
+        },
+      },
+    });
+    // An undefined color_name clears the name in the editor but is omitted by JSON.
+    const savedDashcardSettings = JSON.parse(
+      JSON.stringify({
+        series_settings: { valor: { color: "#FF161F", color_name: undefined } },
+      }),
+    );
+    const merged = extendCardWithDashcardSettings(card, savedDashcardSettings);
+    expect(merged.visualization_settings.series_settings?.valor).toEqual({
+      color: "#FF161F",
+      title: "Valor",
+    });
+  });
+
+  it("preserves the inherited accent when the dashcard only renames a series", () => {
+    expect(
+      mergeSettings(
+        {
+          series_settings: {
+            valor: { color: "#509EE3", color_name: "accent0" },
+          },
+        },
+        { series_settings: { valor: { title: "Renamed" } } },
+      ).series_settings?.valor,
+    ).toEqual({
+      color: "#509EE3",
+      color_name: "accent0",
+      title: "Renamed",
+    });
+  });
+
   it("should merge when only one setting has the nested key", () => {
     expect(
       mergeSettings({}, { column_settings: { col1: { set1: "val" } } }),

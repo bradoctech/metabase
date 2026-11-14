@@ -1,7 +1,8 @@
 import { t } from "ttag";
 import _ from "underscore";
 
-import { getAccentColors, getPreferredColor } from "metabase/ui/colors/groups";
+import { SP_PALETTE_COLORS } from "metabase/ui/colors/constants/accent-colors";
+import { getPreferredColor } from "metabase/ui/colors/groups";
 import MetabaseSettings from "metabase/utils/settings";
 import {
   ChartSettingsError,
@@ -221,9 +222,9 @@ export const MAP_VIZ_DEFINITION: VisualizationDefinition = {
       },
       widget: "colorRangeSelector",
       getProps: () => ({
-        colors: getAccentColors(),
+        colors: SP_PALETTE_COLORS,
         colorMapping: Object.fromEntries(
-          getAccentColors().map((color) => [
+          SP_PALETTE_COLORS.map((color) => [
             color,
             getColorplethColorScale(color),
           ]),
@@ -232,7 +233,7 @@ export const MAP_VIZ_DEFINITION: VisualizationDefinition = {
       }),
       getDefault: (_series, vizSettings) =>
         getColorplethColorScale(
-          getPreferredColor(vizSettings["map.metric"]) ?? getAccentColors()[0],
+          getPreferredColor(vizSettings["map.metric"]) ?? SP_PALETTE_COLORS[0],
         ),
       getHidden: (_series, vizSettings) => vizSettings["map.type"] !== "region",
       readDependencies: ["map.metric"],
