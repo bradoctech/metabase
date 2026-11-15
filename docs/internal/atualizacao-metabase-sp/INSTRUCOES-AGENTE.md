@@ -1,5 +1,9 @@
 # Instruções para o agente — atualização Metabase SP
 
+> **Ambiente local — 15/11/2026:** resources/version.properties gerado no fechamento fazia o checkout se identificar como v64 contra banco local de desenvolvimento x.9999.0.0. Arquivo preservado fora do classpath em .merge-sp/fechamento-saopaulov64/backup-version-properties-2026-11-15.properties, restaurando vLOCAL_DEV. Ao alternar build → desenvolvimento, retirar novamente o recurso gerado após empacotar. Não executar rollback/recriar o banco para resolver apenas essa troca de identificação. Detalhes no fechamento técnico; usuário confirmou a inicialização completa em 15/11/2026. Procedimento preventivo na seção “Alternar build de produção e desenvolvimento local” abaixo.
+
+> **Complemento — 15/11/2026:** AUD-011 teve lacuna de transporte identificada após o fechamento: CSS de seleção/hover do admin reaplicado para preto SP sobre branco. Smoke visual AUD-011 aprovado pelo usuário em 15/11/2026, com captura, conforme smoke-saopaulov64.md. O JAR de 14/11 não contém esse complemento; reconstruir frontend/pacote antes da publicação desta revisão.
+
 > **Situação atual — 14/11/2026:** fechamento técnico local de `saopaulov64` concluído. Produção OSS (ClojureScript, FE, static-viz, idiomas, licenças, backend/drivers e JAR), execução do comando de versão, tipos globais, lint/formatação e auditoria aprovados. Regressão consolidada: 46 suítes/545 testes frontend e 8 testes backend/40 asserções, sem falhas. Evidências e comandos em [fechamento-tecnico-saopaulov64.md](./fechamento-tecnico-saopaulov64.md). Pendências de infraestrutura/perfil e banco real permanecem em homologação; não confundir fechamento técnico com aprovação desses cenários, deploy ou publicação.
 
 > **Contexto vigente:** `saopaulov64` parte da 64 oficial `metabase-64-oficial` (`bb612fac416`) e recebeu patches selecionados usando EDD-1523 como aprendizado. Fundação, marca/tema, home/dashboard, datagrid, cascata, nulls, eixos/tooltips, paletas, traduções/política SP e Data Studio/Monitor foram reaplicados e validados no escopo registrado no [plano](./reaplicacao-saopaulov64.md) e no [smoke](./smoke-saopaulov64.md). Não executar o merge/restore histórico 60→64 nesta branch. Preservar o aceite explícito de null numérico como 0 nos cenários NU definidos, texto/booleano conforme metadata e ausência de linhas como Sem resultados; NU-17/18 e subcenários adiados continuam para homologação. Ilustrações genéricas permanecem coloridas como no upstream. A assinatura futura Dashboards SP + brasão está documentada separadamente na branch `EDD-1523v64`, sem implementação nesta branch. As instruções antigas abaixo são histórico do processo de atualização; o resultado vigente está na consolidação acima. Nenhum commit ou push automático neste fechamento.
@@ -14,6 +18,22 @@
 ## Objetivo do trabalho
 
 Atualizar o fork Metabase São Paulo / Trilhas para uma versão mais recente **preservando customizações SP**, e criar um processo **reproduzível / semi-automatizado** para próximos upgrades — sem depender de “baixar a release e recolocar tudo na mão”.
+
+---
+
+## Alternar build de produção e desenvolvimento local
+
+Aprendizado consolidado em **15/11/2026**, após a geração do JAR da saopaulov64. A versão efetiva é lida de `version.properties` no classpath; executar com aliases de desenvolvimento não ignora esse arquivo.
+
+1. **Antes do build:** registrar se `resources/version.properties` existe e preservar seu conteúdo/estado fora do classpath. Identificar qual banco de aplicação será usado e não confundir o banco local de desenvolvimento com o de homologação.
+2. **Durante o build:** gerar a versão pelo pipeline oficial e manter o recurso até concluir o empacotamento. Conferir a versão/hash do próprio JAR. O pacote publicado deve conter sua identificação de versão; não publicar um artefato sem metadados para fazê-lo assumir `vLOCAL_DEV`.
+3. **Ao retomar o checkout de desenvolvimento:** se o recurso não existia antes do build, guardar o arquivo gerado fora de `resources/`, em diretório ignorado como `.merge-sp/`. Se já existia, restaurar o estado anterior e conferir se corresponde ao ambiente que será executado. Reiniciar a JVM: o processo em execução não relê automaticamente esses metadados.
+4. **Conferir a identificação:** no desenvolvimento habitual sem esse recurso, a aplicação deve indicar `vLOCAL_DEV`. No código atual, `config/current-major-version` retorna nil e o controle de migrações utiliza a versão sintética `x.9999.0.0`. Conferir também a inicialização completa do backend.
+5. **Diagnosticar antes de alterar dados:** se aparecer `Development build detected`, comparar a versão efetiva do processo com o histórico do banco. Quando a causa for apenas o recurso de produção deixado no mesmo checkout de desenvolvimento, restaurar a identificação desse checkout. Não executar rollback, recriar banco, editar tabelas Liquibase ou desativar a proteção para resolver essa troca de metadados.
+6. **Separar compatibilidade de banco e artefato:** retirar o recurso do checkout não altera um JAR já criado e não torna um banco migrado em desenvolvimento compatível com o JAR versionado. Qualquer transição real desse banco exige planejamento próprio; não usar `vLOCAL_DEV` como atalho de deploy.
+7. **Após alterações posteriores ao pacote:** reconstruir frontend e pacote para publicar o novo código. Manter versão/hash e evidências dos artefatos anteriores como histórico, sem atribuir a eles correções posteriores.
+
+No incidente local, o arquivo v0.64.1-SNAPSHOT foi preservado em `.merge-sp/fechamento-saopaulov64/backup-version-properties-2026-11-15.properties`; a identificação voltou a vLOCAL_DEV e o usuário confirmou que o backend iniciou normalmente. O banco não foi revertido nem recriado. Detalhes em [fechamento-tecnico-saopaulov64.md](./fechamento-tecnico-saopaulov64.md).
 
 ---
 

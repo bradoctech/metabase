@@ -92,3 +92,21 @@ A checagem de segredos dos sete documentos/listas desta rodada passou; `git diff
 Os OK do usuário mantêm o alcance registrado por cenário; os adiamentos não viram aprovação por causa de um build bem-sucedido. O build local OSS não inclui publicação Docker, deploy, construção do runtime Python ou empacotamento EE.
 
 A futura assinatura **Dashboards SP + brasão**, em incorporação e exportações PDF/PNG, permanece na branch **`EDD-1523v64`**, nos arquivos `pendencia-assinatura-dashboards-sp.md` e `.pdf`. Não foi incorporada nem implementada em `saopaulov64`.
+
+## Complemento posterior — AUD-011 — 15/11/2026
+
+A revisão com o usuário encontrou uma omissão no transporte do contraste da navegação administrativa. O fundo branco selecionado havia sido reaplicado, mas faltava a regra CSS de texto preto SP na seleção/hover. A regra foi corrigida em AdminNavbar.module.css; o smoke específico da aplicação foi aprovado pelo usuário em 15/11/2026, com captura, conforme smoke-saopaulov64.md.
+
+Os resultados, versão e SHA-256 deste relatório continuam identificando o código/artefato de 14/11. O JAR local descrito acima **não contém a correção posterior de AUD-011**; é necessário reconstruir frontend e pacote antes de publicar essa revisão. O aceite visual desta revisão é o retorno do usuário em 15/11, separado dos testes/build anteriores.
+
+**Validação técnica do complemento:** Stylelint e Oxfmt aprovados no CSS; `git diff --check` aprovado. Oito combinações de seleção/hover em Chromium headless, com CSS real, tokens constantes SP e fundos claro/escuro em fixture isolada, passaram: selecionado e hover com rgb(0, 0, 0) sobre rgb(255, 255, 255); inativo sem hover com texto branco. A fixture não carrega a aplicação completa; o aceite visual da aplicação foi posteriormente confirmado pelo usuário em 15/11/2026. Evidências locais em `.merge-sp/aud-011/contraste.json` e capturas light/dark. Nenhum teste unitário novo nem rebuild do JAR nesta correção CSS.
+
+## Retorno ao backend de desenvolvimento após o build — 15/11/2026
+
+O build do fechamento gerou o arquivo ignorado resources/version.properties com tag v0.64.1-SNAPSHOT. Ao executar o backend pelo checkout com o mesmo banco local anteriormente migrado em desenvolvimento (x.9999.0.0), esse arquivo fez o processo se identificar como v64; a checagem de downgrade interrompeu a inicialização com Development build detected. O modo dev, sozinho, não substitui a versão lida desse recurso.
+
+Para retomar o mesmo ambiente de desenvolvimento, o arquivo gerado foi movido para `.merge-sp/fechamento-saopaulov64/backup-version-properties-2026-11-15.properties`, fora do classpath. Sem esse recurso, o checkout volta à identificação oficial vLOCAL_DEV e ao versionamento sintético de desenvolvimento. Não foi executado rollback, recriação do banco, alteração das tabelas Liquibase ou desativação da checagem de downgrade. A operação não altera o version.properties já empacotado no JAR de 14/11.
+
+Após gerar um novo pacote neste checkout, preservar o arquivo de versão necessário ao empacotamento e, ao voltar ao desenvolvimento local, guardá-lo novamente fora de resources antes de reiniciar a JVM. Este procedimento restaura a identidade do checkout de desenvolvimento; ele não realiza nem valida uma migração desse banco para uma versão de produção. A compatibilidade do banco de homologação com o pacote publicado continua parte da validação do ambiente.
+
+A verificação isolada carrega apenas metabase.config.core e confere tag vLOCAL_DEV, major nil e ausência de version.properties no classpath; não sobe servidor nem executa migrações. Após repetir seu comando habitual, o usuário confirmou em 15/11/2026 que o backend iniciou normalmente. Aprendizado consolidado nas instruções e no runbook, na seção Alternar build de produção e desenvolvimento local.

@@ -424,3 +424,11 @@ Fechamento do smoke de Monitor em 14/11/2026: TS-21/22/23/25 aprovados. TS-24 pe
 ## Fechamento técnico local — 14/11/2026
 
 Consolidação aprovada no [relatório técnico](./fechamento-tecnico-saopaulov64.md): 545 testes frontend e 8 testes backend/40 asserções, tipos globais, ESLint/Stylelint/formatação, builds de produção OSS e JAR executável. Scan final sem stale/missing/orphan/hybrid; caminhos ativos das listas existem. Onze referências históricas ausentes foram comentadas, sem importar seeds ou alterar o banco. Não houve mudança de produto, commit, push ou publicação nesta rodada. Permanecem as pendências por infraestrutura/perfil/banco real discriminadas no relatório e no smoke. A tarefa futura de assinatura está na branch EDD-1523v64.
+
+## Complemento AUD-011 — 15/11/2026
+
+Identificada lacuna no transporte: AdminNavLink recebeu fundo branco da seleção, mas AdminNavbar.module.css permaneceu igual à base oficial, herdando texto branco. Reaplicada a regra da EDD-1523 para seleção e hover: sp-black sobre core-white_constant nos dois temas. O caminho já consta em lists/dual-changed.txt e foi incluído no manifesto de marca/tema. Roteiro em smoke-saopaulov64.md e aceite visual AUD-011 confirmado pelo usuário em 15/11/2026, com captura; o fechamento de 14/11 não cobre esta revisão posterior nem atualiza seu JAR automaticamente.
+
+## Inicialização local após o build — 15/11/2026
+
+O arquivo gerado resources/version.properties estava identificando o checkout como v64, enquanto o banco local estava marcado como desenvolvimento x.9999.0.0. Metadados preservados fora do classpath em .merge-sp/fechamento-saopaulov64/backup-version-properties-2026-11-15.properties para restaurar vLOCAL_DEV. Sem rollback ou alteração de dados. Detalhes e prevenção ao alternar build/dev no fechamento-tecnico-saopaulov64.md; usuário confirmou que o backend iniciou normalmente em 15/11/2026. Aprendizado preventivo consolidado em INSTRUCOES-AGENTE.md e runbook-atualizacao.md, na seção Alternar build de produção e desenvolvimento local.
