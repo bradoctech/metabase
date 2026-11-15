@@ -8,7 +8,6 @@
 
 # Infra / processo do fork
 bin/docker/Dockerfile
-bin/build-and-push-docker.sh
 bin/merge-upstream-preserve-sp.sh
 mise.toml
 .husky/pre-commit
@@ -25,3 +24,6 @@ resources/frontend_client/app/img/login_leftbg_only.png
 
 # Tradução SP
 locales/metabase.po
+
+# Historical paths absent from saopaulov64; reactivate only when explicitly imported.
+# bin/build-and-push-docker.sh
