@@ -432,3 +432,7 @@ Identificada lacuna no transporte: AdminNavLink recebeu fundo branco da seleçã
 ## Inicialização local após o build — 15/11/2026
 
 O arquivo gerado resources/version.properties estava identificando o checkout como v64, enquanto o banco local estava marcado como desenvolvimento x.9999.0.0. Metadados preservados fora do classpath em .merge-sp/fechamento-saopaulov64/backup-version-properties-2026-11-15.properties para restaurar vLOCAL_DEV. Sem rollback ou alteração de dados. Detalhes e prevenção ao alternar build/dev no fechamento-tecnico-saopaulov64.md; usuário confirmou que o backend iniciou normalmente em 15/11/2026. Aprendizado preventivo consolidado em INSTRUCOES-AGENTE.md e runbook-atualizacao.md, na seção Alternar build de produção e desenvolvimento local.
+
+## Pacote atualizado com AUD-011 — 15/11/2026
+
+JAR OSS reconstruído a partir de `9c0573d25947a36edd9b12eee7a8d891deace07e`: `v0.64.1-SNAPSHOT (9c0573d)`. Versão/idiomas/licenças, ClojureScript, frontend OSS, static-viz, backend/drivers e comando de versão passaram. A regra AUD-011 foi confirmada no CSS dentro do JAR, ausente no pacote anterior. SHA-256 e evidências no fechamento-tecnico-saopaulov64.md. Ao final, metadados gerados foram guardados fora do classpath e a identificação vLOCAL_DEV do checkout foi reconferida. Sem commit, push ou deploy; homologação continua conforme roteiro.

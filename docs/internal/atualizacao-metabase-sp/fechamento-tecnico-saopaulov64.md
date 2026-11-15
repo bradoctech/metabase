@@ -1,5 +1,7 @@
 # Fechamento técnico — saopaulov64
 
+> **Artefato atual — 15/11/2026:** JAR OSS reconstruído com AUD-011, versão v0.64.1-SNAPSHOT (9c0573d). Empacotamento, comando de versão, inspeção do CSS e restauração do checkout para vLOCAL_DEV aprovados. Ver a seção “Reconstrução OSS com AUD-011” ao final.
+
 **Fechamento técnico local concluído em 14/11/2026.** Rodada autorizada pelo usuário após os smokes de traduções/política SP. Este registro consolida a validação técnica; os aceites visuais e suas limitações continuam em [smoke-saopaulov64.md](./smoke-saopaulov64.md).
 
 ## Referências e escopo
@@ -42,9 +44,9 @@ As listas continham 11 referências históricas a arquivos ausentes da branch: d
 
 A busca nos fontes, recursos e fixtures não encontrou os conteúdos demo Abono de Permanência/Detalhamentos por Situação. Isso não prova sua ausência no banco de aplicação do cliente, que não foi consultado nesta auditoria. A aplicabilidade continua para homologação. As ilustrações genéricas de `resources/frontend_client/app/img` permanecem coloridas como no upstream; o diff contém apenas os quatro assets de login SP adicionados nessa pasta.
 
-## Artefato validado
+## Artefato validado em 14/11/2026 — histórico
 
-- Caminho local: `target/uberjar/metabase.jar` (ignorado pelo Git).
+- Caminho histórico preservado: `.merge-sp/rebuild-aud011-2026-11-15/previous-metabase.jar` (ignorado pelo Git).
 - Tamanho: **962.040.805 bytes**, aproximadamente 918 MiB.
 - SHA-256: `e73231971bb6d681775a1fc02ec2d69f8b7025a2ed53a39a315f108c5ffc1290`.
 - JDK do build e da execução: **OpenJDK 25.0.3**.
@@ -110,3 +112,29 @@ Para retomar o mesmo ambiente de desenvolvimento, o arquivo gerado foi movido pa
 Após gerar um novo pacote neste checkout, preservar o arquivo de versão necessário ao empacotamento e, ao voltar ao desenvolvimento local, guardá-lo novamente fora de resources antes de reiniciar a JVM. Este procedimento restaura a identidade do checkout de desenvolvimento; ele não realiza nem valida uma migração desse banco para uma versão de produção. A compatibilidade do banco de homologação com o pacote publicado continua parte da validação do ambiente.
 
 A verificação isolada carrega apenas metabase.config.core e confere tag vLOCAL_DEV, major nil e ausência de version.properties no classpath; não sobe servidor nem executa migrações. Após repetir seu comando habitual, o usuário confirmou em 15/11/2026 que o backend iniciou normalmente. Aprendizado consolidado nas instruções e no runbook, na seção Alternar build de produção e desenvolvimento local.
+
+## Reconstrução OSS com AUD-011 — 15/11/2026
+
+**Novo artefato local aprovado:** `target/uberjar/metabase.jar`, edição OSS, código `9c0573d25947a36edd9b12eee7a8d891deace07e`. Esta reconstrução inclui a correção de contraste AUD-011 validada pelo usuário. É o pacote atual; o artefato de 14/11 foi preservado em `.merge-sp/rebuild-aud011-2026-11-15/previous-metabase.jar` como histórico.
+
+| Etapa | Resultado | Duração |
+| --- | --- | --- |
+| version-i18n-licenses | APROVADO — código 0 | 24.01 s |
+| cljs | APROVADO — código 0 | 64.88 s |
+| frontend-oss | APROVADO — código 0 | 87.13 s |
+| static-viz | APROVADO — código 0 | 5.36 s |
+| uberjar | APROVADO — código 0 | 290.61 s |
+| jar-version | APROVADO — código 0 | 22.63 s |
+
+- Versão no JAR e confirmada pelo comando `version`: `v0.64.1-SNAPSHOT (9c0573d)`, data `2026-11-15`.
+- Tamanho: **962.039.979 bytes**, aproximadamente 917,5 MiB.
+- SHA-256: `a03c08ce9d78f42657d34b7524f5194cc31ed01fe39cc93c718bbab9130e1885`.
+- CSS empacotado: regra de seleção/hover com `--mb-color-sp-black` e `--mb-color-core-white_constant` confirmada em `frontend_client/app/dist/app-main.5263dc5169fac66e.css`. A regra não estava no JAR anterior. CSS Modules usa nomes de classes compactados em produção; a inspeção considera os seletores e as cores emitidos, não o nome de classe do fonte.
+- Recursos confirmados: frontend, static-viz, pt-BR, brasão, Rawline e classes compiladas de Collection/SQLite/PostgreSQL. Os recursos inspecionados correspondem aos arquivos gerados neste build.
+- Frontend compilado com os mesmos dois avisos de tamanho de assets/entrypoint, sem erro; ClojureScript sem avisos de compilação. Demais avisos não fatais estão nos logs.
+
+A identificação de produção foi mantida até finalizar o empacotamento. Depois, `resources/version.properties` foi preservado em `.merge-sp/rebuild-aud011-2026-11-15/version-built.properties`, fora do classpath, restaurando o estado inicial (arquivo ausente). A verificação isolada no checkout confirmou novamente `vLOCAL_DEV`, major nil e ausência do recurso, sem iniciar servidor ou executar migrações. O recurso de versão dentro do JAR continua intacto e versionado. Build/verificação do pacote usaram caminhos temporários separados para banco/plugins.
+
+Logs, estado das etapas, hash e prova do CSS: `.merge-sp/rebuild-aud011-2026-11-15/`. Os comandos de produção foram os mesmos do fechamento anterior, com versão/idiomas/licenças gerados antes do frontend, static-viz após frontend e empacotamento por último. O runner inicial de inspeção procurava o nome original da classe CSS; a inspeção complementar corrigiu essa expectativa para o formato de produção e aprovou o conteúdo do mesmo JAR, sem repetir os builds concluídos.
+
+As suítes de regressão anteriores e o aceite manual do AUD-011 mantêm seus registros próprios; não foram reexecutadas integralmente nesta reconstrução. Nenhum commit, push, deploy ou execução do workflow GitHub/Depot foi realizado. Pendências de homologação/integrações permanecem conforme o roteiro, sem aceite presumido por este build.
