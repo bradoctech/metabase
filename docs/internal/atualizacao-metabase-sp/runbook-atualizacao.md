@@ -6,6 +6,22 @@
 
 ---
 
+## Alternar build de produção e desenvolvimento local
+
+Aprendizado consolidado em **15/11/2026**, após a geração do JAR da saopaulov64. A versão efetiva é lida de `version.properties` no classpath; executar com aliases de desenvolvimento não ignora esse arquivo.
+
+1. **Antes do build:** registrar se `resources/version.properties` existe e preservar seu conteúdo/estado fora do classpath. Identificar qual banco de aplicação será usado e não confundir o banco local de desenvolvimento com o de homologação.
+2. **Durante o build:** gerar a versão pelo pipeline oficial e manter o recurso até concluir o empacotamento. Conferir a versão/hash do próprio JAR. O pacote publicado deve conter sua identificação de versão; não publicar um artefato sem metadados para fazê-lo assumir `vLOCAL_DEV`.
+3. **Ao retomar o checkout de desenvolvimento:** se o recurso não existia antes do build, guardar o arquivo gerado fora de `resources/`, em diretório ignorado como `.merge-sp/`. Se já existia, restaurar o estado anterior e conferir se corresponde ao ambiente que será executado. Reiniciar a JVM: o processo em execução não relê automaticamente esses metadados.
+4. **Conferir a identificação:** no desenvolvimento habitual sem esse recurso, a aplicação deve indicar `vLOCAL_DEV`. No código atual, `config/current-major-version` retorna nil e o controle de migrações utiliza a versão sintética `x.9999.0.0`. Conferir também a inicialização completa do backend.
+5. **Diagnosticar antes de alterar dados:** se aparecer `Development build detected`, comparar a versão efetiva do processo com o histórico do banco. Quando a causa for apenas o recurso de produção deixado no mesmo checkout de desenvolvimento, restaurar a identificação desse checkout. Não executar rollback, recriar banco, editar tabelas Liquibase ou desativar a proteção para resolver essa troca de metadados.
+6. **Separar compatibilidade de banco e artefato:** retirar o recurso do checkout não altera um JAR já criado e não torna um banco migrado em desenvolvimento compatível com o JAR versionado. Qualquer transição real desse banco exige planejamento próprio; não usar `vLOCAL_DEV` como atalho de deploy.
+7. **Após alterações posteriores ao pacote:** reconstruir frontend e pacote para publicar o novo código. Manter versão/hash e evidências dos artefatos anteriores como histórico, sem atribuir a eles correções posteriores.
+
+No incidente local, o arquivo v0.64.1-SNAPSHOT foi preservado em `.merge-sp/fechamento-saopaulov64/backup-version-properties-2026-11-15.properties`; a identificação voltou a vLOCAL_DEV e o usuário confirmou que o backend iniciou normalmente. O banco não foi revertido nem recriado. Detalhes em [fechamento-tecnico-saopaulov64.md](./fechamento-tecnico-saopaulov64.md).
+
+---
+
 ## Pré-requisitos
 
 1. Remote `upstream` apontando para o Metabase oficial:

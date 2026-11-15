@@ -75,3 +75,6 @@ resources/frontend_client/app/img/login_framebottom.png
 resources/frontend_client/app/img/login_frametop.png
 resources/frontend_client/app/img/login_leftbg_only.png
 src/metabase/appearance/settings.clj
+
+# AUD-011 — complemento de contraste da navegação administrativa (15/11/2026).
+frontend/src/metabase/nav/components/AdminNavbar/AdminNavbar.module.css

@@ -506,3 +506,23 @@ Build de produção OSS aprovado no fechamento técnico. Envio real de assinatur
 **Aceite Data Studio e introdução — 14/11/2026:** usuário confirmou explicitamente /getting-started validada e correta, encerrando a ressalva de acesso direto da introdução em TS-14. TS-16/17/18/19/20 aprovados em todas as etapas, inclusive marca/sidebar, navegação/grupos, URL de dependências, perfil comum e acesso autorizado/teclado. Próximo lote TS-21 a TS-25 (Monitor); nenhuma aprovação presumida para Monitor pelo aceite de Data Studio.
 
 **Fechamento do lote Monitor — 14/11/2026:** usuário aprovou TS-21/22/23/25 em todas as etapas. TS-24 não executado: o ambiente não tem perfil não administrador com permissão explícita de monitoramento; manter para homologação, sem inferir aprovação pelo administrador ou usuário comum. Traduções/política SP/Data Studio/Monitor têm aceite local nos cenários exercitados. Pendências específicas: CC/BCC após SMTP configurado (TS-02), upload completo conforme banco elegível (TS-13/homologação), lista/menu/editor/execução de transformações sem banco compatível (TS-15), perfil de monitoramento (TS-24), assinaturas/build e demais pendências globais já registradas. A troca de assinatura visual para Dashboards SP continua tarefa posterior separada.
+
+## AUD-011 — contraste da navegação administrativa — complemento de 15/11/2026
+
+A aprovação de 06/11 na auditoria EDD-1523 pertence à branch anterior. Na saopaulov64 foi transportado o fundo branco de AdminNavLink, mas faltou a regra de cor em AdminNavbar.module.css. Corrigido para texto sp-black sobre core-white_constant na aba selecionada e no hover das demais abas; links inativos fora do hover continuam brancos sobre a barra escura. Não alterar navegação, atalhos ou permissões.
+
+**Roteiro na aplicação — OK, validado pelo usuário em 15/11/2026:**
+
+1. Como administrador, abrir `/admin/settings/general` no tema claro. A aba superior selecionada deve mostrar texto preto sobre fundo branco.
+2. Passar o mouse nessa aba: deve manter preto sobre branco.
+3. Passar o mouse em uma aba inativa: deve ficar com texto preto sobre branco. Ao sair, deve voltar ao texto branco sobre a barra escura.
+4. Clicar em outra aba e repetir a conferência da seleção/hover; conferir navegação por teclado e foco visível preservados.
+5. Repetir no tema escuro, sem inversão indevida das cores dos estados selecionado/hover.
+
+O build/JAR de 14/11 é anterior a este complemento e não o inclui. Gerar novamente o frontend e o pacote de publicação antes de homologar esta revisão. Não transferir o aceite visual histórico para este caso.
+
+**Validação técnica do complemento:** Stylelint e Oxfmt aprovados no CSS; `git diff --check` aprovado. Oito combinações de seleção/hover em Chromium headless, com CSS real, tokens constantes SP e fundos claro/escuro em fixture isolada, passaram: selecionado e hover com rgb(0, 0, 0) sobre rgb(255, 255, 255); inativo sem hover com texto branco. A fixture não carrega a aplicação completa nem substitui o aceite visual acima. Evidências locais em `.merge-sp/aud-011/contraste.json` e capturas light/dark. Nenhum teste unitário novo nem rebuild do JAR nesta correção CSS.
+
+**Aceite AUD-011 — 15/11/2026:** usuário confirmou que o teste funcionou e solicitou registrar como validado. A captura da área administrativa mostra Configuração selecionada e Incorporação em hover, ambas com texto preto sobre branco. AUD-011 aprovado nesta branch conforme o retorno do usuário; não reutilizado o aceite histórico da EDD-1523. O pacote de 14/11 continua anterior ao complemento e precisa ser reconstruído para publicá-lo.
+
+**Pacote atualizado — 15/11/2026:** reconstrução OSS `v0.64.1-SNAPSHOT (9c0573d)` concluída com AUD-011. CSS de seleção/hover e recursos SP confirmados dentro do novo JAR; comando de versão aprovado. Checkout restaurado e conferido como vLOCAL_DEV. Ver versão/hash e SHA-256 no fechamento técnico. Mantido o aceite visual AUD-011 do usuário; este build não aprova cenários ainda pendentes em homologação.
