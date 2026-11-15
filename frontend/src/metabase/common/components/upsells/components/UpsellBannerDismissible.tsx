@@ -1,4 +1,5 @@
 import { UserHasSeen } from "metabase/common/components/UserHasSeen/UserHasSeen";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 
 export type DismissibleProps = {
   dismissible: boolean;
@@ -39,5 +40,5 @@ export function UpsellWrapperDismissible<Props>(
     );
   };
 
-  return MaybeWrappedComponent;
+  return withSpCommercialPolicy(MaybeWrappedComponent);
 }

@@ -35,3 +35,5 @@ frontend/src/metabase/sp/with-commercial-policy.unit.spec.tsx
 # EDD-1523 / AUD-024 — tradução central dos metadados de conexão dos drivers.
 frontend/src/metabase/sp/connection-field-i18n.ts
 frontend/src/metabase/sp/connection-field-i18n.unit.spec.ts
+
+frontend/src/metabase/sp/connection-field-i18n-catalog.unit.spec.ts

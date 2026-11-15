@@ -45,7 +45,7 @@ export function mergeSettings(
           typeof override?.color === "string" &&
           override.color_name == null
         ) {
-          delete merged[key][nestedKey].color_name;
+          delete merged[key]?.[nestedKey]?.color_name;
         }
       }
     }

@@ -1,5 +1,6 @@
 import { renderWithProviders, screen, within } from "__support__/ui";
 import { Route } from "metabase/router";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 
 import { type PillTab, PillTabNavigation } from "./PillTabNavigation";
 
@@ -91,11 +92,13 @@ describe("PillTabNavigation", () => {
   });
 
   it("renders an upsell gem for a gated tab", () => {
+    SP_COMMERCIAL_POLICY.showUpsells = true;
     setup({
       tabs: [{ label: "Usage", to: "/monitor/example/usage", isGated: true }],
     });
 
     expect(screen.getByTestId("upsell-gem")).toBeInTheDocument();
+    SP_COMMERCIAL_POLICY.showUpsells = false;
   });
 
   it("does not render an upsell gem for an ungated tab", () => {

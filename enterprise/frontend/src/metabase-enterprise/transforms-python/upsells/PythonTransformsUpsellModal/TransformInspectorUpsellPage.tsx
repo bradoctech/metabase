@@ -3,9 +3,10 @@ import { DottedBackground } from "metabase/common/components/upsells/components/
 import { PageContainer } from "metabase/common/data-studio/components/PageContainer";
 import { getUserIsAdmin } from "metabase/current-user";
 import { useSelector } from "metabase/redux/hooks";
-import { useParams } from "metabase/router";
+import { redirect, useParams } from "metabase/router";
 import { getStoreUsers } from "metabase/selectors/store-users";
 import { useSetting } from "metabase/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { TransformHeader } from "metabase/transforms/components/TransformHeader";
 import { useTransformPermissions } from "metabase/transforms/hooks/use-transform-permissions";
 import { useTransformWithPolling } from "metabase/transforms/hooks/use-transform-with-polling";
@@ -15,7 +16,7 @@ import { reload } from "metabase/utils/dom";
 
 import { PythonTransformsUpsell } from "./PythonTransformsUpsellModal";
 
-export function TransformInspectorUpsellPage() {
+function TransformInspectorUpsellPageUpstream() {
   const { transformId: transformIdParam } = useParams();
   const transformId = Urls.extractEntityId(transformIdParam);
   const { transform, isLoading, error } = useTransformWithPolling(transformId);
@@ -49,3 +50,8 @@ export function TransformInspectorUpsellPage() {
     </DottedBackground>
   );
 }
+
+export const TransformInspectorUpsellPage = withSpCommercialPolicy(
+  TransformInspectorUpsellPageUpstream,
+  redirect("/"),
+);

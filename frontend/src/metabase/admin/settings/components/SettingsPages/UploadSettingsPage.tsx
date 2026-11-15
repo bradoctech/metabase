@@ -6,6 +6,7 @@ import {
   SettingsPageWrapper,
   SettingsSection,
 } from "metabase/settings-components";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Box, Flex } from "metabase/ui";
 
 import { UploadSettingsForm } from "../UploadSettings/UploadSettingsForm";
@@ -18,9 +19,11 @@ export function UploadSettingsPage() {
           <UploadSettingsForm />
           <PLUGIN_UPLOAD_MANAGEMENT.UploadManagementTable />
         </SettingsSection>
-        <Box>
-          <UpsellUploads location="settings-uploads" />
-        </Box>
+        {SP_COMMERCIAL_POLICY.showUpsells && (
+          <Box>
+            <UpsellUploads location="settings-uploads" />
+          </Box>
+        )}
       </Flex>
     </SettingsPageWrapper>
   );

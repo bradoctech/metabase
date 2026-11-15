@@ -3,6 +3,7 @@ import cx from "classnames";
 import { ForwardRefLink } from "metabase/common/components/Link";
 import { UpsellGem } from "metabase/common/components/upsells/components/UpsellGem";
 import { useLocation } from "metabase/router";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Ellipsified, FixedSizeIcon, Flex } from "metabase/ui";
 import type { IconName } from "metabase-types/api";
 
@@ -33,6 +34,9 @@ export function PillTabNavigation({ tabs }: PillTabNavigationProps) {
   return (
     <Flex component="nav" gap="xxs" wrap="wrap">
       {tabs.map((tab) => {
+        if (tab.isGated && !SP_COMMERCIAL_POLICY.showUpsells) {
+          return null;
+        }
         const selected = isTabSelected(tab, pathname);
         return (
           <Flex

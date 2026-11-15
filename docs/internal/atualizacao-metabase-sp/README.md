@@ -16,6 +16,7 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 
 | Documento                                                  | Conteúdo                                                                  |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [pendencia-assinatura-dashboards-sp.md](./pendencia-assinatura-dashboards-sp.md) | Tarefa posterior: assinatura Dashboards SP com brasão em incorporação, PDF e PNG |
 | [EDD-1523-auditoria.md](./EDD-1523-auditoria.md)           | Auditoria pós-v64: pontos levantados, ajustes aplicados e validações pendentes |
 | [manual-orientar-ia.md](./manual-orientar-ia.md)           | Manual humano: prompt curto, entrada da IA e docs sob demanda             |
 | [estrategia-salto-60-64.md](./estrategia-salto-60-64.md)   | Salto saopaulo 60→64 (branch `metabasev64`): plano, o que levar da 1359   |

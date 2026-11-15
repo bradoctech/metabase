@@ -12,6 +12,7 @@ import { useSelector } from "metabase/redux";
 import type { ChecklistItemValue } from "metabase/redux/store";
 import { getIsPaidPlan } from "metabase/selectors/settings";
 import { getApplicationName } from "metabase/selectors/whitelabel";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Accordion, Box, Button, Stack, Text, Title, rem } from "metabase/ui";
 
 import { AiProviderModalProvider } from "./AiProviderModal";
@@ -107,44 +108,45 @@ export const Onboarding = () => {
             ))}
           </Accordion>
         </AiProviderModalProvider>
-        {(showMetabaseLinks || isPaidPlan) && (
-          <Box component="footer">
-            {showMetabaseLinks && (
-              <Box data-testid="learning-section" mb="xxl">
-                <Title
-                  order={3}
-                  mb={12}
-                >{t`Get the most out of ${applicationName}`}</Title>
-                <Text>
-                  {jt`${applicationName} can do a lot. To learn more—about ${applicationName}, data visualization, modeling, and other data topics—check out our ${(
-                    <ExternalLink
-                      href={docsLink}
-                      key="docs"
-                    >{t`Docs`}</ExternalLink>
-                  )} and ${(
-                    <ExternalLink
-                      href={learnLink}
-                      key="learn"
-                    >{t`Learn`}</ExternalLink>
-                  )} sites.`}
-                </Text>
-              </Box>
-            )}
-            {helpLink.visible && (
-              <Box className={S.support} data-testid="help-section" p="xl">
-                <Stack gap="xxs">
-                  <Title order={4}>{t`Need to talk with someone?`}</Title>
-                  <Text>{t`Reach out to engineers who can help with technical troubleshooting. Not your typical support agents.`}</Text>
-                </Stack>
-                <Button
-                  component={ExternalLink}
-                  href={helpLink.href}
-                  variant="filled"
-                >{t`Get Help`}</Button>
-              </Box>
-            )}
-          </Box>
-        )}
+        {SP_COMMERCIAL_POLICY.showExternalHelpLinks &&
+          (showMetabaseLinks || isPaidPlan) && (
+            <Box component="footer">
+              {showMetabaseLinks && (
+                <Box data-testid="learning-section" mb="xxl">
+                  <Title
+                    order={3}
+                    mb={12}
+                  >{t`Get the most out of ${applicationName}`}</Title>
+                  <Text>
+                    {jt`${applicationName} can do a lot. To learn more—about ${applicationName}, data visualization, modeling, and other data topics—check out our ${(
+                      <ExternalLink
+                        href={docsLink}
+                        key="docs"
+                      >{t`Docs`}</ExternalLink>
+                    )} and ${(
+                      <ExternalLink
+                        href={learnLink}
+                        key="learn"
+                      >{t`Learn`}</ExternalLink>
+                    )} sites.`}
+                  </Text>
+                </Box>
+              )}
+              {helpLink.visible && (
+                <Box className={S.support} data-testid="help-section" p="xl">
+                  <Stack gap="xxs">
+                    <Title order={4}>{t`Need to talk with someone?`}</Title>
+                    <Text>{t`Reach out to engineers who can help with technical troubleshooting. Not your typical support agents.`}</Text>
+                  </Stack>
+                  <Button
+                    component={ExternalLink}
+                    href={helpLink.href}
+                    variant="filled"
+                  >{t`Get Help`}</Button>
+                </Box>
+              )}
+            </Box>
+          )}
       </Box>
     </Box>
   );

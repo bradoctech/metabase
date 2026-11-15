@@ -11,6 +11,7 @@ import { createMockAppState, createMockState } from "__support__/state";
 import { renderWithProviders } from "__support__/ui";
 import type { ChecklistItemValue } from "metabase/redux/store";
 import { Route } from "metabase/router";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import type { TokenFeatures } from "metabase-types/api";
 import {
   createMockSettings,
@@ -28,6 +29,7 @@ export type SetupProps = {
   aiFeaturesEnabled?: boolean;
   openItem?: ChecklistItemValue;
   showMetabaseLinks?: boolean;
+  showExternalHelpLinks?: boolean;
   tokenFeatures?: Partial<TokenFeatures>;
   enterprisePlugins?: Parameters<typeof setupEnterpriseOnlyPlugin>[0][];
 };
@@ -39,9 +41,16 @@ export const setup = ({
   aiFeaturesEnabled = true,
   openItem,
   showMetabaseLinks = true,
+  showExternalHelpLinks = true,
   tokenFeatures = {},
   enterprisePlugins = [],
 }: SetupProps = {}) => {
+  // Keep upstream footer scenarios covered; SP cases explicitly disable links.
+  jest.replaceProperty(
+    SP_COMMERCIAL_POLICY,
+    "showExternalHelpLinks",
+    showExternalHelpLinks,
+  );
   const hasTokenFeatures = Object.entries(tokenFeatures).length > 0;
   setupPropertiesEndpoints(createMockSettings());
   setupBugReportingDetailsEndpoint();

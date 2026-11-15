@@ -18,6 +18,7 @@ import {
   SettingsPageWrapper,
   SettingsSection,
 } from "metabase/settings-components";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Divider, Flex, Stack, Switch, Tabs } from "metabase/ui";
 
 import { AIModelSettingsSection } from "./AIModelSettingsSection";
@@ -180,18 +181,20 @@ function MetabotSettingsSection({
           >
             {t`Internal`}
           </Tabs.Tab>
-          <Tabs.Tab
-            renderRoot={(props) => (
-              <Link
-                {...props}
-                to={getMetabotTabPath(FIXED_METABOT_IDS.EMBEDDED)}
-              />
-            )}
-            value={String(FIXED_METABOT_IDS.EMBEDDED)}
-            rightSection={!hasEmbedding && <UpsellGem.New size={14} />}
-          >
-            {t`Embedded`}
-          </Tabs.Tab>
+          {(hasEmbedding || SP_COMMERCIAL_POLICY.showUpsells) && (
+            <Tabs.Tab
+              renderRoot={(props) => (
+                <Link
+                  {...props}
+                  to={getMetabotTabPath(FIXED_METABOT_IDS.EMBEDDED)}
+                />
+              )}
+              value={String(FIXED_METABOT_IDS.EMBEDDED)}
+              rightSection={!hasEmbedding && <UpsellGem.New size={14} />}
+            >
+              {t`Embedded`}
+            </Tabs.Tab>
+          )}
         </Tabs.List>
       </Tabs>
 

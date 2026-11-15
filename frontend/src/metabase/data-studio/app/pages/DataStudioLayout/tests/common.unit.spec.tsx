@@ -17,6 +17,33 @@ describe("DataStudioLayout", () => {
   });
 
   describe("sidebar rendering", () => {
+    it("uses the SP logo and omits Tools when no tool is available", async () => {
+      setup();
+      expect(await screen.findByTestId("data-studio-nav")).toBeInTheDocument();
+      expect(screen.getByTestId("main-logo")).toHaveAttribute(
+        "src",
+        expect.stringContaining("app/assets/img/logo.svg"),
+      );
+      expect(
+        screen.queryByRole("region", { name: "Tools" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("region", { name: "Library" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "Glossary" }),
+      ).toBeInTheDocument();
+    });
+
+    it("keeps Tools when the schema viewer is available", async () => {
+      setup({ tokenFeatures: { "schema-viewer": true } });
+      expect(await screen.findByTestId("data-studio-nav")).toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "Tools" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "Schema viewer" }),
+      ).toBeInTheDocument();
+    });
+
     it("should render the sidebar with navigation tabs", async () => {
       setup({ remoteSyncBranch: "main" });
 

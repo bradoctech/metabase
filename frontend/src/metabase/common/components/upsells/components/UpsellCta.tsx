@@ -3,6 +3,7 @@ import { P, match } from "ts-pattern";
 
 import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { Link } from "metabase/common/components/Link";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { UnstyledButton } from "metabase/ui";
 
 import S from "./UpsellCta.module.css";
@@ -18,7 +19,7 @@ type UpsellCtaProps = {
   style?: React.CSSProperties;
 };
 
-export function UpsellCta({
+function UpsellCtaUpstream({
   onClick,
   onClickCapture,
   internalLink,
@@ -88,3 +89,5 @@ export function UpsellCta({
     )
     .otherwise(() => null);
 }
+
+export const UpsellCta = withSpCommercialPolicy(UpsellCtaUpstream);

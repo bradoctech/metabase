@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { renderWithProviders, screen } from "__support__/ui";
 import { Route } from "metabase/router";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 
 import { AreaTab } from "./AreaTab";
 
@@ -36,6 +37,16 @@ const setup = ({
 };
 
 describe("AreaTab", () => {
+  afterEach(() => {
+    SP_COMMERCIAL_POLICY.showUpsells = false;
+  });
+
+  it("does not expose a gated link to click or keyboard navigation in SP", () => {
+    setup({ isGated: true });
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("upsell-gem")).not.toBeInTheDocument();
+  });
+
   it("marks the selected tab as the current page for assistive tech", () => {
     setup({ isSelected: true });
 
@@ -51,6 +62,7 @@ describe("AreaTab", () => {
   });
 
   it("shows an upsell gem for a gated tab", () => {
+    SP_COMMERCIAL_POLICY.showUpsells = true;
     setup({ isGated: true });
 
     expect(screen.getByTestId("upsell-gem")).toBeInTheDocument();
@@ -63,6 +75,7 @@ describe("AreaTab", () => {
   });
 
   it("shows a custom right section instead of an upsell gem", () => {
+    SP_COMMERCIAL_POLICY.showUpsells = true;
     setup({
       isGated: true,
       rightSection: <span data-testid="custom-right-section" />,

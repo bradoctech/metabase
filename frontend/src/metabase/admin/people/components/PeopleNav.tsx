@@ -14,6 +14,7 @@ import { UpsellGem } from "metabase/common/components/upsells/components/UpsellG
 import { useSelector } from "metabase/redux";
 import { useLocation } from "metabase/router";
 import { useSetting } from "metabase/settings";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Divider, Stack } from "metabase/ui";
 
 export function PeopleNav() {
@@ -21,7 +22,8 @@ export function PeopleNav() {
   const shouldNudge = useSelector(shouldNudgeToPro) as boolean;
   const isUsingTenants = useSetting("use-tenants");
   const showTenantsUpsell = useSelector(shouldShowTenantsUpsell);
-  const showTenantsUpsellNav = showTenantsUpsell && !isUsingTenants;
+  const showTenantsUpsellNav =
+    SP_COMMERCIAL_POLICY.showUpsells && showTenantsUpsell && !isUsingTenants;
   const tenantUpsellGem = showTenantsUpsellNav ? <UpsellGem /> : undefined;
 
   return (
@@ -75,7 +77,9 @@ export function PeopleNav() {
           </>
         )}
       </Stack>
-      {shouldNudge && <UpsellSSO location="people-groups-settings" />}
+      {SP_COMMERCIAL_POLICY.showUpsells && shouldNudge && (
+        <UpsellSSO location="people-groups-settings" />
+      )}
     </AdminNavWrapper>
   );
 }

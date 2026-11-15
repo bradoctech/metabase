@@ -7,6 +7,7 @@ import {
   useGetPlanQuery,
   useStartTrialMutation,
 } from "metabase/api/cloud-proxy";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Center, Loader, Modal } from "metabase/ui";
 
 import { UpgradeModalError } from "./UpgradeModalError";
@@ -23,7 +24,7 @@ function formatCentsToDollars(cents: number): string {
   return `$${Math.round(cents / 100)}`;
 }
 
-export function UpgradeModal({ opened, onClose }: UpgradeModalProps) {
+function UpgradeModalUpstream({ opened, onClose }: UpgradeModalProps) {
   const [step, setStep] = useState<ModalStep>("initial");
 
   // Check if trial is available (always needed)
@@ -151,3 +152,5 @@ export function UpgradeModal({ opened, onClose }: UpgradeModalProps) {
     </Modal>
   );
 }
+
+export const UpgradeModal = withSpCommercialPolicy(UpgradeModalUpstream);

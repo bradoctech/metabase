@@ -1331,6 +1331,7 @@ msgstr ""
 msgid "Unsubscribe from all subscriptions / alerts"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: enterprise/frontend/src/metabase-enterprise/auth/components/AuthSettingsPage.tsx
 #: enterprise/frontend/src/metabase-enterprise/tenants/components/TenantsSummaryOnboardingStep/TenantsSummaryOnboardingStep.tsx
 #: frontend/src/metabase/account/app/components/AccountHeader/AccountHeader.tsx
@@ -1750,6 +1751,7 @@ msgid ""
 "configuration\" should be accessible."
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: enterprise/frontend/src/metabase-enterprise/auth/components/SettingsOIDCForm/SettingsOIDCForm.tsx
 #: frontend/src/metabase/admin/ai/MetabotSlackSetup.tsx
 #: frontend/src/metabase/admin/settings/auth/components/GoogleAuthForm/GoogleAuthForm.tsx
@@ -9181,6 +9183,7 @@ msgstr[1] ""
 msgid "Auto populated"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: enterprise/frontend/src/metabase-enterprise/table-editing/table-edit/modals/ModalParameterActionInput.tsx
 #: frontend/src/metabase/embedding/setup-guide/components/StepperWithCards/StepperWithCards.tsx
 msgid "Optional"
@@ -9777,6 +9780,7 @@ msgstr ""
 msgid "Close tab"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: enterprise/frontend/src/metabase-enterprise/transforms-inspector/pages/TransformInspectPage/components/LensSections/GenericSummarySections/GenericSummarySection.tsx
 #: frontend/src/metabase/dashboard/components/ClickBehaviorSidebar/LinkOptions/ValuesYouCanReference.tsx
 #: frontend/src/metabase/dashboard/components/ClickMappings/ClickMappingsTargetWithoutSource.tsx
@@ -13819,6 +13823,7 @@ msgstr ""
 msgid "upgrade"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: frontend/src/metabase/admin/app/reducers.ts
 #: frontend/src/metabase/admin/databases/components/DatabaseList/DatabaseList.tsx
 #: frontend/src/metabase/admin/databases/containers/DatabaseEditApp.tsx
@@ -15579,6 +15584,7 @@ msgstr ""
 msgid "Schema name"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: frontend/src/metabase/admin/permissions/selectors/data-permissions/permission-editor.tsx
 #: metabase/driver/common.clj
 msgid "Database name"
@@ -16068,6 +16074,7 @@ msgstr ""
 msgid "Username or DN"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
 #: frontend/src/metabase/admin/settings/components/widgets/Notifications/WebhookForm.tsx
 #: frontend/src/metabase/auth/components/LoginForm/LoginForm.tsx
@@ -16975,6 +16982,7 @@ msgstr ""
 msgid "Please add a description"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: frontend/src/metabase/admin/settings/components/widgets/Notifications/WebhookForm.tsx
 #: metabase/driver/common.clj
 msgid "Username"
@@ -17066,6 +17074,7 @@ msgstr ""
 msgid "Where is this going and what does it send?"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: frontend/src/metabase/admin/settings/components/widgets/Notifications/WebhookForm.tsx
 #: metabase/llm/provider.clj
 msgid "Authentication method"
@@ -23431,6 +23440,7 @@ msgid ""
 "timezone casting with this data."
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: frontend/src/metabase/databases/constants.tsx
 msgid "Include User ID and query hash in queries"
 msgstr ""
@@ -23471,6 +23481,7 @@ msgstr ""
 msgid "SSH Key"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: frontend/src/metabase/databases/constants.tsx metabase/driver/mysql.clj
 msgid "Server SSL certificate chain"
 msgstr ""
@@ -38852,6 +38863,7 @@ msgstr ""
 msgid "It doesn''t make sense to convert between DATEs and TIMEs!"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj metabase/lib/extraction.cljc
 msgid "Host"
 msgstr ""
@@ -38862,6 +38874,7 @@ msgid ""
 "esc.mydatabase.com)."
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Port"
 msgstr ""
@@ -38870,6 +38883,7 @@ msgstr ""
 msgid "username"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Role (optional, required for connection impersonation)"
 msgstr ""
@@ -38886,14 +38900,17 @@ msgstr ""
 msgid "birds_of_the_world"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Use a secure connection (SSL)"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Additional JDBC connection string options"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Use an SSH tunnel"
 msgstr ""
@@ -38902,34 +38919,42 @@ msgstr ""
 msgid "Enable this SSH tunnel?"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "SSH tunnel host"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "The hostname that you use to connect to SSH tunnels."
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "SSH tunnel port"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "SSH tunnel username"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "The username you use to login to your SSH tunnel."
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "SSH Authentication"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "SSH tunnel password"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "SSH private key to connect to the tunnel"
 msgstr ""
@@ -38938,10 +38963,12 @@ msgstr ""
 msgid "Paste the contents of an SSH private key here"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Passphrase for SSH private key"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "SSH known hosts"
 msgstr ""
@@ -38950,28 +38977,34 @@ msgstr ""
 msgid "Paste known_hosts content or upload file"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Give your index a name"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid ""
 "The column(s) the index will be built on. Usually the ones you filter or "
 "join by."
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Unique"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Enforce uniqueness across rows for indexed columns."
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Granularity"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Rerun queries for simple explorations"
 msgstr ""
@@ -38982,10 +39015,12 @@ msgid ""
 "Filter. This is on by default but you can turn it off if performance is slow."
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Choose when syncs and scans happen"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid ""
 "By default, Metabase does a lightweight hourly sync and an intensive daily "
@@ -38993,6 +39028,7 @@ msgid ""
 "changes."
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Database syncing"
 msgstr ""
@@ -39003,6 +39039,7 @@ msgid ""
 "schema. In most cases, you should be fine leaving this set to sync hourly."
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Scanning for Filter Values"
 msgstr ""
@@ -39015,6 +39052,7 @@ msgid ""
 "When should Metabase automatically scan and cache field values?"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Allow unfolding of JSON columns"
 msgstr ""
@@ -39026,6 +39064,7 @@ msgid ""
 "unfolding for individual fields in their settings."
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Periodically refingerprint tables"
 msgstr ""
@@ -39055,14 +39094,17 @@ msgstr ""
 msgid "OAuth"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Auth provider"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Auth token URL"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/common.clj
 msgid "Auth token request headers (a JSON map)"
 msgstr ""
@@ -39264,10 +39306,12 @@ msgstr ""
 msgid "Unable to parse query: {0}"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/mysql.clj metabase/driver/postgres.clj
 msgid "B-Tree"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/mysql.clj
 msgid "Full-text"
 msgstr ""
@@ -39308,10 +39352,12 @@ msgstr ""
 msgid "port"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/oracle.clj
 msgid "Oracle system ID (SID)"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/oracle.clj
 msgid "Oracle service name"
 msgstr ""
@@ -39330,6 +39376,7 @@ msgstr ""
 msgid "SSL Root Certificate (PEM)"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/postgres.clj
 msgid "Authenticate client certificate?"
 msgstr ""
@@ -39648,6 +39695,7 @@ msgstr ""
 msgid "Error executing raw queries: {0}"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/driver/sqlite.clj
 msgid "Filename"
 msgstr ""
@@ -41731,6 +41779,7 @@ msgstr ""
 msgid "Secret access key"
 msgstr ""
 
+#: frontend/src/metabase/sp/connection-field-i18n.ts
 #: metabase/llm/provider.clj
 msgid "Region"
 msgstr ""
@@ -49341,4 +49390,532 @@ msgstr ""
 
 #: resources/automagic_dashboards/table/example/indepth.yaml
 msgid "Total [[GenericTable]]"
+msgstr ""
+
+#: frontend/src/metabase/embedding/components/SharingMenu/SharingMenu.tsx
+msgctxt "Sharing action"
+msgid "Share"
+msgstr ""
+
+#: frontend/src/metabase/archive/components/ArchivedEntityBanner/ArchivedEntityBanner.tsx
+#, javascript-format
+msgctxt "{0} is a collection in the trash"
+msgid "This {0} is in the trash."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Access key"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Account name"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Additional Athena connection string options"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Additional JDBC options"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Additional connection string options (optional)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Authenticate with Kerberos"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Authenticate with user and password"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Authentication database (optional)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Basic authentication password."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Basic authentication username."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Catalog"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Catalogs and Schemas"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "ClickHouse settings (comma-separated)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Client SSL certificate chain (PEM)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Client SSL private key (PEM)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Database instance name"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Database name (case sensitive)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Default Catalog"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Default database"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Default impersonation user (required for impersonation if the connection's user cannot be impersonated)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Disable system wide proxy settings"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Enable multiple catalogs"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Enable multiple databases"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Enable syncing and scanning tables from multiple ClickHouse databases except the system ones."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Enter your Account ID with the region that your Snowflake cluster is running on e.g. \"xxxxxxxx.us-east-2.aws\". Some regions don't have this suffix."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "For M2M OAuth authentication, corresponds to the service principal's Client ID."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Found in SQL Warehouses > Connection details"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Full hostname"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "HTTP Path"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "If your user doesn't have a default warehouse, enter the warehouse to connect to."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Kerberos configuration file"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Kerberos coordinator service"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Kerberos credential cache file"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Kerberos keytab file"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Kerberos principal"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Keystore"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Keystore (PKCS12 or JKS)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Keystore password"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Leave empty to use Dynamic Ports, or input specific port. Standard port is 1433."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Leave this empty to authorize using AWS Credentials Provider Chain (Instance Profiles or IAM Roles for Tasks)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Max open HTTP connections in the JDBC driver (default: 100)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "OAuth Secret for M2M OAuth authentication."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Only add tables to Metabase that come from a specific schema."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Optimized prepared statements"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Optionally filter which databases are visible."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Optionally filter which schemas are visible."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Paste your connection string"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Personal Access Token"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Personal Access Token for authentication. Not required if using OAuth M2M."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Presto Catalogs contain schemas and reference data sources via a connector."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Presto coordinator Kerberos service principal pattern"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "RSA private key (PKCS#8/.p8)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Requires Starburst Galaxy, Starburst Enterprise (version 420-e or higher), or Trino (version 418 or higher)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Role (optional)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Router node port"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "S3 staging directory"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Schema (optional)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Schemas"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Secret key"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Server SSL certificate chain (PEM)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Service Principal Client ID"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Service Principal OAuth Secret"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Snowflake will soon block password authentication."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Specific database"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Specify a role to override the database user's default role."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Specify a role to override the database user’s default role."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Specify a single database to enable features like DB routing"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Specify the default catalog to connect to."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Specify the default database to connect to"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Starburst Catalogs contain schemas and reference data sources via a connector."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "The Databricks host URL. Could also be adb-xxxxx.azuredatabricks.net"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "This S3 staging directory must be in the same region you specify above. Leave it empty if you use managed query results."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "This enables the connection with basic authentication."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "This enables unfolding JSON columns into their component fields."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "This is useful when Metabase is deployed on a VPC or AWS Secret Cloud."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Truststore"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Truststore (PKCS12 or JKS)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Truststore password"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Use Machine to Machine (M2M) authentication"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Use Personal Access Token for authentication."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Use SSL server certificate?"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Use SSL truststore?"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Use a different data catalog (if you have federated queries, for example)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Use canonical hostname"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "User used to run system queries, required if the connection's user cannot be impersonated, such as the 'sa' user."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Warehouse"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Workgroup"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Your database's IP address (e.g. 98.137.149.56) or its domain name (e.g. esc.mydatabase.com)."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "A file readable by the Metabase server (e.g. a Kubernetes projected token). Preferred over a pasted JWT because the driver re-reads it per connection."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "AWS"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Azure"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Azure AD - Managed identity"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Azure AD - Service principal"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Azure AD - Service principal (certificate)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Certificate password"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Client certificate"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Client key"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Client key password"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Client secret"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Google Cloud"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "If the certificate needs a password, provide it here."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Managed identity client ID"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "OIDC token"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "OIDC token file path"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Only needed if the private key is in a separate file from the certificate."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Only needed if the separate private key file is encrypted."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Only needed if your private key is encrypted."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "OpenID Connect (JWT)"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Optional. Fill in for a user-assigned managed identity; leave blank to use the default identity attached to the Metabase host."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Paste a JWT for a one-off test. Metabase does not refresh tokens."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Private key passphrase"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "RSA key pair"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "SQL Server login"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Snowflake blocks password authentication for service users by October 2026."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "The Entra application (client) ID of the service principal."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "The Microsoft Entra service principal certificate."
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Username & password"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Workload Identity Federation"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Workload identity provider"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Alternate hostname"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Alternate hostname used to connect to BigQuery"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Authentication header"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Broker node port"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Datasets"
+msgstr ""
+
+#: frontend/src/metabase/sp/connection-field-i18n.ts
+msgid "Project ID (override)"
+msgstr ""
+
+
+#: frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
+#, javascript-format
+msgid "Map LDAP attributes to the email, first name, and last name fields in {0}"
+msgstr ""
+
+
+#: frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
+#, javascript-format
+msgid "Automatically assign people to {0} groups based on their LDAP group membership"
+msgstr ""
+
+
+#: frontend/src/metabase/admin/settings/auth/components/GroupMappings/SettingsGroupMappingSection.tsx
+msgid "Save the settings above to set up group mapping."
 msgstr ""

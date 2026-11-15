@@ -1,11 +1,12 @@
 import { t } from "ttag";
 
 import { ExternalLink } from "metabase/common/components/ExternalLink";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Flex, Icon, Tooltip } from "metabase/ui";
 
 import S from "./StoreLink.module.css";
 
-const StoreLink = () => {
+const StoreLinkUpstream = () => {
   return (
     <Tooltip label={t`Explore paid features`}>
       <ExternalLink
@@ -20,6 +21,8 @@ const StoreLink = () => {
     </Tooltip>
   );
 };
+
+const StoreLink = withSpCommercialPolicy(StoreLinkUpstream);
 
 // eslint-disable-next-line import/no-default-export -- deprecated usage
 export default StoreLink;

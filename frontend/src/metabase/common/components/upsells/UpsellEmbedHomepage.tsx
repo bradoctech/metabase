@@ -1,5 +1,6 @@
 import { t } from "ttag";
 
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Text } from "metabase/ui";
 
 import { UpsellCard } from "./UpsellCard";
@@ -7,7 +8,7 @@ import { UPGRADE_URL } from "./constants";
 
 const campaign = "advanced-embeds";
 
-export const UpsellEmbedHomepage = ({ location }: { location: string }) => {
+const UpsellEmbedHomepageUpstream = ({ location }: { location: string }) => {
   return (
     <UpsellCard
       title={t`More advanced embeds`}
@@ -28,3 +29,7 @@ export const UpsellEmbedHomepage = ({ location }: { location: string }) => {
     </UpsellCard>
   );
 };
+
+export const UpsellEmbedHomepage = withSpCommercialPolicy(
+  UpsellEmbedHomepageUpstream,
+);

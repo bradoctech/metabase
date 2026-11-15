@@ -5,6 +5,8 @@ import { UpsellCardContent } from "metabase/common/components/upsells/components
 import { DATA_STUDIO_UPGRADE_URL } from "metabase/common/components/upsells/constants";
 import { DataStudioBreadcrumbs } from "metabase/common/data-studio/components/DataStudioBreadcrumbs";
 import { PaneHeader } from "metabase/common/data-studio/components/PaneHeader";
+import { redirect } from "metabase/router";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Stack } from "metabase/ui";
 
 import S from "./BaseUpsellPage.module.css";
@@ -20,7 +22,7 @@ export type BaseUpsellPageProps = {
   variant?: "image-full-height" | "image-card";
 };
 
-export function BaseUpsellPage({
+function BaseUpsellPageUpstream({
   campaign,
   location,
   header,
@@ -59,3 +61,8 @@ export function BaseUpsellPage({
     </DottedBackground>
   );
 }
+
+export const BaseUpsellPage = withSpCommercialPolicy(
+  BaseUpsellPageUpstream,
+  redirect("/data-studio/guide"),
+);

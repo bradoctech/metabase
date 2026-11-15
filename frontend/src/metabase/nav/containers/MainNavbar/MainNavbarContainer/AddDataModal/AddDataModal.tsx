@@ -8,6 +8,7 @@ import {
 import CS from "metabase/css/core/index.css";
 import { PLUGIN_UPLOAD_MANAGEMENT } from "metabase/plugins";
 import { useSetting } from "metabase/settings";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Box, Icon, Modal, Tabs } from "metabase/ui";
 import type { IconName } from "metabase-types/api";
 
@@ -45,7 +46,9 @@ export const AddDataModal = (props: AddDataModalProps) => (
   // Outside `Modal.Root` so setup state and its polling survive the modal
   // closing, and so the purchase modal it hosts replaces this one rather than
   // stacking. `enabled` defers the add-ons fetch until the modal is shown.
-  <PLUGIN_STORAGE_SETUP.StorageSetupProvider enabled={props.opened}>
+  <PLUGIN_STORAGE_SETUP.StorageSetupProvider
+    enabled={props.opened && SP_COMMERCIAL_POLICY.showUpsells}
+  >
     <AddDataModalContent {...props} />
   </PLUGIN_STORAGE_SETUP.StorageSetupProvider>
 );

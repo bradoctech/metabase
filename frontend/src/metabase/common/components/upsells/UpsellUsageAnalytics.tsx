@@ -4,6 +4,7 @@ import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { PLUGIN_ADMIN_SETTINGS } from "metabase/plugins";
 import { useSelector } from "metabase/redux";
 import { getDocsUrl } from "metabase/selectors/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Box, type BoxProps, Text } from "metabase/ui";
 
 import { UpsellCard, type UpsellCardProps } from "./UpsellCard";
@@ -11,7 +12,7 @@ import { UPGRADE_URL } from "./constants";
 
 const usageAnalyticsIllustrationSource = "app/assets/img/usage-analytics.png";
 
-export const UpsellUsageAnalytics = (
+const UpsellUsageAnalyticsUpstream = (
   props: BoxProps &
     Omit<
       UpsellCardProps,
@@ -59,3 +60,7 @@ export const UpsellUsageAnalytics = (
     </Box>
   );
 };
+
+export const UpsellUsageAnalytics = withSpCommercialPolicy(
+  UpsellUsageAnalyticsUpstream,
+);

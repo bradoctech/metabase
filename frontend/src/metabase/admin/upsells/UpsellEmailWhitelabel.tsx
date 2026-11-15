@@ -4,8 +4,9 @@ import { UpsellPill } from "metabase/common/components/upsells/components";
 import { UPGRADE_URL } from "metabase/common/components/upsells/constants";
 import { useHasTokenFeature } from "metabase/common/hooks";
 import { useSetting } from "metabase/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 
-export const UpsellEmailWhitelabelPill = ({ source }: { source: string }) => {
+const UpsellEmailWhitelabelPillUpstream = ({ source }: { source: string }) => {
   const isHosted = useSetting("is-hosted?");
   const hasCloudSMTPFeature = useHasTokenFeature("cloud_custom_smtp");
 
@@ -23,3 +24,7 @@ export const UpsellEmailWhitelabelPill = ({ source }: { source: string }) => {
     </UpsellPill>
   );
 };
+
+export const UpsellEmailWhitelabelPill = withSpCommercialPolicy(
+  UpsellEmailWhitelabelPillUpstream,
+);

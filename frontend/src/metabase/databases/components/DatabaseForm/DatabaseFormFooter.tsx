@@ -10,6 +10,7 @@ import type {
 } from "metabase/databases/types";
 import { FormSubmitButton } from "metabase/forms/components/FormSubmitButton";
 import { useSetting } from "metabase/settings";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Button, Flex, Text } from "metabase/ui";
 import type { DatabaseData } from "metabase-types/api";
 
@@ -49,7 +50,7 @@ export const DatabaseFormFooter = ({
         px={location === "full-page" ? undefined : "xxl"}
       >
         <Flex justify="space-between" align="center" w="100%">
-          {isNew ? (
+          {isNew && SP_COMMERCIAL_POLICY.showExternalHelpLinks ? (
             <ExternalLink
               key="link"
               href={docsUrl}

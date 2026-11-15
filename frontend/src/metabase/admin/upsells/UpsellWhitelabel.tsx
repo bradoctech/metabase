@@ -8,9 +8,11 @@ import { UPGRADE_URL } from "metabase/common/components/upsells/constants";
 import { useHasTokenFeature } from "metabase/common/hooks";
 import { PLUGIN_ADMIN_SETTINGS } from "metabase/plugins";
 import { useSelector } from "metabase/redux";
+import { redirect } from "metabase/router";
 import { getDocsUrl } from "metabase/selectors/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 
-export const UpsellWhitelabel = ({ source }: { source: string }) => {
+const UpsellWhitelabelUpstream = ({ source }: { source: string }) => {
   const isWhitelabeled = useHasTokenFeature("whitelabel");
   const campaign = "whitelabel";
   const { triggerUpsellFlow } = PLUGIN_ADMIN_SETTINGS.useUpsellFlow({
@@ -53,3 +55,8 @@ export const UpsellWhitelabel = ({ source }: { source: string }) => {
     </UpsellBigCard>
   );
 };
+
+export const UpsellWhitelabel = withSpCommercialPolicy(
+  UpsellWhitelabelUpstream,
+  redirect("/admin/settings/general"),
+);

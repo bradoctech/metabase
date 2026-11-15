@@ -6,7 +6,7 @@ import {
   lazyModalRouteElement,
   modalRoute,
 } from "metabase/common/components/ModalRoute";
-import { canAccessMonitorDiagnostics } from "metabase/common/monitor/selectors";
+import { getMonitorInitialSection } from "metabase/common/monitor/selectors";
 // From the file rather than the barrel beside it: the barrel also re-exports
 // the page this file loads lazily, so importing the modal through it would hold
 // the page in the initial bundle.
@@ -156,12 +156,18 @@ export function getMonitorRoutes() {
   );
 }
 
-// Diagnostics for analysts/admins; otherwise the Tools pages for users who only
-// hold the monitoring application permission.
+// Use the same visibility decision as the app switcher, avoiding an upsell landing page.
 function getMonitorIndexPath(state: State) {
-  return canAccessMonitorDiagnostics(state)
-    ? Urls.dependencyDiagnostics()
-    : Urls.monitorTasks();
+  switch (getMonitorInitialSection(state)) {
+    case "diagnostics":
+      return Urls.dependencyDiagnostics();
+    case "tasks":
+      return Urls.monitorTasks();
+    case "alerts":
+      return Urls.monitorNotifications();
+    default:
+      return "/";
+  }
 }
 
 /**

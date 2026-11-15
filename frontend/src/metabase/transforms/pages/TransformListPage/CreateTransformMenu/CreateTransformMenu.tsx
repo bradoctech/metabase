@@ -7,6 +7,7 @@ import { UpsellGem } from "metabase/common/components/upsells/components/UpsellG
 import { useHasTokenFeature } from "metabase/common/hooks";
 import { useSelector } from "metabase/redux";
 import { useNavigate } from "metabase/router";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { useTransformPermissions } from "metabase/transforms/hooks/use-transform-permissions";
 import { getShouldShowPythonTransformsUpsell } from "metabase/transforms/selectors";
 import { Button, Center, Icon, Loader, Menu, Tooltip } from "metabase/ui";
@@ -102,17 +103,21 @@ export const CreateTransformMenu = () => {
                 {t`SQL query`}
               </Menu.Item>
 
-              {shouldShowPythonScriptOption && (
-                <Menu.Item
-                  leftSection={<Icon name="code_block" />}
-                  rightSection={
-                    !hasPythonTransformsFeature ? <UpsellGem size={14} /> : null
-                  }
-                  onClick={handlePythonClick}
-                >
-                  {t`Python script`}
-                </Menu.Item>
-              )}
+              {shouldShowPythonScriptOption &&
+                (hasPythonTransformsFeature ||
+                  SP_COMMERCIAL_POLICY.showUpsells) && (
+                  <Menu.Item
+                    leftSection={<Icon name="code_block" />}
+                    rightSection={
+                      !hasPythonTransformsFeature ? (
+                        <UpsellGem size={14} />
+                      ) : null
+                    }
+                    onClick={handlePythonClick}
+                  >
+                    {t`Python script`}
+                  </Menu.Item>
+                )}
               <Menu.Item
                 leftSection={<Icon name="insight" />}
                 onClick={() => {

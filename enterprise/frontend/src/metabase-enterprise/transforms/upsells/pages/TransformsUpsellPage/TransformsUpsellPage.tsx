@@ -8,7 +8,9 @@ import { LineDecorator } from "metabase/common/components/upsells/components/Lin
 import { useMetadataToasts } from "metabase/common/hooks";
 import { getUserIsAdmin } from "metabase/current-user";
 import { useSelector } from "metabase/redux";
+import { redirect } from "metabase/router";
 import { getStoreUsers } from "metabase/selectors/store-users";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { TransformsHeader } from "metabase/transforms/components/TransformsHeader";
 import { EnableTransformsCard } from "metabase/transforms/pages/EnableTransformsPage/EnableTransformsCard";
 import { Button, Center, Flex, Text, Title } from "metabase/ui";
@@ -24,7 +26,7 @@ const NOTIFICATION_THRESHOLD = 0.8;
  * Note: this upsell page should only be displayed to cloud customers since OSS and Self-hosted
  * do not need to pay extra for basic transforms.
  */
-export function TransformsUpsellPage() {
+function TransformsUpsellPageUpstream() {
   const { error, hadTransforms, isLoading, basicTransformsAddOn } =
     useTransformsBilling();
   const { isStoreUser, anyStoreUserEmailAddress } = useSelector(getStoreUsers);
@@ -153,3 +155,8 @@ export function TransformsUpsellPage() {
     </DottedBackground>
   );
 }
+
+export const TransformsUpsellPage = withSpCommercialPolicy(
+  TransformsUpsellPageUpstream,
+  redirect("/"),
+);

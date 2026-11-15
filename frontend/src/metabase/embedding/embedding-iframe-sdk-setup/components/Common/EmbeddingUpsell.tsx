@@ -6,12 +6,13 @@ import { useSdkIframeEmbedSetupContext } from "metabase/embedding/embedding-ifra
 import { PLUGIN_ADMIN_SETTINGS } from "metabase/plugins";
 import { useSelector } from "metabase/redux";
 import { getUpgradeUrl } from "metabase/selectors/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 
 type Props = {
   campaign: string;
 };
 
-export const EmbeddingUpsell = ({ campaign }: Props) => {
+const EmbeddingUpsellUpstream = ({ campaign }: Props) => {
   const { isSimpleEmbedFeatureAvailable } = useSdkIframeEmbedSetupContext();
 
   if (isSimpleEmbedFeatureAvailable) {
@@ -49,3 +50,5 @@ const EmbeddingUpsellInner = ({ campaign }: Props) => {
     </UpsellCard>
   );
 };
+
+export const EmbeddingUpsell = withSpCommercialPolicy(EmbeddingUpsellUpstream);

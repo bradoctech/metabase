@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { t } from "ttag";
 
+import { useLocale } from "metabase/common/hooks/use-locale";
 import type { EngineKey } from "metabase-types/api";
 
 import { ENGINE_DOC_MAP } from "./constants";
 
 export const useEngineDocMarkdownContent = (engineKey: EngineKey) => {
+  const { locale } = useLocale();
   const [markdownContent, setMarkdownContent] = useState<string>();
   const [loadingError, setLoadingError] = useState<string>();
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -22,7 +24,13 @@ export const useEngineDocMarkdownContent = (engineKey: EngineKey) => {
     setIsLoading(true);
     setLoadingError(undefined);
 
-    import(`docs/databases/connections/${docFileName}.md`)
+    const loadDocumentation =
+      engineKey === "postgres" &&
+      locale?.replace(/_/g, "-").toLowerCase() === "pt-br"
+        ? import("docs/databases/connections/postgresql.pt-BR.md")
+        : import(`docs/databases/connections/${docFileName}.md`);
+
+    loadDocumentation
       .then((result: { default: string }) => {
         setMarkdownContent(result.default);
       })
@@ -38,7 +46,7 @@ export const useEngineDocMarkdownContent = (engineKey: EngineKey) => {
       .finally(() => {
         setIsLoading(false);
       });
-  }, [engineKey]);
+  }, [engineKey, locale]);
 
   return { markdownContent, loadingError, isLoading };
 };

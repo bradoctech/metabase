@@ -6,9 +6,11 @@ import { useUpgradeAction } from "metabase/common/components/upsells/components/
 import { UpsellCardContent } from "metabase/common/components/upsells/components/UpsellCardContent";
 import { UPGRADE_URL } from "metabase/common/components/upsells/constants";
 import { MonitorMain } from "metabase/monitor/components/MonitorLayout";
+import { redirect } from "metabase/router";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Stack } from "metabase/ui";
 
-export function MetabotAnalyticsUpsellPage() {
+function MetabotAnalyticsUpsellPageUpstream() {
   const campaign = "ai-controls-usage-auditing";
   const location = "ai-controls-usage-auditing-page";
 
@@ -39,3 +41,8 @@ export function MetabotAnalyticsUpsellPage() {
     </MonitorMain>
   );
 }
+
+export const MetabotAnalyticsUpsellPage = withSpCommercialPolicy(
+  MetabotAnalyticsUpsellPageUpstream,
+  redirect("/"),
+);

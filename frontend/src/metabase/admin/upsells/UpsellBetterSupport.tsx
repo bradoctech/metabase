@@ -5,9 +5,10 @@ import { UPGRADE_URL } from "metabase/common/components/upsells/constants";
 import { PLUGIN_ADMIN_SETTINGS } from "metabase/plugins";
 import { useSelector } from "metabase/redux";
 import { getPlan, getSetting } from "metabase/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 import { Text } from "metabase/ui";
 
-export const UpsellBetterSupport = ({ location }: { location: string }) => {
+const UpsellBetterSupportUpstream = ({ location }: { location: string }) => {
   const campaign = "better-hosting";
   const { triggerUpsellFlow } = PLUGIN_ADMIN_SETTINGS.useUpsellFlow({
     campaign,
@@ -39,3 +40,7 @@ export const UpsellBetterSupport = ({ location }: { location: string }) => {
     </UpsellBanner>
   );
 };
+
+export const UpsellBetterSupport = withSpCommercialPolicy(
+  UpsellBetterSupportUpstream,
+);

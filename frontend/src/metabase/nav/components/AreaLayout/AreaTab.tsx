@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { ForwardRefLink } from "metabase/common/components/Link";
 import { UpsellGem } from "metabase/common/components/upsells/components/UpsellGem";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import { Box, FixedSizeIcon, Flex, Text, Tooltip } from "metabase/ui";
 import type { IconName } from "metabase-types/api";
 
@@ -30,6 +31,10 @@ export function AreaTab({
   isGated,
   onClick,
 }: AreaTabProps) {
+  if (isGated && !SP_COMMERCIAL_POLICY.showUpsells) {
+    return null;
+  }
+
   const upsellGem = isGated ? <UpsellGem.New size={14} /> : null;
   const effectiveRightSection = rightSection ?? upsellGem;
 

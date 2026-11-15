@@ -10,6 +10,7 @@ import { mockSettings } from "__support__/settings";
 import { createMockState } from "__support__/state";
 import { renderWithProviders, screen, waitFor, within } from "__support__/ui";
 import { Route } from "metabase/router";
+import { SP_COMMERCIAL_POLICY } from "metabase/sp/commercial-policy";
 import * as Urls from "metabase/urls";
 import type { TokenFeatures } from "metabase-types/api";
 import {
@@ -30,6 +31,7 @@ const { trackMonitorSectionClicked } = jest.requireMock(
 );
 
 interface SetupOpts {
+  showUpsells?: boolean;
   isNavbarOpened?: boolean;
   tokenFeatures?: Partial<TokenFeatures>;
   aiFeaturesEnabled?: boolean;
@@ -78,6 +80,7 @@ function TestSidebarToggle({ onRender }: { onRender: () => void }) {
 }
 
 const setup = ({
+  showUpsells = true,
   isNavbarOpened = true,
   tokenFeatures,
   aiFeaturesEnabled = true,
@@ -87,6 +90,8 @@ const setup = ({
   user = createMockUser({ is_superuser: true }),
   children = <div data-testid="content">{"Content"}</div>,
 }: SetupOpts = {}) => {
+  // Preserve upstream gating coverage; SP scenarios below explicitly hide offers.
+  jest.replaceProperty(SP_COMMERCIAL_POLICY, "showUpsells", showUpsells);
   const settings = mockSettings({
     "token-features": createMockTokenFeatures(tokenFeatures),
     "ai-features-enabled?": aiFeaturesEnabled,
@@ -130,6 +135,30 @@ const CONTENT_MANAGEMENT_GROUP = "Content management";
 const LOGS_AND_ACTIVITY_GROUP = "Logs and activity";
 
 describe("MonitorLayout", () => {
+  afterEach(() => jest.restoreAllMocks());
+  it("shows the SP logo alongside the Monitor icon in the expanded sidebar", async () => {
+    setup({ showUpsells: false });
+
+    const nav = await screen.findByTestId("monitor-nav");
+    expect(within(nav).getByTestId("main-logo")).toHaveAttribute(
+      "src",
+      expect.stringContaining("app/assets/img/logo.svg"),
+    );
+    expect(
+      within(nav).getByRole("img", { name: "pulse icon" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the SP logo and hides the secondary Monitor icon in the collapsed sidebar", async () => {
+    setup({ isNavbarOpened: false, showUpsells: false });
+
+    const nav = await screen.findByTestId("monitor-nav");
+    expect(within(nav).getByTestId("main-logo")).toBeInTheDocument();
+    expect(
+      within(nav).queryByRole("img", { name: "pulse icon" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("groups the sections under static headings with a link for each Monitor section", async () => {
     setup();
 

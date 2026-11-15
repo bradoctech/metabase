@@ -1,17 +1,55 @@
 import { renderHook, waitFor } from "@testing-library/react";
 
+import { useLocale } from "metabase/common/hooks/use-locale";
 import type { EngineKey } from "metabase-types/api";
 
 import { useEngineDocMarkdownContent } from "./useEngineDocMarkdownContent";
 
 jest.mock("docs/databases/connections/postgresql.md", () => "# Postgres doc");
+jest.mock(
+  "docs/databases/connections/postgresql.pt-BR.md",
+  () => "# Ajuda PostgreSQL\n\n## Versões compatíveis",
+);
+jest.mock("metabase/common/hooks/use-locale");
 jest.mock("docs/databases/connections/athena.md", () => {
   throw new Error("Failed to import file");
 });
 
 describe("useEngineDocMarkdownContent", () => {
   beforeEach(() => {
+    jest
+      .mocked(useLocale)
+      .mockReturnValue({ locale: "en", isLocaleLoading: false });
     jest.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  it.each(["pt-BR", "pt_BR"])("loads PostgreSQL help in %s", async (locale) => {
+    jest.mocked(useLocale).mockReturnValue({ locale, isLocaleLoading: false });
+    const { result } = renderHook(() =>
+      useEngineDocMarkdownContent("postgres"),
+    );
+
+    await waitFor(() => {
+      expect(result.current.markdownContent).toContain("Versões compatíveis");
+    });
+    expect(result.current.loadingError).toBeUndefined();
+  });
+
+  it("reloads the documentation when the interface language changes", async () => {
+    const { result, rerender } = renderHook(() =>
+      useEngineDocMarkdownContent("postgres"),
+    );
+    await waitFor(() => {
+      expect(result.current.markdownContent).toContain("# Postgres doc");
+    });
+
+    jest
+      .mocked(useLocale)
+      .mockReturnValue({ locale: "pt-BR", isLocaleLoading: false });
+    rerender();
+    await waitFor(() => {
+      expect(result.current.markdownContent).toContain("Versões compatíveis");
+    });
   });
 
   describe("when markdown content loads successfully", () => {

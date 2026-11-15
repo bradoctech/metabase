@@ -7,10 +7,12 @@ import { UPGRADE_URL } from "metabase/common/components/upsells/constants";
 import { useHasTokenFeature } from "metabase/common/hooks";
 import { PLUGIN_ADMIN_SETTINGS } from "metabase/plugins";
 import { useSelector } from "metabase/redux";
+import { redirect } from "metabase/router";
 import { getApplicationName } from "metabase/selectors/whitelabel";
 import { getPlan, isProPlan, useSetting } from "metabase/settings";
+import { withSpCommercialPolicy } from "metabase/sp/with-commercial-policy";
 
-export const UpsellRemoteSync = ({ source }: { source: string }) => {
+const UpsellRemoteSyncUpstream = ({ source }: { source: string }) => {
   const hasRemoteSync = useHasTokenFeature("remote_sync");
   const tokenFeatures = useSetting("token-features");
   const applicationName = useSelector(getApplicationName);
@@ -45,3 +47,8 @@ export const UpsellRemoteSync = ({ source }: { source: string }) => {
     </UpsellBigCard>
   );
 };
+
+export const UpsellRemoteSync = withSpCommercialPolicy(
+  UpsellRemoteSyncUpstream,
+  redirect("/admin/settings/general"),
+);
