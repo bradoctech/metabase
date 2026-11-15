@@ -2,14 +2,14 @@
 # STAGE 1: builder
 ###################
 
-FROM node:22-bullseye AS builder
+FROM node:22-bookworm AS builder
 
 ARG MB_EDITION=oss
 ARG VERSION
 
 WORKDIR /home/node
 
-RUN apt-get update && apt-get upgrade -y && apt-get install wget apt-transport-https gpg curl git -y \
+RUN apt-get update && apt-get upgrade -y && apt-get install wget apt-transport-https gpg curl git python3 -y \
     && wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor | tee /etc/apt/trusted.gpg.d/adoptium.gpg > /dev/null \
     && echo "deb https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" | tee /etc/apt/sources.list.d/adoptium.list \
     && apt-get update \
@@ -17,7 +17,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install wget apt-transport-h
     && curl -O https://download.clojure.org/install/linux-install-1.12.0.1488.sh \
     && chmod +x linux-install-1.12.0.1488.sh \
     && ./linux-install-1.12.0.1488.sh \
-    && curl -LsSf https://astral.sh/uv/install.sh | sh
+    && curl -LsSf https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local/bin sh
 
 ENV PATH="/root/.local/bin:$PATH"
 
