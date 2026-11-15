@@ -1,5 +1,7 @@
 # Reaplicação SP na base oficial 64 — saopaulov64
 
+> **Consolidação de 14/11/2026:** consultar o [fechamento técnico](./fechamento-tecnico-saopaulov64.md) para resultados finais de produção/regressão, auditoria e pendências encaminhadas à homologação. As notas cronológicas abaixo não substituem esse resultado.
+
 ## Decisão atual — 08/11/2026
 
 - Base: `metabase-64-oficial`, commit `bb612fac416eb1dde36c32e5a2d224280d09d7b6`.
@@ -30,7 +32,7 @@ O [inventário TSV](./inventario-saopaulov64.tsv) cruza as listas com o diff ent
 3. **Home e dashboard — aplicada, testes/tipos/lint e smoke local relatado aprovados; HD-05/12 adiados para homologação:** badges/cards, dashcards DS, layout e componentes associados.
 4. **Comportamentos — datagrid reaplicado com testes/tipos/lint e smoke DG-01 a DG-08 aprovados; filtros cascata reaplicados com testes/tipos/lint aprovados e smoke parcial (FC-01 a FC-04 aprovados; FC-05 a FC-08 em homologação); nulls reaplicados com aceite local no escopo registrado e pendências em homologação; eixos/tooltips reaplicados com aceite local registrado; paletas reaplicadas com smoke local aprovado no escopo registrado:** pin/hover do datagrid, cascata de filtros, nulls, eixos/title case/tooltips e paletas, incluindo Visualizer.
 5. **Traduções e política SP — reaplicadas; smoke local aprovado nos cenários exercitados, com pendências de infraestrutura/perfil registradas:** catálogo pt-BR, ajuda de drivers, links/upsells, Data Studio e Monitor, conforme EDD-1523. Preservar verificações reais de permissões/licença.
-6. **Entrega — pendente:** produção (backend/drivers, static-viz, tsc, FE), smoke canônico e auditoria. Não declarar o transporte concluído antes dessas validações.
+6. **Fechamento técnico local — concluído em 14/11/2026:** produção OSS (ClojureScript, FE, static-viz, idiomas, licenças, backend/drivers e JAR), execução do comando de versão, tipos/lint/formatação, regressões e auditoria aprovados. Smoke local aceito no escopo registrado; cenários adiados permanecem em homologação. Ver [relatório final](./fechamento-tecnico-saopaulov64.md); não equivale a deploy ou encerramento da homologação.
 
 ## Lixeira: diagnóstico e patch
 
@@ -413,8 +415,12 @@ TS-06/07/08/09 aprovados pelo usuário; TS-10 funcional aprovado com três strin
 
 Aceite posterior em 14/11/2026: usuário confirmou os três textos LDAP corretos; ressalva de TS-10 encerrada. TS-06 a TS-10 aprovados; CC/BCC de TS-02 segue adiado conforme combinado. Próximo lote TS-11 a TS-15.
 
-Retorno de 14/11/2026: TS-11/12/13 aprovados; TS-14 validado com acesso direto à introdução em /getting-started (rota confirmada no código), sem atalho no menu. TS-15 validado somente no estado sem banco compatível/sem upsell; demais fluxos de transformação permanecem para homologação. Tarefa futura solicitada para a assinatura de incorporação/exportações: [Dashboards SP com brasão](./pendencia-assinatura-dashboards-sp.md), registrada em documento separado; não implementada durante o smoke. Próximo lote TS-16 a TS-20.
+Retorno de 14/11/2026: TS-11/12/13 aprovados; TS-14 validado com acesso direto à introdução em /getting-started (rota confirmada no código), sem atalho no menu. TS-15 validado somente no estado sem banco compatível/sem upsell; demais fluxos de transformação permanecem para homologação. Tarefa futura solicitada para a assinatura de incorporação/exportações: `pendencia-assinatura-dashboards-sp.md` na branch `EDD-1523v64` (Dashboards SP com brasão), registrada em documento separado; não implementada durante o smoke. Próximo lote TS-16 a TS-20.
 
 Retorno de 14/11/2026: introdução em /getting-started explicitamente validada e aprovada (TS-14). Data Studio TS-16 a TS-20 aprovado integralmente pelo usuário. Monitor TS-21 a TS-25 segue pendente; não inferir aceite entre as áreas.
 
 Fechamento do smoke de Monitor em 14/11/2026: TS-21/22/23/25 aprovados. TS-24 pendente por inexistência do perfil específico no ambiente; não criar nem presumir permissões para encerrar o caso. Leva de traduções/política/Data Studio/Monitor validada localmente no escopo exercitado; CC/BCC (SMTP), upload completo, fluxos de transformações e perfil de monitoramento seguem para homologação conforme roteiro. Build de produção/auditoria final permanecem pendentes. Assinatura Dashboards SP registrada como tarefa futura, sem implementação nesta leva.
+
+## Fechamento técnico local — 14/11/2026
+
+Consolidação aprovada no [relatório técnico](./fechamento-tecnico-saopaulov64.md): 545 testes frontend e 8 testes backend/40 asserções, tipos globais, ESLint/Stylelint/formatação, builds de produção OSS e JAR executável. Scan final sem stale/missing/orphan/hybrid; caminhos ativos das listas existem. Onze referências históricas ausentes foram comentadas, sem importar seeds ou alterar o banco. Não houve mudança de produto, commit, push ou publicação nesta rodada. Permanecem as pendências por infraestrutura/perfil/banco real discriminadas no relatório e no smoke. A tarefa futura de assinatura está na branch EDD-1523v64.

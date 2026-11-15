@@ -1,6 +1,6 @@
 # Atualização do Metabase (fork SP)
 
-**Trabalho atual:** [Reaplicação SP sobre a 64 oficial — saopaulov64](./reaplicacao-saopaulov64.md).
+**Trabalho atual:** [Reaplicação SP sobre a 64 oficial — saopaulov64](./reaplicacao-saopaulov64.md). Validações finais e pendências: [fechamento técnico](./fechamento-tecnico-saopaulov64.md).
 
 Documentação interna do processo de atualizar o fork São Paulo / Trilhas do Metabase, preservando as customizações de código e reduzindo o custo das próximas releases.
 
@@ -16,7 +16,8 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 
 | Documento                                                  | Conteúdo                                                                  |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
-| [pendencia-assinatura-dashboards-sp.md](./pendencia-assinatura-dashboards-sp.md) | Tarefa posterior: assinatura Dashboards SP com brasão em incorporação, PDF e PNG |
+| [fechamento-tecnico-saopaulov64.md](./fechamento-tecnico-saopaulov64.md) | Validações de produção OSS, regressões, auditoria e encaminhamento para homologação |
+| `pendencia-assinatura-dashboards-sp.md` e `.pdf` — branch `EDD-1523v64` | Tarefa posterior: assinatura Dashboards SP com brasão em incorporação, PDF e PNG; arquivos separados desta branch |
 | [EDD-1523-auditoria.md](./EDD-1523-auditoria.md)           | Auditoria pós-v64: pontos levantados, ajustes aplicados e validações pendentes |
 | [manual-orientar-ia.md](./manual-orientar-ia.md)           | Manual humano: prompt curto, entrada da IA e docs sob demanda             |
 | [estrategia-salto-60-64.md](./estrategia-salto-60-64.md)   | Salto saopaulo 60→64 (branch `metabasev64`): plano, o que levar da 1359   |
