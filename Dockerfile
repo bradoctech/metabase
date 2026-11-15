@@ -32,7 +32,11 @@ RUN npm install -g bun
 # install frontend dependencies
 RUN bun install --frozen-lockfile
 
-RUN INTERACTIVE=false CI=true MB_EDITION=$MB_EDITION bin/build.sh :version ${VERSION}
+RUN if [ -n "$VERSION" ]; then \
+        INTERACTIVE=false CI=true MB_EDITION=$MB_EDITION bin/build.sh :version "\"$VERSION\""; \
+    else \
+        INTERACTIVE=false CI=true MB_EDITION=$MB_EDITION bin/build.sh; \
+    fi
 
 # ###################
 # # STAGE 2: runner
