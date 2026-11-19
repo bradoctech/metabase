@@ -268,12 +268,16 @@ Autorização do usuário: aplicar o padrão SP nos três pontos restantes e sub
 | AS-SM-03 | OK pelo usuário em 19/11/2026 | Cenário de link público aprovado conforme roteiro |
 | AS-SM-04 | PENDENTE — sem ambiente iframe SDK, conforme usuário em 19/11/2026 | Validar futuramente se houver ambiente disponível; não exigir configurar SDK apenas para o smoke |
 | AS-SM-05 | PARCIAL pelo usuário em 19/11/2026: marca visível OK pelo AS-SM-03; página pública de erro com rodapé e assinatura SP OK; ocultação e documento/ação indisponíveis | Subcenários indisponíveis permanecem pendentes; não exigir habilitação de licença ou publicação de novos recursos |
-| AS-SM-06 a 10 | Modelo aprovado onde testado; não equivale a aceite de todas as variações de PNG, clipboard e PDF frontend | Associar os testes já realizados aos IDs, sem exigir sua repetição; registrar variantes ainda não exercitadas |
+| AS-SM-06 | OK pelo usuário em 19/11/2026: PNG de pergunta e card no dashboard conforme roteiro | Concluído |
+| AS-SM-07 | PARCIAL pelo usuário em 19/11/2026: imagens de cards maiores e menores OK; faixa abaixo de 200 px não reproduzida | Manter somente xs abaixo de 200 px pendente de validação manual; presença do prefixo nas imagens testadas não caracteriza falha |
+| AS-SM-08 | OK pelo usuário em 19/11/2026: PNG nos temas claro e escuro conforme roteiro | Concluído |
+| AS-SM-09 | OK pelo usuário em 19/11/2026: copiar como imagem; anexo em fundo claro com assinatura SP | Concluído |
+| AS-SM-10 | OK pelo usuário em 19/11/2026: todas as páginas e trechos do PDF frontend corretos, assinatura sem link | Concluído; não confundir com variações do PDF backend em AS-SM-11 |
 | AS-SM-11 | PARCIAL: PDF backend real via endpoint/DevTools aprovado pelo usuário | A4/Letter e multipágina permanecem abertos para homologação quando não exercitados |
 | AS-SM-12 | Gates cobertos por testes automatizados; aceite manual específico não informado | Conferir apenas em ambiente/perfil compatível; registrar limitação se indisponível |
 | AS-SM-13 — e-mail | ABERTO PARA HOMOLOGAÇÃO: corpo dashboard, alerta e PDF anexo | Conferir imagem inline, identidade, links funcionais e entrega |
 | AS-SM-13 — Slack | OPCIONAL, sem vínculo obrigatório; sem envio real validado | Conferir somente se houver integração autorizada disponível |
-| AS-SM-14 | Cobertura manual completa de locale/subdiretório não informada | Validar conforme configuração do ambiente; marcar não aplicável com motivo quando pertinente |
+| AS-SM-14 | OK pelo usuário em 19/11/2026 conforme roteiro local: pt-BR/inglês na prévia e PNG, prefixos localizados e nome Dashboards SP preservado | Concluído no cenário local; subdiretório não exercitado em localhost na raiz, conferir em homologação somente se aplicável |
 | AS-SM-15 | Testes automatizados aprovados; novo build/JAR ainda pendente | Gerar pacote e verificar versão, recursos e assinatura no artefato |
 
 Consolidar significa registrar os testes já feitos com seu ID e seus limites. Não exige repetir um cenário já aprovado nem habilitar uma integração indisponível. Aceite visual geral do modelo permanece válido, mas não deve ser convertido em aprovação de rotas, formatos ou canais não exercitados.
@@ -408,3 +412,9 @@ Verificação: Stylelint e git diff --check aprovados; suíte SdkIframeEmbedSetu
 
 
 **Reteste AS-SM-01/02 — 19/11/2026:** usuário confirmou ambos OK após a correção do contêiner da prévia. Consideradas aprovadas as etapas do roteiro, incluindo largura reduzida, conforme convenção de retorno OK combinada. A indicação anterior de reteste pendente descreve o momento anterior a este aceite.
+
+
+**Retorno do lote AS-SM-06 a 10 — 19/11/2026:** usuário aprovou PNG de pergunta/card, temas claro/escuro, clipboard e PDF frontend em todas as páginas, sem link na assinatura. Capturas na conversa mostram assinatura SP em exportação escura de card pequeno e imagem clara copiada. Em AS-SM-07, cards menores e maiores produziram imagens corretas com prefixo + brasão + nome; a faixa de conteúdo abaixo de 200 px não foi reproduzida. Nessa faixa xs, a regra é omitir somente o prefixo e manter brasão + Dashboards SP; não é esperado deixar apenas o brasão. Não inferir largura do conteúdo exportado a partir da largura do card na grade ou da imagem rasterizada em escala 2.
+
+
+**Retorno AS-SM-14 — 19/11/2026:** usuário confirmou OK conforme roteiro local de idiomas (prévia de incorporação e PNG). Aceite não estendido à implantação em subdiretório, ausente no ambiente local informado.
