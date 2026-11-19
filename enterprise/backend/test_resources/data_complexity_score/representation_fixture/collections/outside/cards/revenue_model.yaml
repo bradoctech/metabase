@@ -1,0 +1,8 @@
+name: Revenue
+entity_id: ReVeNuEcArDmOdEl0001
+type: model
+archived: false
+collection_id: OuTsIdEcOlL000000001
+database_id: Sample Database
+serdes/meta:
+- model: Card

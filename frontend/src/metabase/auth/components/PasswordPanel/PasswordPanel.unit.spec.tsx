@@ -1,4 +1,4 @@
-import "metabase/plugins/builtin";
+import "metabase/auth/plugins";
 import userEvent from "@testing-library/user-event";
 import fetchMock from "fetch-mock";
 
@@ -7,13 +7,10 @@ import {
   setupLoginEndpoint,
   setupPropertiesEndpoints,
 } from "__support__/server-mocks";
+import { createMockSettingsState, createMockState } from "__support__/state";
 import { renderWithProviders, screen, waitFor } from "__support__/ui";
-import MetabaseSettings from "metabase/lib/settings";
+import MetabaseSettings from "metabase/utils/settings";
 import { createMockSettings, createMockUser } from "metabase-types/api/mocks";
-import {
-  createMockSettingsState,
-  createMockState,
-} from "metabase-types/store/mocks";
 
 import { PasswordPanel } from "./PasswordPanel";
 

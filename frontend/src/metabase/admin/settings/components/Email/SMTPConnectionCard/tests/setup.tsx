@@ -4,6 +4,7 @@ import {
   setupSettingsEndpoints,
 } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
+import { createMockState } from "__support__/state";
 import { renderWithProviders } from "__support__/ui";
 import { SMTPConnectionCard } from "metabase/admin/settings/components/Email/SMTPConnectionCard/SMTPConnectionCard";
 import type { SettingKey, TokenFeatures } from "metabase-types/api";
@@ -12,7 +13,6 @@ import {
   createMockSettings,
   createMockTokenFeatures,
 } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 export interface SetupOpts {
   tokenFeatures?: Partial<TokenFeatures>;
@@ -36,6 +36,7 @@ export function setup({
   setupPropertiesEndpoints(createMockSettings(settings));
   setupSettingsEndpoints(
     Object.entries(settings).map(([key, value]) =>
+      // Unjustified type cast. FIXME
       createMockSettingDefinition({ key: key as SettingKey, value }),
     ),
   );

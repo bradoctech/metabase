@@ -2,21 +2,29 @@ import { useDisclosure } from "@mantine/hooks";
 import { useMemo } from "react";
 import { t } from "ttag";
 
-import ActionViz from "metabase/actions/components/ActionViz";
-import { ConnectedActionDashcardSettings } from "metabase/actions/components/ActionViz/ActionDashcardSettings";
 import { isActionDashCard } from "metabase/actions/utils";
-import { Ellipsified } from "metabase/common/components/Ellipsified";
 import { FormField } from "metabase/common/components/FormField/FormField";
 import { Sidebar } from "metabase/common/components/Sidebar";
 import CS from "metabase/css/core/index.css";
+import ActionViz from "metabase/dashboard/components/ActionViz";
+import { ActionDashcardSettings } from "metabase/dashboard/components/ActionViz/ActionDashcardSettings";
 import { useDashboardContext } from "metabase/dashboard/context";
 import { Form, FormProvider, FormSelect, FormTextInput } from "metabase/forms";
-import { checkNotNull } from "metabase/lib/types";
-import { Box, Button, Divider, Flex, Modal, Stack, Title } from "metabase/ui";
+import {
+  Box,
+  Button,
+  Divider,
+  Ellipsified,
+  Flex,
+  Modal,
+  Stack,
+  Title,
+} from "metabase/ui";
+import { checkNotNull } from "metabase/utils/types";
 import type { ActionDashboardCard } from "metabase-types/api";
 
-const settings = checkNotNull(ActionViz.settings);
-const buttonVariantOptions = settings["button.variant"].getProps().options;
+const getButtonVariantOptions = () =>
+  checkNotNull(ActionViz.settings)["button.variant"].getProps().options;
 
 export function ActionSidebar() {
   const {
@@ -37,6 +45,7 @@ export function ActionSidebar() {
     if (!dashboard?.dashcards || !dashcardId) {
       return null;
     }
+    // Unjustified type cast. FIXME
     return dashboard.dashcards.find(
       (dc) => dc?.id === dashcardId && isActionDashCard(dc),
     ) as ActionDashboardCard | undefined;
@@ -48,11 +57,11 @@ export function ActionSidebar() {
 
   return (
     <Sidebar>
-      <Box px="xl" py="md">
+      <Box px="xxl" py="lg">
         <Title order={4} c="text-primary" fz="lg">{t`Button properties`}</Title>
       </Box>
       <Divider />
-      <Stack px="xl" py="md" flex={1} className={CS.overflowYAuto}>
+      <Stack px="xxl" py="lg" flex={1} className={CS.overflowYAuto}>
         <FormProvider
           initialValues={{
             button_text:
@@ -82,7 +91,7 @@ export function ActionSidebar() {
               title={t`Button variant`}
               label={t`Button variant`}
               name="button_variant"
-              data={buttonVariantOptions}
+              data={getButtonVariantOptions()}
               onChange={(value) =>
                 onUpdateDashCardVisualizationSettings(dashcard.id, {
                   "button.variant": value,
@@ -105,7 +114,7 @@ export function ActionSidebar() {
               onClick={openActionModal}
             >{t`Pick an action`}</Button>
           ) : (
-            <Flex justify="space-between" py="xs">
+            <Flex justify="space-between" py="xxs">
               <Ellipsified fw="bold">{dashcard.action.name}</Ellipsified>
               <Button
                 h="auto"
@@ -124,16 +133,16 @@ export function ActionSidebar() {
         >
           <Modal.Overlay />
           <Modal.Content>
-            <ConnectedActionDashcardSettings
+            <ActionDashcardSettings
               dashboard={dashboard}
-              dashcard={dashcard as ActionDashboardCard}
+              dashcard={dashcard}
               onClose={closeActionModal}
             />
           </Modal.Content>
         </Modal.Root>
       </Stack>
       <Divider />
-      <Flex px="xl" py="md" justify="flex-end">
+      <Flex px="xxl" py="lg" justify="flex-end">
         <Button onClick={onClose} variant="filled">
           {t`Close`}
         </Button>

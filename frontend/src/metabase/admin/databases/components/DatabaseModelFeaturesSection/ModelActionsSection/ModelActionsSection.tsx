@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { t } from "ttag";
 
-import { getResponseErrorMessage } from "metabase/lib/errors";
+import { findErrorMessage } from "metabase/api/utils/errors";
 import { Alert, Box, Flex, Icon, Switch } from "metabase/ui";
 
 import { Description, Error, Label } from "../../DatabaseFeatureComponents";
@@ -24,13 +24,13 @@ export function ModelActionsSection({
       setError(null);
       await onToggleModelActionsEnabled(enabled);
     } catch (err) {
-      setError(getResponseErrorMessage(err) || t`An error occurred`);
+      setError(findErrorMessage(err) || t`An error occurred`);
     }
   };
 
   return (
     <div>
-      <Flex align="center" justify="space-between" mb="xs">
+      <Flex align="center" justify="space-between" mb="xxs">
         <Label htmlFor="model-actions-toggle">{t`Model actions`}</Label>
         <Box>
           <Switch
@@ -54,10 +54,10 @@ export function ModelActionsSection({
       {disabled && (
         <Box>
           <Alert
+            size="compact"
             variant="light"
-            color="info"
             icon={<Icon name="info" />}
-            mb="md"
+            mb="lg"
           >
             {t`Model actions can't be enabled when database routing is enabled.`}
           </Alert>

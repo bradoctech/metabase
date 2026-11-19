@@ -1,6 +1,5 @@
 name: ID
 display_name: ID
-created_at: '2024-08-28T14:38:42.774331Z'
 visibility_type: normal
 table_id:
 - Sample Database
@@ -13,7 +12,6 @@ semantic_type: type/PK
 database_is_auto_increment: true
 dimensions: []
 position: 0
-custom_position: 0
 database_position: 0
 serdes/meta:
 - id: Sample Database

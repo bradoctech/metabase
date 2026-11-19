@@ -1,6 +1,5 @@
 /* istanbul ignore file */
 import fetchMock from "fetch-mock";
-import { Route } from "react-router";
 
 import { setupEnterpriseOnlyPlugin } from "__support__/enterprise";
 import {
@@ -9,7 +8,9 @@ import {
   setupUserKeyValueEndpoints,
 } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
+import { createMockState } from "__support__/state";
 import { renderWithProviders, screen, waitFor } from "__support__/ui";
+import { Route } from "metabase/router";
 import type {
   Collection,
   DashboardQuestionCandidate,
@@ -20,7 +21,6 @@ import {
   createMockTokenFeatures,
   createMockUser,
 } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { CollectionMenu } from "../CollectionMenu";
 
@@ -86,13 +86,13 @@ export const setup = ({
     <>
       <Route
         path="/"
-        component={() => (
+        element={
           <CollectionMenu
             collection={collection}
             isAdmin={isAdmin}
             onUpdateCollection={onUpdateCollection}
           />
-        )}
+        }
       />
     </>,
     { storeInitialState: state, initialRoute: "/", withRouter: true },

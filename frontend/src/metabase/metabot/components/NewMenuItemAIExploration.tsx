@@ -1,28 +1,27 @@
 import { t } from "ttag";
 
 import { ForwardRefLink } from "metabase/common/components/Link";
-import * as Urls from "metabase/lib/urls";
 import { Icon, Menu } from "metabase/ui";
+import * as Urls from "metabase/urls";
 import type { CollectionId } from "metabase-types/api";
 
-export function getNewMenuItemAIExploration(
-  hasDataAccess: boolean,
-  collectionId?: CollectionId,
-  isMetabotEnabled?: boolean,
-) {
-  if (!hasDataAccess || !isMetabotEnabled) {
-    return undefined;
-  }
+interface NewMenuItemAIExplorationProps {
+  collectionId?: CollectionId;
+}
+
+export function NewMenuItemAIExploration({
+  collectionId,
+}: NewMenuItemAIExplorationProps) {
+  const url = Urls.newQuestion({
+    mode: "ask",
+    collectionId,
+    cardType: "question",
+  });
 
   return (
     <Menu.Item
-      key="nlq"
       component={ForwardRefLink}
-      to={Urls.newQuestion({
-        mode: "ask",
-        collectionId,
-        cardType: "question",
-      })}
+      to={url}
       leftSection={<Icon name="comment" />}
     >
       {t`AI exploration`}

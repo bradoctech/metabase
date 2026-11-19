@@ -1,9 +1,8 @@
 import cx from "classnames";
 
-import { Ellipsified } from "metabase/common/components/Ellipsified";
 import { Sortable } from "metabase/common/components/Sortable";
 import { getColumnIcon } from "metabase/common/utils/columns";
-import { Box, Card, Flex, Icon, Text, rem } from "metabase/ui";
+import { Box, Card, Ellipsified, Flex, Icon, Text, rem } from "metabase/ui";
 import * as Lib from "metabase-lib";
 import type { Field } from "metabase-types/api";
 
@@ -39,7 +38,9 @@ export function SortableFieldItem<T extends number | string>({
     >
       <Card
         aria-label={label}
-        bg={active ? "background-brand" : "background-primary"}
+        bg={
+          active ? "background_surface-brand-subtle" : "background_page-primary"
+        }
         c="text-secondary"
         className={cx(S.card, {
           [S.active]: active,
@@ -54,7 +55,7 @@ export function SortableFieldItem<T extends number | string>({
           gap={0}
           mih={rem(40)}
           pos="relative"
-          px="md"
+          px="lg"
           py={rem(12)}
           w="100%"
           wrap="nowrap"
@@ -67,7 +68,7 @@ export function SortableFieldItem<T extends number | string>({
               flex="0 0 auto"
               lh="normal"
               maw="50%"
-              mr="xs"
+              mr="xxs"
             >
               <Ellipsified lines={1} tooltip={parent.display_name}>
                 {parent.display_name}

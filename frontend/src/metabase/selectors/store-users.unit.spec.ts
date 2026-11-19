@@ -2,12 +2,9 @@ import {
   setupCurrentUserEndpoint,
   setupPropertiesEndpoints,
 } from "__support__/server-mocks";
+import { createMockSettingsState, createMockState } from "__support__/state";
 import { getStoreUsers } from "metabase/selectors/store-users";
 import { createMockSettings, createMockUser } from "metabase-types/api/mocks";
-import {
-  createMockSettingsState,
-  createMockState,
-} from "metabase-types/store/mocks";
 
 const setupRefreshableProperties = ({
   current_user_matches_store_user,

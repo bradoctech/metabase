@@ -1,0 +1,85 @@
+import { t } from "ttag";
+
+import {
+  type VisualizationDefinition,
+  getDefaultSize,
+  getMinSize,
+} from "metabase/viz-core";
+
+import { Text } from "./Text";
+
+const TextViz: VisualizationDefinition = {
+  getUiName: () => t`Text`,
+  identifier: "text",
+  iconName: "empty",
+  canSavePng: false,
+
+  disableSettingsConfig: false,
+  noHeader: true,
+  hidden: true,
+  supportPreviewing: false,
+
+  minSize: getMinSize("text"),
+  defaultSize: getDefaultSize("text"),
+
+  checkRenderable: () => {
+    // text can always be rendered, nothing needed here
+  },
+
+  settings: {
+    "card.title": {
+      dashboard: false,
+      getDefault: () => t`Text card`,
+    },
+    "card.description": {
+      dashboard: false,
+    },
+    text: {
+      getDefault: () => "",
+    },
+    "text.align_vertical": {
+      getSection: () => t`Display`,
+      get title() {
+        return t`Vertical Alignment`;
+      },
+      widget: "select",
+      getProps: () => ({
+        options: [
+          { name: t`Top`, value: "top" },
+          { name: t`Middle`, value: "middle" },
+          { name: t`Bottom`, value: "bottom" },
+        ],
+      }),
+      getDefault: () => "top",
+    },
+    "text.align_horizontal": {
+      getSection: () => t`Display`,
+      get title() {
+        return t`Horizontal Alignment`;
+      },
+      widget: "select",
+      getProps: () => ({
+        options: [
+          { name: t`Left`, value: "left" },
+          { name: t`Center`, value: "center" },
+          { name: t`Right`, value: "right" },
+        ],
+      }),
+      getDefault: () => "left",
+    },
+    "dashcard.background": {
+      getSection: () => t`Display`,
+      get title() {
+        return t`Show background`;
+      },
+      dashboard: true,
+      inline: true,
+      widget: "toggle",
+      getDefault: () => true,
+    },
+  },
+};
+
+const TextWrapper = Object.assign(Text, TextViz);
+
+export { TextWrapper as Text };

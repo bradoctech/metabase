@@ -1,7 +1,7 @@
+import { createMockSettingsState } from "__support__/state";
 import { renderWithProviders, screen } from "__support__/ui";
 import type { TokenFeature } from "metabase-types/api";
 import { createMockTokenFeatures } from "metabase-types/api/mocks";
-import { createMockSettingsState } from "metabase-types/store/mocks";
 
 import { useHasTokenFeature } from "./use-has-token-feature";
 

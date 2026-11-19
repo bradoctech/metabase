@@ -12,6 +12,7 @@
    ;; TODO (Bronsa 16/02/26): get rid of macaw
    [macaw.ast :as macaw.ast]
    [macaw.core :as macaw]
+   [metabase-enterprise.transforms-inspector.db :as transforms-inspector.db]
    [metabase.driver :as driver]
    [metabase.driver.sql.normalize :as sql.normalize]
    [metabase.lib.core :as lib]
@@ -20,8 +21,7 @@
    [metabase.transforms-base.util :as transforms-base.u]
    [metabase.util :as u]
    [metabase.util.honey-sql-2 :as h2x]
-   [metabase.util.log :as log]
-   [toucan2.core :as t2]))
+   [metabase.util.log :as log]))
 
 (set! *warn-on-reflection* true)
 
@@ -94,16 +94,15 @@
 ;;; isolating macaw details to this namespace.
 
 (defn- macaw-table->hsql
-  "Convert a macaw table node to a HoneySQL table reference.
-   Returns `[table-identifier :alias]` when aliased, or `table-identifier` when not.
-   The alias is a plain keyword since HoneySQL expects that in FROM/JOIN position."
+  "Convert a macaw table node to a HoneySQL table reference suitable for a FROM or JOIN entry.
+   Returns `[table-identifier :alias]` when aliased, or `[table-identifier]` when not."
   [driver {:keys [schema table table-alias]}]
   (let [table-id (apply h2x/identifier :table
                         (remove nil? [(some->> schema (sql.normalize/normalize-name driver))
                                       (sql.normalize/normalize-name driver table)]))]
     (if table-alias
       [table-id (keyword (sql.normalize/normalize-name driver table-alias))]
-      table-id)))
+      [table-id])))
 
 (defn- macaw-column->hsql
   "Convert a macaw column node to a HoneySQL column identifier."
@@ -121,7 +120,7 @@
     :macaw.ast/literal (let [{:keys [value]} node]
                          (cond
                            (nil? value) nil
-                           :else        [:inline value]))
+                           :else        [:lift value]))
     nil))
 
 (defn- macaw-condition->hsql
@@ -217,7 +216,7 @@
                            qp.preprocess/preprocess)
           sql (lib/raw-native-query native-query)
           db-id (transforms-base.u/transform-source-database transform)
-          driver (t2/select-one-fn (comp keyword :engine) :model/Database :id db-id)
+          driver (keyword (transforms-inspector.db/database-engine db-id))
           parsed (macaw-parsed-query sql driver)
           ast (macaw.ast/->ast parsed {:with-instance? false})]
       (when (and ast (= (:type ast) :macaw.ast/select))
@@ -229,7 +228,7 @@
            :join-structure (extract-native-join-structure ast table->id driver)
            :visited-fields (resolve-native-visited-fields driver native-query)})))
     (catch Exception e
-      (log/warn e "Failed to analyze native SQL query")
+      (log/warnf "Failed to analyze native SQL query: %s" (ex-message e))
       nil)))
 
 ;;; -------------------------------------------------- Unified Analysis --------------------------------------------------
@@ -244,7 +243,7 @@
    - sources: source table info (with fields) for native column resolution
 
    Returns:
-   {:preprocessed-query <pMBQL> (MBQL only)
+   {:preprocessed-query <MBQL 5> (MBQL only)
     :driver <keyword> (native only)
     :from-table-id <int> (native only)
     :from-table <honeysql> (native only)

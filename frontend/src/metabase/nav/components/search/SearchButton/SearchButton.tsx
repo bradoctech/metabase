@@ -3,13 +3,18 @@ import { useCallback } from "react";
 import { t } from "ttag";
 
 import { useIsSmallScreen } from "metabase/common/hooks/use-is-small-screen";
-import { METAKEY } from "metabase/lib/browser";
-import S from "metabase/nav/components/search/SearchButton/SearchButton.module.css";
+import { getSearchTextFromLocation } from "metabase/common/search";
+import { useLocation } from "metabase/router";
 import { Button, type ButtonProps, Flex, Icon } from "metabase/ui";
+import { METAKEY } from "metabase/utils/browser";
+
+import S from "./SearchButton.module.css";
 
 export const SearchButton = (props: ButtonProps) => {
+  const location = useLocation();
   const kbar = useKBar();
   const { setVisualState } = kbar.query;
+  const searchText = getSearchTextFromLocation(location);
 
   const handleClick = useCallback(() => {
     setVisualState(VisualState.showing);
@@ -25,7 +30,7 @@ export const SearchButton = (props: ButtonProps) => {
         variant="subtle"
         onClick={handleClick}
         color="text-secondary"
-        aria-label={t`Search`}
+        aria-label="Search"
       />
     );
   }
@@ -34,7 +39,7 @@ export const SearchButton = (props: ButtonProps) => {
     <Button
       h="36px"
       w="240px"
-      c="text-tertiary"
+      c={searchText ? "text-primary" : "text-disabled"}
       leftSection={<Icon name="search" c="text-primary" />}
       onClick={handleClick}
       styles={{
@@ -48,11 +53,11 @@ export const SearchButton = (props: ButtonProps) => {
         },
       }}
       className={S.searchTextButton}
-      aria-label={t`Search`}
+      aria-label="Search"
       {...props}
     >
-      <span>{t`Search...`}</span>
-      <Flex gap="xs">
+      <span>{searchText || t`Search...`}</span>
+      <Flex gap="xxs">
         <span className={S.shortcutText}>{METAKEY}</span>
         <span className={S.shortcutText}>{t`K`}</span>
       </Flex>

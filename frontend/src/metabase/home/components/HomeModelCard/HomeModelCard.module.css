@@ -1,0 +1,68 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  height: 315px;
+  width: 215px;
+  max-width: 215px;
+  gap: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--mb-color-border-card-home);
+  border-radius: 0.75rem;
+  background-color: var(--mb-color-background_page-primary);
+  box-shadow: 0 0 0 0 transparent;
+  transition: box-shadow 0.2s ease;
+  text-decoration: none;
+  color: inherit;
+
+  @media (--breakpoint-min-lg) {
+    padding: 1rem;
+  }
+
+  &:hover {
+    box-shadow: -1px 6px 18.9px 0 var(--mb-color-shadow-card-hover);
+  }
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--mb-color-brand);
+  background-color: color-mix(in srgb, var(--mb-color-brand) 10%, transparent);
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.iconWrapper {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  color: var(--mb-color-brand);
+}
+
+.iconWrapper :global(.Icon),
+.iconWrapper svg,
+.iconWrapper img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 2rem;
+  max-height: 2rem;
+  min-width: 1.66rem;
+  min-height: 1.66rem;
+  object-fit: contain;
+  color: var(--mb-color-brand);
+}
+
+.title {
+  font-size: 1.25rem;
+  line-height: 1.875rem;
+  font-weight: 600;
+  color: var(--mb-color-sp-black-hover);
+  width: 100%;
+}

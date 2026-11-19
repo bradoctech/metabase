@@ -2,9 +2,9 @@ import type { FormEvent } from "react";
 import { useMemo } from "react";
 import { t } from "ttag";
 
-import { isNotNull } from "metabase/lib/types";
 import { BigIntNumberInput } from "metabase/querying/common/components/BigIntNumberInput";
 import { Box, Flex, Text } from "metabase/ui";
+import { isNotNull } from "metabase/utils/types";
 import * as Lib from "metabase-lib";
 
 import { FilterOperatorPicker } from "../FilterOperatorPicker";
@@ -137,7 +137,7 @@ function NumberValueInput({
 }: NumberValueInputProps) {
   if (hasMultipleValues) {
     return (
-      <Box p="md" mah="25vh" style={{ overflow: "auto" }}>
+      <Box p="lg" mah="25vh" style={{ overflow: "auto" }}>
         <NumberFilterValuePicker
           query={query}
           stageIndex={stageIndex}
@@ -153,7 +153,7 @@ function NumberValueInput({
 
   if (valueCount === 1) {
     return (
-      <Flex p="md">
+      <Flex p="lg">
         <BigIntNumberInput
           value={values[0]}
           placeholder={t`Enter a number`}
@@ -168,7 +168,7 @@ function NumberValueInput({
 
   if (valueCount === 2) {
     return (
-      <Flex align="center" justify="center" p="md">
+      <Flex align="center" justify="center" p="lg">
         <BigIntNumberInput
           value={values[0]}
           placeholder={t`Min`}

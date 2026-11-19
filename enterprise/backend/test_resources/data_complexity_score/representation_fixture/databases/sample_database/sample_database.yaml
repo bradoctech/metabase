@@ -1,0 +1,5 @@
+name: Sample Database
+entity_id: sAmPlEdAtAbAsE0000001
+engine: h2
+serdes/meta:
+- model: Database

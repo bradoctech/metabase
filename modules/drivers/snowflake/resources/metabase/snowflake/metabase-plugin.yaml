@@ -1,0 +1,111 @@
+info:
+  name: Metabase Snowflake Driver
+  version: 1.0.0-SNAPSHOT-3.12.7
+  description: Allows Metabase to connect to Snowflake databases.
+driver:
+  name: snowflake
+  display-name: Snowflake
+  lazy-load: true
+  parent: sql-jdbc
+  connection-properties:
+    - name: use-hostname
+      type: section
+      default: false
+    - merge:
+        - host
+        - visible-if:
+            use-hostname: true
+    - name: account
+      display-name: Account name
+      helper-text: Enter your Account ID with the region that your Snowflake cluster is running on e.g. "xxxxxxxx.us-east-2.aws". Some regions don't have this suffix.
+      placeholder: xxxxxxxx.us-east-2.aws
+      required: true
+      visible-if:
+        use-hostname: false
+    - user
+    - name: auth-mode
+      display-name: Authentication method
+      type: select
+      default: key-pair
+      required: true
+      options:
+        - {name: "RSA key pair",                 value: "key-pair"}
+        - {name: "Workload Identity Federation", value: "wif"}
+        - {name: "Username & password",          value: "password"}
+    - name: wif-provider
+      display-name: Workload identity provider
+      type: select
+      required: true
+      options:
+        - {name: "OpenID Connect (JWT)", value: "OIDC"}
+        - {name: "AWS",                  value: "AWS"}
+        - {name: "Azure",                value: "AZURE"}
+        - {name: "Google Cloud",         value: "GCP"}
+      visible-if:
+        auth-mode: wif
+    - name: wif-token
+      display-name: OIDC token
+      helper-text: Paste a JWT for a one-off test. Metabase does not refresh tokens.
+      type: password
+      placeholder: "eyJhbGciOi..."
+      visible-if:
+        wif-provider: OIDC
+    - name: wif-token-file-path
+      display-name: OIDC token file path
+      helper-text: A file readable by the Metabase server (e.g. a Kubernetes projected token). Preferred over a pasted JWT because the driver re-reads it per connection.
+      type: string
+      placeholder: "/var/run/secrets/tokens/oidc-token"
+      visible-if:
+        wif-provider: OIDC
+    - name: private-key
+      display-name: RSA private key (PKCS#8/.p8)
+      type: secret
+      secret-kind: pem-cert
+      visible-if:
+        auth-mode: key-pair
+      required: true
+    - name: private-key-passphrase
+      display-name: Private key passphrase
+      helper-text: Only needed if your private key is encrypted.
+      type: password
+      placeholder: "********"
+      visible-if:
+        auth-mode: key-pair
+    - merge:
+      - password
+      - visible-if:
+          auth-mode: password
+        description: Snowflake blocks password authentication for service users by October 2026.
+        required: true
+    - name: warehouse
+      display-name: Warehouse
+      helper-text: If your user doesn't have a default warehouse, enter the warehouse to connect to.
+      placeholder: birds_main
+      required: true
+    - merge:
+        - dbname
+        - name: db
+          required: true
+          display-name: Database name (case sensitive)
+    - name: schema-filters
+      type: schema-filters
+      display-name: Schemas
+    - name: role
+      display-name: Role (optional, required for connection impersonation)
+      helper-text: Specify a role to override the database user’s default role.
+      placeholder: user
+    - cloud-ip-address-info
+    - group:
+        container-style: ["component", "backdrop"]
+        fields:
+        - ssh-tunnel
+    - advanced-options-start
+    - merge:
+      - additional-options
+      - placeholder: 'queryTimeout=0'
+    - default-advanced-options
+init:
+  - step: load-namespace
+    namespace: metabase.driver.snowflake
+  - step: register-jdbc-driver
+    class: net.snowflake.client.api.driver.SnowflakeDriver

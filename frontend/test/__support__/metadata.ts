@@ -1,10 +1,7 @@
-import type { MetadataSelectorOpts } from "metabase/selectors/metadata";
-import { getMetadata } from "metabase/selectors/metadata";
+import { createMockSettingsState, createMockState } from "__support__/state";
+import type { MetadataSelectorOpts } from "metabase/metadata-store";
+import { getMetadata } from "metabase/metadata-store";
 import type { Settings } from "metabase-types/api";
-import {
-  createMockSettingsState,
-  createMockState,
-} from "metabase-types/store/mocks";
 
 import type { EntitiesStateOpts } from "./store";
 import { createMockEntitiesState } from "./store";

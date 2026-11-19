@@ -1,79 +1,85 @@
 import { useMemo } from "react";
 import _ from "underscore";
 
+import { getUserAttributes } from "metabase/current-user";
+import {
+  setOrUnsetParameterValues,
+  setParameterValue,
+} from "metabase/dashboard/actions/parameters";
 import {
   getDashCardById,
   getDashboardComplete,
+  getLinkTargetEntities,
   getParameterValuesBySlugMap,
   getParameters,
 } from "metabase/dashboard/selectors";
-import { getLinkTargets } from "metabase/lib/click-behavior";
-import { useStore } from "metabase/lib/redux";
-import { getUserAttributes } from "metabase/selectors/user";
+import { useStore } from "metabase/redux";
+import type { State } from "metabase/redux/store";
 import type { ClickObject } from "metabase/visualizations/types";
-import Question from "metabase-lib/v1/Question";
-import type { DashCardId } from "metabase-types/api";
-import type { State } from "metabase-types/store";
+import type {
+  CardId,
+  ClickBehavior,
+  DashCardId,
+  DashboardId,
+  EntityCustomDestinationClickBehavior,
+  VisualizationSettings,
+} from "metabase-types/api";
 
 type EntityObject = {
   id: number | string;
 };
 
-type LinkedEntityTarget = {
-  entity: {
-    name: string;
-    selectors: {
-      getObject: (
-        state: State,
-        opts: { entityId: number | string | undefined },
-      ) => unknown;
-    };
-  };
-  entityType: "question" | "dashboard";
-  entityId: number | string | undefined;
-};
+type LinkedEntityTarget =
+  | { entityType: "question"; entityId: CardId | undefined }
+  | { entityType: "dashboard"; entityId: DashboardId | undefined };
 
 function isEntityObject(value: unknown): value is EntityObject {
   return _.isObject(value) && "id" in value;
 }
 
 function resolveLinkedObject(target: LinkedEntityTarget, state: State) {
-  const object = target.entity.selectors.getObject(state, {
-    entityId: target.entityId,
-  });
-
-  if (target.entityType === "question") {
-    if (object instanceof Question) {
-      const card = object.card();
-      return isEntityObject(card) ? card : null;
-    }
+  if (target.entityId == null) {
     return null;
   }
 
-  return isEntityObject(object) ? object : null;
+  const targets = getLinkTargetEntities(state);
+  const linked =
+    target.entityType === "question"
+      ? targets.questions[target.entityId]
+      : targets.dashboards[target.entityId];
+
+  return isEntityObject(linked) ? linked : null;
 }
+
+/**
+ * Only the targets a click behavior actually names, so a key is absent when
+ * the dashboard carries no link of that kind.
+ */
+type LinkedEntities = {
+  questions?: Record<CardId, EntityObject>;
+  dashboards?: Record<DashboardId, EntityObject>;
+};
 
 function getEntitiesByTypeAndId(
   state: State,
   clicked: ClickObject | null,
-): Record<string, Record<string | number, EntityObject>> {
-  const targets: LinkedEntityTarget[] = getLinkTargets(clicked?.settings);
+): LinkedEntities {
+  const targets = getLinkTargets(clicked?.settings);
 
-  return targets.reduce<Record<string, Record<string | number, EntityObject>>>(
-    (acc, target) => {
-      const linkedObject = resolveLinkedObject(target, state);
-      if (!linkedObject) {
-        return acc;
-      }
-
-      const entityName = target.entity.name;
-      const bucket = acc[entityName] ?? {};
-      bucket[linkedObject.id] = linkedObject;
-      acc[entityName] = bucket;
+  return targets.reduce<LinkedEntities>((acc, target) => {
+    const linkedObject = resolveLinkedObject(target, state);
+    if (!linkedObject) {
       return acc;
-    },
-    {},
-  );
+    }
+
+    const entityName =
+      target.entityType === "question" ? "questions" : "dashboards";
+    acc[entityName] = {
+      ...acc[entityName],
+      [linkedObject.id]: linkedObject,
+    };
+    return acc;
+  }, {});
 }
 
 function createGetExtraDataForClick(
@@ -96,6 +102,8 @@ function createGetExtraDataForClick(
       dashboard,
       dashcard,
       userAttributes,
+      setOrUnsetParameterValues,
+      setParameterValue,
     };
   };
 }
@@ -117,3 +125,36 @@ export const useClickBehaviorData = ({
 
   return { getExtraDataForClick };
 };
+
+export function getLinkTargets(settings?: VisualizationSettings) {
+  const { click_behavior, column_settings = {} } = settings || {};
+  return [
+    click_behavior,
+    ...Object.values(column_settings).map(
+      (settings) => settings.click_behavior,
+    ),
+  ]
+    .filter(hasLinkedQuestionOrDashboard)
+    .map(mapLinkedEntityToEntityQuery);
+}
+
+function hasLinkedQuestionOrDashboard({
+  type,
+  linkType,
+}: {
+  type?: ClickBehavior["type"];
+  linkType?: EntityCustomDestinationClickBehavior["linkType"];
+} = {}) {
+  if (type === "link") {
+    return linkType === "question" || linkType === "dashboard";
+  }
+  return false;
+}
+
+function mapLinkedEntityToEntityQuery(
+  clickBehavior: EntityCustomDestinationClickBehavior,
+): LinkedEntityTarget {
+  return clickBehavior.linkType === "question"
+    ? { entityType: "question", entityId: clickBehavior.targetId }
+    : { entityType: "dashboard", entityId: clickBehavior.targetId };
+}

@@ -5,9 +5,9 @@ import {
   type AdminNavItemProps,
   AdminNavWrapper,
 } from "metabase/admin/components/AdminNav";
+import { UpsellGem } from "metabase/common/components/upsells/components/UpsellGem";
 import { useHasTokenFeature } from "metabase/common/hooks";
-import { useSelector } from "metabase/lib/redux";
-import { getLocation } from "metabase/selectors/routing";
+import { useLocation } from "metabase/router";
 import { Divider, Flex, Stack } from "metabase/ui";
 
 export function EmbeddingNav() {
@@ -15,7 +15,7 @@ export function EmbeddingNav() {
 
   return (
     <AdminNavWrapper>
-      <Stack gap="xs">
+      <Stack gap="xxs">
         {hasSimpleEmbedding && (
           <>
             <EmbeddingNavItem
@@ -52,14 +52,25 @@ export function EmbeddingNav() {
           label={t`Security`}
           icon="shield_outline"
         />
+
+        <EmbeddingNavItem
+          path="/admin/embedding/themes"
+          label={
+            <Flex gap="sm" align="center">
+              <span>{t`Themes`}</span>
+              {!hasSimpleEmbedding && <UpsellGem />}
+            </Flex>
+          }
+          icon="palette"
+        />
       </Stack>
     </AdminNavWrapper>
   );
 }
 
 const EmbeddingNavItem = (props: AdminNavItemProps) => {
-  const location = useSelector(getLocation);
-  const subpath = location?.pathname;
+  const location = useLocation();
+  const subpath = location.pathname;
 
   const isActive = props.path === subpath;
 

@@ -3,8 +3,8 @@ import { handleActions } from "redux-actions";
 import type {
   ChannelApiResponse,
   DashboardSubscription,
+  DraftDashboardSubscription,
 } from "metabase-types/api";
-import type { DraftDashboardSubscription } from "metabase-types/store";
 
 import {
   CANCEL_EDITING_PULSE,
@@ -50,6 +50,7 @@ export const formInput = handleActions(
       ) => payload,
     },
   },
+  // Unjustified type cast. FIXME
   {} as ChannelApiResponse,
 );
 
@@ -62,5 +63,6 @@ export const pulseList = handleActions(
       ) => payload,
     },
   },
+  // Unjustified type cast. FIXME
   [] as DashboardSubscription[],
 );

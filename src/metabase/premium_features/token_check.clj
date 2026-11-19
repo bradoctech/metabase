@@ -15,11 +15,12 @@
    [diehard.core :as dh]
    [environ.core :refer [env]]
    [java-time.api :as t]
-   [metabase.analytics.prometheus :as analytics]
+   [metabase.analytics-interface.core :as analytics]
    [metabase.app-db.core :as app-db]
    [metabase.config.core :as config]
    [metabase.events.core :as events]
    [metabase.internal-stats.core :as internal-stats]
+   [metabase.premium-features.db :as premium-features.db]
    [metabase.premium-features.defenterprise :refer [defenterprise]]
    [metabase.premium-features.settings :as premium-features.settings]
    [metabase.settings.core :as setting]
@@ -46,11 +47,6 @@
   "Similar to RemoteCheckedToken, but starts with 'airgap_'."
   #"airgap_.+")
 
-(def ^:private TokenStr
-  [:or
-   [:re RemoteCheckedToken]
-   [:re AirgapToken]])
-
 (def ^String token-check-url
   "Base URL to use for token checks. Hardcoded by default but for development purposes you can use a local server.
   Specify the env var `METASTORE_DEV_SERVER_URL`. If no server is defined, it uses the staging token check url."
@@ -72,15 +68,11 @@
 (let [f    (fn []
              {:post [(integer? %)]}
              (log/debug (u/colorize :yellow "GETTING ACTIVE USER COUNT!"))
-             (assert ((requiring-resolve 'metabase.app-db.core/db-is-set-up?)) "Metabase DB is not yet set up")
+             (assert (app-db/db-is-set-up?) "Metabase DB is not yet set up")
              ;; force this to use a new Connection, it seems to be getting called in situations where the Connection
              ;; is from a different thread and is invalid by the time we get to use it
              (let [result (binding [t2.conn/*current-connectable* nil]
-
-                            ;; Because we need this count *during* token checks, this uses `t2/table-name` to avoid
-                            ;; the `after-select` method on users, which calls an EE method that needs ... a token
-                            ;; check :|
-                            (t2/count (t2/table-name :model/User) :is_active true :type "personal"))]
+                            (premium-features.db/active-personal-user-count))]
                (log/debug (u/colorize :green "=>") result)
                result))
       lock (Object.)]
@@ -93,7 +85,7 @@
 (defn -active-users-count
   "Getter for the [[metabase.premium-features.settings/active-users-count]] Setting."
   []
-  (if-not ((requiring-resolve 'metabase.app-db.core/db-is-set-up?))
+  (if-not (app-db/db-is-set-up?)
     0
     (locking-active-user-count)))
 
@@ -149,6 +141,7 @@
         stats                     (merge (internal-stats/query-execution-last-utc-day)
                                          (embedding-settings embedding-dashboard-count embedding-question-count)
                                          (internal-stats/metabot-stats)
+                                         (internal-stats/data-app-stats)
                                          (transform-stats)
                                          {:users                     users
                                           :embedding-dashboard-count embedding-dashboard-count
@@ -165,9 +158,26 @@
   (when (seq token)
     (format "%s/api/%s/v2/status" base-url token)))
 
+(def ^:private Meters
+  "The `:meters` of a token status response, keyed by the meter names the license server defines, each meter's fields
+  also being the license server's."
+  [:map {:closed false, ::mr/deliberately-open true, :description "license-server meters"}])
+
+(def ^:private StoreUser
+  "A store user of a token status response, whose keys are the license server's."
+  [:map {:closed false, ::mr/deliberately-open true, :description "license-server store user"}
+   [:email :string]])
+
+(def ^:private Quota
+  "A quota of a token status response, whose keys are the license server's."
+  [:map {:closed false, ::mr/deliberately-open true, :description "license-server quota"}
+   [:hosting-feature {:optional true} :string]
+   [:soft-limit      {:optional true} number?]
+   [:usage           {:optional true} number?]])
+
 (def TokenStatus
-  "Schema for a response from the token status API."
-  [:map
+  "Schema for a response from the token status API, whose keys are the license server's."
+  [:map {:closed false, ::mr/deliberately-open true, :description "license-server token status"}
    [:valid                          :boolean]
    [:status                         [:string {:min 1}]]
    [:error-details {:optional true} [:maybe [:string {:min 1}]]]
@@ -178,10 +188,9 @@
    [:valid-thru    {:optional true} [:string {:min 1}]]
    [:max-users     {:optional true} pos-int?]
    [:company       {:optional true} [:string {:min 1}]]
-   [:store-users   {:optional true} [:maybe [:sequential [:map
-                                                          [:email :string]]]]]
-   [:meters        {:optional true} :map]
-   [:quotas        {:optional true} [:sequential [:map]]]])
+   [:store-users   {:optional true} [:maybe [:sequential StoreUser]]]
+   [:meters        {:optional true} Meters]
+   [:quotas        {:optional true} [:sequential Quota]]])
 
 (defn- http-fetch
   [base-url token site-uuid]
@@ -198,7 +207,7 @@
   (log/infof "Checking with the MetaStore to see whether token '%s' is valid..." (u.str/mask token))
   (let [{:keys [body status] :as resp} (http-fetch base-url token site-uuid)]
     (cond
-      (http/success? resp) (do (analytics/inc-if-initialized! :metabase-token-check/attempt {:status :success})
+      (http/success? resp) (do (analytics/inc! :metabase-token-check/attempt {:status :success})
                                (some-> body json/decode+kw (assoc :canonical? true)))
       (<= 400 status 499) (or (some-> body json/decode+kw (assoc :canonical? true))
                               {:valid         false
@@ -206,7 +215,7 @@
                                :status        "Unable to validate token"
                                :error-details "Token validation provided no response"})
       ;; exceptions are not cached.
-      :else (do (analytics/inc-if-initialized! :metabase-token-check/attempt {:status :failure})
+      :else (do (analytics/inc! :metabase-token-check/attempt {:status :failure})
                 (throw (ex-info "An unknown error occurred when validating token." {:status status
                                                                                     :body body}))))))
 
@@ -229,7 +238,7 @@
                         :content-type :json
                         :throw-exceptions false})
             (catch Throwable e
-              (log/error e "Error sending metering events"))))))))
+              (log/errorf "Error sending metering events: %s" (ex-message e)))))))))
 
 ;;;;;;;;;;;;;;;;;;;; Airgap Tokens ;;;;;;;;;;;;;;;;;;;;
 
@@ -244,9 +253,7 @@
         (when (pos? max-users) max-users)))))
 
 (defn- active-user-count []
-  ;; Because we need this count *during* token checks, this uses `t2/table-name` to avoid the `after-select` method
-  ;; on users, which calls an EE method that needs ... a token check :|
-  (t2/count (t2/table-name :model/User) :is_active true, :type "personal"))
+  (premium-features.db/active-personal-user-count))
 
 (defn assert-valid-airgap-user-count!
   "Asserts that, in an airgap context, the current user count does not exceed the allowed maximum.
@@ -272,7 +279,7 @@
 (mu/defn- decode-token* :- TokenStatus
   "Decode a token. If you get a positive response about the token, even if it is not valid, return that. Errors will
   be caught further up with appropriate fall backs, retry strategies, and grace periods for features."
-  [token :- TokenStr]
+  [token :- :string]
   ;; NB that we fetch any settings from this thread, not inside on of the futures in the inner fetch calls.  We
   ;; will have taken a lock to call through to here, and could create a deadlock with the future's thread.  See
   ;; https://github.com/metabase/metabase/pull/38029/
@@ -300,8 +307,13 @@
   (-check-token [this token]
     "Check a token and return TokenStatus map. May throw exceptions on failure.")
   (-clear-cache! [this]
-    "Clear any caches in this checker and any wrapped checkers.
-     Returns nil. Implementations should delegate to wrapped checkers."))
+    "Clear any caches in this checker and any wrapped checkers, including the shared DB cache.
+     Returns nil. Implementations should delegate to wrapped checkers.")
+  (-clear-local-cache! [this]
+    "Clear only the in-process memoization in this checker and any wrapped checkers. The shared DB cache and the
+     DB-hash-validated local cache are left alone, so the next check re-validates against the DB and only refetches
+     from the MetaStore if another instance really did get a different token status. Safe to trigger from untrusted
+     input. Returns nil."))
 
 (def store-and-airgap-token-checker
   "Creates a basic token checker that handles HTTP requests and airgap tokens.
@@ -309,7 +321,8 @@
   (reify TokenChecker
     (-check-token [_ token]
       (decode-token* token))
-    (-clear-cache! [_] nil)))
+    (-clear-cache! [_] nil)
+    (-clear-local-cache! [_] nil)))
 
 (defn circuit-breaker-token-checker
   "Wraps a token checker with circuit breaker and timeout logic."
@@ -323,7 +336,7 @@
                           {:pass-thru true})))
         ;; important to not count these errors against the circuit breaker. These are not the types of errors we need
         ;; to circuit break. (#65294)
-        (when-not ((requiring-resolve 'metabase.app-db.core/db-is-set-up?))
+        (when-not (app-db/db-is-set-up?)
           (throw (ex-info "Metabase DB is not yet set up"
                           {:cause :token-check/app-db-not-ready})))
         (locking lock
@@ -340,7 +353,9 @@
                  (catch dev.failsafe.FailsafeException e
                    (throw (.getCause e)))))))
       (-clear-cache! [_]
-        (-clear-cache! token-checker)))))
+        (-clear-cache! token-checker))
+      (-clear-local-cache! [_]
+        (-clear-local-cache! token-checker)))))
 
 (defn- hash-token
   "SHA-256 hex hash of a token string. Used as cache table key so the raw token never appears in plaintext."
@@ -365,7 +380,7 @@
 (defn- read-cache-from-db
   "Read a cached token status hash from the premium_features_token_cache table. Returns nil if not found."
   [token-hash]
-  (t2/select-one [:model/PremiumFeaturesCache :token_status_hash :updated_at] :token_hash token-hash))
+  (premium-features.db/token-status-cache token-hash))
 
 (defn- write-cache-to-db!
   "Upsert a token status hash into the premium_features_token_cache table.
@@ -374,23 +389,36 @@
   [token-hash result-hash]
   (t2/with-connection [_conn (app-db/app-db)]
     (let [now     (t/offset-date-time)
-          updated (t2/update! :model/PremiumFeaturesCache :token_hash token-hash
-                              {:token_status_hash result-hash :updated_at now})]
+          updated (premium-features.db/update-token-status-cache! token-hash result-hash now)]
       (when (zero? updated) ;; even though toucan2 returns 0 if we match a row but don't update it
         ;; we should always be updating this row with the timestamp if it's there.
         (try
-          (t2/insert! :model/PremiumFeaturesCache {:token_hash        token-hash
-                                                   :token_status_hash result-hash
-                                                   :updated_at        now})
+          (premium-features.db/insert-token-status-cache! token-hash result-hash now)
           (catch Exception _e
             ;; Another instance inserted first — update instead.
-            (t2/update! :model/PremiumFeaturesCache :token_hash token-hash
-                        {:token_status_hash result-hash :updated_at now})))))))
+            (premium-features.db/update-token-status-cache! token-hash result-hash now)))))))
 
 (defn- clear-db-cache!
   "Delete all rows from the premium_features_token_cache table."
   []
-  (t2/delete! :model/PremiumFeaturesCache))
+  (premium-features.db/delete-token-status-cache!))
+
+(defn- extract-locks
+  "Project a `:meters` map to `{meter-keyword -> boolean}` of `:is-locked` values.
+   Meters without an `:is-locked` field are dropped."
+  [meters]
+  (into {} (keep (fn [[k v]] (when-some [locked (:is-locked v)] [k locked]))) meters))
+
+(defn- update-locked-meters!
+  "Mirror the `:is-locked` flag for each meter in `result` to the local `:locked-meters`
+   setting, when `:meters` is present in a successful token-check response. Best-effort:
+   failures are logged but never propagated to the refresh path."
+  [result]
+  (when (contains? result :meters)
+    (try
+      (premium-features.settings/locked-meters! (extract-locks (:meters result)))
+      (catch Throwable t
+        (log/warnf "Failed to mirror :locked-meters from token-check response: %s" (ex-message t))))))
 
 (def ^:dynamic *testing-only-call-after-refresh*
   "When non-nil, a zero-arg function called after async background refresh completes.
@@ -416,6 +444,7 @@
                     result-hash (hash-token-status result)
                     now         (t/instant)]
                 (write-cache-to-db! token-hash result-hash)
+                (update-locked-meters! result)
                 (swap! local-cache assoc token-hash {:result      result
                                                      :result-hash result-hash
                                                      :updated-at  now})
@@ -446,7 +475,7 @@
                           (try
                             (do-refresh! token token-hash)
                             (catch Exception e
-                              (log/error e "Background premium features refresh failed"))
+                              (log/errorf "Background premium features refresh failed: %s" (ex-message e)))
                             (finally
                               (reset! refresh-in-progress? false)
                               (when-let [after *testing-only-call-after-refresh*]
@@ -456,14 +485,17 @@
                     ;; Expired (> hard-ttl): synchronous refresh
                     :else
                     (do-refresh! token token-hash)))
-
                 ;; No local cache, no DB row, or hash mismatch: synchronous fetch
                 (do-refresh! token token-hash)))))
         (-clear-cache! [_]
           (reset! local-cache {})
           (when (app-db/db-is-set-up?)
             (clear-db-cache!))
-          (-clear-cache! token-checker))))))
+          (-clear-cache! token-checker))
+        (-clear-local-cache! [_]
+          ;; `local-cache` is validated against the DB hash on every check, so it self-corrects; dropping it would
+          ;; only force a synchronous MetaStore fetch.
+          (-clear-local-cache! token-checker))))))
 
 (defn local-cached-token-checker
   "Wraps a token checker with short-lived in-memory TTL memoization.
@@ -477,7 +509,10 @@
         (cached-check token))
       (-clear-cache! [_]
         (memoize/memo-clear! cached-check)
-        (-clear-cache! token-checker)))))
+        (-clear-cache! token-checker))
+      (-clear-local-cache! [_]
+        (memoize/memo-clear! cached-check)
+        (-clear-local-cache! token-checker)))))
 
 (defn- error-catching-token-checker
   [token-checker]
@@ -487,12 +522,13 @@
            (catch Exception e
              (when-not (-> e ex-data :cause #{:token-check/circuit-breaker :token-check/app-db-not-ready})
                (log/infof "Error checking token: %s" (ex-message e))
-               (analytics/inc-if-initialized! :metabase-token-check/attempt {:status :failure}))
+               (analytics/inc! :metabase-token-check/attempt {:status :failure}))
              {:valid         false
               :canonical?    false
               :status        (tru "Unable to validate token")
               :error-details (.getMessage e)})))
-    (-clear-cache! [_] (-clear-cache! token-checker))))
+    (-clear-cache! [_] (-clear-cache! token-checker))
+    (-clear-local-cache! [_] (-clear-local-cache! token-checker))))
 
 (def ^:dynamic *customize-checker*
   "Dynamic variable allowing for customized token checkers. In the app, we want all of these in place. Only in tests
@@ -544,13 +580,19 @@
   []
   (-clear-cache! token-checker))
 
+(defn clear-local-cache!
+  "Clear only this process's in-memory token memoization; see [[-clear-local-cache!]]. Unlike [[clear-cache!]] this
+  never touches the shared DB cache, so it is safe to trigger from an untrusted request."
+  []
+  (-clear-local-cache! token-checker))
+
 (defn check-token
   "Public entrypoint to the token checking."
   ([token] (check-token token-checker token))
   ([checker token]
    (-check-token checker token)))
 
-(derive :event/set-premium-embedding-token :metabase/event)
+(events/derive! :event/set-premium-embedding-token :metabase/event)
 
 (defn -set-premium-embedding-token!
   "Setter for the [[metabase.premium-features.settings/token-status]] setting."
@@ -563,7 +605,9 @@
       (when-not (or (mr/validate [:re RemoteCheckedToken] new-value)
                     (mr/validate [:re AirgapToken] new-value))
         (throw (ex-info (tru "Token format is invalid.")
-                        {:status-code 400, :error-details "Token should be 64 hexadecimal characters."})))
+                        {:status-code   400
+                         :error-details "Token should be 64 hexadecimal characters."
+                         :response/keys #{:error-details}})))
       (let [decoded (check-token new-value)]
         (when-not (:valid decoded)
           (throw (ex-info (:status decoded)
@@ -572,12 +616,13 @@
                            ;; probably more appropriate.
                            :status-code (if (:canonical? decoded)
                                           400
-                                          503)}))))
+                                          503)
+                           :response/keys #{:error-details}}))))
       (log/info "Token is valid."))
     (setting/set-value-of-type! :string :premium-embedding-token new-value)
     (events/publish-event! :event/set-premium-embedding-token {})
     (catch Throwable e
-      (log/error e "Error setting premium features token")
+      (log/errorf "Error setting premium features token: %s" (ex-message e))
       ;; merge in error-details if present
       (throw (ex-info (.getMessage e) (merge
                                        {:message (.getMessage e), :status-code 400}
@@ -591,8 +636,7 @@
 (let [cached-logger (memoize/ttl
                      ^{::memoize/args-fn (fn [[token _e]] [token])}
                      (fn [_token e]
-                       (log/error "Error validating token:" (ex-message e))
-                       (log/debug e "Error validating token"))
+                       (log/errorf "Error validating token: %s" (ex-message e)))
                      ;; log every five minutes
                      :ttl/threshold (* 1000 60 5))]
   (mu/defn ^:dynamic *token-features* :- [:set ms/NonBlankString]
@@ -666,7 +710,7 @@
   [feature-name]
   (ex-info (tru "{0} is a paid feature not currently available to your instance. Please upgrade to use it. Learn more at metabase.com/upgrade/"
                 feature-name)
-           {:status-code 402 :status "error-premium-feature-not-available"}))
+           {:status-code 402 :status "error-premium-feature-not-available" :response/keys #{:status}}))
 
 (mu/defn assert-has-feature
   "Check if an token with `feature` is present. If not, throw an error with a message using `feature-name`.
@@ -695,6 +739,28 @@
   "Returns true when we should record audit data into the audit log."
   []
   (or (premium-features.settings/is-hosted?) (has-feature? :audit-app)))
+
+(defn query-transforms-enabled?
+  "Whether query (native/MBQL) transforms are available on this instance. Available on any non-hosted
+  instance (OSS intentionally gets query transforms without a license), or on hosted instances with the
+  `:transforms-basic` feature. Also requires the :transforms-enabled setting to be true."
+  []
+  (and (setting/get :transforms-enabled)
+       (or (not (premium-features.settings/is-hosted?))
+           (has-feature? :transforms-basic))))
+
+(defn python-transforms-enabled?
+  "Whether Python transforms are available on this instance. EE only; requires both `:transforms-basic`
+  and `:transforms-python`. Also requires the :transforms-enabled setting to be true."
+  []
+  (and (setting/get :transforms-enabled)
+       (has-feature? :transforms-basic)
+       (has-feature? :transforms-python)))
+
+(defn any-transforms-enabled?
+  "Whether any kind of transform is available on this instance."
+  []
+  (or (query-transforms-enabled?) (python-transforms-enabled?)))
 
 (defenterprise decode-airgap-token
   "In OSS, this returns an empty map."

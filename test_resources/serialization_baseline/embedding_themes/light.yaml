@@ -1,0 +1,7 @@
+entity_id: WvRp2yy6Tk98WunjkA8aE
+name: Light
+settings: {}
+serdes/meta:
+- id: WvRp2yy6Tk98WunjkA8aE
+  label: light
+  model: EmbeddingTheme

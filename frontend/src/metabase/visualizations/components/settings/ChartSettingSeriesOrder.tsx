@@ -6,53 +6,19 @@ import _ from "underscore";
 
 import { ColorSelector } from "metabase/common/components/ColorSelector";
 import type { DragEndEvent } from "metabase/common/components/Sortable";
-import { NULL_DISPLAY_VALUE } from "metabase/lib/constants";
-import { getEventTarget } from "metabase/lib/dom";
-import { isEmpty } from "metabase/lib/validate";
 import { Box, Button, Flex, Group, Icon, Select, Text } from "metabase/ui";
 import { color } from "metabase/ui/colors";
 import { SP_PALETTE_COLORS } from "metabase/ui/colors/constants/accent-colors";
-import type { AccentColorOptions } from "metabase/ui/colors/types";
-import type { Series } from "metabase-types/api";
+import { getNullDisplayValue } from "metabase/utils/constants";
+import { getEventTarget } from "metabase/utils/dom";
+import { isEmpty } from "metabase/utils/validate";
+import type {
+  ChartSettingSeriesOrderItem,
+  ChartSettingSeriesOrderProps,
+} from "metabase/viz-core";
 
 import { ChartSettingMessage } from "./ChartSettingMessage";
-import {
-  ChartSettingOrderedItems,
-  type SortableItem as SortableChartSettingOrderedItem,
-} from "./ChartSettingOrderedItems";
-
-export { SortableChartSettingOrderedItem };
-
-export interface SortableItem {
-  key: string;
-  enabled: boolean;
-  name: string;
-  color?: string;
-  hidden?: boolean;
-  hideSettings?: boolean;
-}
-
-export type ChartSettingSeriesOrderProps = {
-  onChange: (rows: SortableItem[]) => void;
-  value: SortableItem[];
-  onShowWidget: (
-    widget: { id?: string; props?: { seriesKey: string } },
-    ref: HTMLElement | undefined,
-  ) => void;
-  series: Series;
-  hasEditSettings: boolean;
-  onChangeSeriesColor: (seriesKey: string, color: string) => void;
-  onSortEnd: (newItems: SortableItem[]) => void;
-  accentColorOptions?: AccentColorOptions;
-  getItemColor?: (item: SortableChartSettingOrderedItem) => string | undefined;
-  addButtonLabel?: string;
-  searchPickerPlaceholder?: string;
-  groupedAfterIndex?: number;
-  otherColor?: string;
-  otherSettingWidgetId?: string;
-  onOtherColorChange?: (newColor: string) => void;
-  truncateAfter?: number;
-};
+import { ChartSettingOrderedItems } from "./ChartSettingOrderedItems";
 
 export const ChartSettingSeriesOrder = ({
   onChange,
@@ -63,6 +29,7 @@ export const ChartSettingSeriesOrder = ({
   hasEditSettings = true,
   onChangeSeriesColor,
   onSortEnd,
+  isSortable = true,
   getItemColor,
   accentColorOptions,
   otherColor,
@@ -107,7 +74,7 @@ export const ChartSettingSeriesOrder = ({
   const canAddSeries = hiddenItems.length > 0;
 
   const toggleDisplay = useCallback(
-    (selectedItem: SortableItem) => {
+    (selectedItem: ChartSettingSeriesOrderItem) => {
       const index = orderedItems.findIndex(
         (item) => item.key === selectedItem.key,
       );
@@ -131,12 +98,12 @@ export const ChartSettingSeriesOrder = ({
     [orderedItems, onChange, onSortEnd],
   );
 
-  const getItemTitle = useCallback((item: SortableItem) => {
-    return isEmpty(item.name) ? NULL_DISPLAY_VALUE : item.name;
+  const getItemTitle = useCallback((item: ChartSettingSeriesOrderItem) => {
+    return isEmpty(item.name) ? getNullDisplayValue() : item.name;
   }, []);
 
   const handleOnEdit = useCallback(
-    (item: SortableItem, ref: HTMLElement | undefined) => {
+    (item: ChartSettingSeriesOrderItem, ref: HTMLElement | undefined) => {
       onShowWidget(
         {
           props: {
@@ -150,8 +117,12 @@ export const ChartSettingSeriesOrder = ({
   );
 
   const handleColorChange = useCallback(
-    (item: SortableItem, color: string) => {
-      onChangeSeriesColor(item.key, color);
+    (
+      item: ChartSettingSeriesOrderItem,
+      hexValue: string,
+      colorName?: string,
+    ) => {
+      onChangeSeriesColor(item.key, hexValue, colorName);
     },
     [onChangeSeriesColor],
   );
@@ -167,7 +138,10 @@ export const ChartSettingSeriesOrder = ({
     [hiddenItems, toggleDisplay],
   );
 
-  const getId = useCallback((item: SortableItem) => item.key, []);
+  const getId = useCallback(
+    (item: ChartSettingSeriesOrderItem) => item.key,
+    [],
+  );
 
   const handleOtherSeriesSettingsClick = useCallback(
     (e: React.MouseEvent) => {
@@ -184,7 +158,7 @@ export const ChartSettingSeriesOrder = ({
           <Flex justify="space-between" px={4}>
             <Group p={4} gap="sm">
               <ColorSelector
-                value={otherColor ?? color("text-tertiary")}
+                value={otherColor ?? color("text-disabled")}
                 colors={SP_PALETTE_COLORS}
                 onChange={onOtherColorChange}
                 pillSize="small"
@@ -211,7 +185,7 @@ export const ChartSettingSeriesOrder = ({
   ]);
 
   return (
-    <Box pl="md" pb="sm">
+    <Box pl="lg" pb="sm">
       {orderedItems.length > 0 ? (
         <>
           <ChartSettingOrderedItems
@@ -220,6 +194,7 @@ export const ChartSettingSeriesOrder = ({
             onRemove={visibleItems.length > 1 ? toggleDisplay : undefined}
             onEnable={toggleDisplay}
             onSortEnd={handleSortEnd}
+            isSortable={isSortable}
             onEdit={hasEditSettings ? handleOnEdit : undefined}
             onColorChange={handleColorChange}
             getId={getId}

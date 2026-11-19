@@ -1,22 +1,14 @@
-import type { IconName } from "metabase/ui";
+import { EntityIcon } from "metabase/common/components/EntityIcon";
+import { Link } from "metabase/common/components/Link";
+import type { IconData } from "metabase/common/utils/icon";
 
-import {
-  CardBadge,
-  CardIcon,
-  CardIconWrapper,
-  CardTitle,
-  ModelCardRoot,
-} from "./HomeModelCard.styled";
+import S from "./HomeModelCard.module.css";
 
 interface HomeModelCardProps {
   title: string;
   badge?: string;
-  icon: HomeModelIconProps;
+  icon: IconData;
   url: string;
-}
-
-export interface HomeModelIconProps {
-  name: IconName;
 }
 
 export const HomeModelCard = ({
@@ -26,13 +18,14 @@ export const HomeModelCard = ({
   url,
 }: HomeModelCardProps): JSX.Element => {
   const showBadge = badge != null && badge !== title;
+
   return (
-    <ModelCardRoot to={url}>
-      {showBadge && <CardBadge>{badge}</CardBadge>}
-      <CardIconWrapper>
-        <CardIcon {...icon} />
-      </CardIconWrapper>
-      <CardTitle>{title}</CardTitle>
-    </ModelCardRoot>
+    <Link className={S.root} to={url}>
+      {showBadge && <span className={S.badge}>{badge}</span>}
+      <div className={S.iconWrapper}>
+        <EntityIcon {...icon} color="core-brand" />
+      </div>
+      <div className={S.title}>{title}</div>
+    </Link>
   );
 };

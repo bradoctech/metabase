@@ -3,8 +3,8 @@ import { useLayoutEffect, useState } from "react";
 import { t } from "ttag";
 
 import { DelayedLoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper/DelayedLoadingAndErrorWrapper";
-import { SEARCH_DEBOUNCE_DURATION } from "metabase/lib/constants";
 import { Box, Card } from "metabase/ui";
+import { SEARCH_DEBOUNCE_DURATION } from "metabase/utils/constants";
 import { useListNodeDependentsQuery } from "metabase-enterprise/api";
 import type {
   DependencyEntry,
@@ -86,7 +86,7 @@ export function GraphDependencyPanel({
       {isLoading || error != null ? (
         <DelayedLoadingAndErrorWrapper loading={isLoading} error={error} />
       ) : nodes.length === 0 ? (
-        <Box p="lg" c="text-secondary" ta="center">
+        <Box p="xl" c="text-secondary" ta="center">
           {t`Didn't find any results`}
         </Box>
       ) : (

@@ -1,0 +1,5 @@
+name: SQLite DB
+engine: sqlite
+settings: null
+serdes/meta:
+- model: Database

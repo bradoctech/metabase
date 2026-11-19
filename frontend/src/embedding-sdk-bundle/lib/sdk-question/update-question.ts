@@ -1,17 +1,18 @@
 import _ from "underscore";
 
 import type { SdkQuestionState } from "embedding-sdk-bundle/types/question";
-import type { Deferred } from "metabase/lib/promise";
-import { computeQuestionPivotTable } from "metabase/query_builder/actions/core/pivot-table";
-import { getAdHocQuestionWithVizSettings } from "metabase/query_builder/actions/core/utils";
-import { createRawSeries } from "metabase/query_builder/utils";
+import { selectQuestionFromCard } from "metabase/metadata-store";
+import {
+  computeQuestionPivotTable,
+  getAdHocQuestionWithVizSettings,
+} from "metabase/query_builder";
 import { loadMetadataForCard } from "metabase/questions/actions";
-import { getMetadata } from "metabase/selectors/metadata";
+import type { Dispatch, GetState } from "metabase/redux/store";
+import { createRawSeries } from "metabase/viz-core";
 import * as Lib from "metabase-lib";
-import Question from "metabase-lib/v1/Question";
+import type Question from "metabase-lib/v1/Question";
 import type { ParameterValuesMap } from "metabase-types/api";
 import type { EntityToken } from "metabase-types/api/entity";
-import type { Dispatch, GetState } from "metabase-types/store";
 
 import { runQuestionQuerySdk } from "./run-question-query";
 
@@ -34,7 +35,7 @@ interface UpdateQuestionParams {
   shouldStartAdHocQuestion: boolean;
 
   queryResults?: any[];
-  cancelDeferred?: Deferred;
+  signal?: AbortSignal;
   isGuestEmbed: boolean;
   token: EntityToken | null | undefined;
 
@@ -54,7 +55,7 @@ export const updateQuestionSdk =
       originalQuestion,
       nextParameterValues,
       shouldStartAdHocQuestion,
-      cancelDeferred,
+      signal,
       queryResults,
       optimisticUpdateQuestion: onQuestionChange,
       shouldRunQueryOnQuestionChange = false,
@@ -72,7 +73,9 @@ export const updateQuestionSdk =
       shouldRunQueryOnQuestionChange = false;
     }
 
-    nextQuestion = nextQuestion.applyTemplateTagParameters();
+    if (!isGuestEmbed) {
+      nextQuestion = nextQuestion.applyTemplateTagParameters();
+    }
 
     const rawSeries = createRawSeries({
       card: nextQuestion.card(),
@@ -83,7 +86,7 @@ export const updateQuestionSdk =
     const computedPivotQuestion = computeQuestionPivotTable({
       question: nextQuestion,
       currentQuestion: previousQuestion,
-      rawSeries,
+      rawSeries: rawSeries ?? undefined,
     });
 
     nextQuestion = computedPivotQuestion.question;
@@ -115,10 +118,9 @@ export const updateQuestionSdk =
       await dispatch(loadMetadataForCard(nextQuestion.card(), { token }));
     }
 
-    const metadata = getMetadata(getState());
-    nextQuestion = new Question(
+    nextQuestion = selectQuestionFromCard(
+      getState(),
       nextQuestion.card(),
-      metadata,
       nextParameterValues,
     );
 
@@ -131,7 +133,8 @@ export const updateQuestionSdk =
         token,
         originalQuestion,
         parameterValues: nextParameterValues,
-        cancelDeferred,
+        signal,
+        dispatch,
       });
     }
 

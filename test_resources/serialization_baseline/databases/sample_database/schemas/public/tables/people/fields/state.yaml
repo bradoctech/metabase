@@ -1,6 +1,5 @@
 name: STATE
 display_name: State
-created_at: '2024-08-28T14:38:42.774331Z'
 visibility_type: normal
 table_id:
 - Sample Database
@@ -12,7 +11,6 @@ effective_type: type/Text
 semantic_type: type/State
 dimensions: []
 position: 7
-custom_position: 0
 database_position: 7
 has_field_values: auto-list
 serdes/meta:

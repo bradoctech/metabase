@@ -27,9 +27,6 @@ export const MetabotChatEditor = forwardRef<
 >(({ isResponding = false, ...props }, ref) => {
   return (
     <Box className={S.editorContainer}>
-      <Box className={S.iconContainer}>
-        <Icon name="metabot" c="brand" />
-      </Box>
       <Box className={S.contentWrapper}>
         <MetabotPromptInput
           {...props}

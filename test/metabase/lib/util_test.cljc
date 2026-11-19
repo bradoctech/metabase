@@ -42,23 +42,21 @@
     ;; already a pipeline: nothing to do
     {:database 1
      :lib/type :mbql/query
-     :stages   [{:lib/type    :mbql.stage/native
-                 :lib/options {:lib/uuid "ef87e113-7436-41dd-9f78-3232c6778436"}
-                 :native      "SELECT * FROM VENUES;"}]}
+     :stages   [{:lib/type :mbql.stage/native
+                 :native   "SELECT * FROM VENUES;"}]}
     {:database 1
      :lib/type :mbql/query
      :stages   [{:lib/type :mbql.stage/native
                  :native   "SELECT * FROM VENUES;"}]}))
 
 (deftest ^:parallel pipeline-joins-test
-  ;; this isn't meant to be 100% correct pMBQL -- `->pipeline` is just supposed to put stuff in the generally correct
+  ;; this isn't meant to be 100% correct MBQL 5 -- `->pipeline` is just supposed to put stuff in the generally correct
   ;; shape, just to make sure we have `:stages` and stuff looking the way they should. [[metabase.lib.convert]] uses
   ;; this as part of what it does
   (is (=? {:lib/type :mbql/query
            :stages   [{:lib/type    :mbql.stage/mbql
                        :fields      [[:field (meta/id :categories :name) {:join-alias "CATEGORIES__via__CATEGORY_ID"}]]
                        :joins       [{:lib/type    :mbql/join
-                                      :lib/options {:lib/uuid string?}
                                       :alias       "CATEGORIES__via__CATEGORY_ID"
                                       :conditions  [[:=
                                                      [:field (meta/id :venues :category-id)]
@@ -379,3 +377,26 @@
                                                                                     {:name "count"}
                                                                                     {:name "CC", :lib/expression-name "CC"}]}}]}]}]}
               (lib.util/pipeline query))))))
+
+#?(:clj
+   (deftest ^:parallel recover-test
+     (testing "returns the thunk's value when nothing is thrown"
+       (is (= 42 (lib.util/recover (fn [] 42) (fn [_] :unreached)))))
+     (testing "recoverable throwables reach the handler unchanged -- any Exception, plus AssertionError"
+       (are [make] (let [e (make)]
+                     (identical? e (lib.util/recover (fn [] (throw e)) (fn [caught] caught))))
+         #(AssertionError. "bad data")
+         #(RuntimeException.)
+         #(ex-info "boom" {})
+         #(InterruptedException.)
+         #(java.util.concurrent.TimeoutException.)))
+     (testing "fatal Errors propagate uncaught, unchanged"
+       (are [make] (let [e (make)]
+                     (identical? e (try
+                                     (lib.util/recover (fn [] (throw e)) (fn [_] :unreached))
+                                     (catch Error caught caught))))
+         #(StackOverflowError.)
+         #(OutOfMemoryError.)
+         #(LinkageError.)
+         #(ThreadDeath.)
+         #(Error. "generic")))))

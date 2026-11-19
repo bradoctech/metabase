@@ -1,0 +1,8 @@
+name: Revenue
+entity_id: ReVeNuEcArDmEtRiC0b2
+type: metric
+archived: false
+collection_id: LiBrArYmEtRiCs000001
+database_id: Sample Database
+serdes/meta:
+- model: Card

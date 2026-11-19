@@ -4,20 +4,18 @@ import { t } from "ttag";
 import ErrorBoundary from "metabase/ErrorBoundary";
 import { SidebarContent } from "metabase/common/components/SidebarContent";
 import CS from "metabase/css/core/index.css";
-import { useDispatch, useSelector } from "metabase/lib/redux";
-import {
-  onCloseChartSettings,
-  onOpenChartType,
-  onReplaceAllVisualizationSettings,
-} from "metabase/query_builder/actions";
+import { useDispatch, useSelector } from "metabase/redux";
+import { QuestionChartSettings } from "metabase/visualizations/components/ChartSettings";
+import { visualizations } from "metabase/viz-core";
+import type Question from "metabase-lib/v1/Question";
+import type { Dataset, VisualizationSettings } from "metabase-types/api";
+
+import { onReplaceAllVisualizationSettings } from "../../../actions";
+import { onCloseChartSettings, onOpenChartType } from "../../../store/actions";
 import {
   getUiControls,
   getVisualizationSettings,
-} from "metabase/query_builder/selectors";
-import visualizations from "metabase/visualizations";
-import { QuestionChartSettings } from "metabase/visualizations/components/ChartSettings";
-import type Question from "metabase-lib/v1/Question";
-import type { Dataset, VisualizationSettings } from "metabase-types/api";
+} from "../../../store/selectors";
 
 interface ChartSettingsSidebarProps {
   question: Question;

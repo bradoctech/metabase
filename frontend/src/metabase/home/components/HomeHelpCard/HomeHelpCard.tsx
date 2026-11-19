@@ -4,7 +4,7 @@ import { t } from "ttag";
 import { ExternalLink } from "metabase/common/components/ExternalLink";
 import { useUniqueId } from "metabase/common/hooks/use-unique-id";
 import CS from "metabase/css/core/index.css";
-import { useSelector } from "metabase/lib/redux";
+import { useSelector } from "metabase/redux";
 import { getLearnUrl } from "metabase/selectors/settings";
 import {
   getApplicationName,
@@ -28,8 +28,8 @@ export const HomeHelpCard = (): JSX.Element | null => {
       aria-labelledby={cardTitleId}
       withBorder
       shadow="none"
-      py="md"
-      px="lg"
+      py="lg"
+      px="xl"
       classNames={{
         root: cx(
           CS.bgMenuHover,
@@ -39,7 +39,7 @@ export const HomeHelpCard = (): JSX.Element | null => {
         ),
       }}
     >
-      <Flex align="center" h="100%" gap="md">
+      <Flex align="center" h="100%" gap="lg">
         <Icon name="reference" />
         <Text
           id={cardTitleId}

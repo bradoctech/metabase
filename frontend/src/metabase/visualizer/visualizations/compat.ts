@@ -1,14 +1,16 @@
 import _ from "underscore";
 
-import { isCartesianChart } from "metabase/visualizations";
-import type { ComputedVisualizationSettings } from "metabase/visualizations/types";
+import type { VisualizerVizDefinitionWithColumns } from "metabase/redux/store/visualizer";
+import {
+  type ComputedVisualizationSettings,
+  isCartesianChart,
+} from "metabase/viz-core";
 import type {
   Dataset,
   DatasetColumn,
   Field,
   VisualizerDataSourceId,
 } from "metabase-types/api";
-import type { VisualizerVizDefinitionWithColumns } from "metabase-types/store/visualizer";
 
 import { findColumnSlotForCartesianChart } from "./cartesian";
 import { findColumnSlotForFunnel } from "./funnel";
@@ -82,11 +84,14 @@ export function groupColumnsBySuitableVizSettings(
           state,
           settings,
           datasets,
+          // Unjustified type cast. FIXME
           dataSourceColumns: columns as DatasetColumn[],
+          // Unjustified type cast. FIXME
           column: column as DatasetColumn,
         }),
       }))
       .filter((mapping) => !!mapping.slot);
+    // Unjustified type cast. FIXME
     const groupedMappings = _.groupBy(mapping, (m) => m.slot as string);
     return _.mapObject(groupedMappings, (mappings) =>
       mappings.map((m) => m.column),

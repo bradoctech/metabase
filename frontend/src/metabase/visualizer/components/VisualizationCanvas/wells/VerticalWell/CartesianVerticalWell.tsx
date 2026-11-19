@@ -1,10 +1,9 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useMemo } from "react";
 
-import { useDispatch, useSelector } from "metabase/lib/redux";
-import { isNotNull } from "metabase/lib/types";
+import { useDispatch, useSelector } from "metabase/redux";
 import { Flex, Text } from "metabase/ui";
-import { getDefaultMetricFilter } from "metabase/visualizations/shared/settings/cartesian-chart";
+import { isNotNull } from "metabase/utils/types";
 import { DRAGGABLE_ID, DROPPABLE_ID } from "metabase/visualizer/constants";
 import { useCanHandleActiveItem } from "metabase/visualizer/hooks/use-can-handle-active-item";
 import {
@@ -15,6 +14,7 @@ import {
   getVisualizerRawSettings,
 } from "metabase/visualizer/selectors";
 import { removeColumn } from "metabase/visualizer/visualizer.slice";
+import { getDefaultMetricFilter } from "metabase/viz-core";
 import type { DatasetColumn } from "metabase-types/api";
 
 import { WellItem } from "../WellItem";

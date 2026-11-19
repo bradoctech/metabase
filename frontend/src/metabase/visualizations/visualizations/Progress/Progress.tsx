@@ -3,12 +3,13 @@ import { type MouseEvent, useCallback, useEffect, useRef } from "react";
 import { t } from "ttag";
 
 import CS from "metabase/css/core/index.css";
-import { formatValue } from "metabase/lib/formatting";
-import { checkNotNull } from "metabase/lib/types";
 import { Flex, Icon } from "metabase/ui";
+import { assignLazily } from "metabase/utils/merge-lazily";
+import { checkNotNull } from "metabase/utils/types";
+import { formatValue } from "metabase/value-formatting";
 import type { VisualizationProps } from "metabase/visualizations/types";
 
-import { PROGRESS_CHART_DEFINITION } from "./chart-definition";
+import { PROGRESS_CHART_DEFINITION } from "./definition";
 import {
   calculateProgressMetrics,
   extractProgressValue,
@@ -23,9 +24,7 @@ const MAX_BAR_HEIGHT = 65;
 const MIN_BAR_HEIGHT = 30;
 const COMPONENT_HEIGHT_TO_MIN_BAR_HEIGHT = 99;
 
-Object.assign(Progress, PROGRESS_CHART_DEFINITION);
-
-export function Progress(props: VisualizationProps) {
+function ProgressComponent(props: VisualizationProps) {
   const {
     className,
     isMobile,
@@ -144,12 +143,12 @@ export function Progress(props: VisualizationProps) {
           CS.flexColumn,
           CS.justifyCenter,
         )}
-        style={{ height: "calc(100% - 35px)", padding: 8, paddingTop: 0 }}
+        style={{ padding: 10, paddingTop: 0 }}
       >
         <div
           ref={containerRef}
           className={cx(CS.relative, CS.textBold, CS.textMedium)}
-          style={{ height: 20, top: -10 }}
+          style={{ height: 20 }}
         >
           <div ref={labelRef} style={{ position: "absolute" }}>
             {hasValidValue ? formatValue(value, columnSettings) : t`No data`}
@@ -255,3 +254,8 @@ export function IconWithBorder() {
     </Flex>
   );
 }
+
+export const Progress = assignLazily(
+  ProgressComponent,
+  PROGRESS_CHART_DEFINITION,
+);

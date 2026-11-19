@@ -1,7 +1,6 @@
 import { t } from "ttag";
 import { uniq } from "underscore";
 
-import { Button } from "metabase/common/components/Button";
 import { Link } from "metabase/common/components/Link";
 import { Sortable } from "metabase/common/components/Sortable";
 import type { TabButtonMenuItem } from "metabase/common/components/TabButton";
@@ -10,10 +9,10 @@ import { TabRow } from "metabase/common/components/TabRow";
 import { useConfirmation } from "metabase/common/hooks/use-confirmation";
 import CS from "metabase/css/core/index.css";
 import { useDashboardContext } from "metabase/dashboard/context";
-import { isVirtualDashCard } from "metabase/lib/dashboard";
 import { useRegisterShortcut } from "metabase/palette/hooks/useRegisterShortcut";
-import { Flex, List } from "metabase/ui";
-import type { SelectedTabId } from "metabase-types/store";
+import type { SelectedTabId } from "metabase/redux/store";
+import { ActionIcon, Flex, Icon, List } from "metabase/ui";
+import { isVirtualDashCard } from "metabase/utils/dashboard";
 
 import S from "./DashboardTabs.module.css";
 import { useDashboardTabs } from "./use-dashboard-tabs";
@@ -94,7 +93,7 @@ export function DashboardTabs() {
           ) : (
             <>
               {t`This will also delete any questions saved in it. If you'd like to keep any of these, move them to a different tab, dashboard, or collection.`}
-              <List ml="md" mt="sm">
+              <List ml="lg" mt="sm">
                 {uniq(tabDashboardQuestions, (dc) => dc.card.id).map(
                   (dashcard) => (
                     <List.Item key={dashcard.card.id}>
@@ -118,7 +117,7 @@ export function DashboardTabs() {
   }
 
   return (
-    <Flex align="start" gap="lg" w="100%" className={S.dashboardTabs}>
+    <Flex align="start" gap="xl" w="100%" className={S.dashboardTabs}>
       <TabRow<SelectedTabId>
         value={selectedTabId}
         onChange={selectTab}
@@ -152,13 +151,14 @@ export function DashboardTabs() {
           ))
         )}
         {isEditing && (
-          <Button
-            icon="add"
-            iconSize={12}
+          <ActionIcon
+            variant="viewHeader"
             onClick={createNewTab}
             aria-label={t`Create new tab`}
             className={S.createTabButton}
-          />
+          >
+            <Icon name="add" size={12} />
+          </ActionIcon>
         )}
       </TabRow>
       {modalContent}

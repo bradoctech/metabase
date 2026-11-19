@@ -1,0 +1,6 @@
+name: query_log
+db_id: Audit Database
+active: true
+is_published: true
+serdes/meta:
+- model: Table

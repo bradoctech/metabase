@@ -1,0 +1,8 @@
+name: orders
+db_id: Sample Database
+schema: PUBLIC
+active: true
+is_published: true
+collection_id: LiBrArYdAtA000000001
+serdes/meta:
+- model: Table

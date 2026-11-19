@@ -1,5 +1,3 @@
-import { Route } from "react-router";
-
 import {
   setupDashboardEndpoints,
   setupDatabasesEndpoints,
@@ -7,10 +5,11 @@ import {
   setupRecentViewsEndpoints,
   setupSearchEndpoints,
 } from "__support__/server-mocks";
+import { createMockState } from "__support__/state";
 import { renderWithProviders, screen } from "__support__/ui";
+import { Route } from "metabase/router";
 import type { DashboardId } from "metabase-types/api";
 import { createMockDashboard, createMockUser } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { HomePage } from "./HomePage";
 
@@ -41,8 +40,8 @@ const setup = async ({ dashboardId }: SetupOpts = {}) => {
 
   renderWithProviders(
     <>
-      <Route path="/" component={HomePage} />
-      <Route path="/dashboard/:slug" component={TestDashboard} />
+      <Route path="/" element={<HomePage />} />
+      <Route path="/dashboard/:slug" element={<TestDashboard />} />
     </>,
     {
       withRouter: true,

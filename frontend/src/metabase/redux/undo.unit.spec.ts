@@ -1,7 +1,7 @@
 import { configureStore } from "@reduxjs/toolkit";
 
 import { act } from "__support__/ui";
-import type { Dispatch } from "metabase-types/store";
+import type { Dispatch } from "metabase/redux/store";
 
 import {
   addUndo,
@@ -162,5 +162,6 @@ const createMockStore = () => {
     // @ts-expect-error rework undo reducer to RTK
     reducer: { undo: undoReducer },
   });
+  // Unjustified type cast. FIXME
   return store as typeof store & { dispatch: Dispatch };
 };

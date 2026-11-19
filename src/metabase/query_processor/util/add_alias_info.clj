@@ -40,7 +40,7 @@
 
   If this clause is 'selected' (i.e., appears in `:fields`, `:aggregation`, or `:breakout`), select the clause `AS`
   this alias. This alias is guaranteed to be unique."
-  (:refer-clojure :exclude [mapv ref select-keys some empty? not-empty get-in])
+  (:refer-clojure :exclude [mapv select-keys some empty? not-empty get-in])
   (:require
    [medley.core :as m]
    [metabase.config.core :as config]
@@ -52,32 +52,23 @@
    [metabase.lib.schema.id :as lib.schema.id]
    [metabase.lib.schema.join :as lib.schema.join]
    [metabase.lib.schema.metadata :as lib.schema.metadata]
-   [metabase.lib.util.match :as lib.util.match]
    [metabase.lib.walk :as lib.walk]
    [metabase.query-processor.error-type :as qp.error-type]
    [metabase.query-processor.middleware.annotate.legacy-helper-fns :as annotate.legacy-helper-fns]
+   ;; the legacy QP pipeline still conveys the metadata provider via the ambient store; no MBQL 5 path yet
    ^{:clj-kondo/ignore [:deprecated-namespace]} [metabase.query-processor.store :as qp.store]
    [metabase.util :as u]
    [metabase.util.i18n :refer [tru]]
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
    [metabase.util.malli.registry :as mr]
+   [metabase.util.match :as match]
    [metabase.util.performance :refer [mapv select-keys some empty? not-empty get-in]]))
 
 (mu/defn- ^:dynamic *escape-alias-fn* :- :string
   [driver :- :keyword
    s      :- :string]
   (driver/escape-alias driver s))
-
-(defmulti ^String field-reference-mlv2
-  "Generate a reference for the field instance `field-inst` appropriate for the driver `driver`.
-  By default this is just the name of the field, but it can be more complicated, e.g., take
-  parent fields into account.
-
-  DEPRECATED in 0.56.0, and no longer used."
-  {:added "0.48.0", :deprecated "0.57.0, " :arglists '([driver field-inst])}
-  driver/dispatch-on-initialized-driver
-  :hierarchy #'driver/hierarchy)
 
 (defn- escape-fn []
   {:pre [(keyword? driver/*driver*)]}
@@ -95,18 +86,12 @@
 ;;; of the kooky extra info we add here... none of it should affect calculated metadata
 
 (mu/defn- returned-columns :- :metabase.lib.metadata.calculation/returned-columns
-  [query :- [:merge
-             ::lib.schema/query
-             [:map
-              [::original ::lib.schema/query]]]
+  [query :- ::lib.schema/query
    path  :- ::lib.walk/path]
   (lib.walk/apply-f-for-stage-at-path lib/returned-columns (::original query) path))
 
 (mu/defn- resolve-field-ref :- :metabase.lib.metadata.calculation/visible-column
-  [query      :- [:merge
-                  ::lib.schema/query
-                  [:map
-                   [::original ::lib.schema/query]]]
+  [query      :- ::lib.schema/query
    stage-path :- ::lib.walk/path
    field-ref  :- :mbql.clause/field]
   (u/prog1 (lib.walk/apply-f-for-stage-at-path lib/metadata (::original query) stage-path field-ref)
@@ -205,7 +190,8 @@
      :source/card)                ::source
     (:source/expressions
      :source/aggregations
-     :source/native)              ::none))
+     :source/native
+     :source/pivot-grouping)      ::none))
 
 (defn- add-source-to-field-ref [query path field-ref col]
   (lib/update-options
@@ -227,7 +213,7 @@
   [query :- ::lib.schema/query
    path  :- ::lib.walk/path
    stage :- ::lib.schema/stage.mbql]
-  (lib.util.match/replace-lite stage
+  (match/replace stage
     ;; don't recurse into the metadata or joins -- [[lib.walk]] will take care of that recursion for us.
     (_ :guard (some #{:lib/stage-metadata :joins} &parents))
     &match
@@ -278,7 +264,7 @@
    by-source-alias    :- [:map-of :string [:sequential ::lib.schema.metadata/column]]
    by-expression-name :- [:map-of :string ::lib.schema.metadata/column]
    stage              :- ::lib.schema/stage.mbql]
-  (lib.util.match/replace-lite stage
+  (match/replace stage
     ;; don't recurse into the metadata or joins -- [[lib.walk]] will take care of that recursion for us.
     (_ :guard (some #{:lib/stage-metadata :joins ::resolved} &parents))
     &match
@@ -420,7 +406,7 @@
                               (add-source-to-field-ref query parent-stage-path field-ref col)))
         update-conditions (fn [conditions]
                             ;; the only kind of ref join conditions can have is a `:field` ref
-                            (lib.util.match/replace-lite conditions
+                            (match/replace conditions
                               [:field opts _id-or-name]
                               (if (= (:join-alias opts) (:alias join))
                                 ;; a field ref that comes from THIS join needs to get the desired alias returned
@@ -464,7 +450,7 @@
 (mr/def ::options
   [:map
    {:closed true}
-   [:globally-unique-join-aliases? {:default false} :any]])
+   [:globally-unique-join-aliases? {:default false} :boolean]])
 
 (mu/defn- escape-join-aliases :- ::lib.schema/query
   [query                                                                              :- ::lib.schema/query
@@ -540,10 +526,10 @@
 
   If this is a nested column, the path to the column, e.g. for `grandparent.parent.child` this will be `[\"grandparent\"
   \"child\"]."
-  ([query]
+  ([query :- [:or ::lib.schema/query :metabase.legacy-mbql.schema/Query :metabase.legacy-mbql.schema/MBQLInnerQuery]]
    (add-alias-info query nil))
 
-  ([query   :- :map
+  ([query   :- [:or ::lib.schema/query :metabase.legacy-mbql.schema/Query :metabase.legacy-mbql.schema/MBQLInnerQuery]
     options :- [:maybe ::options]]
    (cond
      ;; MBQL 5 query
@@ -559,8 +545,9 @@
      ;; MBQL 4 inner MBQL query
      ((some-fn :source-table :source-query) query)
      (-> query
+         ;; legacy inner-query entry point; the deprecated bridge is the only path to a Lib query here
          #_{:clj-kondo/ignore [:deprecated-var]}
-         annotate.legacy-helper-fns/legacy-inner-query->mlv2-query
+         annotate.legacy-helper-fns/legacy-inner-query->mbql5-query
          (add-alias-info options)
          lib/->legacy-MBQL
          :query)

@@ -17,7 +17,7 @@ import {
 import cx from "classnames";
 
 import { Sortable } from "metabase/common/components/Sortable";
-import { useDispatch, useSelector } from "metabase/lib/redux";
+import { useDispatch, useSelector } from "metabase/redux";
 import { Box, Flex, type FlexProps, Text } from "metabase/ui";
 import { DROPPABLE_ID } from "metabase/visualizer/constants";
 import { useCanHandleActiveItem } from "metabase/visualizer/hooks/use-can-handle-active-item";
@@ -103,7 +103,7 @@ export function FunnelHorizontalWell({ style, ...props }: FlexProps) {
         onDragEnd={handleDragEnd}
       >
         {dimension && (
-          <FunnelWellItem mr="md" id="dimension" onRemove={handleRemove}>
+          <FunnelWellItem mr="lg" id="dimension" onRemove={handleRemove}>
             <Text truncate>{dimension.display_name}</Text>
           </FunnelWellItem>
         )}
@@ -147,7 +147,7 @@ function FunnelWellItem({
   const box = (
     <WellItem
       {...props}
-      bg={isDraggable ? "background-primary" : "transparent"}
+      bg={isDraggable ? "background_page-primary" : "transparent"}
       style={{
         cursor: isDraggable ? "grab" : "default",
       }}

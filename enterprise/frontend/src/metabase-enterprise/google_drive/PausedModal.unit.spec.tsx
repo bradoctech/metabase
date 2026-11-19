@@ -1,11 +1,11 @@
 import { setupDatabaseEndpoints } from "__support__/server-mocks";
+import { createMockSettingsState } from "__support__/state";
 import { renderWithProviders, screen } from "__support__/ui";
 import {
   createMockDatabase,
   createMockSettings,
   createMockUser,
 } from "metabase-types/api/mocks";
-import { createMockSettingsState } from "metabase-types/store/mocks";
 
 import { FileUploadErrorModal } from "./PausedModal";
 

@@ -10,8 +10,8 @@ import {
   FormSubmitButton,
   FormTextInput,
 } from "metabase/forms";
-import * as Errors from "metabase/lib/errors";
 import { Box, Button, FocusTrap, Group, Modal, Stack } from "metabase/ui";
+import * as Errors from "metabase/utils/errors";
 import type { TransformTag } from "metabase-types/api";
 
 type UpdateTagModalProps = {
@@ -29,7 +29,7 @@ export function UpdateTagModal({
     <Modal
       title={t`Rename the ${tag.name} tag`}
       opened
-      padding="xl"
+      padding="xxl"
       onClose={onClose}
     >
       <FocusTrap.InitialFocus />
@@ -73,7 +73,7 @@ function UpdateTagForm({ tag, onUpdate, onClose }: UpdateTagFormProps) {
     >
       {({ dirty }) => (
         <Form>
-          <Stack gap="lg">
+          <Stack gap="xl">
             <FormTextInput
               name="name"
               label={t`Name`}

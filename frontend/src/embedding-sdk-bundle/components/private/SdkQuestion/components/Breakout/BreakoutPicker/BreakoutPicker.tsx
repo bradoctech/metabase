@@ -3,7 +3,7 @@ import { t } from "ttag";
 import {
   type UpdateQueryHookProps,
   useBreakoutQueryHandlers,
-} from "metabase/query_builder/hooks";
+} from "metabase/query_builder";
 import { BreakoutPopover } from "metabase/querying/notebook/components/BreakoutStep";
 import { Button, Divider, Icon, Stack } from "metabase/ui";
 import type * as Lib from "metabase-lib";
@@ -30,7 +30,7 @@ export const BreakoutPickerInner = ({
   return (
     <Stack gap={0} w="18.75rem">
       <Button
-        p="md"
+        p="lg"
         fz="lg"
         color="text-secondary"
         variant="subtle"
@@ -53,7 +53,6 @@ export const BreakoutPickerInner = ({
           breakoutItem?.updateBreakout(column)
         }
         onClose={() => onClose?.()}
-        isMetric={false}
       />
     </Stack>
   );
@@ -66,18 +65,21 @@ export const BreakoutPicker = ({
   onClose?: () => void;
   breakoutItem?: SDKBreakoutItem;
 }) => {
-  const { question, updateQuestion } = useSdkQuestionContext();
+  const {
+    question,
+    updateAndNormalizeQuestion,
+    lastVisibleStageIndex: stageIndex,
+  } = useSdkQuestionContext();
 
   if (!question) {
     return null;
   }
 
   const query = question.query();
-  const stageIndex = -1;
 
-  const onQueryChange = (query: Lib.Query) => {
+  const onQueryChange = (nextQuery: Lib.Query) => {
     if (question) {
-      updateQuestion(question.setQuery(query), { run: true });
+      updateAndNormalizeQuestion(question.setQuery(nextQuery), { run: true });
     }
   };
 

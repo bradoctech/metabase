@@ -16,12 +16,14 @@ import type {
   SdkQuestionState,
   SqlParameterValues,
 } from "embedding-sdk-bundle/types/question";
-import { isStaticEmbeddingEntityLoadingError } from "metabase/lib/errors/is-static-embedding-entity-loading-error";
-import { type Deferred, defer } from "metabase/lib/promise";
+import { isAbortError } from "metabase/api/client";
+import { isStaticEmbeddingEntityLoadingError } from "metabase/utils/errors/is-static-embedding-entity-loading-error";
 import type Question from "metabase-lib/v1/Question";
-import type { ParameterValuesMap } from "metabase-types/api";
+import type {
+  ParameterValuesMap,
+  QueryVisualizationDisplayType,
+} from "metabase-types/api";
 import type { EntityToken } from "metabase-types/api/entity";
-import { isObject } from "metabase-types/guards";
 
 type LoadQuestionResult = Promise<
   SdkQuestionState & { originalQuestion?: Question }
@@ -37,7 +39,9 @@ export interface LoadQuestionHookResult {
   isQuestionLoading: boolean;
   isQueryRunning: boolean;
 
-  queryQuestion(): Promise<Question | undefined>;
+  queryQuestion(options?: {
+    ignoreCache?: boolean;
+  }): Promise<Question | undefined>;
 
   loadAndQueryQuestion(): LoadQuestionResult;
 
@@ -61,6 +65,7 @@ export interface LoadQuestionHookResult {
 type UseLoadQuestionParams = LoadSdkQuestionParams & {
   isGuestEmbed: boolean;
   token: EntityToken | null | undefined;
+  initialVisualization?: QueryVisualizationDisplayType;
 };
 
 export function useLoadQuestion({
@@ -71,6 +76,7 @@ export function useLoadQuestion({
   deserializedCard,
   initialSqlParameters,
   targetDashboardId,
+  initialVisualization,
 }: UseLoadQuestionParams): LoadQuestionHookResult {
   const dispatch = useSdkDispatch();
 
@@ -82,32 +88,47 @@ export function useLoadQuestion({
 
   const isGuestEmbed = useSdkSelector(getIsGuestEmbed);
 
-  const deferredRef = useRef<Deferred>();
+  /**
+   * Token change isn't an indicator to re-run the query. When users are refreshing
+   * the guest embeds token, the token will change, but not questionId. So we can
+   * rely on questionId that will change the loadAndQueryQuestion value and trigger
+   * the query again.
+   *
+   * As a reference, dashboards don't use this approach. It detects if the
+   * dashboardId has changed before triggering the query. So, the idea is quite similar.
+   */
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
 
-  function deferred() {
+  const controllerRef = useRef<AbortController>();
+
+  function nextSignal() {
     // Cancel the previous query when a new one is started.
-    deferredRef.current?.resolve();
-    deferredRef.current = defer();
+    controllerRef.current?.abort();
+    controllerRef.current = new AbortController();
 
-    return deferredRef.current;
+    return controllerRef.current.signal;
   }
 
   // Cancel the running query when the component unmounts.
   useUnmount(() => {
-    deferredRef.current?.resolve();
+    controllerRef.current?.abort();
   });
 
   // Avoid re-running the query if the parameters haven't changed.
   const sqlParameterKey = getParameterDependencyKey(initialSqlParameters);
 
   const shouldLoadQuestion = questionId != null || deserializedCard != null;
-  const [isQuestionLoading, setIsQuestionLoading] =
-    useState(shouldLoadQuestion);
+  const [isLoadInFlight, setIsLoadInFlight] = useState(shouldLoadQuestion);
+
+  const isQuestionLoading = isLoadInFlight || !shouldLoadQuestion;
 
   const [, loadAndQueryQuestion] = useAsyncFn(async () => {
-    if (shouldLoadQuestion) {
-      setIsQuestionLoading(true);
+    if (!shouldLoadQuestion) {
+      return {};
     }
+
+    setIsLoadInFlight(true);
 
     try {
       const questionState = await dispatch(
@@ -115,7 +136,7 @@ export function useLoadQuestion({
           options,
           deserializedCard,
           questionId,
-          token,
+          token: tokenRef.current,
           initialSqlParameters,
           targetDashboardId,
         }),
@@ -126,20 +147,25 @@ export function useLoadQuestion({
       const results = await runQuestionQuerySdk({
         question: questionState.question,
         isGuestEmbed,
-        token,
+        token: tokenRef.current,
         originalQuestion: questionState.originalQuestion,
         parameterValues: questionState.parameterValues,
-        cancelDeferred: deferred(),
+        signal: nextSignal(),
+        dispatch,
+        initialVisualization,
       });
 
       mergeQuestionState(results);
 
-      setIsQuestionLoading(false);
+      setIsLoadInFlight(false);
       return { ...results, originalQuestion };
     } catch (err) {
-      // Ignore cancelled requests (e.g. when the component unmounts).
-      // React simulates unmounting on strict mode, therefore "Question not found" will be shown without this.
-      if (isCancelledRequestError(err)) {
+      // Ignore cancelled requests (e.g. when the component unmounts, or when a
+      // controlled `sqlParameters` push cancels the in-flight load query via the
+      // shared `controllerRef`). React simulates unmounting on strict mode,
+      // therefore "Question not found" will be shown without this.
+      if (isAbortError(err)) {
+        setIsLoadInFlight(false);
         return {};
       }
 
@@ -159,7 +185,7 @@ export function useLoadQuestion({
         parameterValues: undefined,
       });
 
-      setIsQuestionLoading(false);
+      setIsLoadInFlight(false);
       return {};
     }
   }, [
@@ -169,35 +195,40 @@ export function useLoadQuestion({
     isGuestEmbed,
     sqlParameterKey,
     questionId,
-    token,
     targetDashboardId,
+    initialVisualization,
   ]);
 
-  const [runQuestionState, queryQuestion] = useAsyncFn(async () => {
-    if (!question) {
-      return;
-    }
+  const [runQuestionState, queryQuestion] = useAsyncFn(
+    async (options?: { ignoreCache?: boolean }) => {
+      if (!question) {
+        return;
+      }
 
-    const state = await runQuestionQuerySdk({
+      const state = await runQuestionQuerySdk({
+        question,
+        isGuestEmbed,
+        token,
+        originalQuestion,
+        parameterValues,
+        signal: nextSignal(),
+        dispatch,
+        ignoreCache: options?.ignoreCache,
+      });
+
+      mergeQuestionState(state);
+
+      return state.question;
+    },
+    [
+      dispatch,
       question,
       isGuestEmbed,
       token,
       originalQuestion,
       parameterValues,
-      cancelDeferred: deferred(),
-    });
-
-    mergeQuestionState(state);
-
-    return state.question;
-  }, [
-    dispatch,
-    question,
-    isGuestEmbed,
-    token,
-    originalQuestion,
-    parameterValues,
-  ]);
+    ],
+  );
 
   const [updateQuestionState, updateQuestion] = useAsyncFn(
     async (nextQuestion: Question, options: { run?: boolean }) => {
@@ -213,7 +244,7 @@ export function useLoadQuestion({
           previousQuestion: question,
           originalQuestion,
           nextParameterValues: parameterValues ?? {},
-          cancelDeferred: deferred(),
+          signal: nextSignal(),
           optimisticUpdateQuestion: (question) =>
             mergeQuestionState({ question }),
           shouldRunQueryOnQuestionChange: run,
@@ -251,7 +282,7 @@ export function useLoadQuestion({
           previousQuestion: question,
           originalQuestion,
           nextParameterValues,
-          cancelDeferred: deferred(),
+          signal: nextSignal(),
           optimisticUpdateQuestion: (question) =>
             mergeQuestionState({ question }),
           shouldRunQueryOnQuestionChange: true,
@@ -282,7 +313,7 @@ export function useLoadQuestion({
           token,
           originalQuestion,
           parameterValues,
-          cancelDeferred: deferred(),
+          signal: nextSignal(),
           onQuestionChange: (question) => mergeQuestionState({ question }),
           onClearQueryResults: () =>
             mergeQuestionState({ queryResults: [null] }),
@@ -337,6 +368,3 @@ export const getParameterDependencyKey = (
     .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
     .map(([key, value]) => `${key}=${value}`)
     .join(":");
-
-const isCancelledRequestError = (error: unknown) =>
-  isObject(error) && "isCancelled" in error && error.isCancelled === true;

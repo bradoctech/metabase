@@ -7,11 +7,12 @@ import {
   MultiStepPopover,
   type MultiStepState,
 } from "embedding-sdk-bundle/components/private/util/MultiStepPopover";
-import type { UpdateQueryHookProps } from "metabase/query_builder/hooks";
+import type { UpdateQueryHookProps } from "metabase/query_builder";
 import { getFilterItems } from "metabase/querying/filters/components/FilterPanel/utils";
 import type { PopoverProps } from "metabase/ui";
 
 import { useSdkQuestionContext } from "../../../context";
+import { shouldRenderQueryBuilderEditingControl } from "../../../utils/should-render-query-builder-editing-control";
 import { ToolbarButton } from "../../util/ToolbarButton";
 import { FilterBadgeList } from "../FilterBadgeList";
 import { FilterPicker } from "../FilterPicker/FilterPicker";
@@ -79,6 +80,7 @@ const FilterDropdownInner = ({
               step === null ? (filters.length === 0 ? "picker" : "list") : null,
             )
           }
+          data-testid="filter-dropdown-button"
         />
       </MultiStepPopover.Target>
 
@@ -112,7 +114,7 @@ const FilterDropdownInner = ({
 export const FilterDropdown = ({ withColumnItemIcon }: FilterDropdownProps) => {
   const { question } = useSdkQuestionContext();
 
-  if (!question) {
+  if (!question || !shouldRenderQueryBuilderEditingControl(question)) {
     return null;
   }
 

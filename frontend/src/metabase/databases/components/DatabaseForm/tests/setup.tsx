@@ -1,5 +1,6 @@
 import { setupEnterpriseOnlyPlugin } from "__support__/enterprise";
 import { mockSettings } from "__support__/settings";
+import { createMockState } from "__support__/state";
 import { renderWithProviders } from "__support__/ui";
 import type {
   DatabaseData,
@@ -7,7 +8,6 @@ import type {
   EngineKey,
   Settings,
 } from "metabase-types/api";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { DatabaseForm } from "../DatabaseForm";
 

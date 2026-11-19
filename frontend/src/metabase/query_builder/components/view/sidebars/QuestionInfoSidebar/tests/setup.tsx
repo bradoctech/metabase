@@ -1,32 +1,35 @@
-import { Route } from "react-router";
-
 import { setupEnterpriseOnlyPlugin } from "__support__/enterprise";
 import {
   setupAuditInfoEndpoint,
   setupCardEndpoints,
   setupCardsUsingModelEndpoint,
+  setupListDatabaseSchemasEndpoint,
   setupRevisionsEndpoints,
   setupTokenStatusEndpoint,
   setupUsersEndpoints,
 } from "__support__/server-mocks";
 import { setupPerformanceEndpoints } from "__support__/server-mocks/performance";
 import { mockSettings } from "__support__/settings";
+import {
+  createMockQueryBuilderState,
+  createMockState,
+} from "__support__/state";
 import { createMockEntitiesState } from "__support__/store";
 import { renderWithProviders, waitForLoaderToBeRemoved } from "__support__/ui";
-import { checkNotNull } from "metabase/lib/types";
-import { getQuestion } from "metabase/query_builder/selectors";
+import { Route } from "metabase/router";
+import { checkNotNull } from "metabase/utils/types";
 import type { Card, Settings, User } from "metabase-types/api";
 import {
   createMockCard,
   createMockSettings,
   createMockUser,
 } from "metabase-types/api/mocks";
-import { createSampleDatabase } from "metabase-types/api/mocks/presets";
 import {
-  createMockQueryBuilderState,
-  createMockState,
-} from "metabase-types/store/mocks";
+  SAMPLE_DB_ID,
+  createSampleDatabase,
+} from "metabase-types/api/mocks/presets";
 
+import { getQuestion } from "../../../../../store/selectors";
 import { QuestionInfoSidebar } from "../QuestionInfoSidebar";
 
 export interface SetupOpts {
@@ -49,6 +52,7 @@ export const setup = async ({
   setupRevisionsEndpoints([]);
   setupPerformanceEndpoints([]);
   setupAuditInfoEndpoint();
+  setupListDatabaseSchemasEndpoint(SAMPLE_DB_ID, ["PUBLIC"]);
 
   const state = createMockState({
     currentUser,
@@ -72,10 +76,13 @@ export const setup = async ({
     <QuestionInfoSidebar question={question} onSave={onSave} />
   );
 
-  renderWithProviders(<Route path="*" component={TestQuestionInfoSidebar} />, {
-    withRouter: true,
-    storeInitialState: state,
-  });
+  renderWithProviders(
+    <Route path="*" element={<TestQuestionInfoSidebar />} />,
+    {
+      withRouter: true,
+      storeInitialState: state,
+    },
+  );
 
   await waitForLoaderToBeRemoved();
 };

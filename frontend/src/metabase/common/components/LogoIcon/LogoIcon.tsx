@@ -1,5 +1,5 @@
-import { getSubpathSafeUrl } from "metabase/lib/urls";
 import { PLUGIN_LOGO_ICON_COMPONENTS } from "metabase/plugins";
+import { getSubpathSafeUrl } from "metabase/urls";
 
 /** Served from `resources/frontend_client/app/assets/img/logo.svg` */
 const RESOURCE_LOGO_PATH = "app/assets/img/logo.svg";

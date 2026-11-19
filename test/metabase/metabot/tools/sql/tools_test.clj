@@ -30,11 +30,10 @@
                              :new_string "id = 2"}]})]
               (is (= query-id (:query-id result)))
               (is (= "SELECT * FROM users WHERE id = 2" (:query-content result)))))
-
-          (testing "edit with JSON-parsed pMBQL query (string enum values)"
+          (testing "edit with JSON-parsed MBQL 5 query (string enum values)"
             (let [original-sql "SELECT * FROM users WHERE id = 1"
-                  query-id "q-pmbql"
-                  ;; Simulates JSON round-tripped pMBQL: keyword keys, string values
+                  query-id "q-mbql5"
+                  ;; Simulates JSON round-tripped MBQL 5: keyword keys, string values
                   queries-state {query-id {:lib/type "mbql/query"
                                            :database db-id
                                            :stages   [{:lib/type "mbql.stage/native"
@@ -47,7 +46,6 @@
                              :new_string "id = 2"}]})]
               (is (= query-id (:query-id result)))
               (is (= "SELECT * FROM users WHERE id = 2" (:query-content result)))))
-
           (testing "replace-all edit"
             (let [mp (mt/metadata-provider)
                   original-sql "SELECT id, id FROM users WHERE id = 1"
@@ -64,7 +62,6 @@
                              :replace_all true}]})]
               (is (= "SELECT user_id, user_id FROM users WHERE user_id = 1"
                      (:query-content result)))))
-
           (testing "rejects ambiguous edits"
             (let [mp (mt/metadata-provider)
                   original-sql "SELECT id, id FROM users"
@@ -100,11 +97,10 @@
                     :sql new-sql})]
               (is (= new-sql (:query-content result)))
               (is (= db-id (:database result)))))
-
-          (testing "replace with JSON-parsed pMBQL query (string enum values)"
+          (testing "replace with JSON-parsed MBQL 5 query (string enum values)"
             (let [original-sql "SELECT * FROM users"
                   new-sql "SELECT id, name FROM customers"
-                  query-id "q-pmbql-replace"
+                  query-id "q-mbql5-replace"
                   queries-state {query-id {:lib/type "mbql/query"
                                            :database db-id
                                            :stages   [{:lib/type "mbql.stage/native"
@@ -116,7 +112,6 @@
                     :sql new-sql})]
               (is (= new-sql (:query-content result)))
               (is (= db-id (:database result)))))
-
           (testing "replaces SQL and updates name/description"
             (let [mp (mt/metadata-provider)
                   query-id "q6"
@@ -133,23 +128,23 @@
               (is (= "SELECT 2" (:query-content result)))
               (is (= db-id (:database result))))))))))
 
-(deftest update-query-sql-with-json-pmbql-test
+(deftest update-query-sql-with-json-mbql5-test
   (mt/test-drivers #{:h2}
     (mt/with-temp [:model/Database {db-id :id} {:engine :h2}]
-      (testing "pMBQL query with string enum values (as received from frontend JSON)"
+      (testing "MBQL 5 query with string enum values (as received from frontend JSON)"
         ;; Simulates what cheshire/decode+kw produces: keyword keys but string values
         ;; for enum-like fields such as :lib/type.
-        (let [json-pmbql {:lib/type "mbql/query"
+        (let [json-mbql5 {:lib/type "mbql/query"
                           :database db-id
                           :stages   [{:lib/type "mbql.stage/native"
                                       :native  "SELECT 1"}]}
-              result     (sql-common/update-query-sql json-pmbql "SELECT 2")]
+              result     (sql-common/update-query-sql json-mbql5 "SELECT 2")]
           (is (lib/native-only-query? result))
           (is (= "SELECT 2" (lib/raw-native-query result)))))
-      (testing "already-normalized pMBQL query"
+      (testing "already-normalized MBQL 5 query"
         (let [mp         (mt/metadata-provider)
-              pmbql      (lib/native-query mp "SELECT 1")
-              result     (sql-common/update-query-sql pmbql "SELECT 2")]
+              mbql5      (lib/native-query mp "SELECT 1")
+              result     (sql-common/update-query-sql mbql5 "SELECT 2")]
           (is (lib/native-only-query? result))
           (is (= "SELECT 2" (lib/raw-native-query result)))))
       (testing "legacy MBQL query"

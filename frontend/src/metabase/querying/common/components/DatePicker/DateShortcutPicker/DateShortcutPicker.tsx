@@ -44,7 +44,7 @@ export function DateShortcutPicker({
       {renderBackButton?.()}
       {shortcutGroups.map((group, groupIndex) => (
         <Fragment key={groupIndex}>
-          {groupIndex > 0 && <Divider mx="md" my="sm" />}
+          {groupIndex > 0 && <Divider mx="lg" my="sm" />}
           {group.map((option, optionIndex) => (
             <Button
               key={optionIndex}
@@ -61,7 +61,7 @@ export function DateShortcutPicker({
         </Fragment>
       ))}
       {shortcutGroups.length > 0 && typeOptions.length > 0 && (
-        <Divider mx="md" my="sm" />
+        <Divider mx="lg" my="sm" />
       )}
       {typeOptions.map((option, optionIndex) => (
         <Button
@@ -72,6 +72,7 @@ export function DateShortcutPicker({
           display="block"
           variant="subtle"
           onClick={() => onSelectType(option.type)}
+          data-testid={`date-picker-type-${option.type}`}
         >
           {option.label}
         </Button>

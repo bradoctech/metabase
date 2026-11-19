@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { t } from "ttag";
 
 import CS from "metabase/css/core/index.css";
-import { isTableDisplay } from "metabase/lib/click-behavior";
+import { hasColumnLevelClickBehavior } from "metabase/dashboard/utils";
 import {
   Button,
   Flex,
@@ -14,12 +14,12 @@ import {
   TextInputBlurChange,
 } from "metabase/ui";
 import type { UiParameter } from "metabase-lib/v1/parameters/types";
-import { clickBehaviorIsValid } from "metabase-lib/v1/parameters/utils/click-behavior";
 import type {
   ArbitraryCustomDestinationClickBehavior,
   ClickBehavior,
   DashboardCard,
 } from "metabase-types/api";
+import { clickBehaviorIsValid } from "metabase-types/guards";
 
 import LinkOptionsS from "../LinkOptions/LinkOptions.module.css";
 import { SidebarItem } from "../SidebarItem";
@@ -102,7 +102,7 @@ export function CustomURLPicker({
         title={t`Enter a URL to link to`}
         size="lg"
       >
-        <Flex direction="column" gap="md" mt="sm">
+        <Flex direction="column" gap="lg" mt="sm">
           <Text>
             {t`You can insert the value of a column or dashboard filter using its name, like this: {{some_column}}`}
           </Text>
@@ -113,7 +113,7 @@ export function CustomURLPicker({
             onChange={handleLinkTemplateChange}
             className={cx(CS.block, CS.full)}
           />
-          {isTableDisplay(dashcard) && (
+          {hasColumnLevelClickBehavior(dashcard) && (
             <CustomLinkText
               updateSettings={updateSettings}
               clickBehavior={clickBehavior}
@@ -122,7 +122,7 @@ export function CustomURLPicker({
           <ValuesYouCanReference dashcard={dashcard} parameters={parameters} />
           <Button
             ml="auto"
-            mt="xl"
+            mt="xxl"
             variant="filled"
             type="button"
             onClick={() => {

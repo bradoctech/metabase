@@ -3,15 +3,15 @@ import fetchMock from "fetch-mock";
 import { setupEnterpriseOnlyPlugin } from "__support__/enterprise";
 import { setupUserEndpoints } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
+import { createMockState } from "__support__/state";
 import { createMockEntitiesState } from "__support__/store";
 import { renderWithProviders } from "__support__/ui";
-import type { User, UserListResult } from "metabase-types/api";
+import type { User } from "metabase-types/api";
 import {
   createMockSettings,
   createMockTokenFeatures,
   createMockUser,
 } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { EditUserModal } from "../EditUserModal";
 
@@ -30,7 +30,7 @@ export const setup = ({
   userData: Partial<User>;
   enterprisePlugins?: Parameters<typeof setupEnterpriseOnlyPlugin>[0][];
 }) => {
-  setupUserEndpoints(createMockUser(userData) as unknown as UserListResult);
+  setupUserEndpoints(createMockUser(userData));
 
   const storeInitialState = createMockState({
     entities: createMockEntitiesState({}),

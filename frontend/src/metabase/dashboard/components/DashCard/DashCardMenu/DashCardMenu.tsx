@@ -1,10 +1,10 @@
 import { useDisclosure } from "@mantine/hooks";
-import cx from "classnames";
 import { useMemo, useState } from "react";
 import { t } from "ttag";
 
 import { QuestionDownloadWidget } from "metabase/common/components/QuestionDownloadWidget";
 import { useDownloadData } from "metabase/common/components/QuestionDownloadWidget/use-download-data";
+import { canDownloadResults } from "metabase/common/utils/dataset";
 import { canEditQuestion } from "metabase/dashboard/components/DashCard/DashCardMenu/utils";
 import {
   type DashboardContextReturned,
@@ -12,17 +12,16 @@ import {
 } from "metabase/dashboard/context";
 import { getParameterValuesBySlugMap } from "metabase/dashboard/selectors";
 import { transformSdkQuestion } from "metabase/embedding-sdk/lib/transform-question";
-import { canDownloadResults } from "metabase/lib/downloads";
-import { useStore } from "metabase/lib/redux";
-import { checkNotNull } from "metabase/lib/types";
-import { ActionIcon, Icon, Menu, type MenuProps } from "metabase/ui";
-import { SAVING_DOM_IMAGE_HIDDEN_CLASS } from "metabase/visualizations/lib/save-chart-image";
+import { useStore } from "metabase/redux";
+import { Icon, Menu, type MenuProps } from "metabase/ui";
+import { checkNotNull } from "metabase/utils/types";
 import type Question from "metabase-lib/v1/Question";
 import { InternalQuery } from "metabase-lib/v1/queries/InternalQuery";
 import type { DashboardCard, Dataset } from "metabase-types/api";
 
 import { getDashcardTokenId, getDashcardUuid } from "../dashcard-ids";
 
+import { DashCardMenuButton } from "./DashCardMenuButton";
 import { DashCardMenuItems } from "./DashCardMenuItems";
 
 interface DashCardMenuProps {
@@ -31,7 +30,7 @@ interface DashCardMenuProps {
   dashcard: DashboardCard;
   position?: MenuProps["position"];
   onEditVisualization?: () => void;
-  openUnderlyingQuestionItems?: React.ReactNode;
+  openUnderlyingQuestionItems?: React.ReactNode[];
   canEdit?: boolean;
 }
 
@@ -124,8 +123,8 @@ export const DashCardMenu = ({
           onEditVisualization={onEditVisualization}
           canEdit={canEdit}
         />
-        {openUnderlyingQuestionItems && (
-          <Menu.Sub position="right" shadow="md">
+        {!!openUnderlyingQuestionItems?.length && (
+          <Menu.Sub position="right" shadow="sm">
             <Menu.Sub.Target>
               <Menu.Sub.Item
                 fw="bold"
@@ -149,16 +148,7 @@ export const DashCardMenu = ({
   return (
     <Menu offset={4} position={position} opened={isOpen} onClose={close}>
       <Menu.Target>
-        <ActionIcon
-          size="xs"
-          className={cx({
-            [SAVING_DOM_IMAGE_HIDDEN_CLASS]: true,
-          })}
-          onClick={toggle}
-          data-testid="dashcard-menu"
-        >
-          <Icon name="ellipsis" />
-        </ActionIcon>
+        <DashCardMenuButton onClick={toggle} data-testid="dashcard-menu" />
       </Menu.Target>
 
       <Menu.Dropdown>{getMenuContent()}</Menu.Dropdown>
@@ -169,26 +159,31 @@ export const DashCardMenu = ({
 type ShouldRenderDashcardMenuProps = {
   question: Question | null;
   result?: Dataset;
-} & Pick<DashboardContextReturned, "dashboard" | "dashcardMenu">;
+} & Pick<DashboardContextReturned, "dashboard" | "dashcardMenu"> &
+  Pick<DashCardMenuProps, "canEdit" | "openUnderlyingQuestionItems">;
 
 DashCardMenu.shouldRender = ({
   question,
   dashboard,
   dashcardMenu,
   result,
+  canEdit,
+  openUnderlyingQuestionItems,
 }: ShouldRenderDashcardMenuProps) => {
   if (!question || !dashboard || dashcardMenu === null) {
     return null;
   }
 
   // Do not remove this check until we completely remove the old code related to Audit V1!
-  // MLv2 doesn't handle `internal` queries used for Audit V1.
+  // Lib doesn't handle `internal` queries used for Audit V1.
   const isInternalQuery = InternalQuery.isDatasetQueryType(
     question.datasetQuery(),
   );
 
   return (
     !isInternalQuery &&
-    (canEditQuestion(question) || canDownloadResults(result))
+    ((canEdit && canEditQuestion(question)) ||
+      canDownloadResults(result) ||
+      !!openUnderlyingQuestionItems?.length)
   );
 };

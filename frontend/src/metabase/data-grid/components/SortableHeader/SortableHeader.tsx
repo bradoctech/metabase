@@ -22,6 +22,7 @@ export interface SortableHeaderProps<TData, TValue> {
   pinButton?: React.ReactNode;
 }
 
+// Unjustified type cast. FIXME
 export const SortableHeader = memo(function SortableHeader<TData, TValue>({
   header,
   className,
@@ -83,7 +84,8 @@ export const SortableHeader = memo(function SortableHeader<TData, TValue>({
 
         const isClicked = dx + dy < HEADER_DRAG_THRESHOLD;
         const isClickTarget = headerClickTargetSelector
-          ? !!(e.target as HTMLElement).closest(headerClickTargetSelector)
+          ? // Unjustified type cast. FIXME
+            !!(e.target as HTMLElement).closest(headerClickTargetSelector)
           : true;
         if (isClicked && onClick && isClickTarget) {
           onClick(e, id);

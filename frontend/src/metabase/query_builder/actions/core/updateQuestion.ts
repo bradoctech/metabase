@@ -1,30 +1,31 @@
 import _ from "underscore";
 
-import { createThunkAction } from "metabase/lib/redux";
 import { loadMetadataForCard } from "metabase/questions/actions";
-import * as Lib from "metabase-lib";
-import type Question from "metabase-lib/v1/Question";
-import type NativeQuery from "metabase-lib/v1/queries/NativeQuery";
-import type { Series } from "metabase-types/api";
+import { createThunkAction } from "metabase/redux";
+import { setUIControls } from "metabase/redux/query-builder";
 import type {
   Dispatch,
   GetState,
   QueryBuilderMode,
-} from "metabase-types/store";
+} from "metabase/redux/store";
+import * as Lib from "metabase-lib";
+import type Question from "metabase-lib/v1/Question";
+import type NativeQuery from "metabase-lib/v1/queries/NativeQuery";
 
+import { UPDATE_QUESTION, onCloseQuestionInfo } from "../../store/actions";
 import {
   getIsShowingTemplateTagsEditor,
   getQueryBuilderMode,
   getQuestion,
   getRawSeries,
-} from "../../selectors";
+} from "../../store/selectors";
+import { getAdHocQuestionWithVizSettings } from "../../utils/viz-settings";
 import { runQuestionQuery } from "../querying";
-import { onCloseQuestionInfo, setQueryBuilderMode, setUIControls } from "../ui";
+import { setQueryBuilderMode } from "../ui";
 import { updateUrl } from "../url";
 
 import { setIsShowingTemplateTagsEditor } from "./native";
 import { computeQuestionPivotTable } from "./pivot-table";
-import { getAdHocQuestionWithVizSettings } from "./utils";
 
 function shouldTemplateTagEditorBeVisible({
   currentQuestion,
@@ -48,12 +49,14 @@ function shouldTemplateTagEditorBeVisible({
   ).isNative;
 
   const previousTags = isCurrentQuestionNative
-    ? (
+    ? // Unjustified type cast. FIXME
+      (
         currentQuestion.legacyNativeQuery() as NativeQuery
       ).variableTemplateTags()
     : [];
   const nextTags = isNewQuestionNative
-    ? (newQuestion.legacyNativeQuery() as NativeQuery).variableTemplateTags()
+    ? // Unjustified type cast. FIXME
+      (newQuestion.legacyNativeQuery() as NativeQuery).variableTemplateTags()
     : [];
   if (nextTags.length > previousTags.length) {
     return true;
@@ -72,7 +75,6 @@ export type UpdateQuestionOpts = {
 /**
  * Replaces the currently active question with the given Question object.
  */
-export const UPDATE_QUESTION = "metabase/qb/UPDATE_QUESTION";
 export const updateQuestion = (
   newQuestion: Question,
   {
@@ -97,12 +99,12 @@ export const updateQuestion = (
       run = false;
     }
 
-    const rawSeries = getRawSeries(getState()) as Series;
+    const rawSeries = getRawSeries(getState());
 
     const computedPivotQuestion = computeQuestionPivotTable({
       question: newQuestion,
       currentQuestion,
-      rawSeries,
+      rawSeries: rawSeries ?? undefined,
     });
 
     newQuestion = computedPivotQuestion.question;

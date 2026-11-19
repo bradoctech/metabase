@@ -2,24 +2,24 @@ import { useCallback, useEffect, useState } from "react";
 import { usePrevious, useUnmount } from "react-use";
 
 import { useSdkDispatch, useSdkStore } from "embedding-sdk-bundle/store";
+import { getNewCardUrl } from "metabase/dashboard/actions/getNewCardUrl";
+import type { NavigateToNewCardFromDashboardOpts } from "metabase/dashboard/components/DashCard/types";
+import { selectQuestionFromCardBuilder } from "metabase/metadata-store";
+import { navigateBackToDashboard } from "metabase/query_builder";
 import {
   NAVIGATE_TO_NEW_CARD,
   reset as dashboardReset,
-} from "metabase/dashboard/actions";
-import { getNewCardUrl } from "metabase/dashboard/actions/getNewCardUrl";
-import type { NavigateToNewCardFromDashboardOpts } from "metabase/dashboard/components/DashCard/types";
-import { parseNumber } from "metabase/lib/number";
-import * as Urls from "metabase/lib/urls";
-import { isJWT } from "metabase/lib/utils";
-import { navigateBackToDashboard } from "metabase/query_builder/actions";
-import { getMetadata } from "metabase/selectors/metadata";
+} from "metabase/redux/dashboard";
+import type { StoreDashboard } from "metabase/redux/store";
+import * as Urls from "metabase/urls";
+import { isJWT } from "metabase/utils/jwt";
+import { parseNumber } from "metabase/utils/number";
 import type Question from "metabase-lib/v1/Question";
 import {
   type DashboardId,
   type QuestionDashboardCard,
   isBaseEntityID,
 } from "metabase-types/api";
-import type { StoreDashboard } from "metabase-types/store";
 
 export const useCommonDashboardParams = ({
   dashboardId,
@@ -52,7 +52,7 @@ export const useCommonDashboardParams = ({
       objectId,
     }: NavigateToNewCardFromDashboardOpts) => {
       const state = store.getState();
-      const metadata = getMetadata(state);
+      const buildQuestion = selectQuestionFromCardBuilder(state);
       const { dashboards, parameterValues } = state.dashboard;
 
       if (dashboardId === null) {
@@ -63,11 +63,12 @@ export const useCommonDashboardParams = ({
 
       if (dashboard) {
         const url = getNewCardUrl({
-          metadata,
+          buildQuestion,
           dashboard,
           parameterValues,
           nextCard,
           previousCard,
+          // Unjustified type cast. FIXME
           dashcard: dashcard as QuestionDashboardCard,
           objectId,
         });
@@ -114,7 +115,7 @@ export const useCommonDashboardParams = ({
             model: "dashboard",
           },
         });
-        setAdhocQuestionUrl(Urls.question(question.card()));
+        setAdhocQuestionUrl(Urls.card(question.card()));
       }
     },
     [dashboardId, dispatch, store],

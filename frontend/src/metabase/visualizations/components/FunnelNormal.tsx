@@ -2,16 +2,16 @@ import cx from "classnames";
 import Color from "color";
 import { t } from "ttag";
 
-import { Ellipsified } from "metabase/common/components/Ellipsified";
 import CS from "metabase/css/core/index.css";
+import { Ellipsified } from "metabase/ui";
+import { color } from "metabase/ui/colors";
 import {
   formatChangeWithSign,
+  formatNullable,
   formatNumber,
-  formatValue,
-} from "metabase/lib/formatting";
-import { formatNullable } from "metabase/lib/formatting/nullable";
-import { isNotNull } from "metabase/lib/types";
-import { color } from "metabase/ui/colors";
+} from "metabase/utils/formatting";
+import { isNotNull } from "metabase/utils/types";
+import { formatValue } from "metabase/value-formatting";
 import {
   FunnelNormalRoot,
   FunnelStart,
@@ -21,19 +21,18 @@ import {
   Subtitle,
   Title,
 } from "metabase/visualizations/components/FunnelNormal.styled";
-import {
-  calculateFunnelSteps,
-  calculateStepOpacity,
-} from "metabase/visualizations/lib/funnel/utils";
 import type {
   ClickObject,
-  HoveredObject,
   VisualizationProps,
 } from "metabase/visualizations/types";
+import {
+  type HoveredObject,
+  calculateFunnelSteps,
+  calculateStepOpacity,
+  computeChange,
+} from "metabase/viz-core";
 import type { RowValue, RowValues } from "metabase-types/api";
 import { getRowsForStableKeys } from "metabase-types/api";
-
-import { computeChange } from "../lib/numeric";
 
 type FunnelStepInfo = {
   value: number;
@@ -126,6 +125,7 @@ export function FunnelNormal({
   const formatPercent = (percent: number) => `${(100 * percent).toFixed(2)} %`;
 
   const dimensions = sortedRows.map((row) => row[dimensionIndex]);
+  // Unjustified type cast. FIXME
   const metrics = sortedRows.map((row) => row[metricIndex]) as number[];
 
   // this is a little hacky, since this component and static-viz use different data structures for the funnel steps
@@ -318,7 +318,7 @@ const GraphSection = ({
       >
         <polygon
           opacity={calculateStepOpacity(index, numSteps)}
-          fill={Color(color("brand")).hex()}
+          fill={Color(color("core-brand")).hex()}
           points={`0 ${info.graph.startBottom}, 0 ${info.graph.startTop}, 1 ${info.graph.endTop}, 1 ${info.graph.endBottom}`}
         />
       </svg>

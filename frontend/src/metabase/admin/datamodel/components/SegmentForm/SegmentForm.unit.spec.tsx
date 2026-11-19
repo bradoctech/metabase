@@ -5,6 +5,7 @@ import {
   setupTableEndpoints,
 } from "__support__/server-mocks";
 import { mockSettings } from "__support__/settings";
+import { createMockState } from "__support__/state";
 import { act, renderWithProviders, screen } from "__support__/ui";
 import type { EnterpriseSettings } from "metabase-types/api";
 import {
@@ -13,7 +14,6 @@ import {
   createMockTable,
   createMockTokenFeatures,
 } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { SegmentForm } from "./SegmentForm";
 

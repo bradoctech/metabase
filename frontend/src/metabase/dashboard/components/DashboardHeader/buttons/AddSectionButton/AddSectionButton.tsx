@@ -5,7 +5,7 @@ import { addSectionToDashboard } from "metabase/dashboard/actions";
 import { SectionLayoutPreview } from "metabase/dashboard/components/DashboardHeader/SectionLayoutPreview";
 import { useDashboardContext } from "metabase/dashboard/context/context";
 import { type SectionLayout, layoutOptions } from "metabase/dashboard/sections";
-import { useDispatch } from "metabase/lib/redux";
+import { useDispatch } from "metabase/redux";
 import { Flex, Menu } from "metabase/ui";
 
 import AddSectionButtonS from "./AddSectionButton.module.css";
@@ -38,14 +38,14 @@ export const AddSectionButton = () => {
         <Flex
           direction="column"
           align="center"
-          gap="md"
+          gap="lg"
           p="12px"
           className={AddSectionButtonS.AddSectionButton}
         >
           {layoutOptions.map((layout) => (
             <Menu.Item
               key={layout.id}
-              bg="icon-secondary"
+              bg="icon-disabled"
               onClick={() => onAddSection(layout)}
               aria-label={layout.label}
               p="14px"

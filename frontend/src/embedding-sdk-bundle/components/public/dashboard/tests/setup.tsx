@@ -19,6 +19,7 @@ import {
 } from "__support__/server-mocks";
 import { setupDashcardQueryEndpoints } from "__support__/server-mocks/dashcard";
 import { setupNotificationChannelsEndpoints } from "__support__/server-mocks/pulse";
+import { createMockDashboardState } from "__support__/state";
 import { screen } from "__support__/ui";
 import { SdkInternalNavigationProvider } from "embedding-sdk-bundle/components/private/SdkInternalNavigation/SdkInternalNavigationProvider";
 import { renderWithSDKProviders } from "embedding-sdk-bundle/test/__support__/ui";
@@ -48,7 +49,6 @@ import {
   ORDERS_ID,
   createSampleDatabase,
 } from "metabase-types/api/mocks/presets";
-import { createMockDashboardState } from "metabase-types/store/mocks";
 
 import type { EditableDashboardProps } from "../EditableDashboard";
 import type { SdkDashboardProps } from "../SdkDashboard";
@@ -118,7 +118,9 @@ export interface SetupSdkDashboardOptions extends NotificationChannelSetup {
   props?: Omit<Partial<SdkDashboardProps>, "token">;
   providerProps?: Partial<MetabaseProviderProps>;
   isLocaleLoading?: boolean;
-  component: ComponentType<SdkDashboardProps>;
+  component: ComponentType<
+    SdkDashboardProps & Pick<EditableDashboardProps, "dataPickerProps">
+  >;
   dashboardName?: string;
   dataPickerProps?: EditableDashboardProps["dataPickerProps"];
   dashcards?: DashboardCard[];
@@ -148,6 +150,7 @@ export const setupSdkDashboard = async ({
   isEmailConfigured = false,
   isSlackConfigured = false,
 }: SetupSdkDashboardOptions) => {
+  // Unjustified type cast. FIXME
   const useLocaleMock = useLocale as jest.Mock;
   useLocaleMock.mockReturnValue({ isLocaleLoading });
 
@@ -193,7 +196,7 @@ export const setupSdkDashboard = async ({
   setupNotificationChannelsEndpoints({
     email: { configured: isEmailConfigured },
     slack: { configured: isSlackConfigured },
-  } as any);
+  });
 
   setupDatabasesEndpoints([createMockDatabase()]);
 

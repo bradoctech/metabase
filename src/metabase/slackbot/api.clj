@@ -3,11 +3,11 @@
   (:require
    [clojure.string :as str]
    [malli.core :as mc]
-   [metabase.analytics.core :as analytics]
+   [metabase.analytics-interface.core :as analytics]
+   [metabase.analytics.core :as analytics.core]
    [metabase.api.macros :as api.macros]
    [metabase.channel.settings :as channel.settings]
-   [metabase.config.core :as config]
-   [metabase.metabot.config :as metabot.config]
+   [metabase.lib.schema.common :as lib.schema.common]
    [metabase.metabot.feedback :as metabot.feedback]
    [metabase.permissions.core :as perms]
    [metabase.request.core :as request]
@@ -15,6 +15,7 @@
    [metabase.settings.core :as setting]
    [metabase.slackbot.client :as slackbot.client]
    [metabase.slackbot.config :as slackbot.config]
+   [metabase.slackbot.db :as slackbot.db]
    [metabase.slackbot.events :as slackbot.events]
    [metabase.slackbot.persistence :as slackbot.persistence]
    [metabase.slackbot.settings :as slackbot.settings]
@@ -29,8 +30,7 @@
    [metabase.util.log :as log]
    [metabase.util.malli :as mu]
    [metabase.util.malli.schema :as ms]
-   [ring.util.codec :as codec]
-   [toucan2.core :as t2])
+   [ring.util.codec :as codec])
   (:import
    (java.util.concurrent ExecutorService Executors ThreadFactory)))
 
@@ -60,6 +60,23 @@
                       :metabot-slack-signing-secret nil})
   nil)
 
+(defn conversation-permalink
+  "Best-effort Slack permalink for a message in a conversation thread."
+  [channel ts]
+  (when (and channel
+             ts
+             (channel.settings/slack-configured?))
+    (try
+      (let [client {:token (channel.settings/unobfuscated-slack-app-token)}
+            {:keys [ok permalink]} (slackbot.client/get-permalink client
+                                                                  {:channel channel
+                                                                   :ts      ts})]
+        (when ok
+          permalink))
+      (catch Exception e
+        (log/warnf "Unable to fetch Slack permalink for metabot conversation: %s" (ex-message e))
+        nil))))
+
 ;; ------------------------- VALIDATION ----------------------------------
 
 (defn- assert-valid-slack-req
@@ -85,12 +102,7 @@
   signing secret version, so that rotating the secret automatically invalidates existing identity links. Legacy
   identities without an explicit version are treated as version 0."
   [slack-user-id]
-  (let [identity (t2/select-one [:model/AuthIdentity :user_id :metadata]
-                                :provider "slack-connect"
-                                :provider_id slack-user-id
-                                {:join     [[:core_user :user] [:= :user.id :auth_identity.user_id]]
-                                 :where    [:= :user.is_active true]
-                                 :order-by [[:created_at :desc]]})]
+  (let [identity (slackbot.db/active-slack-connect-identity slack-user-id)]
     (when (= (auth-identity-signing-secret-version identity)
              (current-signing-secret-version))
       (:user_id identity))))
@@ -152,11 +164,24 @@
    :body    "ok"})
 
 (defn- all-files-skipped?
-  "Returns true if all files were skipped (none were CSV/TSV)."
+  "Returns true if nothing was uploaded and at least one file was refused."
   [{:keys [upload-result]}]
-  (let [{:keys [results skipped]} upload-result]
-    (and (seq skipped)
-         (empty? results))))
+  (let [{:keys [results skipped remote]} upload-result]
+    (and (empty? results)
+         (or (seq skipped) (seq remote)))))
+
+(defn- refused-files-message
+  "Reply text for a share where nothing could be uploaded, naming why for each file."
+  [{:keys [skipped remote]}]
+  (str/join " "
+            (cond-> []
+              (seq skipped)
+              (conj (format "I can only process CSV and TSV files. The following files were skipped: %s"
+                            (str/join ", " skipped)))
+
+              (seq remote)
+              (conj (format "These files are stored outside Slack, so I can't upload them: %s"
+                            (str/join ", " remote))))))
 
 (mu/defn- handle-message-file-share
   "Process a file_share message - handles CSV uploads"
@@ -180,23 +205,21 @@
         should-skip-ai? (and (not has-text?)
                              (not (:error file-handling))
                              all-skipped?)]
-    ;; If all files were skipped (non-CSV) and there's no text, respond directly
+    ;; If nothing could be uploaded and there's no text, respond directly
     ;; without calling the AI to avoid sending an empty prompt
     (if should-skip-ai?
-      (let [skipped-files (get-in file-handling [:upload-result :skipped])]
-        (slackbot.client/post-message client
-                                      (merge (slackbot.events/event->reply-context event)
-                                             {:text (format "I can only process CSV and TSV files. The following files were skipped: %s"
-                                                            (str/join ", " skipped-files))})))
+      (slackbot.client/post-message client
+                                    (merge (slackbot.events/event->reply-context event)
+                                           {:text (refused-files-message (:upload-result file-handling))}))
       (slackbot.streaming/send-response client event extra-history))))
 
-(defmethod analytics/known-labels :metabase-slackbot/responses-generated [_]
+(defmethod analytics.core/known-labels :metabase-slackbot/responses-generated [_]
   [{:source "dm"      :result "success"}
    {:source "dm"      :result "error"}
    {:source "channel" :result "success"}
    {:source "channel" :result "error"}])
 
-(defmethod analytics/known-labels :metabase-slackbot/file-uploads [_]
+(defmethod analytics.core/known-labels :metabase-slackbot/file-uploads [_]
   [{:result "success"} {:result "error"}])
 
 (defn- event-source
@@ -226,7 +249,7 @@
                  (finally
                    (analytics/observe! :metabase-slackbot/response-duration-ms {:source source} (u/since-ms timer)))))))
          (catch Exception e
-           (log/errorf e "[slackbot] Error processing %s: %s" event-type (ex-message e))))))))
+           (log/errorf "[slackbot] Error processing %s: %s" event-type (ex-message e))))))))
 
 (defn- ignore-event
   "Handle any event we don't care to process"
@@ -355,7 +378,7 @@
                                            :source   "reaction"
                                            :reaction reaction))))
     (catch Exception e
-      (log/error e "[slackbot] Error handling delete reaction"))))
+      (log/errorf "[slackbot] Error handling delete reaction: %s" (ex-message e)))))
 
 (defn- assert-setup-complete
   "Asserts that all required Slack settings have been configured."
@@ -415,10 +438,11 @@
   "Respond to activities in Slack"
   [_route-params
    _query-params
-   body :- [:multi {:dispatch :type}
+   body :- [:multi {:decode/normalize lib.schema.common/normalize-map-no-kebab-case
+                    :dispatch         :type}
             ["url_verification" slackbot.events/SlackUrlVerificationEvent]
             ["event_callback"   slackbot.events/SlackEventCallbackEvent]
-            [::mc/default       [:map [:type :string]]]]
+            [::mc/default       [:map {:closed true} [:type :string]]]]
    request]
   (log/debugf "[slackbot] Incoming Slack request type=%s slack_event_type=%s request_ts=%s"
               (:type body)
@@ -435,7 +459,7 @@
 (def SlackBotSettingsRequest
   "Malli schema for the request body of PUT /api/metabot/slack/settings.
    All credential fields must be provided together (either all set or all nil)."
-  [:map
+  [:map {:closed true}
    [:slack-connect-client-id      [:maybe ms/NonBlankString]]
    [:slack-connect-client-secret  [:maybe ms/NonBlankString]]
    [:metabot-slack-signing-secret [:maybe ms/NonBlankString]]])
@@ -522,34 +546,15 @@
          :label    {:type "plain_text" :text "What kind of issue are you reporting?"}}
         freeform-block]))})
 
-(defn- get-conversation-messages
-  "Retrieve all messages for a conversation from the database."
-  [conversation-id]
-  (when conversation-id
-    (t2/select :model/MetabotMessage
-               :conversation_id conversation-id
-               :deleted_at nil
-               {:order-by [[:created_at :asc]]})))
-
-(defn- build-base-feedback
-  "Build the common feedback payload fields."
-  [user-id conversation-id positive]
-  {:metabot_id        (metabot.config/normalize-metabot-id "slackbotmetabotmetabo")
-   :feedback          {:positive          positive
-                       :message_id        conversation-id
-                       :freeform_feedback ""}
-   :conversation_data {:messages (get-conversation-messages conversation-id)}
-   :version           config/mb-version-info
-   :submission_time   (str (java.time.OffsetDateTime/now))
-   :is_admin          (boolean (t2/select-one-fn :is_superuser :model/User :id user-id))
-   :source            "slack"})
-
 (defn- handle-feedback-action
   "Handle a metabot feedback button click from Slack.
-   Opens the detail modal immediately (trigger_id expires in 3s). Feedback is
-   submitted to Harbormaster only when the user submits the modal."
+   Opens the detail modal immediately (trigger_id expires in 3s).
+   `:message_external_id` in the button payload is the hardened identifier for
+   the rated assistant message; `:channel_id` / `:message_ts` are kept in
+   private_metadata as a fallback for buttons emitted before that plumbing
+   shipped."
   [{:keys [action trigger-id slack-user-id channel-id message-ts]}]
-  (let [{:keys [conversation_id positive]} (json/decode (:value action) true)
+  (let [{:keys [conversation_id positive message_external_id]} (json/decode (:value action) true)
         client  {:token (channel.settings/unobfuscated-slack-app-token)}
         user-id (slack-id->user-id slack-user-id)]
     (when user-id
@@ -557,13 +562,14 @@
         (slackbot.client/open-view
          client
          {:trigger_id trigger-id
-          :view       (feedback-modal-view positive {:conversation_id conversation_id
-                                                     :positive        positive
-                                                     :user_id         user-id
-                                                     :channel_id      channel-id
-                                                     :message_ts      message-ts})})
+          :view       (feedback-modal-view positive {:conversation_id     conversation_id
+                                                     :positive            positive
+                                                     :user_id             user-id
+                                                     :channel_id          channel-id
+                                                     :message_ts          message-ts
+                                                     :message_external_id message_external_id})})
         (catch Exception e
-          (log/errorf e "[slackbot] Error opening feedback modal: %s" (ex-data e)))))))
+          (log/errorf "[slackbot] Error opening feedback modal: %s" (ex-message e)))))))
 
 (defn- handle-delete-action
   "Handle replacing a metabot response message with a removed notice.
@@ -578,35 +584,59 @@
            (try
              (replace-response-with-removed-notice! client channel-id message-ts (:request-user-id authorization))
              (catch Exception e
-               (log/errorf e "[slackbot] Error replacing metabot response with removed notice: %s" (ex-data e)))))))
+               (log/errorf "[slackbot] Error replacing metabot response with removed notice: %s" (ex-message e)))))))
 
       (log-ignored-delete-request (assoc authorization :source "action")))))
 
+(defn- resolve-message-external-id
+  "Resolve the rated `metabot_message.external_id` from the modal's
+   `private_metadata`. Prefers `:message_external_id` (present when the button
+   was emitted with the hardened payload); falls back to a
+   `(channel_id, slack_msg_id)` reverse lookup for buttons issued before that
+   change shipped."
+  [{:keys [message_external_id channel_id message_ts]}]
+  (or message_external_id
+      (when (and channel_id message_ts)
+        (slackbot.db/metabot-message-external-id channel_id message_ts))))
+
 (defn- handle-feedback-modal-submission
-  "Handle submission of the feedback details modal. Submits detailed feedback to Harbormaster."
+  "Handle submission of the feedback details modal.
+   Persists the feedback locally under the Slack submitter's user binding (so
+   the `can-read?` participation check in `metabot.feedback/persist-feedback!`
+   runs against the real submitter)."
   [payload]
   (let [private-metadata (json/decode (get-in payload [:view :private_metadata]) true)
         {:keys [conversation_id positive user_id]} private-metadata
         values           (get-in payload [:view :state :values])
         issue-type       (get-in values [:issue_type :issue_type_select :selected_option :value])
-        freeform         (get-in values [:freeform_feedback :freeform_input :value])]
-    (submit-async
-     (fn []
-       (try
-         (metabot.feedback/submit-to-harbormaster!
-          (cond-> (build-base-feedback user_id conversation_id positive)
-            true       (assoc-in [:feedback :freeform_feedback] (or freeform ""))
-            issue-type (assoc-in [:feedback :issue_type] issue-type)))
-         (catch Exception e
-           (log/error e "[slackbot] Error submitting feedback to Harbormaster")))))))
+        freeform         (get-in values [:freeform_feedback :freeform_input :value])
+        external-id      (resolve-message-external-id private-metadata)]
+    (if (nil? external-id)
+      (log/warnf "[slackbot] Dropping feedback submission: no external_id resolvable (conversation_id=%s user_id=%s)"
+                 conversation_id user_id)
+      (submit-async
+       (fn []
+         (try
+           (request/with-current-user user_id
+             (metabot.feedback/persist-feedback!
+              {:message_id        external-id
+               :positive          positive
+               :issue_type        issue-type
+               :freeform_feedback freeform}))
+           (catch Exception e
+             (log/warnf "[slackbot] Feedback submission failed (external_id=%s user_id=%s): %s"
+                        external-id user_id (ex-message e)))))))))
 
 #_{:clj-kondo/ignore [:metabase/validate-defendpoint-has-response-schema]}
 (api.macros/defendpoint :post "/interactive"
   "Handle interactive payloads from Slack (button clicks, modal submissions)."
-  [_route-params _query-params _body request]
+  [_route-params
+   _query-params
+   {:keys [payload]} :- [:map {:closed true}
+                         [:payload ms/NonBlankString]]
+   request]
   (assert-valid-slack-req request)
-  (let [payload (-> (get-in request [:params :payload])
-                    (json/decode true))]
+  (let [payload (json/decode payload true)]
     (case (:type payload)
       "block_actions"
       (let [actions    (:actions payload)
@@ -661,7 +691,7 @@
   (do
     (require '[clojure.java.shell :refer [sh]])
     (sh "pbcopy" :in (json/encode (get-slack-manifest) {:pretty true}))))
-  ;; 5. there will be a notification at the top of the manifest page to verify your new site url, click verify
+;; 5. there will be a notification at the top of the manifest page to verify your new site url, click verify
 
 ;; ----------------- DEV -----------------------
 

@@ -3,8 +3,8 @@ import { t } from "ttag";
 import { EntityCreationInfo } from "metabase/common/components/EntityCreationInfo";
 import { getColumnIcon } from "metabase/common/utils/columns";
 import CS from "metabase/css/core/index.css";
-import { getUserName } from "metabase/lib/user";
 import { Box, FixedSizeIcon, Group, Stack, Text, Title } from "metabase/ui";
+import { getUserName } from "metabase/utils/user";
 import * as Lib from "metabase-lib";
 import type { DependencyEntry, DependencyNode } from "metabase-types/api";
 
@@ -33,7 +33,7 @@ type PanelBodyProps = {
 
 export function PanelBody({ node, getGraphUrl }: PanelBodyProps) {
   return (
-    <Stack className={S.body} p="lg" gap="lg">
+    <Stack className={S.body} p="xl" gap="xl">
       <DescriptionSection node={node} />
       <OwnerSection node={node} />
       <CreatorAndLastEditorSection node={node} />
@@ -72,7 +72,7 @@ function OwnerSection({ node }: SectionProps) {
 
   const owner = getNodeOwner(node);
   return (
-    <Stack gap="xs" lh="1rem">
+    <Stack gap="xxs" lh="1rem">
       <Title order={6}>{t`Owner`}</Title>
       {owner != null ? (
         <Text lh="h4">{getUserName(owner)}</Text>
@@ -141,7 +141,7 @@ function FieldsSection({ node }: SectionProps) {
   }
 
   return (
-    <Stack gap="md" lh="1rem">
+    <Stack gap="lg" lh="1rem">
       <Title className={CS.textWrap} order={6}>
         {getNodeFieldsLabelWithCount(fields.length)}
       </Title>

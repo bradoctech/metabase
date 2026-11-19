@@ -1,6 +1,10 @@
 import type { ComponentProps } from "react";
 
 import { createMockMetadata } from "__support__/metadata";
+import {
+  createMockQueryBuilderState,
+  createMockState,
+} from "__support__/state";
 import { createMockEntitiesState } from "__support__/store";
 import { renderWithProviders, screen } from "__support__/ui";
 import * as Lib from "metabase-lib";
@@ -11,10 +15,6 @@ import {
   ORDERS_ID,
   createSampleDatabase,
 } from "metabase-types/api/mocks/presets";
-import {
-  createMockQueryBuilderState,
-  createMockState,
-} from "metabase-types/store/mocks";
 
 import { NotebookProvider } from "../Notebook/context";
 
@@ -75,6 +75,7 @@ describe("NotebookStepList", () => {
 });
 
 function assertActionButtonsOrder(buttonNames: string[]) {
+  // Unjustified type cast. FIXME
   const actionButtonsContainer = screen
     .getAllByTestId("action-buttons")
     .at(-1) as HTMLElement;

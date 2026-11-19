@@ -1,0 +1,6 @@
+name: Library
+entity_id: LiBrArYrOoT000000001
+slug: library
+type: library
+serdes/meta:
+- model: Collection

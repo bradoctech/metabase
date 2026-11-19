@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { t } from "ttag";
 import * as Yup from "yup";
 
-import ButtonsS from "metabase/css/components/buttons.module.css";
 import {
   Form,
   FormCheckbox,
@@ -11,9 +10,8 @@ import {
   FormSubmitButton,
   FormTextInput,
 } from "metabase/forms";
-import * as Errors from "metabase/lib/errors";
-
-import type { LoginData } from "../../types";
+import * as Errors from "metabase/utils/errors";
+import type { LoginData } from "metabase-types/api";
 
 const LOGIN_SCHEMA = Yup.object().shape({
   username: Yup.string()
@@ -79,19 +77,14 @@ export const LoginForm = ({
           mb="1.25rem"
         />
         {!hasSessionCookies && (
-          <FormCheckbox
-            name="remember"
-            label={t`Remember me`}
-            mb="1.25rem"
-            size="lg"
-          />
+          <FormCheckbox name="remember" label={t`Remember me`} mb="1.25rem" />
         )}
         <FormSubmitButton
           label={t`Sign in`}
-          variant="primary"
+          variant="filled"
           w="100%"
           radius="100px"
-          className={ButtonsS.ButtonNoBorder}
+          style={{ border: "none", boxShadow: "none" }}
         />
         <FormErrorMessage mt="1rem" />
       </Form>

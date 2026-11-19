@@ -1,0 +1,9 @@
+name: orders
+display_name: Orders
+description: Orders table
+active: true
+visibility_type: null
+schema: null
+db_id: SQLite DB
+serdes/meta:
+- model: Table

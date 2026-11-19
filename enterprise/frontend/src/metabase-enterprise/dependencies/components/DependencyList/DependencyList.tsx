@@ -4,7 +4,6 @@ import { t } from "ttag";
 
 import { ForwardRefLink } from "metabase/common/components/Link";
 import CS from "metabase/css/core/index.css";
-import * as Urls from "metabase/lib/urls";
 import {
   Box,
   Breadcrumbs,
@@ -14,6 +13,7 @@ import {
   Menu,
   Stack,
 } from "metabase/ui";
+import * as Urls from "metabase/urls";
 import type { DependencyNode } from "metabase-types/api";
 
 import {
@@ -64,7 +64,7 @@ function DependentItem({ node, onGraphOpened }: DependentItemProps) {
       <Menu.Target>
         <Stack
           className={cx(S.item, { [S.active]: isOpened })}
-          p="md"
+          p="lg"
           gap="sm"
           aria-label={label}
         >

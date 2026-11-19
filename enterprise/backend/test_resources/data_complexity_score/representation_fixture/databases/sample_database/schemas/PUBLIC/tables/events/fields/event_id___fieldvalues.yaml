@@ -1,0 +1,11 @@
+field_id:
+- Sample Database
+- PUBLIC
+- events
+- event_id
+type: full
+values:
+- 'evt-1'
+- 'evt-2'
+serdes/meta:
+- model: FieldValues

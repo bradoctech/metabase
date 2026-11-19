@@ -1,0 +1,7 @@
+name: Metrics
+entity_id: LiBrArYmEtRiCs000001
+slug: metrics
+type: library-metrics
+parent_id: LiBrArYrOoT000000001
+serdes/meta:
+- model: Collection

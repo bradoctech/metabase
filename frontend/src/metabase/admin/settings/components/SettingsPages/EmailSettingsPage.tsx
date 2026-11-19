@@ -1,15 +1,17 @@
 import { t } from "ttag";
 
-import {
-  SettingsPageWrapper,
-  SettingsSection,
-} from "metabase/admin/components/SettingsSection";
-import { useGetSettingsQuery } from "metabase/api";
+import { UpsellHostingBanner } from "metabase/admin/upsells";
 import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
 import { useHasTokenFeature } from "metabase/common/hooks";
+import { useGetSettingsQuery } from "metabase/settings";
+import {
+  AdminSettingInput,
+  SettingsPageWrapper,
+  SettingsSection,
+} from "metabase/settings-components";
+import { Center } from "metabase/ui";
 
 import { SMTPConnectionCard } from "../Email/SMTPConnectionCard";
-import { AdminSettingInput } from "../widgets/AdminSettingInput";
 import { EmailFromAddressWidget } from "../widgets/EmailFromAddressWidget";
 import { EmailReplyToWidget } from "../widgets/EmailReplyToWidget";
 import { SendTestEmailWidget } from "../widgets/SendTestEmailWidget";
@@ -75,6 +77,9 @@ export function EmailSettingsPage() {
             <SendTestEmailWidget />
           </SettingsSection>
         )}
+        <Center>
+          <UpsellHostingBanner location="settings-email-migrate_to_cloud" />
+        </Center>
       </SettingsPageWrapper>
     </>
   );

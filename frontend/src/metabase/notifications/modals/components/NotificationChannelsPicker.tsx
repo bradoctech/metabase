@@ -1,8 +1,7 @@
 import { t } from "ttag";
 
 import { useListChannelsQuery, useListUserRecipientsQuery } from "metabase/api";
-import { getNotificationHandlersGroupedByTypes } from "metabase/lib/notifications";
-import { useSelector } from "metabase/lib/redux";
+import { canAccessSettings, getUser } from "metabase/current-user";
 import { ChannelSettingsBlock } from "metabase/notifications/channels/ChannelSettingsBlock";
 import { EmailChannelEdit } from "metabase/notifications/channels/EmailChannelEdit";
 import { SlackChannelFieldNew } from "metabase/notifications/channels/SlackChannelFieldNew";
@@ -10,7 +9,8 @@ import {
   type ChannelToAddOption,
   NotificationChannelsAddMenu,
 } from "metabase/notifications/modals/components/NotificationChannelsAddMenu";
-import { canAccessSettings, getUser } from "metabase/selectors/user";
+import { getNotificationHandlersGroupedByTypes } from "metabase/notifications/utils";
+import { useSelector } from "metabase/redux";
 import { Stack } from "metabase/ui";
 import type {
   ChannelApiResponse,
@@ -128,8 +128,8 @@ export const NotificationChannelsPicker = ({
     getNotificationHandlersGroupedByTypes(notificationHandlers);
 
   return (
-    <Stack gap="xl" align="start">
-      <Stack gap="xl" align="start" data-testid="alert-configured-channel">
+    <Stack gap="xxl" align="start">
+      <Stack gap="xxl" align="start" data-testid="alert-configured-channel">
         {channels.email?.configured && !!emailHandler && (
           <ChannelSettingsBlock
             title={t`Email`}

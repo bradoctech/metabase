@@ -6,7 +6,7 @@ import {
   addLinkDashCardToDashboard,
 } from "metabase/dashboard/actions";
 import { getDashboard, getSelectedTabId } from "metabase/dashboard/selectors";
-import { useDispatch, useSelector } from "metabase/lib/redux";
+import { useDispatch, useSelector } from "metabase/redux";
 import { Group, Icon, Menu } from "metabase/ui";
 
 export const AddLinkOrEmbedButton = () => {
@@ -45,17 +45,17 @@ export const AddLinkOrEmbedButton = () => {
           data-element-id={t`Add a link or iframe`}
           aria-label={t`Add a link or iframe`}
         >
-          <Group gap="xs" wrap="nowrap">
+          <Group gap="xxs" wrap="nowrap">
             <Icon name="link" size={18} />
             <Icon name="chevrondown" size={10} />
           </Group>
         </ToolbarButton>
       </Menu.Target>
       <Menu.Dropdown miw="auto">
-        <Menu.Item pr="xl" fw="bold" onClick={onAddLinkCard}>
+        <Menu.Item pr="xxl" fw="bold" onClick={onAddLinkCard}>
           {t`Link`}
         </Menu.Item>
-        <Menu.Item pr="xl" fw="bold" onClick={onAddIFrameCard}>
+        <Menu.Item pr="xxl" fw="bold" onClick={onAddIFrameCard}>
           {t`Iframe`}
         </Menu.Item>
       </Menu.Dropdown>

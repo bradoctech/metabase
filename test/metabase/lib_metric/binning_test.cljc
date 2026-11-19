@@ -154,7 +154,7 @@
   (testing "Selected binning is marked when projection has binning"
     (let [binning {:strategy :num-bins :num-bins 10}
           projection [:dimension {:binning binning} uuid-numeric]
-          def-with-proj (assoc definition :projections [{:type :metric :id 1 :projection [projection]}])
+          def-with-proj (assoc definition :projections [{:type :metric :id 1 :lib/uuid "550e8400-e29b-41d4-a716-446655440099" :projection [projection]}])
           strategies (lib-metric.projection/available-binning-strategies def-with-proj numeric-dimension)]
       ;; The matching strategy should be marked as selected
       (is (some #(and (= 10 (get-in % [:mbql :num-bins])) (:selected %)) strategies)))))
@@ -221,10 +221,10 @@
 
 (deftest ^:parallel with-binning-preserves-other-options-test
   (testing "with-binning preserves other options"
-    (let [projection [:dimension {:lib/uuid "test-uuid" :display-name "Test"} uuid-numeric]
+    (let [projection [:dimension {:lib/uuid "00000000-0000-4000-8000-000000000042" :display-name "Test"} uuid-numeric]
           binning {:strategy :default}
           result (lib-metric.projection/with-binning projection binning)]
-      (is (= "test-uuid" (:lib/uuid (second result))))
+      (is (= "00000000-0000-4000-8000-000000000042" (:lib/uuid (second result))))
       (is (= "Test" (:display-name (second result))))
       (is (= binning (:binning (second result)))))))
 

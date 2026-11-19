@@ -1,17 +1,17 @@
 import cx from "classnames";
-import { Link } from "react-router";
 import { t } from "ttag";
 
 import { useUpdateTableMutation } from "metabase/api";
-import * as Urls from "metabase/lib/urls";
+import { Link } from "metabase/common/components/Link";
+import { useMetadataToasts } from "metabase/common/hooks";
 import {
   DataSourceInput,
   EntityTypeInput,
   LayerInput,
   UserInput,
 } from "metabase/metadata/components";
-import { useMetadataToasts } from "metabase/metadata/hooks";
 import { Box, Icon, Text } from "metabase/ui";
+import * as Urls from "metabase/urls";
 import type {
   Table,
   TableDataLayer,
@@ -48,6 +48,9 @@ export function TableAttributesEditSingle({ table, onUpdate }: Props) {
           owner_email: table.owner_email,
           owner_user_id: table.owner_user_id,
         });
+        if (!error) {
+          onUpdate();
+        }
         sendUndoToast(error);
       });
     }
@@ -74,6 +77,9 @@ export function TableAttributesEditSingle({ table, onUpdate }: Props) {
           owner_email: table.owner_email,
           owner_user_id: table.owner_user_id,
         });
+        if (!error) {
+          onUpdate();
+        }
         sendUndoToast(error);
       });
     }
@@ -92,11 +98,15 @@ export function TableAttributesEditSingle({ table, onUpdate }: Props) {
     if (error) {
       sendErrorToast(t`Failed to update table visibility layer`);
     } else {
+      onUpdate();
       sendSuccessToast(t`Table visibility layer updated`, async () => {
         const { error } = await updateTable({
           id: table.id,
           data_layer: table.data_layer,
         });
+        if (!error) {
+          onUpdate();
+        }
         sendUndoToast(error);
       });
     }
@@ -147,6 +157,7 @@ export function TableAttributesEditSingle({ table, onUpdate }: Props) {
   };
 
   const isOwnerSpecified = table.owner_email || table.owner_user_id;
+  const readOnly = !table.can_write;
 
   return (
     <TableSectionGroup title={t`Attributes`}>
@@ -155,6 +166,7 @@ export function TableAttributesEditSingle({ table, onUpdate }: Props) {
           email={table.owner_email}
           label={t`Owner`}
           userId={isOwnerSpecified ? table.owner_user_id : "unknown"}
+          disabled={readOnly}
           onEmailChange={handleOwnerEmailChange}
           onUserIdChange={handleOwnerUserIdChange}
           className={S.gridLabelInput}
@@ -167,6 +179,7 @@ export function TableAttributesEditSingle({ table, onUpdate }: Props) {
 
         <LayerInput
           value={table.data_layer ?? "hidden"}
+          disabled={readOnly}
           onChange={handleLayerChange}
           classNames={{ input: S.input, label: S.label }}
           className={S.gridLabelInput}
@@ -174,31 +187,38 @@ export function TableAttributesEditSingle({ table, onUpdate }: Props) {
 
         <EntityTypeInput
           value={table.entity_type ?? "entity/GenericTable"}
+          disabled={readOnly}
           onChange={handleEntityTypeChange}
           classNames={{ input: S.input, label: S.label }}
           className={S.gridLabelInput}
         />
 
         <DataSourceInput
-          disabled={table.data_source === "metabase-transform"}
+          disabled={readOnly || table.data_source === "metabase-transform"}
           value={table.data_source ?? "unknown"}
           onChange={handleDataSourceChange}
           classNames={{ input: S.input, label: S.label }}
           className={S.gridLabelInput}
         />
 
-        <TransformLink table={table} />
+        {table.data_source === "metabase-transform" && (
+          <TransformLink table={table} />
+        )}
       </div>
     </TableSectionGroup>
   );
 }
 function TransformLink({ table }: { table: Table }) {
   const { transform } = table;
-  const shouldShowTransform =
-    transform !== undefined && table.data_source === "metabase-transform";
 
-  if (!shouldShowTransform) {
-    return null;
+  if (!transform) {
+    return (
+      <Box
+        c="feedback-negative"
+        className={S.transformLink}
+        fz="sm"
+      >{t`Transform does not exist anymore`}</Box>
+    );
   }
 
   return (
@@ -206,7 +226,7 @@ function TransformLink({ table }: { table: Table }) {
       <Box
         component={Link}
         to={Urls.transform(transform.id)}
-        py="xs"
+        py="xxs"
         px="sm"
         style={{
           borderRadius: 4,
@@ -216,14 +236,14 @@ function TransformLink({ table }: { table: Table }) {
           cursor: "pointer",
           textDecoration: "none",
         }}
-        bg="background-brand"
-        c="brand"
+        bg="background_surface-brand-subtle"
+        c="core-brand"
       >
         <Icon name="insight" size={12} />
         <Text
           size="sm"
           fw="bold"
-          c="brand"
+          c="core-brand"
           style={{
             fontSize: 12,
             lineHeight: "16px",

@@ -3,6 +3,7 @@
   (:require
    [metabase.app-db.core :as mdb]
    [metabase.config.core :as config]
+   [metabase.premium-features.defenterprise :refer [defenterprise]]
    [metabase.settings.core :as setting :refer [defsetting]]
    [metabase.util.i18n :refer [deferred-tru]]))
 
@@ -13,7 +14,7 @@
   in [[metabase.premium-features.core/fetch-token-status]]. (`site-uuid` is used for anonymous
   analytics aka stats and if we sent it along with the premium features token check API request it would no longer be
   anonymous.)"
-  :encryption :when-encryption-key-set
+  :encryption :no
   :visibility :internal
   :base       setting/uuid-nonce-base
   :doc        false)
@@ -31,12 +32,23 @@
 
 (defsetting token-status
   (deferred-tru "Cached token status for premium features. This is to avoid an API request on the the first page load.")
+  :encryption :no
   :visibility :admin
   :type       :json
   :audit      :never
   :setter     :none
   :getter     (fn []
                 ((requiring-resolve 'metabase.premium-features.token-check/-token-status))))
+
+(defsetting locked-meters
+  (deferred-tru "Locally-mirrored is-locked state per meter, refreshed on each successful token-check.")
+  :encryption :no
+  :type       :json
+  :visibility :internal
+  :audit      :never
+  :export?    false
+  :default    {}
+  :doc        false)
 
 ;;; TODO - rename this to premium-features-token?
 (defsetting premium-embedding-token
@@ -163,6 +175,10 @@
   "Should we enable user/group provisioning via SCIM?"
   :scim)
 
+(define-premium-feature enable-multi-factor-auth?
+  "Should we enable native multi-factor authentication for interactive logins?"
+  :multi-factor-auth)
+
 (defn enable-any-sso?
   "Should we enable any SSO-based authentication?"
   []
@@ -265,6 +281,11 @@
   "Should we enable the semantic search backend?"
   :semantic-search)
 
+(define-premium-feature ^{:added "0.63.0"} enable-library-retrieval?
+  "Should we enable the Metabot library entity-retrieval tool (retrieve_library_entities)?
+  Independent of `:semantic-search`: this gates only that tool, not the general semantic search engine."
+  :library-retrieval)
+
 (define-premium-feature ^{:added "0.57.0"} table-data-editing?
   "Should we allow users to edit the data within tables?"
   :table-data-editing)
@@ -272,6 +293,10 @@
 (define-premium-feature ^{:added "0.57.0"} enable-remote-sync?
   "Does this instance support remote syncing collections."
   :remote-sync)
+
+(define-premium-feature ^{:added "0.65.0"} enable-data-apps?
+  "Should we allow users to publish and run data apps?"
+  :data-apps-preview)
 
 (define-premium-feature ^{:added "0.59.0"} enable-basic-transforms?
   "Should we allow users to use transforms? Replacement for transforms"
@@ -293,14 +318,26 @@
   "Should we enable the Library?"
   :library)
 
+(defsetting security-center-disabled
+  (deferred-tru "Globally disable Security Center as a customer-controlled escape hatch.")
+  :type             :boolean
+  :feature          :admin-security-center
+  :default          false
+  :visibility       :internal
+  :include-in-list? false
+  :audit            :never
+  :setter           :none
+  :export?          false)
+
 (define-premium-feature security-center-enabled?
   "True if the current instance has Security Center access.
    Requires the `:admin-security-center` feature flag, a non-trial subscription,
-   and a self-hosted instance."
+   a self-hosted instance, and the `security-center-disabled` setting to be unset."
   :admin-security-center
   :getter (fn []
             (and (has-feature? :admin-security-center)
                  (not (is-hosted?))
+                 (not (security-center-disabled))
                  (not ((requiring-resolve 'metabase.premium-features.token-check/is-trial?)))
                  (or config/is-test? config/is-e2e?
                      (not= (mdb/db-type) :h2)))))
@@ -308,10 +345,6 @@
 (define-premium-feature ^{:added "0.58.0"} enable-tenants?
   "Should the multi-tenant feature be enabled?"
   :tenants)
-
-(define-premium-feature ^{:added "0.59.0"} enable-workspaces?
-  "Should we allow users to use workspaces?"
-  :workspaces)
 
 (define-premium-feature enable-metabot-v3?
   "Should we allow users to use the Metabase-managed tiered AI provider?"
@@ -325,9 +358,28 @@
   "Should we offer users the Metabase-managed AI provider?"
   :offer-metabase-ai-managed)
 
+(defenterprise enable-custom-viz?
+  "Should we enable custom visualizations? OSS falls back to `false`; the EE implementation checks the
+  `custom-viz-enabled` setting and the `:custom-viz` premium feature."
+  metabase-enterprise.custom-viz-plugin.settings
+  []
+  false)
+
+(define-premium-feature enable-data-complexity-score?
+  "Should we expose Data Complexity Score?"
+  :data-complexity-score)
+
 (define-premium-feature enable-writable-connection?
   "Should we allow admins to configure separate write connection credentials?"
   :writable-connection)
+
+(define-premium-feature ^{:added "0.61.0"} enable-ai-controls?
+  "Should we enable AI controls (metabot permissions, scope management)?"
+  :ai-controls)
+
+(define-premium-feature ^{:added "0.62.0"} enable-schema-viewer?
+  "Should we allow users to view database schemas as ER diagrams?"
+  :schema-viewer)
 
 (defn- -token-features []
   {:admin_security_center          (security-center-enabled?)
@@ -341,11 +393,17 @@
    :config_text_file               (enable-config-text-file?)
    :content_translation            (enable-content-translation?)
    :content_verification           (enable-content-verification?)
+   :custom-viz                     (enable-custom-viz?)
+   :custom-viz-available           (has-feature? :custom-viz)
+   :data-apps                      (enable-data-apps?)
+   :data-complexity-score          (enable-data-complexity-score?)
    :dashboard_subscription_filters (enable-dashboard-subscription-filters?)
    :database_auth_providers        (enable-database-auth-providers?)
    :database_routing               (enable-database-routing?)
    :library                        (enable-library?)
+   :library_retrieval              (enable-library-retrieval?)
    :dependencies                   (enable-dependencies?)
+   :schema-viewer                  (enable-schema-viewer?)
    :development_mode               (development-mode?)
    :disable_password_login         (can-disable-password-login?)
    :email_allow_list               (enable-email-allow-list?)
@@ -358,6 +416,7 @@
    :hosting                        (is-hosted?)
    :metabot-v3                     (enable-metabot-v3?)
    :metabase-ai-managed            (enable-metabase-ai-managed?)
+   :multi-factor-auth              (enable-multi-factor-auth?)
    :offer-metabase-ai-managed      (enable-offer-metabase-ai-managed?)
    :official_collections           (enable-official-collections?)
    :query_reference_validation     (enable-query-reference-validation?)
@@ -380,11 +439,12 @@
    :transforms-python              (enable-python-transforms?)
    :upload_management              (enable-upload-management?)
    :whitelabel                     (enable-whitelabeling?)
-   :workspaces                     (enable-workspaces?)
-   :writable_connection            (enable-writable-connection?)})
+   :writable_connection            (enable-writable-connection?)
+   :ai_controls                    (enable-ai-controls?)})
 
 (defsetting token-features
   "Features registered for this instance's token"
+  :encryption :no
   :visibility :public
   :setter     :none
   :getter     -token-features

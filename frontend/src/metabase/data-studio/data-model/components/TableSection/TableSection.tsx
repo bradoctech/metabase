@@ -1,18 +1,9 @@
 import { memo, useCallback, useState } from "react";
-import { push } from "react-router-redux";
 import { t } from "ttag";
 
-import {
-  useUpdateTableFieldsOrderMutation,
-  useUpdateTableMutation,
-} from "metabase/api";
 import { EmptyState } from "metabase/common/components/EmptyState";
 import { ForwardRefLink } from "metabase/common/components/Link";
-import { trackDependencyEntitySelected } from "metabase/data-studio/analytics";
-import { useDispatch, useSelector } from "metabase/lib/redux";
-import * as Urls from "metabase/lib/urls";
-import type { DataStudioTableMetadataTab } from "metabase/lib/urls/data-studio";
-import { dependencyGraph } from "metabase/lib/urls/dependencies";
+import { trackDependencyEntitySelected } from "metabase/common/data-studio/analytics";
 import {
   FieldOrderPicker,
   NameDescriptionInput,
@@ -20,14 +11,14 @@ import {
 import { ResponsiveButton } from "metabase/metadata/components/ResponsiveButton";
 import { TableFieldList } from "metabase/metadata/components/TableFieldList";
 import { TableSortableFieldList } from "metabase/metadata/components/TableSortableFieldList";
-import { useMetadataToasts } from "metabase/metadata/hooks";
-import { getRawTableFieldId } from "metabase/metadata/utils/field";
+import { useTableUpdateHandlers } from "metabase/metadata/hooks";
 import {
   PLUGIN_DEPENDENCIES,
   PLUGIN_LIBRARY,
   PLUGIN_REMOTE_SYNC,
-  PLUGIN_REPLACEMENT,
 } from "metabase/plugins";
+import { useSelector } from "metabase/redux";
+import { useNavigate } from "metabase/router";
 import {
   Box,
   Button,
@@ -38,16 +29,19 @@ import {
   Tabs,
   Tooltip,
 } from "metabase/ui";
+import * as Urls from "metabase/urls";
+import type { DataStudioTableMetadataTab } from "metabase/urls/data-studio";
+import { dependencyGraph } from "metabase/urls/dependencies";
 import {
   type FieldId,
   type Table,
-  type TableFieldOrder,
   isConcreteTableId,
 } from "metabase-types/api";
 
 import S from "./TableSection.module.css";
 import { MeasureList } from "./components/MeasureList";
 import { SegmentList } from "./components/SegmentList";
+import { TableActionsMenu } from "./components/TableActionsMenu";
 import { TableAttributesEditSingle } from "./components/TableAttributesEditSingle";
 import { TableCollection } from "./components/TableCollection";
 import { TableMetadata } from "./components/TableMetadata";
@@ -59,11 +53,10 @@ interface Props {
   activeTab: DataStudioTableMetadataTab;
   canPublish: boolean;
   hasLibrary: boolean;
-  onSyncOptionsClick: () => void;
   onUpdate: () => void;
 }
 
-type TableModalType = "library" | "publish" | "unpublish" | "replace";
+type TableModalType = "library" | "publish" | "unpublish";
 
 const TableSectionBase = ({
   table,
@@ -71,18 +64,19 @@ const TableSectionBase = ({
   activeTab,
   canPublish,
   hasLibrary,
-  onSyncOptionsClick,
   onUpdate,
 }: Props) => {
-  const [updateTable] = useUpdateTableMutation();
-  const [updateTableSorting, { isLoading: isUpdatingSorting }] =
-    useUpdateTableMutation();
-  const [updateTableFieldsOrder] = useUpdateTableFieldsOrderMutation();
+  const {
+    handleNameChange,
+    handleDescriptionChange,
+    handleFieldOrderTypeChange,
+    handleCustomFieldOrderChange,
+    isUpdatingSorting,
+  } = useTableUpdateHandlers({ table, onNameUpdated: onUpdate });
   const [modalType, setModalType] = useState<TableModalType>();
-  const { sendErrorToast, sendSuccessToast, sendUndoToast } =
-    useMetadataToasts();
   const [isSorting, setIsSorting] = useState(false);
   const hasFields = Boolean(table.fields && table.fields.length > 0);
+  const readOnly = !table.can_write;
   const isLibraryEnabled = PLUGIN_LIBRARY.isEnabled;
   const isDependencyGraphEnabled = PLUGIN_DEPENDENCIES.isEnabled;
   const remoteSyncReadOnly = useSelector(
@@ -99,110 +93,25 @@ const TableSectionBase = ({
     });
   };
 
-  const dispatch = useDispatch();
+  const navigate = useNavigate();
 
   const handleTabChange = useCallback(
-    (tab: string | null) => {
-      if (!Urls.isDataStudioTableMetadataTab(tab)) {
+    (tab: DataStudioTableMetadataTab | null) => {
+      if (tab == null) {
         return;
       }
 
-      dispatch(
-        push(
-          Urls.dataStudioData({
-            databaseId: table.db_id,
-            schemaName: table.schema,
-            tableId: table.id,
-            tab,
-          }),
-        ),
+      navigate(
+        Urls.dataStudioData({
+          databaseId: table.db_id,
+          schemaName: table.schema,
+          tableId: table.id,
+          tab,
+        }),
       );
     },
-    [dispatch, table.db_id, table.schema, table.id],
+    [table.db_id, table.schema, table.id, navigate],
   );
-
-  const handleNameChange = async (name: string) => {
-    const { error } = await updateTable({
-      id: table.id,
-      display_name: name,
-    });
-
-    if (error) {
-      sendErrorToast(t`Failed to update table name`);
-    } else {
-      onUpdate();
-      sendSuccessToast(t`Table name updated`, async () => {
-        const { error } = await updateTable({
-          id: table.id,
-          display_name: table.display_name,
-        });
-        sendUndoToast(error);
-      });
-    }
-  };
-
-  const handleDescriptionChange = async (description: string) => {
-    const { error } = await updateTable({ id: table.id, description });
-
-    if (error) {
-      sendErrorToast(t`Failed to update table description`);
-    } else {
-      sendSuccessToast(t`Table description updated`, async () => {
-        const { error } = await updateTable({
-          id: table.id,
-          description: table.description ?? "",
-        });
-        sendUndoToast(error);
-      });
-    }
-  };
-
-  const handleFieldOrderTypeChange = async (fieldOrder: TableFieldOrder) => {
-    const { error } = await updateTableSorting({
-      id: table.id,
-      field_order: fieldOrder,
-    });
-
-    if (error) {
-      sendErrorToast(t`Failed to update field order`);
-    } else {
-      sendSuccessToast(t`Field order updated`, async () => {
-        const { error } = await updateTable({
-          id: table.id,
-          field_order: table.field_order,
-        });
-        sendUndoToast(error);
-      });
-    }
-  };
-
-  const handleCustomFieldOrderChange = async (fieldOrder: FieldId[]) => {
-    const { error } = await updateTableFieldsOrder({
-      id: table.id,
-      field_order: fieldOrder,
-    });
-
-    if (error) {
-      sendErrorToast(t`Failed to update field order`);
-    } else {
-      sendSuccessToast(t`Field order updated`, async () => {
-        const { error: fieldsOrderError } = await updateTableFieldsOrder({
-          id: table.id,
-          field_order: table.fields?.map(getRawTableFieldId) ?? [],
-        });
-
-        if (table.field_order !== "custom") {
-          const { error: tableError } = await updateTable({
-            id: table.id,
-            field_order: table.field_order,
-          });
-          sendUndoToast(fieldsOrderError ?? tableError);
-        } else {
-          sendUndoToast(fieldsOrderError);
-        }
-      });
-    }
-  };
 
   const handlePublishToggle = () => {
     if (!hasLibrary) {
@@ -232,30 +141,18 @@ const TableSectionBase = ({
   };
 
   return (
-    <Stack data-testid="table-section" gap="md" pb="xl">
+    <Stack data-testid="table-section" gap="lg" pb="xxl">
       <Box>
         <Tabs value={activeTab} onChange={handleTabChange}>
-          <Tabs.List mb="md">
-            <Tabs.Tab
-              value="details"
-              leftSection={<Icon name="info" />}
-            >{t`Details`}</Tabs.Tab>
-            <Tabs.Tab
-              value="field"
-              leftSection={<Icon name="list" />}
-            >{t`Fields`}</Tabs.Tab>
-            <Tabs.Tab
-              value="segments"
-              leftSection={<Icon name="segment2" />}
-            >{t`Segments`}</Tabs.Tab>
-            <Tabs.Tab
-              value="measures"
-              leftSection={<Icon name="ruler" />}
-            >{t`Measures`}</Tabs.Tab>
+          <Tabs.List mb="lg">
+            <Tabs.Tab value="details">{t`Details`}</Tabs.Tab>
+            <Tabs.Tab value="field">{t`Fields`}</Tabs.Tab>
+            <Tabs.Tab value="segments">{t`Segments`}</Tabs.Tab>
+            <Tabs.Tab value="measures">{t`Measures`}</Tabs.Tab>
           </Tabs.List>
 
           <Tabs.Panel value="details">
-            <Stack gap="md">
+            <Stack gap="lg">
               <Box className={S.header}>
                 <NameDescriptionInput
                   description={table.description ?? ""}
@@ -264,6 +161,7 @@ const TableSectionBase = ({
                   nameIcon="table2"
                   nameMaxLength={254}
                   namePlaceholder={t`Give this table a name`}
+                  readOnly={readOnly}
                   onNameChange={handleNameChange}
                   onDescriptionChange={handleDescriptionChange}
                 />
@@ -273,7 +171,8 @@ const TableSectionBase = ({
                 {canPublish && isLibraryEnabled && !remoteSyncReadOnly && (
                   <Button
                     flex="1"
-                    p="sm"
+                    size="md"
+                    variant={table.is_published ? "default" : "filled"}
                     leftSection={
                       <Icon
                         name={table.is_published ? "unpublish" : "publish"}
@@ -284,30 +183,7 @@ const TableSectionBase = ({
                     {table.is_published ? t`Unpublish` : t`Publish`}
                   </Button>
                 )}
-                {!table.db?.is_attached_dwh && (
-                  <Button
-                    flex="1"
-                    leftSection={<Icon name="settings" />}
-                    onClick={onSyncOptionsClick}
-                  >
-                    {t`Sync settings`}
-                  </Button>
-                )}
-                <PLUGIN_REPLACEMENT.SourceReplacementButton>
-                  {({ tooltip, isDisabled }) => (
-                    <Tooltip label={tooltip ?? t`Find and replace`}>
-                      <Button
-                        p="sm"
-                        w="2.5rem"
-                        flex="0 1 auto"
-                        leftSection={<Icon name="find_replace" />}
-                        aria-label={t`Find and replace`}
-                        disabled={isDisabled}
-                        onClick={() => setModalType("replace")}
-                      />
-                    </Tooltip>
-                  )}
-                </PLUGIN_REPLACEMENT.SourceReplacementButton>
+
                 {isDependencyGraphEnabled && (
                   <Tooltip label={t`Dependency graph`}>
                     <Button
@@ -329,6 +205,7 @@ const TableSectionBase = ({
                 <Box style={{ flexGrow: 0, width: 40 }}>
                   <TableLink table={table} />
                 </Box>
+                <TableActionsMenu table={table} />
               </Group>
 
               <TableAttributesEditSingle table={table} onUpdate={onUpdate} />
@@ -342,13 +219,11 @@ const TableSectionBase = ({
           </Tabs.Panel>
 
           <Tabs.Panel value="field">
-            <Stack gap="md">
-              <Group gap="md" justify="flex-start" wrap="nowrap">
-                {isUpdatingSorting && (
-                  <Loader data-testid="loading-indicator" size="xs" />
-                )}
+            <Stack gap="lg">
+              <Group gap="lg" justify="flex-start" wrap="nowrap">
+                {isUpdatingSorting && <Loader size="xs" />}
 
-                {!isSorting && hasFields && (
+                {!isSorting && hasFields && !readOnly && (
                   <ResponsiveButton
                     icon="sort_arrows"
                     showLabel
@@ -439,11 +314,6 @@ const TableSectionBase = ({
         isOpened={modalType === "unpublish"}
         tableIds={[table.id]}
         onUnpublish={handleSuccessCloseModal}
-        onClose={handleCloseModal}
-      />
-      <PLUGIN_REPLACEMENT.SourceReplacementModal
-        opened={modalType === "replace"}
-        initialSource={{ id: Number(table.id), type: "table" }}
         onClose={handleCloseModal}
       />
     </Stack>

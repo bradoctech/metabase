@@ -1,8 +1,12 @@
 (ns metabase-enterprise.remote-sync.permissions-test
+  {:clj-kondo/config '{:linters {:deprecated-var {:exclude {metabase.test.data/mbql-query {:namespaces [metabase-enterprise.remote-sync.permissions-test]}}}}}}
   (:require
    [clojure.test :refer :all]
    [metabase-enterprise.remote-sync.settings :as settings]
    [metabase.collections.models.collection :as collections]
+   [metabase.collections.test-utils :as collections.tu]
+   [metabase.lib.core :as lib]
+   [metabase.lib.metadata :as lib.metadata]
    [metabase.models.interface :as mi]
    [metabase.test :as mt]
    [toucan2.core :as t2]))
@@ -252,7 +256,6 @@
             (testing "remote-synced-collection? returns false for tenant collections by default"
               (is (false? (collections/remote-synced-collection? tenant-coll))
                   "Tenant collection should NOT be remote-synced by default"))
-
             (testing "Tenant collections are editable by superuser by default"
               (mt/with-current-user (mt/user->id :crowberto)
                 (is (true? (mi/can-write? tenant-coll))
@@ -270,7 +273,6 @@
             (testing "remote-synced-collection? returns true when is_remote_synced flag is set"
               (is (true? (collections/remote-synced-collection? tenant-coll))
                   "Tenant collection should be remote-synced when flag is set"))
-
             (testing "Tenant collections are NOT editable by superuser when remote-sync-type is read-only"
               (mt/with-current-user (mt/user->id :crowberto)
                 (is (false? (mi/can-write? tenant-coll))
@@ -288,7 +290,6 @@
             (testing "remote-synced-collection? returns true when is_remote_synced flag is set"
               (is (true? (collections/remote-synced-collection? tenant-coll))
                   "Tenant collection should be remote-synced when flag is set"))
-
             (testing "Tenant collections ARE editable by superuser when remote-sync-type is read-write"
               (mt/with-current-user (mt/user->id :crowberto)
                 (is (true? (mi/can-write? tenant-coll))
@@ -311,16 +312,13 @@
             (testing "Parent tenant collection is remote-synced"
               (is (true? (collections/remote-synced-collection? parent-coll))
                   "Parent tenant collection should be remote-synced"))
-
             (testing "Child tenant collection is remote-synced"
               (is (true? (collections/remote-synced-collection? child-coll))
                   "Child tenant collection should be remote-synced"))
-
             (testing "Parent tenant collection is not editable by superuser"
               (mt/with-current-user (mt/user->id :crowberto)
                 (is (false? (mi/can-write? parent-coll))
                     "Parent tenant collection should not be writable")))
-
             (testing "Child tenant collection is not editable by superuser"
               (mt/with-current-user (mt/user->id :crowberto)
                 (is (false? (mi/can-write? child-coll))
@@ -344,24 +342,19 @@
             (testing "Remote-synced tenant collection is remote-synced"
               (is (true? (collections/remote-synced-collection? remote-synced-tenant))
                   "Remote-synced tenant collection should be remote-synced"))
-
             (testing "Regular tenant collection is NOT remote-synced"
               (is (false? (collections/remote-synced-collection? regular-tenant))
                   "Regular tenant collection should NOT be remote-synced"))
-
             (testing "Regular collection is NOT remote-synced"
               (is (false? (collections/remote-synced-collection? regular-coll))
                   "Regular collection should NOT be remote-synced"))
-
             (mt/with-current-user (mt/user->id :crowberto)
               (testing "Remote-synced tenant collection is not editable by superuser"
                 (is (false? (mi/can-write? remote-synced-tenant))
                     "Remote-synced tenant collection should not be writable"))
-
               (testing "Regular tenant collection is editable by superuser"
                 (is (true? (mi/can-write? regular-tenant))
                     "Regular tenant collection should be writable"))
-
               (testing "Regular collection remains editable by superuser"
                 (is (true? (mi/can-write? regular-coll))
                     "Regular collection should be writable")))))))))
@@ -441,6 +434,146 @@
                     (t2/update! :model/Table (mt/id :venues)
                                 {:is_published false
                                  :collection_id nil})))))))))))
+
+(deftest table-data-model-read-only-test
+  (doseq [features [#{} #{:advanced-permissions}]]
+    (testing (str "features: " features)
+      (mt/with-premium-features features
+        (mt/with-temporary-setting-values [settings/remote-sync-type :read-only]
+          (mt/with-temp [:model/Collection {coll-id :id} {:is_remote_synced true}]
+            (mt/with-temp-vals-in-db :model/Table (mt/id :venues) {:is_published true :collection_id coll-id}
+              (mt/with-temp-vals-in-db :model/Field (mt/id :venues :name) {:visibility_type :sensitive}
+                (testing "published tables in remote-synced collections are not writable when remote-sync-type is read-only"
+                  (is (false? (mi/can-write? (t2/select-one :model/Table (mt/id :venues)))))
+                  (is (false? (:can_write (mt/user-http-request :crowberto :get 200
+                                                                (str "table/" (mt/id :venues) "/query_metadata")
+                                                                :include_editable_data_model true)))))
+                (testing "admins can read the table"
+                  (is (= (mt/id :venues)
+                         (:id (mt/user-http-request :crowberto :get 200 (str "table/" (mt/id :venues))
+                                                    :include_editable_data_model true)))))
+                (testing "admins get sensitive fields in the table metadata"
+                  (is (contains? (into #{} (map :id)
+                                       (:fields (mt/user-http-request :crowberto :get 200
+                                                                      (str "table/" (mt/id :venues) "/query_metadata")
+                                                                      :include_sensitive_fields true
+                                                                      :include_editable_data_model true)))
+                                 (mt/id :venues :name))))
+                (testing "admins can read the table's fields"
+                  (is (= (mt/id :venues :name)
+                         (:id (mt/user-http-request :crowberto :get 200 (str "field/" (mt/id :venues :name))
+                                                    :include_editable_data_model true)))))
+                (testing "FK targets in the table are returned"
+                  (is (= (mt/id :venues :id)
+                         (get-in (mt/user-http-request :crowberto :get 200 (str "field/" (mt/id :checkins :venue_id))
+                                                       :include_editable_data_model true)
+                                 [:target :id]))))
+                (testing "users without data model permissions cannot read the table's data model"
+                  (is (= "You don't have permissions to do that."
+                         (mt/user-http-request :rasta :get 403 (str "table/" (mt/id :venues))
+                                               :include_editable_data_model true))))))))))))
+
+(defn- field-ids
+  [fields]
+  (into #{} (map :id) fields))
+
+(deftest table-data-model-read-only-permissions-test
+  (mt/with-temporary-setting-values [settings/remote-sync-type :read-only]
+    (mt/with-temp [:model/Collection {coll-id :id} {:is_remote_synced true}]
+      (mt/with-temp-vals-in-db :model/Table (mt/id :venues) {:is_published true :collection_id coll-id}
+        (mt/with-temp-vals-in-db :model/Field (mt/id :venues :name) {:visibility_type :sensitive}
+          (let [batch-metadata (fn [user]
+                                 (->> (mt/user-http-request user :post 200 "dataset/query_metadata"
+                                                            (assoc (lib/query (mt/metadata-provider)
+                                                                              (lib.metadata/table (mt/metadata-provider) (mt/id :venues)))
+                                                                   :settings {:include-sensitive-fields true}))
+                                      :tables
+                                      (some #(when (= (mt/id :venues) (:id %)) %))
+                                      :fields
+                                      field-ids))]
+            (testing "admins get sensitive fields of read-only tables from batch query metadata"
+              (is (contains? (batch-metadata :crowberto) (mt/id :venues :name))))
+            (mt/with-premium-features #{:advanced-permissions}
+              (testing "metadata editors can read the data model of read-only tables"
+                (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :unrestricted
+                                                               :create-queries :query-builder
+                                                               :data-model     {:schemas :all}}}
+                  (is (= (mt/id :venues)
+                         (:id (mt/user-http-request :rasta :get 200 (str "table/" (mt/id :venues))
+                                                    :include_editable_data_model true))))
+                  (is (contains? (field-ids (:fields (mt/user-http-request :rasta :get 200
+                                                                           (str "table/" (mt/id :venues) "/query_metadata")
+                                                                           :include_sensitive_fields true
+                                                                           :include_editable_data_model true)))
+                                 (mt/id :venues :name)))))
+              (testing "users without data model permissions cannot read the data model or sensitive fields"
+                (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :unrestricted
+                                                               :create-queries :query-builder
+                                                               :data-model     {:schemas :none}}}
+                  (mt/user-http-request :rasta :get 403 (str "table/" (mt/id :venues) "/query_metadata")
+                                        :include_editable_data_model true)
+                  (mt/user-http-request :rasta :get 403 (str "field/" (mt/id :venues :name))
+                                        :include_editable_data_model true)
+                  (is (not (contains? (field-ids (:fields (mt/user-http-request :rasta :get 200
+                                                                                (str "table/" (mt/id :venues) "/query_metadata")
+                                                                                :include_sensitive_fields true)))
+                                      (mt/id :venues :name))))
+                  (is (not (contains? (batch-metadata :rasta) (mt/id :venues :name)))))))))))))
+
+(deftest fk-to-read-only-table-test
+  (mt/with-temporary-setting-values [settings/remote-sync-type :read-only]
+    (mt/with-temp [:model/Collection {coll-id :id} {:is_remote_synced true}
+                   :model/Table {pk-table-id :id} {:db_id (mt/id) :is_published true :collection_id coll-id}
+                   :model/Field {pk-id :id} {:table_id pk-table-id :base_type :type/Integer :semantic_type :type/PK}
+                   :model/Table {fk-table-id :id} {:db_id (mt/id)}
+                   :model/Field {fk-id :id} {:table_id fk-table-id :base_type :type/Integer :semantic_type :type/FK
+                                             :fk_target_field_id pk-id}
+                   :model/Field {other-id :id} {:table_id fk-table-id :base_type :type/Integer}]
+      (testing "updating an FK field returns its target in a read-only table"
+        (is (= pk-id
+               (get-in (mt/user-http-request :crowberto :put 200 (str "field/" fk-id) {:description "FK"})
+                       [:target :id]))))
+      (testing "a writable table can point an FK at a read-only table"
+        (is (= pk-id
+               (:fk_target_field_id (mt/user-http-request :crowberto :put 200 (str "field/" other-id)
+                                                          {:semantic_type :type/FK :fk_target_field_id pk-id}))))))))
+
+(deftest idfields-data-model-read-only-test
+  (mt/with-temporary-setting-values [settings/remote-sync-type :read-only]
+    (mt/with-temp [:model/Collection {coll-id :id} {:is_remote_synced true}]
+      (mt/with-temp-vals-in-db :model/Table (mt/id :venues) {:is_published true :collection_id coll-id}
+        (doseq [features [#{} #{:advanced-permissions}]]
+          (mt/with-premium-features features
+            (testing (str "admins see primary keys of read-only tables, features: " features)
+              (is (contains? (field-ids (mt/user-http-request :crowberto :get 200 (str "database/" (mt/id) "/idfields")
+                                                              :include_editable_data_model true))
+                             (mt/id :venues :id))))))
+        (mt/with-premium-features #{:advanced-permissions}
+          (testing "users see primary keys only of tables they can edit the data model of"
+            (mt/with-all-users-data-perms-graph! {(mt/id) {:view-data      :unrestricted
+                                                           :create-queries :query-builder
+                                                           :data-model     {:schemas {"PUBLIC" {(mt/id :venues) :none
+                                                                                                (mt/id :users)  :all}}}}}
+              (is (= #{(mt/id :users :id)}
+                     (field-ids (mt/user-http-request :rasta :get 200 (str "database/" (mt/id) "/idfields")
+                                                      :include_editable_data_model true)))))))))))
+
+(deftest publish-tables-read-only-test
+  (mt/with-premium-features #{:library}
+    (collections.tu/without-library
+     (mt/with-temp [:model/Collection {coll-id :id} {:type             collections/library-data-collection-type
+                                                     :is_remote_synced true}
+                    :model/Table      {table-id :id} {:db_id (mt/id)}]
+       (testing "tables cannot be published into a remote-synced collection when remote-sync-type is read-only"
+         (mt/with-temporary-setting-values [settings/remote-sync-type :read-only]
+           (mt/user-http-request :crowberto :post 403 "ee/data-studio/table/publish-tables"
+                                 {:table_ids [table-id] :collection_id coll-id})
+           (is (false? (:is_published (mt/user-http-request :crowberto :get 200 (str "table/" table-id)))))))
+       (testing "tables can be published into a remote-synced collection when remote-sync-type is read-write"
+         (mt/with-temporary-setting-values [settings/remote-sync-type :read-write]
+           (mt/user-http-request :crowberto :post 200 "ee/data-studio/table/publish-tables"
+                                 {:table_ids [table-id] :collection_id coll-id})
+           (is (true? (:is_published (mt/user-http-request :crowberto :get 200 (str "table/" table-id)))))))))))
 
 ;;; ------------------------------------------------ Field Remote Sync Tests ------------------------------------------------
 
@@ -562,7 +695,7 @@
 
 (deftest transform-superuser-can-read-test
   (testing "can_read should be true for superusers"
-    (mt/with-premium-features #{:transforms-basic}
+    (mt/with-premium-features #{:transforms-basic :hosting}
       (mt/with-current-user (mt/user->id :crowberto)
         (mt/with-temp [:model/Collection {coll-id :id} {:name "Transforms Collection"
                                                         :namespace :transforms}
@@ -621,7 +754,7 @@
 
 (deftest transform-writable-when-remote-sync-read-write-test
   (testing "can_write should be true for transforms when remote-sync-type is read-write"
-    (mt/with-premium-features #{:transforms-basic}
+    (mt/with-premium-features #{:transforms-basic :hosting}
       (mt/with-current-user (mt/user->id :crowberto)
         (mt/with-temporary-setting-values [settings/remote-sync-url "https://github.com/test/repo.git"
                                            settings/remote-sync-type :read-write]
@@ -642,7 +775,7 @@
 
 (deftest transform-writable-when-remote-sync-disabled-test
   (testing "can_write should be true for transforms when remote-sync is not enabled"
-    (mt/with-premium-features #{:transforms-basic}
+    (mt/with-premium-features #{:transforms-basic :hosting}
       (mt/with-current-user (mt/user->id :crowberto)
         ;; remote-sync-url is not set, so remote-sync-enabled returns false
         (mt/with-temporary-setting-values [settings/remote-sync-url nil
@@ -684,7 +817,7 @@
 
 (deftest transform-creation-allowed-in-read-write-mode-test
   (testing "can_create should be true for transforms when remote-sync-type is read-write"
-    (mt/with-premium-features #{:transforms-basic}
+    (mt/with-premium-features #{:transforms-basic :hosting}
       (mt/with-current-user (mt/user->id :crowberto)
         (mt/with-temporary-setting-values [settings/remote-sync-url "https://github.com/test/repo.git"
                                            settings/remote-sync-type :read-write]
@@ -722,6 +855,30 @@
             (is (false? (mi/can-write? (t2/select-one :model/Transform :id transform-id)))
                 "Non-superuser should not be able to write transforms even when remote-sync-type is read-write")))))))
 
+(deftest transform-write-endpoints-return-403-in-read-only-remote-sync-test
+  (testing "PUT/DELETE /api/transform/:id reject with 403 when remote-sync is enabled and read-only"
+    (mt/with-premium-features #{:transforms-basic}
+      (mt/with-temporary-setting-values [settings/remote-sync-url "https://github.com/test/repo.git"
+                                         settings/remote-sync-type :read-only]
+        (mt/with-temp [:model/Collection {coll-id :id} {:name "Transforms Collection"
+                                                        :namespace :transforms}
+                       :model/Transform {transform-id :id} {:name "Read-only Transform"
+                                                            :collection_id coll-id
+                                                            :source {:type "query"
+                                                                     :query (lib/native-query (mt/metadata-provider) "SELECT 1")}
+                                                            :target {:database (mt/id)
+                                                                     :type "table"
+                                                                     :schema "public"
+                                                                     :name "target_table"}}]
+          (testing "PUT is rejected"
+            (is (= "You don't have permissions to do that."
+                   (mt/user-http-request :crowberto :put 403 (str "transform/" transform-id) {:name "renamed"}))))
+          (testing "DELETE is rejected"
+            (is (= "You don't have permissions to do that."
+                   (mt/user-http-request :crowberto :delete 403 (str "transform/" transform-id)))))
+          (testing "transform is untouched"
+            (is (= "Read-only Transform" (t2/select-one-fn :name :model/Transform :id transform-id)))))))))
+
 (deftest transform-non-superuser-cannot-create-test
   (testing "can_create should be false for non-superusers even when remote-sync-type is read-write"
     (mt/with-premium-features #{:transforms-basic}
@@ -740,3 +897,48 @@
                                                                    :schema "public"
                                                                    :name "target_table"}}))
                 "Non-superuser should not be able to create transforms even when remote-sync-type is read-write")))))))
+
+;;; ------------------------------------------- Glossary -------------------------------------------
+
+(deftest glossary-write-endpoints-return-403-in-read-only-remote-sync-test
+  (testing "POST/PUT/DELETE /api/glossary reject with 403 when remote sync is read-only and the Library is synced"
+    (mt/with-temporary-setting-values [settings/remote-sync-url "https://github.com/test/repo.git"
+                                       settings/remote-sync-type :read-only]
+      (collections.tu/with-library-synced
+        (mt/with-model-cleanup [:model/Glossary :model/RemoteSyncObject]
+          (mt/with-temp [:model/Glossary {id :id} {:term "ARR" :definition "Annual recurring revenue"}]
+            (testing "POST is rejected"
+              (is (= "You don't have permissions to do that."
+                     (mt/user-http-request :crowberto :post 403 "glossary" {:term "MRR" :definition "Monthly recurring revenue"}))))
+            (testing "PUT is rejected"
+              (is (= "You don't have permissions to do that."
+                     (mt/user-http-request :crowberto :put 403 (str "glossary/" id) {:term "ARR" :definition "changed"}))))
+            (testing "DELETE is rejected"
+              (is (= "You don't have permissions to do that."
+                     (mt/user-http-request :crowberto :delete 403 (str "glossary/" id)))))
+            (testing "the entry is untouched"
+              (is (= "Annual recurring revenue" (t2/select-one-fn :definition :model/Glossary :id id))))
+            (testing "GET still works and reports the glossary as not writable"
+              (let [response (mt/user-http-request :crowberto :get 200 "glossary")]
+                (is (some #(= id (:id %)) (:data response)))
+                (is (false? (:can_write response)))))))))))
+
+(deftest glossary-write-endpoints-allowed-when-editable-test
+  (mt/with-model-cleanup [:model/Glossary :model/RemoteSyncObject]
+    (mt/with-temp [:model/Glossary {id :id} {:term "ARR" :definition "Annual recurring revenue"}]
+      (testing "PUT /api/glossary/:id succeeds in read-write mode with the Library synced"
+        (mt/with-temporary-setting-values [settings/remote-sync-url "https://github.com/test/repo.git"
+                                           settings/remote-sync-type :read-write]
+          (collections.tu/with-library-synced
+            (is (true? (:can_write (mt/user-http-request :crowberto :get 200 "glossary"))))
+            (is (= "read-write edit"
+                   (:definition (mt/user-http-request :crowberto :put 200 (str "glossary/" id)
+                                                      {:term "ARR" :definition "read-write edit"})))))))
+      (testing "PUT /api/glossary/:id succeeds in read-only mode when the Library is not synced"
+        (mt/with-temporary-setting-values [settings/remote-sync-url "https://github.com/test/repo.git"
+                                           settings/remote-sync-type :read-only]
+          (collections.tu/with-library-not-synced
+            (is (true? (:can_write (mt/user-http-request :crowberto :get 200 "glossary"))))
+            (is (= "unsynced edit"
+                   (:definition (mt/user-http-request :crowberto :put 200 (str "glossary/" id)
+                                                      {:term "ARR" :definition "unsynced edit"}))))))))))

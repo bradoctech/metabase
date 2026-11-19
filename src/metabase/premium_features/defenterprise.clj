@@ -45,7 +45,10 @@
   availability of EE code and the necessary premium feature. Returns a fn which, when invoked, applies its args to one
   of the EE implementation, the OSS implementation, or the fallback function."
   [ee-ns ee-fn-name]
-  (let [try-require-ee-ns-once (delay (u/ignore-exceptions (classloader/require ee-ns)))]
+  (let [try-require-ee-ns-once (delay (u/ignore-exceptions
+                                        ;; The namespace is supplied by `defenterprise` at macro-expansion time.
+                                        #_{:clj-kondo/ignore [:metabase/modules]}
+                                        (classloader/require ee-ns)))]
     (fn [& args]
       @try-require-ee-ns-once
       (let [{:keys [ee oss feature fallback]} (get @registry ee-fn-name)]
@@ -94,7 +97,7 @@
   (let [oss-or-ee (if (in-ee?) :ee :oss)]
     (case oss-or-ee
       :ee  (validate-ee-args options)
-      :oss (validate-oss-args '~ee-ns options))
+      :oss (validate-oss-args ee-ns options))
     `(let [ee-ns#        '~(or ee-ns (ns-name *ns*))
            ee-fn-name#   (symbol (str ee-ns# "/" '~fn-name))
            oss-or-ee-fn# ~(if schema?

@@ -1,7 +1,7 @@
 (ns metabase-enterprise.remote-sync.settings
   (:require
    [clojure.string :as str]
-   [java-time.api :as t]
+   [metabase-enterprise.remote-sync.guards :as guards]
    [metabase-enterprise.remote-sync.source.git :as git]
    [metabase.collections.models.collection :as collection]
    [metabase.settings.core :as setting :refer [defsetting]]
@@ -24,9 +24,9 @@
   (deferred-tru "The remote branch to sync with, e.g. `main`")
   :type :string
   :visibility :admin
-  :encryption :no
+  :encryption :when-encryption-key-set
   :export? false
-  :can-read-from-env? false)
+  :can-read-from-env? true)
 
 (defsetting remote-sync-token
   (deferred-tru "An Authorization Bearer token allowing access to the git repo over HTTP")
@@ -37,15 +37,15 @@
   :sensitive? true
   :encryption :when-encryption-key-set
   :audit :getter
-  :can-read-from-env? false)
+  :can-read-from-env? true)
 
 (defsetting remote-sync-url
-  (deferred-tru "The location of your git repository, e.g. https://git-host.example.com/yourcompany/repo.git")
+  (deferred-tru "The location of your git repository, e.g. `https://github.com/acme-inco/metabase.git`")
   :type :string
   :visibility :admin
-  :encryption :no
+  :encryption :when-encryption-key-set
   :export? false
-  :can-read-from-env? false)
+  :can-read-from-env? true)
 
 (defsetting remote-sync-type
   (deferred-tru "Git synchronization type - :read-write or :read-only")
@@ -62,7 +62,7 @@
                                             {:value new-value
                                              :options (seq valid-types)})))]
               (setting/set-value-of-type! :keyword :remote-sync-type value)))
-  :can-read-from-env? false)
+  :can-read-from-env? true)
 
 (defsetting remote-sync-auto-import
   (deferred-tru "Whether to automatically import from the remote git repository. Only applies if remote-sync-type is :read-only.")
@@ -88,71 +88,21 @@
   :encryption :no
   :default (* 1000 60 5))
 
-(def ^:const transforms-root-id
-  "Sentinel value for the virtual Transforms root collection.
-   Used to represent the entire transforms feature being enabled/disabled."
-  -1)
-
-(defn sync-transform-tracking!
-  "Called when remote-sync-transforms setting changes.
-   Creates a single 'Transforms' RSO entry with model_id=-1 as a sentinel value.
-   When enabled: status is 'create' to indicate transforms should be synced.
-   When disabled: status is 'delete' to indicate transforms should be removed.
-   When disabling and there's no existing Transforms RSO, does nothing (avoids creating
-   spurious 'delete' entries when going from default false to explicitly false)."
-  [enabled?]
-  (let [timestamp (t/offset-date-time)
-        existing-rso (t2/select-one :model/RemoteSyncObject
-                                    :model_type "Collection"
-                                    :model_id transforms-root-id)]
-    (cond
-      ;; When enabling, always create/update to 'create' status
-      enabled?
-      (do
-        (when existing-rso
-          (t2/delete! :model/RemoteSyncObject
-                      :model_type "Collection"
-                      :model_id transforms-root-id))
-        (t2/insert! :model/RemoteSyncObject
-                    {:model_type        "Collection"
-                     :model_id          transforms-root-id
-                     :model_name        "Transforms"
-                     :status            "create"
-                     :status_changed_at timestamp}))
-      ;; When disabling and there's an existing RSO, update to 'delete' status
-      existing-rso
-      (do
-        (t2/delete! :model/RemoteSyncObject
-                    :model_type "Collection"
-                    :model_id transforms-root-id)
-        (t2/insert! :model/RemoteSyncObject
-                    {:model_type        "Collection"
-                     :model_id          transforms-root-id
-                     :model_name        "Transforms"
-                     :status            "delete"
-                     :status_changed_at timestamp}))
-      ;; When disabling and there's no existing RSO, do nothing
-      ;; (this avoids creating spurious 'delete' entries when going from default false to explicitly false)
-      :else
-      nil)))
-
-(defn- sync-transform-tracking-on-change
-  "Called when remote-sync-transforms setting changes."
-  [_old-value new-value]
-  ;; new-value may be a string "true"/"false" or a boolean, so we need to parse it
-  (let [enabled? (if (string? new-value)
-                   (parse-boolean new-value)
-                   (boolean new-value))]
-    (sync-transform-tracking! enabled?)))
+(defsetting remote-sync-git-timeout-seconds
+  (deferred-tru "Network timeout (in seconds) for remote git operations such as fetch, push, clone, and ls-remote. A stalled connection would otherwise hang a sync indefinitely.")
+  :type :integer
+  :visibility :authenticated
+  :export? false
+  :encryption :no
+  :default 60)
 
 (defsetting remote-sync-transforms
-  (deferred-tru "Whether to sync transforms via remote-sync. When enabled, all transforms, transform tags, and transform jobs are synced as a single unit (all-or-nothing).")
+  (deferred-tru "Whether to sync transforms via remote-sync. When enabled, transforms, transform tags, transform tests, Python libraries, and transforms folders are synced.")
   :type :boolean
   :visibility :admin
   :export? false
   :encryption :no
-  :default false
-  :on-change sync-transform-tracking-on-change)
+  :default false)
 
 (defsetting remote-sync-check-changes-cache-ttl-seconds
   (deferred-tru "Time-to-live in seconds for the remote changes check cache. Default is 60 seconds.")
@@ -180,10 +130,17 @@
                  (str/starts-with? remote-sync-url "https://"))
      (throw (ex-info "Invalid repository URL: only HTTPS URLs are supported (e.g., https://git-host.example.com/yourcompany/repo.git)"
                      {:url remote-sync-url})))
-
    (let [source (git/git-source remote-sync-url "HEAD" remote-sync-token nil)]
      (when (and (= :read-only remote-sync-type) (not (str/blank? remote-sync-branch)) (not (some #{remote-sync-branch} (git/branches source))))
        (throw (ex-info "Invalid branch name" {:url remote-sync-url :branch remote-sync-branch}))))))
+
+(defsetting remote-sync-allow
+  (deferred-tru "Allow specific remote sync behaviors. Set to overwrite-unpublished to allow overwriting unpublished changes on startup.")
+  :type :string
+  :visibility :internal
+  :export? false
+  :encryption :no
+  :doc false)
 
 (defn check-and-update-remote-settings!
   "Validates and updates git sync settings in the application database.
@@ -197,21 +154,33 @@
 
   Throws ExceptionInfo if the git settings are invalid or if unable to connect to the repository."
   [{:keys [remote-sync-url remote-sync-token] :as settings}]
-  (if (and (contains? settings :remote-sync-url)
-           (str/blank? remote-sync-url))
-    (t2/with-transaction [_conn]
-      (setting/set! :remote-sync-url nil)
-      (setting/set! :remote-sync-token nil)
-      (setting/set! :remote-sync-branch nil))
-    (let [current-token (setting/get :remote-sync-token)
-          obfuscated? (= remote-sync-token (setting/obfuscate-value current-token))
-          token-to-check (if obfuscated? current-token remote-sync-token)
-          _ (check-git-settings! (assoc settings :remote-sync-token token-to-check))]
+  (guards/ensure-no-active-task!)
+  (let [git-related-keys #{:remote-sync-url :remote-sync-token :remote-sync-type :remote-sync-branch}
+        updating-git-settings? (some git-related-keys (keys settings))
+        env-set-url    (= :env (setting/get-raw-value-source :remote-sync-url))
+        env-set-token  (= :env (setting/get-raw-value-source :remote-sync-token))
+        env-set-branch (= :env (setting/get-raw-value-source :remote-sync-branch))]
+    (if (and (contains? settings :remote-sync-url)
+             (str/blank? remote-sync-url))
       (t2/with-transaction [_conn]
-        (doseq [k [:remote-sync-url :remote-sync-token :remote-sync-type :remote-sync-branch :remote-sync-auto-import :remote-sync-transforms]]
-          (when (and (contains? settings k)
-                     (not (and (= k :remote-sync-token) obfuscated?)))
-            (setting/set! k (k settings))))))))
+        (when-not env-set-url
+          (setting/set! :remote-sync-url nil))
+        (when-not env-set-token
+          (setting/set! :remote-sync-token nil))
+        (when-not env-set-branch
+          (setting/set! :remote-sync-branch nil)))
+      (let [current-token  (setting/get :remote-sync-token)
+            obfuscated?    (= remote-sync-token (setting/obfuscate-value current-token))
+            token-to-check (if env-set-token
+                             (setting/get :remote-sync-token)
+                             (if obfuscated? current-token remote-sync-token))]
+        (when updating-git-settings?
+          (check-git-settings! (assoc settings :remote-sync-token token-to-check)))
+        (t2/with-transaction [_conn]
+          (doseq [k [:remote-sync-url :remote-sync-token :remote-sync-type :remote-sync-branch :remote-sync-auto-import :remote-sync-transforms]]
+            (when (and (not= :env (setting/get-raw-value-source k)) (contains? settings k)
+                       (not (and (= k :remote-sync-token) obfuscated?)))
+              (setting/set! k (k settings)))))))))
 
 (defn library-is-remote-synced?
   "Returns true if the Library collection exists and is remote-synced.

@@ -2,19 +2,19 @@ import { useCallback } from "react";
 import { useMount } from "react-use";
 import _ from "underscore";
 
-import { useDispatch, useSelector } from "metabase/lib/redux";
+import { useDispatch, useSelector } from "metabase/redux";
 
 import {
   type MetabotAgentId,
   createAgent as createAgentAction,
   destroyAgent,
   getActiveMetabotAgentIds,
-  resetConversation,
+  startNewConversation,
 } from "../state";
 
 type CreatePayload = Parameters<typeof createAgentAction>[0];
 type DestroyPayload = Parameters<typeof destroyAgent>[0];
-type ResetPayload = Parameters<typeof resetConversation>[0];
+type StartNewConversationPayload = Parameters<typeof startNewConversation>[0];
 
 export const useMetabotAgentsManager = (
   autoStartAgentIds: MetabotAgentId[],
@@ -35,8 +35,8 @@ export const useMetabotAgentsManager = (
       (p: CreatePayload) => dispatch(createAgentAction(p)),
       [dispatch],
     ),
-    resetConversation: useCallback(
-      (p: ResetPayload) => dispatch(resetConversation(p)),
+    startNewConversation: useCallback(
+      (p: StartNewConversationPayload) => dispatch(startNewConversation(p)),
       [dispatch],
     ),
     destroyAgent: useCallback(

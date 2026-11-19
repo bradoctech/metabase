@@ -1,6 +1,5 @@
-import dayjs from "dayjs";
-
-import { isNotNull } from "metabase/lib/types";
+import { dayjs } from "metabase/dayjs";
+import { isNotNull } from "metabase/utils/types";
 import * as Lib from "metabase-lib";
 
 import { OPERATORS } from "./constants";

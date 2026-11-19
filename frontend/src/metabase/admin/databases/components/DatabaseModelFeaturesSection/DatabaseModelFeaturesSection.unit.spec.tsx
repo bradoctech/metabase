@@ -5,6 +5,7 @@ import {
   setupDatabaseEndpoints,
   setupDatabaseUsageInfoEndpoint,
 } from "__support__/server-mocks/database";
+import { createMockState } from "__support__/state";
 import { createMockEntitiesState } from "__support__/store";
 import { renderWithProviders, screen } from "__support__/ui";
 import type { Database } from "metabase-types/api";
@@ -12,7 +13,6 @@ import {
   COMMON_DATABASE_FEATURES,
   createMockDatabase,
 } from "metabase-types/api/mocks";
-import { createMockState } from "metabase-types/store/mocks";
 
 import { DatabaseModelFeaturesSection } from "./DatabaseModelFeaturesSection";
 
@@ -36,6 +36,7 @@ function setup({
     dataset: 0,
     metric: 0,
     segment: 0,
+    transform: 0,
   });
 
   // Using mockResolvedValue since `ActionButton` component

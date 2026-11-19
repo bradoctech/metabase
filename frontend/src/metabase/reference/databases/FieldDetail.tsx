@@ -1,0 +1,318 @@
+import cx from "classnames";
+import { useFormik } from "formik";
+import { useState } from "react";
+import { t } from "ttag";
+
+import { LoadingAndErrorWrapper } from "metabase/common/components/LoadingAndErrorWrapper";
+import CS from "metabase/css/core/index.css";
+import {
+  getShallowFields,
+  selectMetadataProvider,
+} from "metabase/metadata-store";
+import { connect } from "metabase/redux";
+import S from "metabase/reference/Reference.module.css";
+import Detail from "metabase/reference/components/Detail";
+import { EditHeader } from "metabase/reference/components/EditHeader";
+import EditableReferenceHeader from "metabase/reference/components/EditableReferenceHeader";
+import FieldTypeDetail from "metabase/reference/components/FieldTypeDetail";
+import UsefulQuestions from "metabase/reference/components/UsefulQuestions";
+import * as actions from "metabase/reference/reference";
+import { updateField } from "metabase/reference/update-actions";
+import type * as Lib from "metabase-lib";
+import type { NormalizedField, User } from "metabase-types/api";
+
+import type { ReferenceRouteProps, StateWithReference } from "../selectors";
+import {
+  getDatabase,
+  getField,
+  getFieldId,
+  getIsEditing,
+  getIsFormulaExpanded,
+  getTable,
+  getUser,
+} from "../selectors";
+import type {
+  BaseDetailFormFields,
+  FieldFormFieldsValues,
+  ReferenceLoadingProps,
+  StubbedDatabase,
+  StubbedField,
+  StubbedTable,
+} from "../types";
+import { getQuestionUrl } from "../utils";
+
+interface FieldDetailFormFields
+  extends BaseDetailFormFields, FieldFormFieldsValues {
+  revision_message?: string;
+}
+
+const interestingQuestions = (
+  database: StubbedDatabase,
+  table: StubbedTable,
+  field: StubbedField,
+  metadataProvider: Lib.MetadataProvider,
+  breakoutField: NormalizedField | undefined,
+) => {
+  return [
+    {
+      text: t`Number of ${table.display_name} grouped by ${field.display_name}`,
+      icon: "bar" as const,
+      link: getQuestionUrl({
+        tableId: table.id,
+        breakoutField,
+        getCount: true,
+        visualization: "bar",
+        metadataProvider: metadataProvider,
+      }),
+    },
+    {
+      text: t`Number of ${table.display_name} grouped by ${field.display_name}`,
+      icon: "pie" as const,
+      link: getQuestionUrl({
+        tableId: table.id,
+        breakoutField,
+        getCount: true,
+        visualization: "pie",
+        metadataProvider: metadataProvider,
+      }),
+    },
+    {
+      text: t`All distinct values of ${field.display_name}`,
+      icon: "table2" as const,
+      link: getQuestionUrl({
+        tableId: table.id,
+        breakoutField,
+        metadataProvider: metadataProvider,
+      }),
+    },
+  ];
+};
+
+const mapStateToProps = (
+  state: StateWithReference,
+  props: ReferenceRouteProps,
+) => {
+  const entity = getField(state, props) || {};
+
+  return {
+    metadataProvider: selectMetadataProvider(
+      state,
+      getDatabase(state, props)?.id ?? null,
+    ),
+    // `getField` falls back to a stub with only an id, which cannot describe a
+    // column, so the breakout takes the loaded field or nothing
+    breakoutField: getShallowFields(state)?.[getFieldId(state, props)],
+    entity,
+    field: entity,
+    table: getTable(state, props),
+    database: getDatabase(state, props),
+    user: getUser(state),
+    isEditing: getIsEditing(state),
+    isFormulaExpanded: getIsFormulaExpanded(state),
+  };
+};
+
+const mapDispatchToProps = {
+  updateField,
+  ...actions,
+  onSubmit: actions.rUpdateFieldDetail,
+};
+
+interface FieldDetailProps {
+  style: React.CSSProperties;
+  entity: StubbedField;
+  field: StubbedField;
+  table: StubbedTable;
+  user: User;
+  database: StubbedDatabase;
+  isEditing?: boolean;
+  startEditing: () => void;
+  endEditing: () => void;
+  loading?: boolean;
+  loadingError?: unknown;
+  metadataProvider: Lib.MetadataProvider;
+  breakoutField: NormalizedField | undefined;
+
+  onSubmit: (fields: FieldDetailFormFields, props: any) => Promise<void>;
+}
+
+const FieldDetail = (props: FieldDetailProps) => {
+  const {
+    style,
+    entity,
+    table,
+    loadingError,
+    loading,
+    user,
+    isEditing,
+    startEditing,
+    endEditing,
+    metadataProvider,
+    breakoutField,
+    onSubmit,
+  } = props;
+
+  const [saveError, setSaveError] = useState<unknown>(null);
+
+  const {
+    isSubmitting,
+    getFieldProps,
+    getFieldMeta,
+    handleSubmit,
+    handleReset,
+  } = useFormik<FieldDetailFormFields>({
+    initialValues: {},
+    onSubmit: async (fields): Promise<void> => {
+      setSaveError(null);
+      try {
+        await onSubmit(fields, { ...props, resetForm: handleReset });
+      } catch (error) {
+        console.error(error);
+        setSaveError(error);
+      }
+    },
+  });
+
+  const getFormField = (name: string) => ({
+    ...getFieldProps(name),
+    ...getFieldMeta(name),
+  });
+
+  return (
+    <form style={style} className={CS.full} onSubmit={handleSubmit}>
+      {isEditing && (
+        <EditHeader
+          hasRevisionHistory={false}
+          onSubmit={handleSubmit}
+          endEditing={endEditing}
+          reinitializeForm={() => handleReset(undefined)}
+          submitting={isSubmitting}
+          revisionMessageFormField={getFormField("revision_message")}
+        />
+      )}
+      <EditableReferenceHeader
+        entity={entity}
+        type="field"
+        headerIcon="field"
+        name="Details"
+        user={user}
+        isEditing={isEditing}
+        hasSingleSchema={false}
+        hasDisplayName={true}
+        startEditing={startEditing}
+        displayNameFormField={getFormField("display_name")}
+        nameFormField={getFormField("name")}
+      />
+      <LoadingAndErrorWrapper
+        loading={!loadingError && !saveError && (loading || isSubmitting)}
+        error={saveError ?? loadingError}
+      >
+        {() => (
+          <div className={CS.wrapper}>
+            <div
+              className={cx(
+                CS.pl4,
+                CS.pr3,
+                CS.pt4,
+                CS.mb4,
+                CS.mb1,
+                CS.bgWhite,
+                CS.rounded,
+                CS.bordered,
+              )}
+            >
+              <ul>
+                <li>
+                  <Detail
+                    name={t`Description`}
+                    description={entity.description}
+                    placeholder={t`No description yet`}
+                    isEditing={isEditing}
+                    field={getFormField("description")}
+                  />
+                </li>
+                {!isEditing && (
+                  <li>
+                    <Detail
+                      name={t`Actual name in database`}
+                      description={entity.name}
+                      subtitleClass={S.tableActualName}
+                    />
+                  </li>
+                )}
+                <li>
+                  <Detail
+                    name={t`Why this field is interesting`}
+                    description={entity.points_of_interest}
+                    placeholder={t`Nothing interesting yet`}
+                    isEditing={isEditing}
+                    field={getFormField("points_of_interest")}
+                  />
+                </li>
+                <li>
+                  <Detail
+                    name={t`Things to be aware of about this field`}
+                    description={entity.caveats}
+                    placeholder={t`Nothing to be aware of yet`}
+                    isEditing={isEditing}
+                    field={getFormField("caveats")}
+                  />
+                </li>
+
+                {!isEditing && (
+                  <li>
+                    <Detail
+                      name={t`Data type`}
+                      description={entity.database_type}
+                    />
+                  </li>
+                )}
+                <li>
+                  <FieldTypeDetail
+                    databaseId={table.db_id!}
+                    field={entity}
+                    fieldTypeFormField={getFormField("semantic_type")}
+                    foreignKeyFormField={getFormField("fk_target_field_id")}
+                    fieldSettingsFormField={getFormField("settings")}
+                    isEditing={Boolean(isEditing)}
+                  />
+                </li>
+                {!isEditing && (
+                  <li>
+                    <UsefulQuestions
+                      questions={interestingQuestions(
+                        props.database,
+                        props.table,
+                        props.field,
+                        metadataProvider,
+                        breakoutField,
+                      )}
+                    />
+                  </li>
+                )}
+              </ul>
+            </div>
+          </div>
+        )}
+      </LoadingAndErrorWrapper>
+    </form>
+  );
+};
+
+// What the container has to supply: `params` feeds `mapStateToProps`, and
+// `metadata` is read here but selected by the container. Naming it keeps that
+// contract type-checked.
+type FieldDetailOwnProps = ReferenceRouteProps &
+  Pick<FieldDetailProps, "metadataProvider" | "breakoutField"> &
+  ReferenceLoadingProps;
+
+// eslint-disable-next-line import/no-default-export -- deprecated usage
+export default connect(
+  mapStateToProps,
+  mapDispatchToProps,
+)(
+  // connect HOC tangle: the `metadataActions` / `actions` spreads in
+  // `mapDispatchToProps` are untyped, so the dispatch props can't be matched
+  // against the component's own props.
+  FieldDetail as unknown as React.ComponentType<FieldDetailOwnProps>,
+);

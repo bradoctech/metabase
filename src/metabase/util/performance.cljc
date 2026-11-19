@@ -2,7 +2,7 @@
   "Functions and utilities for faster processing. This namespace is compatible with both Clojure and ClojureScript.
   However, some functions are either not only available in CLJS, or offer passthrough non-improved functions."
   (:refer-clojure :exclude [reduce mapv run! some every? concat select-keys update-keys empty? not-empty doseq for
-                            first second update-vals get-in #?(:cljs clj->js)])
+                            first second update-vals get-in str #?(:cljs clj->js)])
   #?(:clj (:require
            [net.cgrand.macrovich :as macros])
      :cljs (:require
@@ -68,7 +68,6 @@
        (when-not (.isEmpty ^List coll)
          (.get ^List coll 0))
        (clojure.core/first coll)))
-
    :cljs
    (def first
      "Returns the first item in the collection. Calls seq on its argument. If coll is nil, returns nil."
@@ -79,7 +78,6 @@
      "Like `clojure.core/second`, but uses `RT/nth` directly for allocation-free access."
      [coll]
      (RT/nth coll 1 nil))
-
    :cljs
    (def second
      "Same as (first (next x))"
@@ -140,7 +138,6 @@
                   @res
                   (recur res)))
               res))))))
-
    :cljs
    (defn reduce
      "Passthrough fallback to `clojure.core/reduce`."
@@ -160,7 +157,6 @@
 
      (persistent [_]
        (LazilyPersistentVector/createOwning arr)))
-
    :cljs
    (deftype SmallTransientImpl [^:mutable arr, ^:mutable cnt, f]))
 
@@ -278,6 +274,11 @@
   [f coll]
   (unreduced (reduce #(if (f %2) true (reduced false)) true coll)))
 
+(defn every-key?
+  "Efficiently check if every key in map `m` matched predicate `f`."
+  [f m]
+  (reduce-kv (fn [_ k _] (if (f k) true (reduced false))) true m))
+
 (defn concat
   "Like `clojure.core/concat` but accumulates the result into a vector. NOT a drop-in replacement."
   ([a b]
@@ -318,6 +319,28 @@
      (reduce (fn [res l] (reduce conj! res l)) res more)
      (persistent! res))))
 
+(defn insert
+  "Insert `el` at a position `pos` into a vector `v`. When position is equal to number of elements in `v`, insert at the
+  tail. Throws if position is negative or bigger than item count in `v`."
+  [v pos el]
+  (when-not (<= 0 pos (count v))
+    (throw (ex-info "Position should be in the range [0; N] of vector." {})))
+  (let [v (vec v)
+        n (count v)]
+    (if (= pos n)
+      (conj v el)
+      (let [i (volatile! -1)]
+        (persistent! (reduce (fn [acc x]
+                               (vswap! i inc)
+                               (conj! (cond-> acc
+                                        (= @i pos) (conj! el))
+                                      x))
+                             #?(:clj (if (<= n 32)
+                                       (small-transient (inc n) identity)
+                                       (transient []))
+                                :cljs (transient []))
+                             v))))))
+
 #?(:clj
    (defn transpose
      "Like `(apply mapv vector coll-of-colls)`, but more efficient."
@@ -325,6 +348,15 @@
      (let [its (mapv #(.iterator ^Iterable %) coll-of-colls)]
        (mapv (fn [_] (mapv #(.next ^Iterator %) its))
              (first coll-of-colls)))))
+
+(defn dropv
+  "Like `clojure.core/drop`, but always returns a vector, and calls `clojure.core/subvec` when invoked on vectors (so,
+  it is very cheap, but shares the structure with original vector, see its docstring)."
+  ([n] (drop n))
+  ([n coll]
+   (cond (vector? coll) (if (> (count coll) n) (subvec coll n) [])
+         (nil? coll)    []
+         :else          (into [] (drop n) coll))))
 
 (defn select-keys
   "Drop-in replacement for `clojure.walk/select-keys`, but much more efficient."
@@ -344,7 +376,6 @@
   (cond (nil? m) {}
         ;; Fallback for non-editable collections where transients aren't supported.
         (not (editable? m))
-        #_{:clj-kondo/ignore [:discouraged-var]}
         (clojure.core/update-keys m f)
         :else (-> (reduce-kv (fn [acc k v]
                                (let [k' (f k)]
@@ -365,7 +396,6 @@
   (cond (nil? coll) {}
         ;; Fallback for non-editable collections where transients aren't supported.
         (not (editable? coll))
-        #_{:clj-kondo/ignore [:discouraged-var]}
         (clojure.core/update-vals coll f)
         :else (-> (reduce-kv (fn [acc k v]
                                (let [v' (f v)]
@@ -553,6 +583,36 @@
            (add-original-meta form))
        form))
    m))
+
+(defn str
+  "More efficient implementation of `clojure.core/str` because it has more non-variadic arities. Optimization is
+  Clojure-only, on other platforms it reverts back to `clojure.core/str`."
+  (^String [] "")
+  (^String [^Object a]
+   #?(:clj (if (nil? a) "" (.toString a))
+      :default (clojure.core/str a)))
+  (^String [^Object a, ^Object b]
+   #?(:clj (if (nil? a)
+             (str b)
+             (if (nil? b)
+               (.toString a)
+               (.concat (.toString a) (.toString b))))
+      :default (clojure.core/str a b)))
+  (^String [a b c]
+   #?(:clj (let [sb (StringBuilder.)]
+             (.append sb (str a))
+             (.append sb (str b))
+             (.append sb (str c))
+             (.toString sb))
+      :default (clojure.core/str a b c)))
+  (^String [a b c & more]
+   #?(:clj (let [sb (StringBuilder.)]
+             (.append sb (str a))
+             (.append sb (str b))
+             (.append sb (str c))
+             (run! #(.append sb (str %)) more)
+             (.toString sb))
+      :default (apply clojure.core/str a b c more))))
 
 ;;;; Faster clj->js implementation
 

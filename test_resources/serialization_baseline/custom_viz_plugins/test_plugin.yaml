@@ -1,0 +1,9 @@
+display_name: Test Plugin
+identifier: test-plugin
+manifest: {}
+bundle_hash: deadbeef
+bundle: cHJldGVuZCB0Z3ogYnl0ZXM=
+serdes/meta:
+- id: test-plugin
+  label: test-plugin
+  model: CustomVizPlugin

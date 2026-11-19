@@ -1,0 +1,6 @@
+name: widgets
+db_id: Sample Database
+active: true
+is_published: false
+serdes/meta:
+- model: Table

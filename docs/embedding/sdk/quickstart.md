@@ -13,7 +13,7 @@ This setup:
 - Only works on localhost when developing your app (though your Metabase doesn't need to be running locally).
 - Works with both the Enterprise and Open Source editions of Metabase, both self-hosted and on Metabase Cloud.
 
-If you want to use the SDK in production, however, you'll also need to [set up JWT SSO authentication](../authentication.md), which requires a [Pro](https://store.metabase.com/checkout/embedding) or [Enterprise plan](https://www.metabase.com/pricing/). To enable JWT SSO when you're self-hosting Metabase, you'll need to run the Enterprise Edition Docker image or JAR, and [activate your license](../../installation-and-operation/activating-the-enterprise-edition.md).
+If you want to use the SDK in production, however, you'll also need to [set up JWT SSO authentication](../authentication.md), which requires a [Pro](https://store.metabase.com/checkout/embedding) or [Enterprise plan](https://www.metabase.com/pricing). To enable JWT SSO when you're self-hosting Metabase, you'll need to run the Enterprise Edition Docker image or JAR, and [activate your license](../../installation-and-operation/activating-the-enterprise-edition.md).
 
 ## Prerequisites
 
@@ -47,19 +47,21 @@ Still in the Admin console, go to **Settings > Authentication** and click on the
 
 ## 3. Install the SDK in your app
 
-When installing the npm package, it's critical to use the npm dist-tag that corresponds to the major version of your Metabase. For example, if your Metabase is version 1.56.x, you'd run `56-stable`. See [SDK versioning](./version.md).
+Install the `@{major}-stable` dist-tag matching your Metabase major, so the package's types and exported components in your client match your SDK bundle served from your Metabase. For Metabase 60:
 
 Via npm:
 
 ```
-npm install @metabase/embedding-sdk-react@53-stable
+npm install @metabase/embedding-sdk-react@60-stable
 ```
 
 Via Yarn:
 
 ```
-yarn add @metabase/embedding-sdk-react@53-stable
+yarn add @metabase/embedding-sdk-react@60-stable
 ```
+
+See [SDK versions](./version.md) for other install options.
 
 ## 4. Embed SDK components in your app
 

@@ -192,7 +192,7 @@ bun run test-unit-watch # Watch for file changes
 
 ## Backend development
 
-Clojure REPL is the main development tool for the backend. There are some directions below on how to setup your REPL for easier development.
+Clojure REPL is the main development tool for the backend. There are some directions below on how to set up your REPL for easier development.
 
 And of course your Jetty development server is available via
 
@@ -208,6 +208,17 @@ You can also start a REPL another way (e.g., through your editor) and then call:
 
 To start the server (at `localhost:3000`). This will also set up or migrate your application database. To actually
 use Metabase, don't forget to start the frontend as well (e.g. with `bun run build-hot`).
+
+### Proxying API calls to a remote backend (dev only)
+
+If you want to run the frontend locally but send `/api` requests to a different Metabase backend, set
+`MB_REMOTE_API_URL` when starting your local backend.
+
+```sh
+MB_REMOTE_API_URL="https://your-remote-metabase.example.com" clojure -M:run
+```
+
+This proxy is development-only and only applies to `/api` requests.
 
 ### Multiple Instances
 
@@ -260,7 +271,7 @@ This approach requires creating a `.lein-env` file within your project directory
 
 Despite the name, this file works fine with `deps.edn` projects. An advantage of this approach versus the global `deps.edn` approach is that it is scoped to this project only.
 
-Only use this for development, it is not supported for production use. There is already entry in `.gitignore` to prevent you accidentally committing this file.
+Only use this for development, it is not supported for production use. There is already an entry in `.gitignore` to prevent you accidentally committing this file.
 
 ### Building drivers
 
@@ -321,13 +332,13 @@ As in any clojure.test project, you can also run unit tests from the REPL. Some 
 
 ```clojure
 ;; run a single test with clojure.test
-some-ns=> (clojure.test/run-test metabase.util-test/add-period-test)
+some-ns=> (clojure.test/run-test metabase.util-test/index-by-test)
 
 Testing metabase.util-test
 
-Ran 1 tests containing 4 assertions.
+Ran 1 tests containing 3 assertions.
 0 failures, 0 errors.
-{:test 1, :pass 4, :fail 0, :error 0, :type :summary}
+{:test 1, :pass 3, :fail 0, :error 0, :type :summary}
 
 ;; run all tests in the namespace
 some-ns=> (clojure.test/run-tests 'metabase.util-test)
@@ -395,7 +406,7 @@ If running tests from the REPL, you can call something like:
 (mt/set-test-drivers! #{:postgres :mysql :h2})
 ```
 
-Most drivers need to be able to load some data (a few use static datasets) and all drivers need to be able to connect to an instance of that database. You can find out what is needed in each's drivers test data namespace which follows that pattern `metabase.test.data.<driver>`.
+Most drivers need to be able to load some data (a few use static datasets) and all drivers need to be able to connect to an instance of that database. You can find out what is needed in each driver's test data namespace, which follows the pattern `metabase.test.data.<driver>`.
 
 There should be an implementation of a multimethod tx/dbdef->connection-details which must produce a way to connect to a database. You can see what is required.
 

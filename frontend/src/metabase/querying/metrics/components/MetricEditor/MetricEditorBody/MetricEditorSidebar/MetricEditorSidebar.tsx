@@ -1,7 +1,7 @@
 import { t } from "ttag";
 
 import { ExternalLink } from "metabase/common/components/ExternalLink";
-import { useSelector } from "metabase/lib/redux";
+import { useSelector } from "metabase/redux";
 import { getDocsUrl } from "metabase/selectors/settings";
 import { getShowMetabaseLinks } from "metabase/selectors/whitelabel";
 import { Box, Button, Icon } from "metabase/ui";
@@ -16,7 +16,7 @@ export function MetricEditorSidebar() {
   );
 
   return (
-    <Box pt="md" pr={{ sm: "sm", lg: "md" }}>
+    <Box pt="lg" pr={{ sm: "sm", lg: "lg" }}>
       {showMetabaseLinks && (
         <Button
           component={ExternalLink}

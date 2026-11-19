@@ -7,10 +7,11 @@ import { setupDatabaseListEndpoint } from "__support__/server-mocks";
 import { screen } from "__support__/ui";
 import { useRegisterMetabotContextProvider } from "metabase/metabot";
 import { FixSqlQueryButton } from "metabase/metabot/components/FixSqlQueryButton";
-import { setIsNativeEditorOpen } from "metabase/query_builder/actions";
+import { setIsNativeEditorOpen } from "metabase/redux/query-builder";
 import {
   createMockDatabase,
   createMockUser,
+  createMockUserMetabotPermissions,
   createMockUserPermissions,
 } from "metabase-types/api/mocks";
 
@@ -25,21 +26,21 @@ import {
   whoIsYourFavoriteResponse,
 } from "./utils";
 
-jest.mock("metabase/metabot/hooks", () => ({
-  ...jest.requireActual("metabase/metabot/hooks"),
-  useMetabotEnabledEmbeddingAware: () => true,
-}));
-
-jest.mock("metabase/query_builder/actions", () => ({
-  ...jest.requireActual("metabase/query_builder/actions"),
+jest.mock("metabase/redux/query-builder", () => ({
+  ...jest.requireActual("metabase/redux/query-builder"),
   setIsNativeEditorOpen: jest.fn(),
 }));
 
 describe("metabot > context", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    fetchMock.get(
+      "path:/api/metabot/permissions/user-permissions",
+      createMockUserMetabotPermissions(),
+    );
     jest.mocked(setIsNativeEditorOpen).mockImplementation(
       (isNativeEditorOpen: boolean) =>
+        // Unjustified type cast. FIXME
         ({
           type: "metabase/qb/SET_IS_NATIVE_EDITOR_OPEN",
           isNativeEditorOpen,
@@ -50,7 +51,7 @@ describe("metabot > context", () => {
   it("should send along default context", async () => {
     setup();
     const agentSpy = mockAgentEndpoint({
-      textChunks: whoIsYourFavoriteResponse,
+      events: whoIsYourFavoriteResponse,
     });
 
     await enterChatMessage("Who is your favorite?");
@@ -78,7 +79,7 @@ describe("metabot > context", () => {
     ]);
 
     const agentSpy = mockAgentEndpoint({
-      textChunks: whoIsYourFavoriteResponse,
+      events: whoIsYourFavoriteResponse,
     });
 
     await enterChatMessage("Who is your favorite?");
@@ -86,13 +87,13 @@ describe("metabot > context", () => {
     expect(
       _.pick((await lastReqBody(agentSpy))?.context, "capabilities"),
     ).toEqual({
-      capabilities: ["frontend:navigate_user_v1", "permission:save_questions"],
+      capabilities: ["permission:save_questions"],
     });
   });
 
   it("should allow components to register additional context", async () => {
     const agentSpy = mockAgentEndpoint({
-      textChunks: whoIsYourFavoriteResponse,
+      events: whoIsYourFavoriteResponse,
     });
 
     const TestComponent = () => {
@@ -131,10 +132,12 @@ describe("metabot > context", () => {
   it("should send SQL profile and SQL error context for SQL fixes", async () => {
     const rawSql = "SELECT * FROM bad_table";
     const queryError = "bad_table";
+    // Unjustified type cast. FIXME
     const editorOpen = { resolve: undefined as (() => void) | undefined };
 
     jest.mocked(setIsNativeEditorOpen).mockImplementationOnce(
       () =>
+        // Unjustified type cast. FIXME
         (() =>
           new Promise<void>((resolve) => {
             editorOpen.resolve = resolve;
@@ -142,7 +145,7 @@ describe("metabot > context", () => {
     );
 
     const agentSpy = mockAgentEndpoint({
-      textChunks: whoIsYourFavoriteResponse,
+      events: whoIsYourFavoriteResponse,
     });
 
     const SqlFixContextRegistration = () => {

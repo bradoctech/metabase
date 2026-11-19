@@ -1,4 +1,4 @@
-import { trackSimpleEvent } from "metabase/lib/analytics";
+import { trackSimpleEvent } from "metabase/analytics";
 
 export const trackMetabotChatOpened = (
   origin: "header" | "command_palette" | "keyboard_shortcut" | "native_editor",
@@ -18,11 +18,5 @@ export const trackMetabotRequestSent = () => {
 export const trackQueryFixClicked = () => {
   trackSimpleEvent({
     event: "metabot_fix_query_clicked",
-  });
-};
-
-export const trackExplainChartClicked = () => {
-  trackSimpleEvent({
-    event: "metabot_explain_chart_clicked",
   });
 };

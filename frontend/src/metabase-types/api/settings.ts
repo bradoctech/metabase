@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
 
-import type { SdkIframeEmbedSetupSettings } from "metabase/embedding/embedding-iframe-sdk-setup/types";
-import type { CurrencyStyle } from "metabase/lib/formatting";
-
 import type { InputSettingType } from "./actions";
 import type { DashboardId } from "./dashboard";
 import type { DatabaseId } from "./database";
-import type { GroupId } from "./group";
+import type { SdkIframeEmbedSetupTheme } from "./embedding-theme";
+import type { CurrencyStyle } from "./formatting";
+import type { GroupMappings } from "./group";
+import type { MetabotLimitPeriod, MetabotLimitType } from "./metabot";
 import type { NotificationRecipient } from "./notification";
 import type { UserId } from "./user";
 
@@ -111,6 +111,7 @@ export interface Engine {
   "details-fields"?: DatabaseFieldOrGroup[];
   source: EngineSource;
   "superseded-by": string | null;
+  "creatable?"?: boolean;
   "extra-info": {
     "db-routing-info": {
       text: string;
@@ -163,22 +164,14 @@ export interface EngineSourceContact {
 }
 
 export interface ScheduleSettings {
-  schedule_type?: ScheduleType | null;
+  schedule_type: ScheduleType;
   schedule_day?: ScheduleDayType | null;
   schedule_frame?: ScheduleFrameType | null;
   schedule_hour?: number | null;
   schedule_minute?: number | null;
 }
 
-export type ScheduleType =
-  | "every_n_minutes"
-  | "hourly"
-  | "daily"
-  | "weekly"
-  | "monthly"
-  // 'cron' type implies usage of more complex expressions represented
-  // by raw cron string.
-  | "cron";
+export type ScheduleType = "hourly" | "daily" | "weekly" | "monthly";
 
 export type ScheduleDayType =
   | "sun"
@@ -203,10 +196,6 @@ export type FontFormat = "woff" | "woff2" | "truetype";
 
 export interface Version {
   tag?: string;
-  date?: string;
-  hash?: string;
-  /** When set (e.g. MB_SOURCE_CODE_URL), used for AGPL source offer in the UI */
-  "source-code-url"?: string;
 }
 
 export interface VersionInfoRecord {
@@ -217,11 +206,27 @@ export interface VersionInfoRecord {
   announcement_url?: string;
 }
 
+export interface AlertUpgradeVersion {
+  min: string;
+  fixed: string;
+  message: string;
+  id?: string;
+}
+
+export interface MajorVersionSupport {
+  major: number;
+  released: string;
+  lts: boolean;
+  eol: string;
+}
+
 export interface VersionInfo {
   nightly?: VersionInfoRecord;
   beta?: VersionInfoRecord;
   latest?: VersionInfoRecord;
   older?: VersionInfoRecord[];
+  alert_upgrade_versions?: AlertUpgradeVersion[];
+  major_version_support?: MajorVersionSupport[];
 }
 
 export type LocaleData = [string, string];
@@ -234,7 +239,13 @@ export type LoadingMessage =
 export type TokenStatusStatus = "unpaid" | "past-due" | "invalid" | string;
 
 export type GdrivePayload = {
-  status: "not-connected" | "syncing" | "active" | "paused" | "error";
+  status:
+    | "not-connected"
+    | "initializing"
+    | "syncing"
+    | "active"
+    | "paused"
+    | "error";
   url?: string;
   message?: string; // only for errors
   created_at?: number;
@@ -251,6 +262,7 @@ export type GdrivePayload = {
 const tokenStatusFeatures = [
   "advanced-config",
   "advanced-permissions",
+  "attached-dwh",
   "audit-app",
   "cache-granular-controls",
   "collection-cleanup",
@@ -258,6 +270,7 @@ const tokenStatusFeatures = [
   "content-management",
   "content-translation",
   "content-verification",
+  "data-complexity-score",
   "dashboard-subscription-filters",
   "database-auth-providers",
   "disable-password-login",
@@ -329,6 +342,9 @@ export const tokenFeatures = [
   "cloud_custom_smtp",
   "content_translation",
   "content_verification",
+  "custom-viz",
+  "custom-viz-available",
+  "data-complexity-score",
   "disable_password_login",
   "embedding",
   "embedding_sdk",
@@ -337,6 +353,7 @@ export const tokenFeatures = [
   "offer-metabase-ai-managed",
   "metabase-ai-managed",
   "metabot-v3",
+  "multi-factor-auth",
   "official_collections",
   "sandboxes",
   "scim",
@@ -356,25 +373,25 @@ export const tokenFeatures = [
   "upload_management",
   "collection_cleanup",
   "cache_preemptive",
-  "ai_sql_fixer",
-  "ai_sql_generation",
-  "ai_entity_analysis",
   "database_routing",
   "development_mode",
   "etl_connections",
   "etl_connections_pg",
   "table_data_editing",
   "remote_sync",
+  "data-apps",
   "dependencies",
+  "schema-viewer",
   "semantic_search",
   "transforms-python",
   "transforms-basic",
   "library",
+  "library_retrieval",
   "support-users",
   "tenants",
-  "workspaces",
   "writable_connection",
   "admin_security_center",
+  "ai_controls",
 ] as const;
 
 export type TokenFeature = (typeof tokenFeatures)[number];
@@ -389,6 +406,8 @@ export type PasswordComplexity = {
 };
 
 export type SessionCookieSameSite = "lax" | "strict" | "none";
+
+export type MfaEnforcement = "off" | "optional" | "required";
 
 export interface SettingDefinition<
   Key extends EnterpriseSettingKey = EnterpriseSettingKey,
@@ -487,6 +506,7 @@ export type EmbeddingHomepageStatus =
 
 interface AdminSettings {
   "active-users-count"?: number;
+  "analytics-pii-retention-enabled"?: boolean;
   "custom-geojson-enabled": boolean;
   "encryption-enabled": boolean;
   "deprecation-notice-version"?: string;
@@ -510,9 +530,11 @@ interface AdminSettings {
   "system-timezone"?: string;
   "embedding-homepage": EmbeddingHomepageStatus;
   "setup-license-active-at-setup": boolean;
+  "setup-embedding-autoenabled": boolean;
   "embedding-hub-test-embed-snippet-created": boolean;
   "embedding-hub-production-embed-snippet-created": boolean;
   "embedding-hub-sso-auth-manual-tested": boolean;
+  "default-embedding-themes-seeded": boolean;
   "security-center-email-recipients": NotificationRecipient[] | null;
   "security-center-slack-channel": string | null;
   "store-url": string;
@@ -523,7 +545,24 @@ interface SettingsManagerSettings {
   "bcc-enabled?": boolean;
   "llm-openai-api-key"?: string;
   "llm-anthropic-api-key"?: string | null;
+  "llm-anthropic-api-base-url"?: string | null;
   "llm-openrouter-api-key"?: string | null;
+  "llm-zai-api-key"?: string | null;
+  "llm-mistral-api-key"?: string | null;
+  "llm-moonshot-api-key"?: string | null;
+  "llm-deepseek-api-key"?: string | null;
+  "llm-azure-api-key"?: string | null;
+  "llm-azure-api-base-url"?: string | null;
+  "llm-google-service-account-key"?: string | null;
+  "llm-google-oauth-access-token"?: string | null;
+  "llm-google-project-id"?: string | null;
+  "llm-google-location"?: string | null;
+  "llm-bedrock-access-key-id"?: string | null;
+  "llm-bedrock-secret-access-key"?: string | null;
+  "llm-bedrock-region"?: string | null;
+  "llm-bedrock-session-token"?: string | null;
+  "llm-vllm-api-base-url"?: string | null;
+  "llm-vllm-api-key"?: string | null;
   "openai-api-key": string | null;
   "openai-available-models"?: OpenAiModel[];
   "openai-model": string | null;
@@ -538,16 +577,22 @@ type PrivilegedSettings = AdminSettings & SettingsManagerSettings;
 
 interface PublicSettings {
   "allowed-iframe-hosts": string;
+  "csp-img-allowed-hosts": string;
+  "csp-img-enabled": boolean;
   "ai-features-enabled?": boolean;
   "agent-api-enabled?": boolean;
   "analytics-uuid": string;
   "anon-tracking-enabled": boolean;
+  "metaplow-tracking-enabled": boolean;
+  "metaplow-url": string | null;
   "application-font": string;
   "application-font-files": FontFile[] | null;
   "application-name": string;
   "application-favicon-url": string;
   "available-fonts": string[];
-  "available-locales": LocaleData[] | null;
+  // Non-null: :public visibility and a total getter (computed from the jar's
+  // bundled translation resources), so every viewer always receives a list.
+  "available-locales": LocaleData[];
   "available-timezones": string[] | null;
   "bug-reporting-enabled": boolean;
   "check-for-updates": boolean;
@@ -558,8 +603,11 @@ interface PublicSettings {
   "custom-homepage-dashboard": DashboardId | null;
   "development-mode?": boolean;
   "llm-metabot-configured?"?: boolean | null;
+  "llm-metabot-supports-reasoning?"?: boolean | null;
   "email-configured?": boolean;
   "embedding-app-origin": string | null;
+  "mfa-enforcement": MfaEnforcement;
+  "mfa-requirement-deadline": string | null;
   "embedding-app-origins-sdk": string | null;
   "embedding-app-origins-interactive": string | null;
   "enable-password-login": boolean;
@@ -589,8 +637,8 @@ interface PublicSettings {
   "ldap-attribute-lastname": string | null;
   "ldap-group-sync": boolean;
   "ldap-group-base": string | null;
-  "ldap-group-mappings": Record<string /*ldap group name */, GroupId[]> | null;
-  "ldap-group-membership-filter"?: string;
+  "ldap-group-mappings": GroupMappings | null;
+  "ldap-group-membership-filter"?: string | null;
   "ldap-user-provisioning-enabled?": boolean;
   "oidc-user-provisioning-enabled?": boolean;
   "loading-message": LoadingMessage;
@@ -604,9 +652,19 @@ interface PublicSettings {
   "report-timezone": string | null;
   "report-timezone-long": string;
   "report-timezone-short": string;
-  "session-cookies": boolean | null;
+  "session-cookies": boolean;
   "setup-token": string | null;
   "metabot-enabled?": boolean;
+  "metabot-name": string;
+  "metabot-icon": string | null;
+  "metabot-show-illustrations": boolean;
+  "metabot-limit-unit": MetabotLimitType;
+  "metabot-limit-reset-rate": MetabotLimitPeriod;
+  "metabot-quota-reached-message": string | null;
+  "ai-usage-max-retention-days": number | null;
+  "metabot-chat-system-prompt": string | null;
+  "metabot-nlq-system-prompt": string | null;
+  "metabot-sql-system-prompt": string | null;
   "embedded-metabot-enabled?": boolean;
   "show-metabase-links": boolean;
   "show-metabot": boolean;
@@ -619,9 +677,12 @@ interface PublicSettings {
   "token-features": TokenFeatures;
   "tracing-enabled": boolean;
   "transforms-enabled": boolean;
+  "transforms-setup-complete": boolean;
   version: Version;
   "version-info-last-checked": string | null;
   "airgap-enabled": boolean;
+  "custom-viz-enabled": boolean;
+  "custom-viz-plugin-dev-mode-enabled": boolean;
   "non-table-chart-generated": boolean;
   "use-tenants": boolean;
 }
@@ -630,6 +691,7 @@ export type UserSettings = {
   "dismissed-excel-pivot-exports-banner"?: boolean;
   "dismissed-collection-cleanup-banner"?: boolean;
   "dismissed-browse-models-banner"?: boolean;
+  "dismissed-research-mode-banner"?: boolean;
   "dismissed-custom-dashboard-toast"?: boolean;
   "last-used-native-database-id"?: number | null;
   "notebook-native-preview-sidebar-width"?: number | null;
@@ -642,10 +704,12 @@ export type UserSettings = {
   "show-updated-permission-modal": boolean;
   "show-updated-permission-banner": boolean;
   "trial-banner-dismissal-timestamp"?: string | null;
-  "sdk-iframe-embed-setup-settings"?: Pick<
-    SdkIframeEmbedSetupSettings,
-    "theme" | "useExistingUserSession"
-  > | null;
+  // The persisted subset of the embed setup wizard's
+  // `SdkIframeEmbedSetupSettings` state.
+  "sdk-iframe-embed-setup-settings"?: {
+    theme?: SdkIframeEmbedSetupTheme;
+    useExistingUserSession?: boolean;
+  } | null;
   "color-scheme"?: string;
 };
 
@@ -673,10 +737,8 @@ export type UserSettings = {
  * Each new scope is more strict than the previous one.
  *
  * To further complicate things, there are two endpoints for fetching settings:
- *  - `GET /api/setting` that _can only be used by admins!_
- *  - `GET /api/session/properties` that can be used by any user, but some settings might be omitted (unavailable).
- *
- * SettingsApi will return `403` for non-admins, while SessionApi will return `200`!
+ *  - `GET /api/setting` that _can only be used by admins!_ — returns `403` for non-admins.
+ *  - `GET /api/session/properties` that can be used by any user (returns `200`), but some settings might be omitted.
  */
 export type Settings = InstanceSettings &
   PublicSettings &
@@ -730,7 +792,13 @@ export interface EnterpriseSettings extends Settings {
   "llm-openai-api-key"?: string;
   "llm-openai-model"?: string;
   "llm-metabot-configured?"?: boolean | null;
+  "llm-metabot-supports-reasoning?"?: boolean | null;
+  "llm-metabot-supports-fast-mode?"?: boolean | null;
   "llm-openrouter-api-key"?: string | null;
+  "llm-zai-api-key"?: string | null;
+  "llm-mistral-api-key"?: string | null;
+  "llm-moonshot-api-key"?: string | null;
+  "llm-deepseek-api-key"?: string | null;
   "session-timeout": TimeoutValue | null;
   "search-engine": SearchEngineSettingValue | null;
   "scim-enabled"?: boolean | null;
@@ -750,6 +818,8 @@ export interface EnterpriseSettings extends Settings {
   "jwt-group-sync": boolean | null;
   "oidc-enabled": boolean;
   "oidc-configured": boolean;
+  // sensitive, so only the admin settings list carries it; pages use /api/ee/sso/oidc
+  "oidc-providers"?: string | null;
   "saml-enabled": boolean;
   "saml-configured": boolean;
   "saml-user-provisioning-enabled?": boolean;
@@ -766,12 +836,14 @@ export interface EnterpriseSettings extends Settings {
   "saml-attribute-tenant": string | null;
   "saml-attribute-group": string | null;
   "saml-group-sync": boolean | null;
-  "saml-group-mappings": Record<string, GroupId[]> | null;
+  "saml-group-mappings": GroupMappings | null;
+  "jwt-group-mappings": GroupMappings | null;
   "database-replication-enabled": boolean | null;
   "database-replication-connections"?: DatabaseReplicationConnections | null;
   "embedding-hub-test-embed-snippet-created": boolean;
   "embedding-hub-production-embed-snippet-created": boolean;
   "embedding-hub-sso-auth-manual-tested": boolean;
+  "default-embedding-themes-seeded": boolean;
   "python-runner-url"?: string | null;
   "python-runner-api-token"?: string | null;
   "python-storage-s-3-endpoint"?: string | null;
@@ -785,6 +857,8 @@ export interface EnterpriseSettings extends Settings {
   "python-runner-timeout-seconds"?: number | null;
   "python-runner-test-run-timeout-seconds"?: number | null;
   "llm-metabot-provider"?: string | null;
+  "llm-mini-model"?: string | null;
+  "llm-fast-mode"?: boolean | null;
   "llm-anthropic-api-key"?: string | null;
   "llm-anthropic-model": string;
   "llm-proxy-configured?"?: boolean | null;
@@ -794,6 +868,7 @@ export interface EnterpriseSettings extends Settings {
   "slack-connect-client-secret"?: string | null;
   "mcp-apps-cors-enabled-clients": string[] | null;
   "mcp-apps-cors-custom-origins": string | null;
+  "transforms-meter-locked": boolean | null;
   /**
    * @deprecated
    */
