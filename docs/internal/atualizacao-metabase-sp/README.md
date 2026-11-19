@@ -17,6 +17,7 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 | Documento                                                  | Conteúdo                                                                  |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
 | [Pendências de homologação — Markdown](./pendencias-homologacao-saopaulov64.md) · [PDF](./pendencias-homologacao-saopaulov64.pdf) | Roteiro para a equipe em homologação: cenários pendentes, pré-requisitos, critérios de aceite e registro de evidências |
+| [Checklist detalhado do QA — Markdown](./checklist-qa-homologacao-saopaulov64.md) · [PDF](./checklist-qa-homologacao-saopaulov64.pdf) | Homologação Saturno: execução por lotes, passos por cenário, dados de apoio, matriz de resultados e parecer do QA |
 | [fechamento-tecnico-saopaulov64.md](./fechamento-tecnico-saopaulov64.md) | Validações de produção OSS, regressões, auditoria e encaminhamento para homologação |
 | [pendencia-assinatura-dashboards-sp.md](./pendencia-assinatura-dashboards-sp.md) · [PDF original](./pendencia-assinatura-dashboards-sp.pdf) | EDD-1523v64: levantamento atual, plano e smoke da assinatura SP; PDF mantém o registro inicial da tarefa |
 | [EDD-1523-auditoria.md](./EDD-1523-auditoria.md)           | Auditoria pós-v64: pontos levantados, ajustes aplicados e validações pendentes |
