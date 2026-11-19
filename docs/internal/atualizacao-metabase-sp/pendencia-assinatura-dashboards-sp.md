@@ -1,6 +1,6 @@
 # Tarefa posterior — assinatura Dashboards SP em incorporação e exportações
 
-**Estado:** modelo visual frontend aprovado pelo usuário em 18/11/2026 no escopo testado; links da assinatura removidos na interface e no PDF frontend. PDF backend, corpos HTML de e-mail e mensagens de assinatura do Slack receberam a composição SP, sem link, em 18/11/2026. Testes automatizados aprovados; envio real e aceite visual desses canais permanecem pendentes.
+**Estado:** modelo visual frontend aprovado pelo usuário em 18/11/2026 no escopo testado; links da assinatura removidos na interface e no PDF frontend. PDF backend, corpos HTML de e-mail e mensagens de assinatura do Slack receberam a composição SP, sem link, em 18/11/2026. Testes automatizados aprovados. PDF backend aprovado visualmente pelo usuário via endpoint/DevTools no cenário executado; e-mail e complementos de PDF ficam para homologação. Slack permanece no escopo implementado, com validação real opcional e sem exigir vínculo.
 
 **Solicitação:** usuário durante TS-12, em 14/11/2026.
 
@@ -160,12 +160,12 @@ A composição poderá ficar em um módulo/asset dedicado à assinatura SP, comp
 ### Decisões de implementação
 
 - **Link — decidido em 18/11/2026:** assinatura sem link. Removidos o anchor do LogoBadge e a anotação comercial do PDF frontend. Não remover links funcionais de gráficos, dados ou navegação; a ausência de link é da assinatura.
-- **Escopo adjacente:** trocar também o prefixo Metabase dos nomes de arquivos? Incluir marca no corpo de e-mail e texto do Slack, ou somente os anexos que compartilham o PDF?
+- **Escopo confirmado:** corpos de e-mail e assinatura Slack incluídos na implementação de 18/11/2026. Por decisão posterior do usuário, teste real do Slack é opcional, sem exigir vínculo. Prefixos dos nomes de arquivos permanecem fora desta alteração.
 - **Direção visual definida em 18/11/2026:** Desenvolvido por / Feito com e Dashboards SP devem continuar como texto, com somente o brasão como imagem entre os dois. Validar amostras pequena/grande e manter a proporção do brasão. O aceite dessa composição não equivale ao aceite de uma implementação ou de um novo mockup.
 
 ## Proposta de validação — lotes de cinco
 
-**Estado inicial de todos os casos: PENDENTE.** Este roteiro é planejamento; nenhum OK foi inferido da leitura de código ou dos smokes de saopaulov64.
+**Estado inicial do roteiro: PENDENTE.** A consolidação abaixo registra os retornos posteriores; os testes automatizados e o aceite geral do modelo não aprovam automaticamente todos os cenários manuais.
 
 ### Lote 1 — assinatura na interface
 
@@ -251,7 +251,28 @@ Autorização do usuário: aplicar o padrão SP nos três pontos restantes e sub
 
 **Evidências locais ignoradas pelo Git:** `.merge-sp/assinatura-backend-2026-11-18/` contém logs, brasão PNG, HTML dos dois templates e `assinatura-backend-a4-letter.pdf`, prévia de duas páginas (A4 e Letter) com a assinatura real. Página PDF renderizada e inspecionada visualmente. Essa prévia não é um dashboard completo e não aprova entrega por e-mail/Slack.
 
-**Pendente:** smoke de dashboard multipágina real via endpoint, corpos de e-mail no MailDev/provedor e mensagem/anexo em workspace Slack de teste, conforme roteiro abaixo. Nenhuma mensagem foi enviada pelo agente. JAR não foi reconstruído nesta etapa; o pacote anterior não contém essas alterações. Reiniciar o BE para os testes locais e gerar novo pacote no fechamento, preservando o procedimento de `version.properties`.
+**Aceite posterior do usuário:** PDF backend gerado pelo código do console do Chrome/DevTools que chama POST `/api/dashboard/:id/pdf`; assinatura considerada satisfatória no arquivo recebido. Isso valida o endpoint real, sem necessidade de repetir pela REPL. Formato do papel, quantidade de páginas e demais variações não foram informados.
+
+**Aberto para homologação:** complementar PDF com dashboard multipágina e papel A4/Letter quando ainda não exercitados; conferir ausência de cortes/sobreposição em cada página. Validar os corpos HTML de assinatura de dashboard e alerta de pergunta, imagem inline e PDF anexo no provedor/captura disponível. A entrega do anexo não é comprovada pelo download direto do endpoint.
+
+**Slack — validação opcional:** implementação e testes automatizados permanecem no escopo. Por decisão do usuário, não exigir vínculo com workspace/canal para fechar o trabalho local. Mensagem e anexo poderão ser conferidos futuramente se já houver integração de teste autorizada; não registrar como aprovado um envio não realizado.
+
+**Pacote:** JAR não foi reconstruído nesta etapa; o pacote anterior não contém essas alterações. Gerar e verificar novo build/JAR no fechamento, preservando o procedimento de `version.properties`. Nenhuma mensagem foi enviada pelo agente.
+
+### Consolidação dos cenários AS-SM
+
+| ID | Estado / evidência disponível | Próxima ação |
+| --- | --- | --- |
+| AS-SM-01 a 05 | Aceite geral do modelo frontend no escopo relatado; não há discriminação completa por cenário | Registrar quais prévias/rotas, temas e controles foram efetivamente testados; manter cenários não exercitados abertos ou não aplicáveis com motivo |
+| AS-SM-06 a 10 | Modelo aprovado onde testado; não equivale a aceite de todas as variações de PNG, clipboard e PDF frontend | Associar os testes já realizados aos IDs, sem exigir sua repetição; registrar variantes ainda não exercitadas |
+| AS-SM-11 | PARCIAL: PDF backend real via endpoint/DevTools aprovado pelo usuário | A4/Letter e multipágina permanecem abertos para homologação quando não exercitados |
+| AS-SM-12 | Gates cobertos por testes automatizados; aceite manual específico não informado | Conferir apenas em ambiente/perfil compatível; registrar limitação se indisponível |
+| AS-SM-13 — e-mail | ABERTO PARA HOMOLOGAÇÃO: corpo dashboard, alerta e PDF anexo | Conferir imagem inline, identidade, links funcionais e entrega |
+| AS-SM-13 — Slack | OPCIONAL, sem vínculo obrigatório; sem envio real validado | Conferir somente se houver integração autorizada disponível |
+| AS-SM-14 | Cobertura manual completa de locale/subdiretório não informada | Validar conforme configuração do ambiente; marcar não aplicável com motivo quando pertinente |
+| AS-SM-15 | Testes automatizados aprovados; novo build/JAR ainda pendente | Gerar pacote e verificar versão, recursos e assinatura no artefato |
+
+Consolidar significa registrar os testes já feitos com seu ID e seus limites. Não exige repetir um cenário já aprovado nem habilitar uma integração indisponível. Aceite visual geral do modelo permanece válido, mas não deve ser convertido em aprovação de rotas, formatos ou canais não exercitados.
 
 ## Reprodução local das saídas backend e canais
 
