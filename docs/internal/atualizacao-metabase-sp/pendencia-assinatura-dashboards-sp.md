@@ -263,7 +263,11 @@ Autorização do usuário: aplicar o padrão SP nos três pontos restantes e sub
 
 | ID | Estado / evidência disponível | Próxima ação |
 | --- | --- | --- |
-| AS-SM-01 a 05 | Aceite geral do modelo frontend no escopo relatado; não há discriminação completa por cenário | Registrar quais prévias/rotas, temas e controles foram efetivamente testados; manter cenários não exercitados abertos ou não aplicáveis com motivo |
+| AS-SM-01 | OK pelo usuário em 19/11/2026 após correção do recorte da prévia, incluindo largura reduzida | Concluído no escopo do roteiro; falha anterior preservada no histórico abaixo |
+| AS-SM-02 | OK pelo usuário em 19/11/2026 após correção do recorte da prévia, incluindo largura reduzida | Concluído no escopo do roteiro; falha anterior preservada no histórico abaixo |
+| AS-SM-03 | OK pelo usuário em 19/11/2026 | Cenário de link público aprovado conforme roteiro |
+| AS-SM-04 | PENDENTE — sem ambiente iframe SDK, conforme usuário em 19/11/2026 | Validar futuramente se houver ambiente disponível; não exigir configurar SDK apenas para o smoke |
+| AS-SM-05 | PARCIAL pelo usuário em 19/11/2026: marca visível OK pelo AS-SM-03; página pública de erro com rodapé e assinatura SP OK; ocultação e documento/ação indisponíveis | Subcenários indisponíveis permanecem pendentes; não exigir habilitação de licença ou publicação de novos recursos |
 | AS-SM-06 a 10 | Modelo aprovado onde testado; não equivale a aceite de todas as variações de PNG, clipboard e PDF frontend | Associar os testes já realizados aos IDs, sem exigir sua repetição; registrar variantes ainda não exercitadas |
 | AS-SM-11 | PARCIAL: PDF backend real via endpoint/DevTools aprovado pelo usuário | A4/Letter e multipágina permanecem abertos para homologação quando não exercitados |
 | AS-SM-12 | Gates cobertos por testes automatizados; aceite manual específico não informado | Conferir apenas em ambiente/perfil compatível; registrar limitação se indisponível |
@@ -374,3 +378,33 @@ Para esse envio de saída não é necessário tornar localhost público apenas p
 Com a mesma sessão autenticada, há GET `/dev/preview/preview-dashboard/1` e `/dev/preview/preview-card/ID`. Eles mostram o conteúdo renderizado para canais, mas **não** o envelope HTML completo de e-mail, o PDF backend ou a mensagem real do Slack. Não utilizá-los como substitutos dos itens A/B/C.
 
 Todos esses comandos são um roteiro para execução pelo usuário; o agente não iniciou containers, não configurou integrações e não enviou mensagens nesta rodada.
+
+
+### Orientação adicional AS-SM-05 — 19/11/2026
+
+Objetivo: conferir que trocar a identidade não alterou a condição que decide mostrar a assinatura. Não é um novo teste de cor ou de largura, nem uma solicitação para ativar recursos pagos.
+
+1. **Marca visível:** usar o link público de pergunta/dashboard já aprovado em AS-SM-03; registrar este subcenário como OK com base nessa evidência, sem repetir.
+2. **Marca oculta:** somente se o ambiente já disponibilizar uma configuração autorizada para remover a marca de incorporação, abrir a mesma visualização com essa configuração ativa. A assinatura deve desaparecer, mas ações permitidas (por exemplo download) devem continuar utilizáveis. Não procurar a opção na configuração de cores ou desabilitar o footer inteiro. Se não houver configuração/licença disponível, registrar este subcenário como PENDENTE por indisponibilidade, com cobertura automatizada dos gates já registrada acima.
+3. **Página auxiliar de erro:** abrir em nova aba o link público de teste, preservando o original, e trocar um caractere do identificador público no endereço. Não alterar parâmetros de filtros nem ID de recurso interno. A página deve apresentar erro/Não encontrado sem expor conteúdo privado; se houver assinatura, deve ser SP. Se não houver rodapé nessa tela, registrar como não aplicável à assinatura, sem tratá-lo como falha. Não alterar ou excluir o recurso real.
+4. **Documento/ação públicos:** conferir somente se já existir recurso de teste disponibilizado. Não criar/publicar novos recursos só para o smoke. Sem esse conteúdo, manter subcenário pendente por indisponibilidade.
+
+Responder por subcenário: visível OK; ocultação OK ou indisponível; erro com assinatura SP ou sem rodapé; documento/ação OK ou indisponíveis. A conferência do corte em largura reduzida continua aberta em AS-SM-01/02.
+
+
+**Retorno adicional — 19/11/2026:** AS-SM-05: usuário confirmou marca visível e página pública de erro com rodapé/assinatura SP. Ocultação e documento/ação não disponíveis no ambiente. Para AS-SM-01/02, o menu do navegador não ofereceu abrir frame e a tentativa pelo Console com seletor `iframe[data-testid="embed-preview-iframe"]` retornou iframe não encontrado. Esse resultado não identifica a causa do corte nem invalida a falha visual; distinguir frame/contexto da prévia antes de alterar layout.
+
+
+**Diagnóstico da prévia SDK — 19/11/2026:** ao abrir o documento do brasão em nova aba, o usuário chegou a `/embed/sdk/v1`, que ficou em branco. O código de `SdkIframeEmbedRoute` depende de configurações enviadas pelo pai via postMessage e retorna null enquanto não as recebe; abrir esse endereço isolado não reproduz a prévia nem demonstra falha de renderização da assinatura. A prévia local já usa o iframe SDK, embora ainda não exista página externa de integração para concluir AS-SM-04. Investigar o recorte no documento original em execução, preservando sua configuração.
+
+
+### Correção do recorte da prévia — 19/11/2026
+
+Medições fornecidas pelo usuário: viewport interno 462 × 600 px; footer entre y=550 e y=600; badge entre y=551,1 e y=599,7; brasão e textos também dentro desses limites. Portanto, nessas medições não há excesso interno da assinatura. O runtime `embedding-iframe-sdk/embed.ts` impõe `min-height: 600px` inline ao iframe; o painel de setup reserva espaço para controles/aviso de publicação e usa overflow hidden. A prévia pode ficar menor que o iframe, recortando o rodapé externamente.
+
+Ajustado somente `embedding-iframe-sdk-setup/components/SdkIframeEmbedPreview.module.css`: permitir que o card flex reduza sua altura (`flex: 1; min-height: 0`) e sobrescrever o mínimo inline do iframe dentro dessa prévia (`min-height: 0 !important`), com iframe em bloco. Mantidos os 600 px padrão nas incorporações externas, as dimensões da assinatura e os gates.
+
+Verificação: Stylelint e git diff --check aprovados; suíte SdkIframeEmbedSetup.unit.spec.tsx com 28 testes aprovados (avisos de act emitidos pelo runner); reprodução isolada no Chromium com estilos reais da prévia e badge, iframe com mínimo inline de 600 px e painel menor. Nas larguras 360, 462 e 900 px, cenário anterior recorta e cenário corrigido mantém a assinatura dentro do painel. Evidências em `.merge-sp/assinatura-responsiva-2026-11-19/checks.json` e `preview.png`. A reprodução isolada não substitui aceite na aplicação: AS-SM-01/02 continuam aguardando reteste do usuário.
+
+
+**Reteste AS-SM-01/02 — 19/11/2026:** usuário confirmou ambos OK após a correção do contêiner da prévia. Consideradas aprovadas as etapas do roteiro, incluindo largura reduzida, conforme convenção de retorno OK combinada. A indicação anterior de reteste pendente descreve o momento anterior a este aceite.

@@ -231,3 +231,4 @@ src/metabase/channel/email/notification_card.hbs
 test/metabase/channel/render/pdf_test.clj
 test/metabase/channel/impl/email_test.clj
 test/metabase/channel/impl/slack_test.clj
+frontend/src/metabase/embedding/embedding-iframe-sdk-setup/components/SdkIframeEmbedPreview.module.css
