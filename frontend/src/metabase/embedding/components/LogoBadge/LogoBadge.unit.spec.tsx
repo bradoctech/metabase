@@ -3,19 +3,21 @@ import { render, screen } from "__support__/ui";
 import { LogoBadge } from ".";
 
 describe("LogoBadge", () => {
-  it("should render Powered by Metabase footer", () => {
+  it("should render the prefix and Dashboards SP as text alongside the coat of arms", () => {
     setup();
 
     expect(screen.getByText("Powered by")).toBeInTheDocument();
+    expect(screen.getByText("Dashboards SP")).toBeInTheDocument();
+    expect(screen.getByTestId("main-logo")).toHaveAttribute(
+      "src",
+      expect.stringContaining("app/assets/img/logo.svg"),
+    );
   });
 
-  it("should render a link with valid utm parameters", () => {
+  it("should render the signature without a link", () => {
     setup();
 
-    expect(screen.getByRole("link")).toHaveProperty(
-      "href",
-      "https://www.metabase.com/?utm_medium=referral&utm_source=product&utm_campaign=powered_by_metabase&utm_content=embedded_banner_localhost",
-    );
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 });
 

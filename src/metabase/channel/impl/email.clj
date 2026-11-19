@@ -8,6 +8,7 @@
    [medley.core :as m]
    [metabase.analytics-interface.core :as analytics]
    [metabase.analytics.core :as analytics.core]
+   [metabase.channel.branding :as branding]
    [metabase.channel.core :as channel]
    [metabase.channel.email :as email]
    [metabase.channel.email.logo :as email.logo]
@@ -202,20 +203,25 @@
 
 (defn- construct-emails
   [template message-context-fn attachments recipients]
-  (let [{:keys [user-emails
-                non-user-emails]} (recipients->emails recipients)
-        email-to-users            (when (seq user-emails)
-                                    (let [message-ctx (message-context-fn nil)]
-                                      (construct-email
-                                       (channel.params/substitute-params (-> template :details :subject) message-ctx)
-                                       user-emails
-                                       (render-message-body template (message-context-fn nil) attachments))))
-        email-to-nonusers         (for [non-user-email non-user-emails]
-                                    (let [message-ctx (message-context-fn non-user-email)]
-                                      (construct-email
-                                       (channel.params/substitute-params (-> template :details :subject) message-ctx)
-                                       [non-user-email]
-                                       (render-message-body template (message-context-fn non-user-email) attachments))))]
+  (let [{:keys [user-emails non-user-emails]} (recipients->emails recipients)
+        render-email (fn [non-user-email addresses]
+                       (let [message-ctx (message-context-fn non-user-email)
+                             signature   (when (get-in message-ctx [:context :include_branding])
+                                           (channel.render/make-image-bundle :attachment (branding/png-bytes)))
+                             message-ctx (cond-> message-ctx
+                                           signature (update :context assoc
+                                                             :signature_prefix (str (trs "Made with"))
+                                                             :signature_name branding/product-name
+                                                             :signature_logo_url (:image-src signature)))
+                             attachments (cond-> attachments
+                                           signature (conj (make-message-attachment
+                                                            (first (channel.render/image-bundle->attachment signature)))))]
+                         (construct-email
+                          (channel.params/substitute-params (-> template :details :subject) message-ctx)
+                          addresses
+                          (render-message-body template message-ctx attachments))))
+        email-to-users (when (seq user-emails) (render-email nil user-emails))
+        email-to-nonusers (for [email non-user-emails] (render-email email [email]))]
     (filter some? (conj email-to-nonusers email-to-users))))
 
 (def ^:private payload-type->default-template
