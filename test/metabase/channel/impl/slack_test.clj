@@ -6,7 +6,6 @@
    [metabase.channel.core :as channel]
    [metabase.channel.impl.slack :as channel.slack]
    [metabase.channel.slack :as slack]
-   [metabase.config.core :as config]
    [metabase.test :as mt]))
 
 (set! *warn-on-reflection* true)
@@ -106,7 +105,8 @@
                               :creator      {:common_name "a"}}
                 recipient    {:type    :notification-recipient/raw-value
                               :details {:value "#foo"}}
-                processed    (with-redefs [channel.slack/header-text-limit char-limit]
+                processed    (with-redefs [channel.slack/header-text-limit char-limit
+                                           slack/upload-file! (fn [_ _] {:id "SP_IMAGE"})]
                                (channel/render-notification :channel/slack notification {:recipients [recipient]}))]
             (-> processed first :blocks first :text :text)))]
     (are [dashboard-name rendered-text]
@@ -134,26 +134,31 @@
       "abcdef" "🔔 abcd…")))
 
 (deftest dashboard-header-branding-test
-  (letfn [(render-dashboard-links [whitelabeling?]
-            (mt/with-premium-features (if whitelabeling? #{:whitelabel} #{})
-              (mt/with-temporary-setting-values [:site-url "https://www.example.com"]
-                (let [notification {:payload_type :notification/dashboard
-                                    :payload      {:dashboard       {:id 42, :name "Test Dashboard"}
-                                                   :parameters      {}
-                                                   :dashboard_parts []}
-                                    :creator      {:common_name "Test User"}}
-                      recipient    {:type    :notification-recipient/raw-value
-                                    :details {:value "#foo"}}
-                      processed    (mt/with-dynamic-fn-redefs [slack/upload-file! (constantly {:url "a.com", :id "id"})]
-                                     (channel/render-notification :channel/slack notification {:recipients [recipient]}))]
-                  (->> processed first :blocks last :fields (map :text))))))]
-    (when config/ee-available?
-      (testing "When whitelabeling is enabled, branding content should not be included"
-        (let [links (render-dashboard-links true)]
-          (is (= 1 (count links))))))
-    (testing "When whitelabeling is disabled, branding content should be included"
-      (let [links (render-dashboard-links false)]
-        (is (= 2 (count links)))))))
+  (doseq [hide? [false true]]
+    (let [uploads (atom [])
+          notification {:payload_type :notification/dashboard
+                        :payload {:dashboard {:id 42 :name "Test Dashboard"}
+                                  :parameters {} :dashboard_parts []}
+                        :creator {:common_name "Test User"}}
+          recipient {:type :notification-recipient/raw-value :details {:value "#foo"}}]
+      (with-redefs [channel.slack/include-branding? (constantly (not hide?))]
+        (mt/with-temporary-setting-values [:site-url "https://www.example.com"]
+          (let [message (mt/with-dynamic-fn-redefs [slack/upload-file! (fn [bytes filename]
+                                                                         (swap! uploads conj {:bytes bytes :filename filename})
+                                                                         {:id "SP_IMAGE"})]
+                          (first (channel/render-notification :channel/slack notification {:recipients [recipient]})))
+                signature (last (:blocks message))]
+            (if hide?
+              (do (is (empty? @uploads))
+                  (is (not= "context" (:type signature))))
+              (do (is (= 1 (count @uploads)))
+                  (is (= "context" (:type signature)))
+                  (is (= [{:type "plain_text" :text "Made with"}
+                          {:type "image" :slack_file {:id "SP_IMAGE"} :alt_text "Brasão do Estado de São Paulo"}
+                          {:type "plain_text" :text "Dashboards SP"}]
+                         (:elements signature)))
+                  (is (pos? (alength ^bytes (:bytes (first @uploads)))))))
+            (is (not (str/includes? (pr-str signature) "metabase.com")))))))))
 
 (defn- test-dashcard
   "A DashboardCard row for card `card-id` on dashboard `dashboard-id`, as a Dashboard Subscription part carries it."

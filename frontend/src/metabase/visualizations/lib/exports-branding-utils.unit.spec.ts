@@ -69,12 +69,13 @@ describe("createBrandingElement", () => {
       justifyContent: "center",
     });
 
-    // Should only have logo for xs size
-    expect(element.children.length).toBe(1);
+    // The smallest size omits the prefix, but keeps the product name as text.
+    expect(element.children.length).toBe(2);
     // Unjustified type cast. FIXME
     const logo = element.children[0] as HTMLImageElement;
     expect(logo.tagName).toBe("IMG");
     expect(logo.src).toMatch(/^data:image\/svg\+xml;base64,/);
+    expect(element.children[1]).toHaveTextContent("Dashboards SP");
   });
 
   it("should create a branding element with correct structure for m size", () => {
@@ -87,12 +88,16 @@ describe("createBrandingElement", () => {
       justifyContent: "flex-end",
     });
 
-    // Should have both text and logo for all sizes above xs
-    expect(element.children.length).toBe(2);
-    const [text, logo] = element.children;
+    // Both texts stay outside the image; only the coat of arms is an IMG.
+    expect(element.children.length).toBe(3);
+    const [text, logo, brandName] = element.children;
     expect(text.tagName).toBe("SPAN");
     expect(text).toHaveTextContent("Made with");
     expect(logo.tagName).toBe("IMG");
+    expect(brandName.tagName).toBe("SPAN");
+    expect(brandName).toHaveTextContent("Dashboards SP");
+    expect(logo).toHaveAttribute("width", "17");
+    expect(logo).toHaveAttribute("height", "20");
     // Unjustified type cast. FIXME
     expect((logo as HTMLImageElement).src).toMatch(
       /^data:image\/svg\+xml;base64,/,

@@ -39,3 +39,4 @@ frontend/src/metabase/sp/connection-field-i18n-catalog.unit.spec.ts
 # docs/internal/proposta-aba-detalhamentos-por-situacao.pdf
 # docs/internal/viabilidade-dashboard-abono-permanencia.md
 # docs/internal/viabilidade-dashboard-abono-permanencia.pdf
+src/metabase/channel/branding.clj

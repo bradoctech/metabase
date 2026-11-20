@@ -7,6 +7,7 @@
    [metabase.channel.email :as email]
    [metabase.channel.impl.email :as email.impl]
    [metabase.channel.render.util :as render.util]
+   [metabase.channel.template.handlebars :as handlebars]
    [metabase.channel.urls :as urls]
    [metabase.lib.core :as lib]
    [metabase.lib.metadata :as lib.metadata]
@@ -219,7 +220,7 @@
                          (messages)))))))))
 
 (deftest email-branding-hidden-when-whitelabel-test
-  (testing "the 'Made with Metabase' footer respects the :whitelabel premium feature"
+  (testing "the SP signature respects the :whitelabel premium feature"
     (notification.tu/with-notification-testing-setup!
       (notification.tu/with-card-notification
         [notification {:card         {:name          "Orders question"
@@ -235,13 +236,37 @@
                         (-> (notification.tu/with-captured-channel-send!
                               (#'notification.send/send-notification-sync! notification))
                             :channel/email first :message first :content))]
-          (testing "branding link is present without whitelabel"
+          (testing "SP signature has separate text and an embedded coat of arms, without a branding link"
             (mt/with-premium-features #{}
-              (is (str/includes? (render!) "Made with"))))
+              (let [html (render!)]
+                (is (str/includes? html "Made with"))
+                (is (str/includes? html "Dashboards SP"))
+                (is (str/includes? html "src=\"cid:"))
+                (is (not (str/includes? html "exports_branding")))
+                (is (not (str/includes? html ">Metabase</span>"))))))
           ;; Whitelabeling is only wired up in EE builds (`enable-whitelabeling?` is gated on
           ;; `config/ee-available?`), so `:whitelabel` can never hide the footer on OSS builds.
           ;; The EE app-db jobs run this same file with EE on the classpath and cover the hidden case.
           (mt/when-ee-evailable
-           (testing "branding link is hidden with whitelabel"
+           (testing "signature is hidden with whitelabel"
              (mt/with-premium-features #{:whitelabel}
                (is (not (str/includes? (render!) "Made with")))))))))))
+
+(deftest sp-signature-templates-test
+  (mt/with-temporary-setting-values [site-url "http://localhost:3002"]
+    (doseq [template ["dashboard_subscription" "notification_card"]
+            visible? [false true]]
+      (let [html (handlebars/render template
+                                    {:context {:include_branding visible?
+                                               :signature_prefix "Feito com"
+                                               :signature_name "Dashboards SP"
+                                               :signature_logo_url "cid:sp-coat-of-arms"}
+                                     :payload {:dashboard {:id 1 :name "Dashboard de teste"}
+                                               :card {:id 1 :name "Pergunta de teste"}
+                                               :style {:color_text_dark "#222222"}}
+                                     :computed {}})]
+        (is (= visible? (str/includes? html "Dashboards SP")))
+        (is (= visible? (str/includes? html "Feito com")))
+        (is (= visible? (str/includes? html "cid:sp-coat-of-arms")))
+        (is (not (str/includes? html "exports_branding")))
+        (is (not (str/includes? html ">Metabase</span>")))))))

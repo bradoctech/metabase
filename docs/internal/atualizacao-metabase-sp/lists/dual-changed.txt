@@ -217,3 +217,18 @@ frontend/src/metabase/home/components/HomeHelpCard/tests/setup.tsx
 frontend/src/metabase/home/components/HomePopularSection/HomePopularSection.unit.spec.tsx
 frontend/src/metabase/home/components/HomeRecentSection/HomeRecentSection.unit.spec.tsx
 frontend/src/metabase/home/components/HomeXraySection/HomeXraySection.unit.spec.tsx
+
+# Assinatura SP — teste visual frontend, 18/11/2026.
+frontend/src/metabase/embedding/components/LogoBadge/LogoBadge.tsx
+frontend/src/metabase/embedding/components/LogoBadge/LogoBadge.module.css
+frontend/src/metabase/embedding/components/LogoBadge/LogoBadge.unit.spec.tsx
+frontend/src/metabase/visualizations/lib/exports-branding-utils.unit.spec.ts
+src/metabase/channel/render/pdf.clj
+src/metabase/channel/impl/email.clj
+src/metabase/channel/impl/slack.clj
+src/metabase/channel/email/dashboard_subscription.hbs
+src/metabase/channel/email/notification_card.hbs
+test/metabase/channel/render/pdf_test.clj
+test/metabase/channel/impl/email_test.clj
+test/metabase/channel/impl/slack_test.clj
+frontend/src/metabase/embedding/embedding-iframe-sdk-setup/components/SdkIframeEmbedPreview.module.css

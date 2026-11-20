@@ -1,7 +1,6 @@
-import ReactDOMServer from "react-dom/server";
 import { t } from "ttag";
 
-import BrandingLogo from "metabase/embedding/components/LogoBadge/metabase_logo_with_text.svg?component";
+import spLogo from "assets/img/logo.svg?source";
 
 type BrandingSize = "xs" | "s" | "m" | "l" | "xl" | "xxl" | "xxxl";
 
@@ -22,12 +21,6 @@ export const getBrandingSize = (width: number): BrandingSize => {
   }
 
   return "xxxl";
-};
-
-const svgComponentToBase64 = (Component: JSX.Element): string => {
-  const svgString = ReactDOMServer.renderToStaticMarkup(Component);
-  const encoded = Buffer.from(svgString, "utf-8").toString("base64");
-  return `data:image/svg+xml;base64,${encoded}`;
 };
 
 type BrandingConfig = {
@@ -73,13 +66,10 @@ export const getBrandingConfig = (size: BrandingSize): BrandingConfig => {
 export const createBrandingElement = (size: BrandingSize) => {
   const { fz, h, ly, m, p } = getBrandingConfig(size);
 
-  const LOGO_ASCPECT_RATIO = 4.0625;
+  // Preserve the coat of arms' viewBox ratio; the product name stays DOM text.
+  const LOGO_ASCPECT_RATIO = 370.206 / 430.138;
   const LOGO_HEIGHT = ly;
   const LOGO_WIDTH = LOGO_HEIGHT * LOGO_ASCPECT_RATIO;
-
-  const LogoComponent = (
-    <BrandingLogo width={LOGO_WIDTH} height={LOGO_HEIGHT} />
-  );
 
   const container = document.createElement("div");
   container.style.cssText = `
@@ -107,14 +97,30 @@ export const createBrandingElement = (size: BrandingSize) => {
     container.appendChild(brandingCopy);
   }
 
-  const logoDataUrl = svgComponentToBase64(LogoComponent);
+  const logoDataUrl = `data:image/svg+xml;base64,${Buffer.from(spLogo, "utf-8").toString("base64")}`;
 
   const logo = document.createElement("img");
   logo.src = logoDataUrl;
-  logo.width = LOGO_WIDTH;
+  logo.width = Math.round(LOGO_WIDTH);
   logo.height = LOGO_HEIGHT;
+  logo.alt = "";
+  logo.style.objectFit = "contain";
+  logo.style.flexShrink = "0";
 
   container.appendChild(logo);
+
+  const brandName = document.createElement("span");
+  brandName.textContent = "Dashboards SP";
+  brandName.style.cssText = `
+    font-family: "Rawline", sans-serif;
+    font-size: ${ly * 0.65}px;
+    font-weight: 700;
+    color: var(--mb-color-text-secondary);
+    margin-inline-start: ${m || 4}px;
+    white-space: nowrap;
+    line-height: 1;
+  `;
+  container.appendChild(brandName);
 
   return container;
 };

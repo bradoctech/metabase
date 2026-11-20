@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as str]
    [metabase.appearance.core :as appearance]
+   [metabase.channel.branding :as branding]
    [metabase.channel.core :as channel]
    [metabase.channel.impl.util :as impl.util]
    [metabase.channel.render.core :as channel.render]
@@ -226,30 +227,31 @@
   []
   (not (premium-features/enable-whitelabeling?)))
 
+(defn- slack-branding-block
+  "Prefix and product name stay text; upload the bundled coat of arms, never a localhost/public logo URL."
+  []
+  {:type "context"
+   :elements [{:type "plain_text" :text (str (tru "Made with"))}
+              {:type "image"
+               :slack_file {:id (:id (slack/upload-file! (branding/png-bytes) "dashboards-sp-coat-of-arms.png"))}
+               :alt_text "Brasão do Estado de São Paulo"}
+              {:type "plain_text" :text branding/product-name}]})
+
 (defn- slack-dashboard-header
-  "Returns a block element that includes a dashboard's name, creator, and filters, for inclusion in a
-  Slack dashboard subscription"
+  "Dashboard name, creator and filters; the signature is appended after the cards."
   [dashboard creator-name all-params top-level-params]
-  (let [header-section  {:type "header"
-                         :text {:type "plain_text"
-                                :text (truncate (:name dashboard) header-text-limit)
-                                :emoji true}}
-        link-section    {:type "section"
-                         :fields (cond-> [{:type "mrkdwn"
-                                           :text (mkdwn-link-text
-                                                  (urls/dashboard-url (:id dashboard) all-params)
-                                                  (format "*Sent from %s by %s*"
-                                                          (appearance/site-name)
-                                                          creator-name))}]
-                                   (include-branding?)
-                                   (conj
-                                    {:type "mrkdwn"
-                                     :text  "Made with Metabase :blue_heart:"}))}
-        filter-fields   (parameter-fields top-level-params)
-        filter-section  (when (seq filter-fields)
-                          {:type   "section"
-                           :fields filter-fields})]
-    (filter some? [header-section filter-section link-section])))
+  (let [header-section {:type "header"
+                        :text {:type "plain_text"
+                               :text (truncate (:name dashboard) header-text-limit)
+                               :emoji true}}
+        link-section {:type "section"
+                      :fields [{:type "mrkdwn"
+                                :text (mkdwn-link-text
+                                       (urls/dashboard-url (:id dashboard) all-params)
+                                       (format "*Sent from %s by %s*" (appearance/site-name) creator-name))}]}
+        filter-fields (parameter-fields top-level-params)
+        filter-section (when (seq filter-fields) {:type "section" :fields filter-fields})]
+    (vec (filter some? [header-section filter-section link-section]))))
 
 (defn- slack-dashboard-caption
   "A plain mrkdwn caption (dashboard title, link, and filters) used as the PDF file's `initial_comment`, so the title
@@ -300,7 +302,8 @@
                                              (catch Throwable e
                                                (log/errorf "Error rendering dashboard subscription part for Slack; substituting error placeholder: %s" (ex-message e))
                                                [(text->markdown-section (str (tru "An error occurred while displaying this card.")))])))
-                                         (:dashboard_parts payload))]
+                                         (:dashboard_parts payload))
+                                 (when (include-branding?) (slack-branding-block))]
                                 flatten
                                 (remove nil?)))]
     (for [channel-id (map notification-recipient->channel recipients)]

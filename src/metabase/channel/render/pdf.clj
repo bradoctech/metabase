@@ -39,6 +39,7 @@
    [clojure.string :as str]
    [clojure.walk :as walk]
    [medley.core :as m]
+   [metabase.channel.branding :as branding]
    [metabase.channel.db :as channel.db]
    [metabase.channel.render.body :as body]
    [metabase.channel.render.card :as render.card]
@@ -64,8 +65,7 @@
   (:import
    (java.awt Color)
    (java.awt.geom AffineTransform PathIterator)
-   (java.io ByteArrayOutputStream StringReader)
-   (org.apache.batik.parser AWTPathProducer)
+   (java.io ByteArrayOutputStream)
    (org.apache.pdfbox.pdmodel PDDocument PDPage PDPageContentStream)
    (org.apache.pdfbox.pdmodel.common PDRectangle)
    (org.apache.pdfbox.pdmodel.font PDFont)
@@ -1186,44 +1186,15 @@
     (font/base-rtl? text) (+ (max 0.0 (- box-w (font/text-width face font-pt text))))))
 
 ;; --------------------------------------------------------------------------------------------
-;; "Made with Metabase" branding badge -- drawn top-right of every page. The logo + "Metabase"
-;; wordmark come from an SVG whose glyphs are already `<path>` outlines, streamed into the content
-;; stream as moveTo/lineTo/curveTo/fill so they stay crisp at any zoom. The "Made with" prefix is
-;; ordinary text in the regular body face (Lato, with the usual per-glyph Noto/CJK fallback -- see
-;; [[font/load-fonts!]] and [[font/font-runs]]). The badge sits in the empty top common/margin band, so it never
-;; collides with the dashboard title (left) or the first card row.
+;; SP signature: localized prefix + vector coat of arms + native product-name text.
+;; The badge stays in the top margin band on each page.
 ;; --------------------------------------------------------------------------------------------
 
-(def ^:private brand-logo-resource "fonts/pdf/metabase_logo_with_text.svg")
-
-(def ^:private brand-svg-colors
-  "Resolves the logo SVG's `var(--mb-color-logo-*)` CSS variables to the Metabase brand colors."
-  {"--mb-color-logo-text"      (Color. 0x5A 0x60 0x72)
-   "--mb-color-logo-primary"   (Color. 0x50 0x9E 0xE3)
-   "--mb-color-logo-secondary" (Color. 0xC2 0xDA 0xF0)})
-
+(def ^:private brand-logo branding/coat-of-arms)
 (def ^:private ^Color brand-text-color (Color. 0x5A 0x60 0x72))
 (def ^:private brand-logo-pt 13.0)
 (def ^:private brand-text-pt 9.0)
 (def ^:private brand-gap-pt 5.0)
-
-(defn- resolve-svg-color ^Color [fill]
-  (if-let [[_ v] (re-matches #"var\((--[^)]+)\)" fill)]
-    (get brand-svg-colors v Color/BLACK)
-    (Color/decode fill)))
-
-(def ^:private brand-logo
-  "Parsed logo SVG -- `{:vw _ :vh _ :groups [{:color <Color> :ds [<d-string> ...]} ...]}`. Delayed
-  because the asset is static; parsed by regex over the controlled, self-owned resource (the `d`
-  attributes contain no quotes, so this is robust here)."
-  (delay
-    (let [svg          (slurp (io/resource brand-logo-resource))
-          [_ vbw vbh]  (re-find #"viewBox=\"0 0 ([\d.]+) ([\d.]+)\"" svg)]
-      {:vw     (Double/parseDouble vbw)
-       :vh     (Double/parseDouble vbh)
-       :groups (vec (for [[_ fill body] (re-seq #"(?s)<g fill=\"([^\"]+)\">(.*?)</g>" svg)]
-                      {:color (resolve-svg-color fill)
-                       :ds    (mapv second (re-seq #"d=\"([^\"]+)\"" body))}))})))
 
 (def ^:private two-thirds
   "The quadratic->cubic Bézier lift factor (see [[emit-shape!]])."
@@ -1291,53 +1262,50 @@
                 (recur start-x start-y start-x start-y))))))))   ; pen returns to the subpath start
 
 (defn- draw-brand-logo!
-  "Draw the logo+wordmark SVG with its top-left at (`x`, `top`), scaled to height `h` preserving aspect.
+  "Draw the vector coat of arms with its top-left at (`x`, `top`), scaled to height `h` preserving aspect.
 
   Returns the drawn width."
   [^PDPageContentStream cs x top h]
-  (let [{:keys [vw vh groups]} @brand-logo
+  (let [{:keys [vw vh shapes]} @brand-logo
         scale (double (/ h vh))
         ;; SVG user space (y-down) -> PDF (y-up): place SVG (0,0) at (x, top).
         xform (AffineTransform. scale 0.0 0.0 (- scale) (double x) (double top))]
-    (doseq [{:keys [^Color color ds]} groups]
-      (.setNonStrokingColor cs color)
-      (doseq [d ds]
-        (emit-shape! cs (AWTPathProducer/createShape (StringReader. d) PathIterator/WIND_NON_ZERO) xform)))
+    (doseq [{:keys [color shape]} shapes]
+      (.setNonStrokingColor cs ^Color color)
+      (emit-shape! cs shape xform))
     (.setNonStrokingColor cs Color/BLACK)
     (* vw scale)))
 
 (defn- include-branding?
-  "Whether the 'Made with Metabase' badge should be drawn. Branding in exports is included only for
+  "Whether the SP signature should be drawn. Branding in exports is included only for
   instances that lack the `:whitelabel` feature -- i.e. OSS instances. Pro/EE instances get no badge."
   []
   (not (premium-features/enable-whitelabeling?)))
 
 (defn- draw-brand-badge!
-  "Draw the 'Made with [logo] Metabase' badge, right-aligned to `right`, with the logo's top at
-  `logo-top` (placed in the page's top common/margin band). The 'Made with' prefix is localized to the
-  current user's locale ([[tru]]) and drawn in the regular body face -- Lato, with the usual
-  per-glyph Noto/CJK fallback (see [[font/font-runs]]) -- so it renders across scripts; the logo +
-  'Metabase' wordmark are locale-independent SVG vectors."
+  "Draw localized prefix + coat of arms + native Dashboards SP text, with no signature link."
   [^PDPageContentStream cs right logo-top]
   (let [{:keys [vw vh]} @brand-logo
         text-face (font/face :regular)
+        name-face (font/face :bold)
         prefix    (str (tru "Made with"))
         logo-w    (* brand-logo-pt (/ vw vh))
-        text-w    (font/text-width text-face brand-text-pt prefix)
-        logo-x    (- right logo-w)
-        text-x    (- logo-x brand-gap-pt text-w)
-        ;; vertically center the text's cap (~0.7*pt tall) on the logo's middle
+        name-w    (font/text-width name-face brand-text-pt branding/product-name)
+        name-x    (- right name-w)
+        logo-x    (- name-x brand-gap-pt logo-w)
+        text-x    (- logo-x brand-gap-pt (font/text-width text-face brand-text-pt prefix))
         baseline  (- logo-top (/ brand-logo-pt 2.0) (* brand-text-pt 0.35))]
+    (draw-brand-logo! cs logo-x logo-top brand-logo-pt)
     (.setNonStrokingColor cs brand-text-color)
     (draw-line! cs text-face brand-text-pt text-x baseline prefix)
-    (.setNonStrokingColor cs Color/BLACK)
-    (draw-brand-logo! cs logo-x logo-top brand-logo-pt)))
+    (draw-line! cs name-face brand-text-pt name-x baseline branding/product-name)
+    (.setNonStrokingColor cs Color/BLACK)))
 
 (defn- draw-header!
   [^PDPageContentStream cs page-height content-w {:keys [dashboard-title tab-title param-table]}]
   (let [bold (font/face :bold)
         top  (- page-height common/margin)
-        ;; "Made with Metabase" badge, vector-drawn in the empty top common/margin band, right-aligned.
+        ;; SP signature, vector-drawn in the empty top common/margin band, right-aligned.
         ;; Only OSS instances get the badge; Pro/EE (whitelabel feature) render no branding.
         _    (when (include-branding?)
                (draw-brand-badge! cs (+ common/margin content-w)
