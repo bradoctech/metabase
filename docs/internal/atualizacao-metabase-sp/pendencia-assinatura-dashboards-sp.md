@@ -6,7 +6,7 @@
 
 **Branch de trabalho:** `EDD-1523v64`; origem da solicitação: `saopaulov64`.
 
-**Revisão inspecionada:** `14811769fe277dfd2fde7126f5970aed4de5210a`.
+**Revisão do levantamento inicial:** `14811769fe277dfd2fde7126f5970aed4de5210a`. Build final AS-SM-15: `54ea1657bc419681f99d530a4c8706af69d6b59c`.
 
 **Contexto:** [roteiro de smoke](./smoke-saopaulov64.md) e [plano de reaplicação](./reaplicacao-saopaulov64.md).
 
@@ -257,7 +257,7 @@ Autorização do usuário: aplicar o padrão SP nos três pontos restantes e sub
 
 **Slack — validação opcional:** implementação e testes automatizados permanecem no escopo. Por decisão do usuário, não exigir vínculo com workspace/canal para fechar o trabalho local. Mensagem e anexo poderão ser conferidos futuramente se já houver integração de teste autorizada; não registrar como aprovado um envio não realizado.
 
-**Pacote:** JAR não foi reconstruído nesta etapa; o pacote anterior não contém essas alterações. Gerar e verificar novo build/JAR no fechamento, preservando o procedimento de `version.properties`. Nenhuma mensagem foi enviada pelo agente.
+**Pacote:** build/JAR reconstruído e verificado no fechamento AS-SM-15 de 19/11/2026, registrado ao final deste documento. O pacote anterior foi preservado como histórico; checkout restaurado para vLOCAL_DEV. Nenhuma mensagem foi enviada pelo agente.
 
 ### Consolidação dos cenários AS-SM
 
@@ -278,7 +278,7 @@ Autorização do usuário: aplicar o padrão SP nos três pontos restantes e sub
 | AS-SM-13 — e-mail | ABERTO PARA HOMOLOGAÇÃO: corpo dashboard, alerta e PDF anexo | Conferir imagem inline, identidade, links funcionais e entrega |
 | AS-SM-13 — Slack | OPCIONAL, sem vínculo obrigatório; sem envio real validado | Conferir somente se houver integração autorizada disponível |
 | AS-SM-14 | OK pelo usuário em 19/11/2026 conforme roteiro local: pt-BR/inglês na prévia e PNG, prefixos localizados e nome Dashboards SP preservado | Concluído no cenário local; subdiretório não exercitado em localhost na raiz, conferir em homologação somente se aplicável |
-| AS-SM-15 | Testes automatizados aprovados; novo build/JAR ainda pendente | Gerar pacote e verificar versão, recursos e assinatura no artefato |
+| AS-SM-15 | APROVADO TECNICAMENTE em 19/11/2026: build OSS completo, tipos globais, inspeção e execução do JAR, renderização da assinatura pelo pacote e retorno do checkout a vLOCAL_DEV | Fechamento local concluído; limites e homologação permanecem conforme tabela e seção final |
 
 Consolidar significa registrar os testes já feitos com seu ID e seus limites. Não exige repetir um cenário já aprovado nem habilitar uma integração indisponível. Aceite visual geral do modelo permanece válido, mas não deve ser convertido em aprovação de rotas, formatos ou canais não exercitados.
 
@@ -418,3 +418,38 @@ Verificação: Stylelint e git diff --check aprovados; suíte SdkIframeEmbedSetu
 
 
 **Retorno AS-SM-14 — 19/11/2026:** usuário confirmou OK conforme roteiro local de idiomas (prévia de incorporação e PNG). Aceite não estendido à implantação em subdiretório, ausente no ambiente local informado.
+
+
+## Fechamento técnico AS-SM-15 — 19/11/2026
+
+**Resultado:** aprovado no escopo técnico local da edição OSS. Artefato gerado: `target/uberjar/metabase.jar`, revisão `54ea1657bc419681f99d530a4c8706af69d6b59c`, versão `v0.64.1-SNAPSHOT (54ea165)`, data de versão 2026-11-19. Não houve commit, push, publicação, deploy ou envio por e-mail/Slack.
+
+| Etapa | Resultado | Duração |
+| --- | --- | --- |
+| cljs | APROVADO — código 0 | 163.6 s |
+| version-translations | APROVADO — código 0 | 18.6 s |
+| licenses | APROVADO — código 0 | 11.9 s |
+| frontend | APROVADO — código 0 | 70.9 s |
+| static-viz | APROVADO — código 0 | 4.9 s |
+| uberjar | APROVADO — código 0 | 352.3 s |
+
+**Verificações complementares:**
+
+- Tipos globais (`bun run type-check-pure`): aprovado, código 0. Primeira tentativa paralela ao build encerrada com código 137 por limite de memória, sem diagnóstico de erro TypeScript. Nova execução após o build, com `GOMEMLIMIT=3GiB GOGC=50 GOMAXPROCS=2`, aprovada. Não foram alteradas regras ou desativadas verificações.
+- Comando `java -jar target/uberjar/metabase.jar version`: código 0 e versão/hash conferidos. JDK 25 pelo mise, com caminhos temporários separados para banco/plugins; não foi iniciado servidor nem executada migração do banco local.
+- Inspeção do JAR: **279 arquivos JS/CSS/HTML** comparados byte a byte com o build. Confirmados nome Dashboards SP nos bundles de aplicação/público/embed/SDK, regra CSS da correção da prévia, brasão idêntico ao recurso fonte, Rawline, pt-BR, static-viz e drivers PostgreSQL/SQLite.
+- Backend: namespace compartilhado de identidade e função PDF compilados; templates dashboard_subscription e notification_card idênticos aos fontes, com campos de assinatura SP e sem o link comercial antigo.
+- Execução **somente com o JAR no classpath**: brasão PNG, HTML dos dois templates e prova PDF A4/Letter gerados. Extração de texto confirmou Dashboards SP nas duas páginas, ausência de Metabase e de anotações de link. Prévia PDF renderizada e inspecionada visualmente. Trata-se de prova da assinatura; não substitui envio real ou dashboard completo em homologação.
+- `resources/version.properties` não existia antes do build. Recurso gerado mantido até o empacotamento e depois guardado fora do classpath em `version-built.properties` no diretório de evidências. Verificação isolada no checkout confirmou `vLOCAL_DEV`, major nil e recurso de versão ausente; o JAR mantém seus metadados de produção.
+
+**Tamanho:** 963,478,421 bytes (918.8 MiB).
+
+**SHA-256:** `1a6c1a05a38f4e0e7194f0b0d0b9e32b061f373656f334ecee0d2f723db47df4`.
+
+**Pacote anterior preservado:** `.merge-sp/fechamento-assinatura-2026-11-19/previous-metabase.jar`. Não usar seus metadados como evidência desta revisão.
+
+**Evidências locais ignoradas pelo Git:** `.merge-sp/fechamento-assinatura-2026-11-19/`: build.py, steps.json, logs individuais de cada etapa, types-first-attempt.log, types-final.log, jar-version.log, jar-inspection.json, artifact-render.log, prova PDF/PNG/HTML, dev-version.log, checkout-version-restored.json e verification-status.json.
+
+**Avisos sem falha:** frontend com dois avisos de tamanho de assets/entrypoint, bases de compatibilidade de navegadores antigas; relatório de 195 violações preexistentes do catálogo i18n; avisos JVM/reflection/fontes nos logs. Nenhuma dependência ou catálogo foi atualizado apenas para silenciar avisos. O verificador local de hash foi adaptado ao Python instalado (sem hashlib.file_digest); inspeção final aprovada.
+
+**Limites preservados:** AS-SM-07 abaixo de 200 px não reproduzido manualmente; AS-SM-04 sem integração externa disponível (a prévia local usa SDK); ocultação/documento/ação de AS-SM-05 e conferência manual de gates AS-SM-12 dependem de ambiente compatível. Complementos A4/Letter/multipágina de dashboard real, corpos de e-mail e PDF anexo seguem para homologação; Slack é possibilidade opcional, sem vínculo exigido. Subdiretório somente se aplicável ao ambiente de destino. Nenhum desses itens virou aprovação pelo sucesso do build. Build local OSS não inclui pacote EE, runtime Python separado, imagem Docker ou deploy.
