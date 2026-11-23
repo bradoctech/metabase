@@ -10,7 +10,6 @@ import { TreeNode } from "metabase/common/components/tree/TreeNode";
 import { NAV_SIDEBAR_WIDTH } from "metabase/nav/constants";
 import type { IconProps } from "metabase/ui";
 import { Icon, Tooltip } from "metabase/ui";
-import { alpha } from "metabase/ui/colors";
 import type { ColorName } from "metabase/ui/colors/types";
 import { color } from "metabase/ui/utils/colors";
 
@@ -40,18 +39,14 @@ const activeColorCSS = css`
   color: var(--mb-color-core-brand);
 `;
 
-function getTextColor(isSelected: boolean) {
-  return isSelected ? color("core-brand") : color("text-primary");
-}
-
 type NodeRootProps = ComponentProps<typeof TreeNode.Root> & {
   hasDefaultIconStyle?: boolean;
 };
 
 export const NodeRoot = styled(TreeNode.Root)<NodeRootProps>`
-  color: ${(props) => getTextColor(props.isSelected)};
+  color: var(--mb-color-text-primary);
   background-color: ${(props) =>
-    props.isSelected ? alpha("core-brand", 0.2) : "unset"};
+    props.isSelected ? color("background-menu-selected") : "unset"};
   padding-left: ${(props) => props.depth}rem;
   border-radius: 4px;
 
@@ -65,9 +60,7 @@ export const NodeRoot = styled(TreeNode.Root)<NodeRootProps>`
   }
 
   &:hover {
-    background-color: ${() => alpha("core-brand", 0.35)};
-    color: var(--mb-color-core-brand);
-
+    background-color: var(--mb-color-background-menu-selected);
     ${ExpandToggleButton} {
       color: var(--mb-color-core-brand);
     }
@@ -98,19 +91,14 @@ const itemContentStyle = css`
   width: 100%;
 `;
 
-export const FullWidthButton = styled.button<{ isSelected: boolean }>`
+export const FullWidthButton = styled.button`
   color: inherit;
   cursor: pointer;
 
   ${itemContentStyle}
   ${TreeNode.NameContainer} {
     font-weight: 700;
-    color: ${(props) => (props.isSelected ? color("core-brand") : "inherit")};
     text-align: start;
-
-    &:hover {
-      color: var(--mb-color-core-brand);
-    }
   }
 
   &:focus,

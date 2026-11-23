@@ -31,6 +31,7 @@ frontend/src/metabase/home/components/HomeModelCard/HomeModelCard.tsx
 frontend/src/metabase/home/components/HomeXrayCard/HomeXrayCard.tsx
 frontend/src/metabase/nav/components/search/SearchButton/SearchButton.module.css
 frontend/src/metabase/nav/containers/MainNavbar/SidebarItems/SidebarItems.styled.tsx
+frontend/src/metabase/nav/containers/MainNavbar/SidebarItems/SidebarLink.tsx
 frontend/src/metabase/public/components/EmbedFrame/EmbedFrame.tsx
 frontend/src/metabase/query_builder/components/view/ViewHeader/ViewTitleHeader.module.css
 frontend/src/metabase/query_builder/components/view/ViewHeader/components/AdHocQuestionLeftSide/AdHocQuestionLeftSide.tsx
