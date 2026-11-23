@@ -4,6 +4,7 @@
 .gitignore
 frontend/src/metabase/admin/databases/components/DatabaseHelpSidePanel/EmbeddedEngineDocContent/useEngineDocMarkdownContent.tsx
 frontend/src/metabase/admin/databases/components/DatabaseHelpSidePanel/EmbeddedEngineDocContent/useEngineDocMarkdownContent.unit.spec.tsx
+frontend/src/metabase/admin/permissions/components/PermissionsTable/PermissionsTable.styled.tsx
 frontend/src/metabase/admin/settings/components/SettingsLdapForm.tsx
 frontend/src/metabase/auth/components/AuthButton/AuthButton.module.css
 frontend/src/metabase/auth/components/AuthButton/AuthButton.tsx
