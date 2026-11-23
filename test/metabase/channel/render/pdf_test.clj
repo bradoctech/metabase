@@ -11,6 +11,7 @@
    [clojure.string :as str]
    [clojure.test :refer :all]
    [metabase.api.common :as api]
+   [metabase.channel.branding :as branding]
    [metabase.channel.render.body :as body]
    [metabase.channel.render.card :as render.card]
    [metabase.channel.render.pdf :as pdf]
@@ -24,15 +25,15 @@
    [metabase.util.memoize :as memo])
   (:import
    (java.awt Color)
-   (java.awt.geom PathIterator Rectangle2D)
+   (java.awt.geom Rectangle2D)
    (java.awt.image BufferedImage)
-   (java.io ByteArrayOutputStream StringReader)
+   (java.io ByteArrayOutputStream)
    (javax.imageio ImageIO)
-   (org.apache.batik.parser AWTPathProducer)
    (org.apache.pdfbox.pdmodel PDDocument PDPage PDPageContentStream)
    (org.apache.pdfbox.pdmodel.common PDRectangle)
    (org.apache.pdfbox.pdmodel.interactive.action PDActionURI)
-   (org.apache.pdfbox.pdmodel.interactive.annotation PDAnnotationLink)))
+   (org.apache.pdfbox.pdmodel.interactive.annotation PDAnnotationLink)
+   (org.apache.pdfbox.text PDFTextStripper)))
 
 (set! *warn-on-reflection* true)
 
@@ -76,25 +77,30 @@
 ;; --------------------------------------------------------------------------------------------
 
 (deftest ^:parallel branding-logo-asset-test
-  (testing "the logo SVG parses to three fill groups with the brand colors and non-empty paths"
-    (let [{:keys [vw vh groups]} @@#'pdf/brand-logo]
-      (is (= 87.0 vw))
-      (is (= 22.0 vh))
-      (is (= 3 (count groups)))
-      (is (every? (comp seq :ds) groups) "every fill group has at least one path")
-      (is (= #{(Color. 0x5A 0x60 0x72)
-               (Color. 0x50 0x9E 0xE3)
-               (Color. 0xC2 0xDA 0xF0)}
-             (set (map :color groups)))))))
+  (testing "the full SP coat of arms retains all shapes and its six fill colors"
+    (let [{:keys [vw vh shapes]} @branding/coat-of-arms]
+      (is (= 370.206 vw))
+      (is (= 430.138 vh))
+      (is (= 455 (count shapes)))
+      (is (= #{(Color/decode "#ffffff") (Color/decode "#F7C520")
+               (Color/decode "#0B921F") (Color/decode "#DC2828")
+               (Color/decode "#808181") (Color/decode "#231F20")}
+             (set (map :color shapes)))))))
 
 (deftest ^:parallel branding-svg-paths-drawable-test
-  (testing "every logo path parses to a non-empty shape (Batik flattens arcs to beziers)"
-    (doseq [{:keys [ds]} (:groups @@#'pdf/brand-logo)
-            d            ds]
-      (let [shape (AWTPathProducer/createShape (StringReader. d) PathIterator/WIND_NON_ZERO)
-            b     ^Rectangle2D (.getBounds2D shape)]
-        (is (pos? (.getWidth b))  (str "path has width: " d))
-        (is (pos? (.getHeight b)) (str "path has height: " d))))))
+  (testing "paths, rectangles and polylines all produce non-empty vector shapes"
+    (doseq [{:keys [shape]} (:shapes @branding/coat-of-arms)]
+      (let [bounds ^Rectangle2D (.getBounds2D ^java.awt.Shape shape)]
+        (is (pos? (.getWidth bounds)))
+        (is (pos? (.getHeight bounds)))))))
+
+(deftest ^:parallel branding-png-test
+  (testing "email and Slack receive a real transparent PNG with the coat of arms' proportions"
+    (let [image (ImageIO/read (java.io.ByteArrayInputStream. (branding/png-bytes)))]
+      (is (= 512 (.getHeight image)))
+      (is (= 441 (.getWidth image)))
+      (is (.hasAlpha (.getColorModel image)))
+      (is (zero? (bit-and 0xff (unsigned-bit-shift-right (.getRGB image 0 0) 24)))))))
 
 ;; not ^:parallel: exercises the real PDFBox rendering path (font registry + content-stream text and
 ;; SVG-vector logo), which the deftest linter treats as side-effecting
@@ -109,10 +115,13 @@
             (#'pdf/draw-brand-badge! cs 559.0 800.0))
           (let [baos (ByteArrayOutputStream.)]
             (.save doc baos)
-            (is (pos? (count (.toByteArray baos))))))))))
+            (is (pos? (count (.toByteArray baos))))
+            (is (str/includes? (.getText (PDFTextStripper.) doc) "Dashboards SP"))
+            (is (not (str/includes? (.getText (PDFTextStripper.) doc) "Metabase")))
+            (is (empty? (.getAnnotations page)))))))))
 
 (deftest ^:synchronized include-branding?-test
-  (testing "the 'Made with Metabase' badge is included only for OSS instances (no :whitelabel feature)"
+  (testing "the SP signature is included only for OSS instances (no :whitelabel feature)"
     (with-redefs [premium-features/enable-whitelabeling? (constantly false)]
       (is (true? (#'pdf/include-branding?)) "OSS: branding included"))
     (with-redefs [premium-features/enable-whitelabeling? (constantly true)]

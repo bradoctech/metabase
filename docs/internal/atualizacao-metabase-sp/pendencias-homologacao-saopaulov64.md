@@ -1,10 +1,10 @@
 # Pendências para homologação — saopaulov64
 
-Versão Markdown do [roteiro em PDF](./pendencias-homologacao-saopaulov64.pdf), emitido em **15/11/2026**. Mantém os cenários, pré-requisitos e critérios de aceite do anexo; a paginação é exclusiva do PDF.
+Versão Markdown do [roteiro em PDF](./pendencias-homologacao-saopaulov64.pdf), atualizado em **17/11/2026** com os dados de homologação informados pela equipe. Mantém os cenários, pré-requisitos e critérios de aceite do anexo; a paginação é exclusiva do PDF.
 
 ## Pendências para homologação
 
-Roteiro para anexar à issue · emissão: 15/11/2026
+Roteiro para anexar à issue · revisão: 17/11/2026 · ambiente: homologação Saturno
 
 **Estado inicial: PENDENTE.** Implementação e fechamento técnico local concluídos em 14/11/2026. Este roteiro reúne os cenários adiados e os complementos ainda sem evidência; não registra aprovação do ambiente de homologação.
 
@@ -12,27 +12,39 @@ Roteiro para anexar à issue · emissão: 15/11/2026
 
 545 testes frontend, 8 testes backend com 40 asserções, tipos, lint, formatação, auditoria e builds OSS de frontend, static-viz e JAR. O comando de versão do JAR foi executado com sucesso. A inicialização e as integrações no ambiente publicado devem ser conferidas pela equipe.
 
+**Complemento local de 15/11/2026:** contraste da seleção/hover da navegação administrativa (AUD-011) aprovado pelo usuário e incluído no JAR reconstruído. A regressão acima pertence ao fechamento anterior e não foi integralmente reexecutada nessa reconstrução.
+
 ### Mapa de execução
 
 | Grupo | Pendência | Página no PDF |
 | --- | --- | --- |
-| Ambiente, marca e home | Inicialização; marca/login; HD-05/10/12 | 2 |
-| Filtros cascata | FC-05 a FC-08 com banco real | 3 |
-| KPIs e nulos | NU-17/18; complementos NU-02/03/14/16 | 4 |
-| Integrações e perfis | TS-02/10/13/15/24 | 5 |
-| Assinaturas e conteúdo | Envio real por e-mail; Abono/Detalhamentos; aceite final | 6 |
+| Identificação da rodada | Ambiente, commit informado e dados a confirmar | 2 |
+| Ambiente, marca e home | Inicialização; marca/login; HD-05/10/12 | 3 |
+| Filtros cascata | FC-05 a FC-08 com banco real | 4 |
+| KPIs e nulos | NU-17/18; complementos NU-02/03/14/16 | 5 |
+| Integrações e perfis | TS-02/10/13/15/24 | 6 |
+| Assinaturas e conteúdo | Envio real por e-mail; Abono/Detalhamentos; aceite final | 7 |
 
 ### Identificação da rodada
 
 | Campo | Preenchimento |
 | --- | --- |
-| URL / ambiente | ________________________________________________ |
-| Build / commit publicado | ________________________________________________ |
-| Data / responsável | ________________________________________________ |
-| Banco / driver / versão | ________________________________________________ |
-| Perfis utilizados | ________________________________________________ |
+| URL / ambiente | Homologação Saturno — https://dev.saturno.aisolutions.tec.br/dashboards/ |
+| Prefixo de acesso | `/dashboards/` — validar navegação, APIs e assets nesse caminho (HD-12) |
+| Último commit do ambiente (informado pela equipe) | [51d8b02](https://github.com/bradoctech/metabase/commit/51d8b023495b9d0d22359d8003ce29d2fffab648) — `51d8b023495b9d0d22359d8003ce29d2fffab648` |
+| Versão / hash do artefato publicado | A confirmar |
+| Responsável pela homologação | Tiago Alves (QA) |
+| Data de execução | A confirmar; 17/11/2026 é a data desta revisão documental |
+| Banco / driver / versão | A confirmar |
+| Perfis utilizados | A confirmar: administrador, usuário comum e perfil com permissão de monitoramento (TS-24) |
+| Integrações / recursos disponíveis | A confirmar: SMTP, LDAP, upload CSV, transformações SQL e runtime Python |
+| Conteúdo Abono / Detalhamentos | Aplicabilidade a confirmar com o responsável (HOM-04) |
 
-Referência técnica do código validado: `175c377fbad416e43a5bd1d93a2df1ae0b9080c9`, base oficial `bb612fac416`. O artefato local foi identificado como `v0.64.1-SNAPSHOT (175c377)`; conferir o build efetivamente publicado.
+**Commit informado:** 15/11/2026 às 15:55 GMT-4. Mensagem: `docs(saopaulov64): registrar rebuild OSS com AUD-011 e restauração do ambiente dev`. Data e mensagem conferidas no histórico Git local. Esse commit registra a documentação do rebuild; a versão e o hash do artefato em execução ainda precisam ser conferidos no ambiente.
+
+**Referência técnica local atual:** código `9c0573d25947a36edd9b12eee7a8d891deace07e`, base oficial `bb612fac416`. JAR OSS reconstruído em 15/11/2026: `v0.64.1-SNAPSHOT (9c0573d)`, com AUD-011. SHA-256: `a03c08ce9d78f42657d34b7524f5194cc31ed01fe39cc93c718bbab9130e1885`. O artefato de 14/11, `v0.64.1-SNAPSHOT (175c377)`, é histórico. Conferir versão/commit e, quando disponível, hash do pacote efetivamente publicado; a URL informada não comprova qual artefato foi implantado.
+
+**Consulta externa em 17/11/2026:** a tentativa automatizada de abrir a URL não concluiu a conexão HTTPS: o cliente informou certificado sem correspondência com o hostname (`curl: (60)`). A aplicação e sua versão não foram inspecionadas. Confirmar o acesso pela rede/navegador da equipe e registrar em HOM-01 se o problema se reproduz; este registro não determina a causa nem substitui a validação do ambiente.
 
 ### Como registrar o retorno
 
@@ -46,10 +58,10 @@ Complementar o aceite local apenas nos cenários abaixo.
 
 **Pré-requisito:** Deploy realizado pela equipe; acesso aos logs e à aplicação.
 
-1. Conferir versão/commit e abrir a aplicação pela URL oficial da homologação; verificar término da inicialização no backend.
+1. Abrir https://dev.saturno.aisolutions.tec.br/dashboards/ e conferir acesso HTTPS, versão/commit e término da inicialização no backend. Confirmar se a observação da consulta externa acima se reproduz no acesso da equipe.
 2. Entrar com administrador e usuário comum autorizado; abrir uma pergunta e um dashboard que consultem o banco real.
 
-**Aceite:** Login, APIs e consultas funcionam sem erros de inicialização; versão publicada identificada e permissões preservadas.
+**Aceite:** Acesso HTTPS sem erro de certificado, login, APIs e consultas funcionam sem erros de inicialização; versão publicada identificada e permissões preservadas.
 
 ### HOM-02 · Marca/login — complemento da checklist
 
@@ -78,14 +90,14 @@ Complementar o aceite local apenas nos cenários abaixo.
 
 **Aceite:** Sem sombra/fundo indevido, com layout, controles e interação preservados. Tipo indisponível: registrar motivo.
 
-### HD-12 · Instância em subdiretório
+### HD-12 · Instância no prefixo /dashboards/
 
-**Pré-requisito:** Somente se a homologação usar um prefixo, como /dashboards-sp/.
+**Pré-requisito:** Acesso à URL de homologação informada, com prefixo `/dashboards/`. Cenário previsto para esta rodada; confirmar o comportamento do proxy e da aplicação durante a execução.
 
-1. Abrir login, home, pergunta e dashboard pelo prefixo; navegar entre as telas.
-2. Conferir carregamento de brasão, fontes e imagens; observar 404 no Network.
+1. A partir de https://dev.saturno.aisolutions.tec.br/dashboards/, abrir login, home, pergunta e dashboard; navegar entre as telas, recarregar uma rota interna e conferir redirecionamentos após login.
+2. Conferir carregamento de brasão, fontes e imagens e chamadas de API; observar 404 no Network e caminhos que percam ou dupliquem o prefixo.
 
-**Aceite:** URLs e assets respeitam o prefixo. Ambiente servido na raiz: NÃO APLICÁVEL com justificativa.
+**Aceite:** Navegação, redirecionamentos, APIs e assets respeitam o prefixo `/dashboards/`, inclusive após recarga de rota interna. Se a equipe confirmar outra topologia de publicação, registrar o caminho efetivo e revisar a aplicabilidade com justificativa.
 
 ## Filtros em cascata
 

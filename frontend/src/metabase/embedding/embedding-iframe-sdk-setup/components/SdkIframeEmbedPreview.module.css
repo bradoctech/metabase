@@ -1,8 +1,17 @@
 .EmbedPreviewIframe {
+  flex: 1;
+  min-height: 0;
   box-shadow: 0 6px 24px 0 rgba(0, 0, 0, 0.1);
 }
 
 .EmbedPreviewIframe > * {
   /* makes the metabase-* elements full height */
   height: 100%;
+}
+
+.EmbedPreviewIframe iframe {
+  /* The SDK's inline 600px minimum is for host pages. In the setup preview,
+     use the space remaining below the controls so its footer stays visible. */
+  min-height: 0 !important;
+  display: block;
 }

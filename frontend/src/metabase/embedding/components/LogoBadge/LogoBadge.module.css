@@ -20,6 +20,14 @@
   --mb-color-text-primary: var(--mb-color-text-secondary);
 }
 
+.brandName {
+  font-family: Rawline, sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .dark {
   --mb-color-border: var(--mb-color-text-secondary);
   --mb-color-background_page-primary: #2f353a;
