@@ -101,13 +101,9 @@ function SidebarLink({
           />
         )
       : (props: ContentProps) => (
-          <FullWidthButton
-            {...props}
-            isSelected={isSelected}
-            onClick={onClick}
-          />
+          <FullWidthButton {...props} onClick={onClick} />
         );
-  }, [url, isSelected, onClick, target, rel]);
+  }, [url, onClick, target, rel]);
 
   return (
     <NodeRoot
