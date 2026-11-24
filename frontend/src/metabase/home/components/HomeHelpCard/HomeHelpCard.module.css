@@ -1,3 +1,9 @@
 .root:hover {
   background-color: var(--mb-color-background-menu-hover);
 }
+
+.title {
+  min-width: 0;
+  color: inherit;
+  overflow-wrap: anywhere;
+}

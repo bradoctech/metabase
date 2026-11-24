@@ -43,9 +43,7 @@ export const HomeHelpCard = (): JSX.Element | null => {
           id={cardTitleId}
           fw="bold"
           fz="md"
-          style={{
-            color: "inherit",
-          }}
+          className={S.title}
         >{t`${applicationName} tips`}</Text>
       </Flex>
     </Card>
