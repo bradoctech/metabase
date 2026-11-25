@@ -15,7 +15,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  DEPOT_IMAGE: registry.depot.dev/9q8jcs5cd0
+  DEPOT_AIS: registry.depot.dev/9q8jcs5cd0
+  DEPOT_PRODESP: registry.depot.dev/v66jhnplxn:metabase-saopaulo-0.64.1
 
 jobs:
   build:
@@ -35,12 +36,12 @@ jobs:
           platforms: linux/amd64
           build-args: MB_EDITION=oss
           load: true
-          tags: ${{ env.DEPOT_IMAGE }}:metabase-v64-${{ github.sha }}
+          tags: ${{ env.DEPOT_AIS }}:metabase-v64-${{ github.sha }}
           cache-from: type=gha,scope=metabase-v64-oss
           cache-to: type=gha,mode=max,scope=metabase-v64-oss
       - name: Smoke-test image
         env:
-          IMAGE_TAG: ${{ env.DEPOT_IMAGE }}:metabase-v64-${{ github.sha }}
+          IMAGE_TAG: ${{ env.DEPOT_AIS }}:metabase-v64-${{ github.sha }}
         run: |
           set -euo pipefail
           trap 'docker logs metabase-smoke; docker rm -f metabase-smoke' EXIT
@@ -75,11 +76,14 @@ jobs:
           IMAGE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          docker push "$DEPOT_IMAGE:metabase-v64-$IMAGE_SHA"
+          docker push "$DEPOT_AIS:metabase-v64-$IMAGE_SHA"
           head_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/saopaulov64" --jq .sha)
           if [ "$head_sha" != "$IMAGE_SHA" ]; then
-            echo 'Deployment branch advanced; leaving metabase-v64 unchanged.'
+            echo 'Deployment branch advanced. Skipping the AIS stable tag and the PRODESP tag.'
             exit 0
           fi
-          docker tag "$DEPOT_IMAGE:metabase-v64-$IMAGE_SHA" "$DEPOT_IMAGE:metabase-v64"
-          docker push "$DEPOT_IMAGE:metabase-v64"
+          docker tag "$DEPOT_AIS:metabase-v64-$IMAGE_SHA" "$DEPOT_AIS:metabase-v64"
+          docker push "$DEPOT_AIS:metabase-v64"
+
+          docker tag "$DEPOT_AIS:metabase-v64-$IMAGE_SHA" "$DEPOT_PRODESP"
+          docker push "$DEPOT_PRODESP"
