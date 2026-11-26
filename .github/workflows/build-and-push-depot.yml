@@ -17,12 +17,16 @@ concurrency:
 env:
   DEPOT_AIS: registry.depot.dev/9q8jcs5cd0
   DEPOT_PRODESP: registry.depot.dev/v66jhnplxn:metabase-saopaulo-0.64.1
+  GHCR: ghcr.io/bradoctech/metabase:saopaulo-0.64.1
 
 jobs:
   build:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/saopaulov64'
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,6 +39,7 @@ jobs:
           context: .
           platforms: linux/amd64
           build-args: MB_EDITION=oss
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           load: true
           tags: ${{ env.DEPOT_AIS }}:metabase-v64-${{ github.sha }}
           cache-from: type=gha,scope=metabase-v64-oss
@@ -79,7 +84,7 @@ jobs:
           docker push "$DEPOT_AIS:metabase-v64-$IMAGE_SHA"
           head_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/saopaulov64" --jq .sha)
           if [ "$head_sha" != "$IMAGE_SHA" ]; then
-            echo 'Deployment branch advanced. Skipping the AIS stable tag and the PRODESP tag.'
+            echo 'Deployment branch advanced. Skipping the stable tags.'
             exit 0
           fi
           docker tag "$DEPOT_AIS:metabase-v64-$IMAGE_SHA" "$DEPOT_AIS:metabase-v64"
@@ -87,3 +92,7 @@ jobs:
 
           docker tag "$DEPOT_AIS:metabase-v64-$IMAGE_SHA" "$DEPOT_PRODESP"
           docker push "$DEPOT_PRODESP"
+
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag "$DEPOT_AIS:metabase-v64-$IMAGE_SHA" "$GHCR"
+          docker push "$GHCR"
