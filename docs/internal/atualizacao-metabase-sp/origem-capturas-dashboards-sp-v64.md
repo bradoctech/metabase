@@ -33,6 +33,12 @@ Na revisão interna do Confluence, marque em **vermelho** cada campo que aguarda
 
 1. Abra a instância de **homologação**. No canto superior direito, clique no ícone de quatro quadrados e abra **Ajuda → Sobre o Metabase**. O último item pode usar o nome exibido da aplicação.
 2. Anote o identificador completo da versão e o identificador da revisão, caso seja exibido. A **v64** identifica a linha do Metabase. O identificador completo distingue o pacote instalado de outros builds da mesma linha.
-3. Confira a data de publicação no registro de implantação. **Compilado em** na tela Sobre informa a data do build. Quando a apresentação incluir um print, use uma legenda que identifique homologação e a data da conferência.
+3. Confira a data de publicação no registro de implantação. O gerador deste projeto usa a data do último commit no campo `date` exibido como **Criado em** na tela Sobre. Quando a apresentação incluir um print, use uma legenda que identifique homologação e a data da conferência.
 
-Os identificadores dos pacotes verificados localmente estão no [fechamento técnico](./fechamento-tecnico-saopaulov64.md) e no [fechamento da assinatura](./pendencia-assinatura-dashboards-sp.md). Use a identificação mostrada na instância para registrar o pacote instalado em homologação.
+Em 26/11/2026, os prints de **DEV Saturno** e da **VM do cliente** mostraram `vUNKNOWN`, data `?` e hash `?`. As duas evidências indicam que a tela Sobre não permite identificar o pacote nem confirmar se os ambientes executam o mesmo build. Mantenha a identificação exata em vermelho até cruzar o artefato em execução com o registro da publicação.
+
+Em uma implantação por JAR, identifique o arquivo efetivamente usado pelo serviço e consulte `unzip -p /caminho/do/metabase.jar version.properties`. Compare o SHA-256 do arquivo com o artefato publicado. Em uma implantação por contêiner, compare o digest ou identificador da imagem em execução com o registro do pipeline. A data de publicação vem do histórico da implantação.
+
+O build tenta deduzir a versão de uma tag Git e usa `vUNKNOWN` quando não consegue inferi-la nem recebe uma versão explícita. O hash e a data também dependem do Git. O `Dockerfile` aceita o argumento `VERSION`, e o `.dockerignore` exclui `.git`. Essa combinação pode reproduzir os três campos observados se a imagem for construída sem versão explícita e sem metadados Git acessíveis. Os prints não identificam o processo usado nos ambientes.
+
+Os identificadores dos pacotes verificados localmente estão no [fechamento técnico](./fechamento-tecnico-saopaulov64.md) e no [fechamento da assinatura](./pendencia-assinatura-dashboards-sp.md).
