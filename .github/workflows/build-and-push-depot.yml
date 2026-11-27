@@ -38,7 +38,9 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
-          build-args: MB_EDITION=oss
+          build-args: |
+            MB_EDITION=oss
+            VERSION=v0.64.1-SAOPAULO
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           load: true
           tags: ${{ env.DEPOT_AIS }}:metabase-v64-${{ github.sha }}
