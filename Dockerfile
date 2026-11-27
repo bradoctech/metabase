@@ -32,6 +32,9 @@ RUN npm install -g bun
 # install frontend dependencies
 RUN bun install --frozen-lockfile
 
+ARG METABASE_BUILD_HASH
+ARG METABASE_BUILD_DATE
+
 RUN if [ -n "$VERSION" ]; then \
         INTERACTIVE=false CI=true MB_EDITION=$MB_EDITION bin/build.sh :version "\"$VERSION\""; \
     else \

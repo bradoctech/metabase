@@ -33,8 +33,10 @@
   (str/join "\n" (for [[k v] {:tag    (if-not (str/starts-with? version "v")
                                         (str \v version)
                                         version)
-                              :hash   (git-hash)
-                              :date   (git-last-commit-date)}]
+                              :hash   (or (not-empty (System/getenv "METABASE_BUILD_HASH"))
+                                          (git-hash))
+                              :date   (or (not-empty (System/getenv "METABASE_BUILD_DATE"))
+                                          (git-last-commit-date))}]
                    (str (name k) \= v))))
 
 (defn- most-recent-tag []

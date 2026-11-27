@@ -32,6 +32,13 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Read Metabase build metadata
+        id: build_metadata
+        run: |
+          set -euo pipefail
+          hash=$(git rev-parse --short=7 HEAD)
+          date=$(git log -1 --format=%ad --date=short HEAD)
+          printf 'hash=%s\ndate=%s\n' "$hash" "$date" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - name: Build image
         uses: docker/build-push-action@v6
@@ -41,6 +48,8 @@ jobs:
           build-args: |
             MB_EDITION=oss
             VERSION=v0.64.1-SAOPAULO
+            METABASE_BUILD_HASH=${{ steps.build_metadata.outputs.hash }}
+            METABASE_BUILD_DATE=${{ steps.build_metadata.outputs.date }}
           labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           load: true
           tags: ${{ env.DEPOT_AIS }}:metabase-v64-${{ github.sha }}
