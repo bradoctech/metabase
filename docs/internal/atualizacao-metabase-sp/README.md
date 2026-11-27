@@ -16,6 +16,8 @@ Documentação interna do processo de atualizar o fork São Paulo / Trilhas do M
 
 | Documento                                                  | Conteúdo                                                                  |
 | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [Apresentação do avanço de produto — versão 64](./apresentacao-avanco-produto-saopaulov64.md) | Narrativa para defesa de produto, evidências, escopo validado e espaço para capturas |
+| [Retrospectiva da atualização para a versão 64](./retrospectiva-atualizacao-saopaulov64.md) | Trajetória das issues, novos recursos e telas, processo de atualização e aprendizados técnicos |
 | [Pendências de homologação — Markdown](./pendencias-homologacao-saopaulov64.md) · [PDF](./pendencias-homologacao-saopaulov64.pdf) | Roteiro para a equipe em homologação: cenários pendentes, pré-requisitos, critérios de aceite e registro de evidências |
 | [Checklist detalhado do QA — Markdown](./checklist-qa-homologacao-saopaulov64.md) · [PDF](./checklist-qa-homologacao-saopaulov64.pdf) | Homologação Saturno: execução por lotes, passos por cenário, dados de apoio, matriz de resultados e parecer do QA |
 | [fechamento-tecnico-saopaulov64.md](./fechamento-tecnico-saopaulov64.md) | Validações de produção OSS, regressões, auditoria e encaminhamento para homologação |
